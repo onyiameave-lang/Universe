@@ -1242,6 +1242,144 @@
       "created_at": 1783484053.713848,
       "lineage": null,
       "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-245aac8e79",
+      "problem_type": "news_path",
+      "name": "wire_priority",
+      "description": "",
+      "handler": "_strat_wire",
+      "params": {},
+      "reasons_for": [
+        "free, fast, credible financial wires"
+      ],
+      "reasons_against": [
+        "misses paywalled/very recent items"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484683.8839028,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-8cebe6d788",
+      "problem_type": "news_path",
+      "name": "premium_api",
+      "description": "",
+      "handler": "_strat_premium",
+      "params": {},
+      "reasons_for": [
+        "richer + more recent (NewsAPI)"
+      ],
+      "reasons_against": [
+        "needs NEWSAPI_KEY"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484683.8839028,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-a25b6d088d",
+      "problem_type": "news_path",
+      "name": "broad_sweep",
+      "description": "",
+      "handler": "_strat_broad",
+      "params": {},
+      "reasons_for": [
+        "max corroboration across all sources"
+      ],
+      "reasons_against": [
+        "slower; noisier"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484683.8900588,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-9d636053ea",
+      "problem_type": "news_path",
+      "name": "wire_priority",
+      "description": "",
+      "handler": "_strat_wire",
+      "params": {},
+      "reasons_for": [
+        "free, fast, credible financial wires"
+      ],
+      "reasons_against": [
+        "misses paywalled/very recent items"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783485357.883854,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-06e2c46816",
+      "problem_type": "news_path",
+      "name": "premium_api",
+      "description": "",
+      "handler": "_strat_premium",
+      "params": {},
+      "reasons_for": [
+        "richer + more recent (NewsAPI)"
+      ],
+      "reasons_against": [
+        "needs NEWSAPI_KEY"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783485357.8868499,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-ba066a1c49",
+      "problem_type": "news_path",
+      "name": "broad_sweep",
+      "description": "",
+      "handler": "_strat_broad",
+      "params": {},
+      "reasons_for": [
+        "max corroboration across all sources"
+      ],
+      "reasons_against": [
+        "slower; noisier"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783485357.8888462,
+      "lineage": null,
+      "confidence": 0.0
     }
   ]
 }

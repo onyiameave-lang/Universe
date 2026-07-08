@@ -65,12 +65,7 @@ class EvolutionLab:
         """Evaluate a genome via backtest. PATCHED: catches all genome errors."""
         try:
             def decide(closes, highs, lows):
-                class _S: pass
-                s = _S()
-                s.closes = closes
-                s.highs = highs
-                s.lows = lows
-                return {"call": genome.call(s)}
+                return {"call": genome.decide(closes, highs, lows)}
 
             warmup = min(50, max(15, len(series.bars) // 3))
             result = self.backtester.run(series, decide, warmup=warmup)
