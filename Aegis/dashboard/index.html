@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis Governance — Universal AI</title>
+  <link rel="stylesheet" href="../../shared/theme.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <style>
+    /* ── Aegis-Specific Styles ─────────────────────────────────────── */
+    .risk-gauge-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 0 0 0;
+    }
+
+    .risk-gauge-wrap svg {
+      display: block;
+      transform: rotate(-90deg);
+    }
+
+    .risk-gauge-bg {
+      fill: none;
+      stroke: var(--bg-tertiary);
+      stroke-width: 12;
+    }
+
+    .risk-gauge-arc-low {
+      fill: none;
+      stroke: #10B981;
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .risk-gauge-arc-med {
+      fill: none;
+      stroke: #F59E0B;
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .risk-gauge-arc-high {
+      fill: none;
+      stroke: #F97316;
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .risk-gauge-arc-crit {
+      fill: none;
+      stroke: #EF4444;
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .risk-gauge-needle {
+      fill: none;
+      stroke: var(--text-primary);
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .risk-center-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .risk-center-text .risk-big {
+      font-size: 36px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .risk-center-text .risk-label-small {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .risk-legend {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin-top: 8px;
+      padding-bottom: 10px;
+    }
+
+    .risk-legend-item {
+      font-size: 9px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .risk-legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .risk-legend-dot.low { background: #10B981; }
+    .risk-legend-dot.med { background: #F59E0B; }
+    .risk-legend-dot.high { background: #F97316; }
+    .risk-legend-dot.crit { background: #EF4444; }
+
+    /* Policy bars */
+    .policy-row {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 8px 0;
+    }
+
+    .policy-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .policy-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .policy-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .policy-value {
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent);
+    }
+
+    /* Anomaly score section */
+    .anomaly-big-score {
+      font-size: 56px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .anomaly-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    .anomaly-bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .anomaly-bar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .anomaly-bar-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .anomaly-bar-value {
+      font-size: 12px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .anomaly-bar-value.amber { color: #F59E0B; }
+    .anomaly-bar-value.green { color: #10B981; }
+    .anomaly-bar-value.red { color: #EF4444; }
+
+    .progress-fill.amber { background: #F59E0B; }
+    .progress-fill.green { background: #10B981; }
+    .progress-fill.red { background: #EF4444; }
+
+    .audit-clean {
+      margin-top: 18px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    .audit-clean i {
+      color: #10B981;
+      font-size: 18px;
+    }
+
+    /* Card padding */
+    .card-padded {
+      padding: 20px 22px;
+    }
+
+    .card-header-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.03em;
+      margin-bottom: 4px;
+    }
+
+    /* Row spacer */
+    .gauge-card-inner {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body data-agent="aegis">
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Sidebar                                                  -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <a href="../../index.html" class="sidebar-logo">U</a>
+    <nav class="sidebar-nav">
+      <a href="../../Chronicle/dashboard/index.html" class="sidebar-link" title="Chronicle"><i class="ti ti-brain"></i></a>
+      <a href="../../Oracle/dashboard/index.html" class="sidebar-link" title="Oracle"><i class="ti ti-trending-up"></i></a>
+      <a href="../../Nexus/dashboard/index.html" class="sidebar-link" title="Nexus"><i class="ti ti-share-2"></i></a>
+      <a href="../../Pulse/dashboard/index.html" class="sidebar-link" title="Pulse"><i class="ti ti-activity"></i></a>
+      <a href="../../Atlas/dashboard/index.html" class="sidebar-link" title="Atlas"><i class="ti ti-search"></i></a>
+      <a href="../../Forge/dashboard/index.html" class="sidebar-link" title="Forge"><i class="ti ti-hammer"></i></a>
+      <a href="../../Genesis/dashboard/index.html" class="sidebar-link" title="Genesis"><i class="ti ti-zap"></i></a>
+      <a href="../../Aegis/dashboard/index.html" class="sidebar-link active" title="Aegis"><i class="ti ti-shield"></i></a>
+      <a href="../../Sentinel/dashboard/index.html" class="sidebar-link" title="Sentinel"><i class="ti ti-news"></i></a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="theme-toggle" aria-label="Toggle theme"></button>
+      <span id="api-indicator" class="sidebar-api-indicator status-dot offline"></span>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Main Content Area                                        -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+    <!-- Header -->
+    <header class="top-header">
+      <div class="top-header-left">
+        <h1>Aegis Governance</h1>
+        <div class="subtitle">RISK & COMPLIANCE MONITORING</div>
+      </div>
+      <div class="top-header-right">
+        <div class="top-stat">
+          <div class="stat-label">Compliance Score</div>
+          <div class="stat-value" id="val-compliance">98.2%</div>
+        </div>
+        <div class="top-stat">
+          <div class="stat-label">Audit Status</div>
+          <div class="stat-value" id="val-audit">PASSED</div>
+        </div>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
+      </div>
+    </header>
+
+    <!-- Dashboard Grid -->
+    <div class="dashboard-grid cols-12">
+
+      <!-- Row 1: Risk Gauge + Anomaly Feed -->
+      <!-- span-5: Real-Time Risk Gauge -->
+      <div class="card card-padded span-5" style="min-height:420px;">
+        <div class="card-header-title">Real-Time Risk Gauge</div>
+        <div class="gauge-card-inner">
+          <div class="risk-gauge-wrap" style="position:relative;">
+            <svg viewBox="0 0 160 160" width="200" height="200" style="transform:rotate(-90deg);">
+              <!-- Background track -->
+              <circle cx="80" cy="80" r="68" class="risk-gauge-bg"
+                stroke-dasharray="320" stroke-dashoffset="0"
+                stroke-linecap="round" />
+              <!-- Low arc 0-25%: green, ~80 dash -->
+              <circle cx="80" cy="80" r="68" class="risk-gauge-arc-low"
+                stroke-dasharray="427" stroke-dashoffset="427"
+                stroke-linecap="butt"
+                style="transform-origin:center; transform:rotate(0deg);" />
+              <!-- We'll use a single arc driven by JS with id="risk-gauge-arc" -->
+              <circle cx="80" cy="80" r="68"
+                id="risk-gauge-arc"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="12"
+                stroke-linecap="round"
+                stroke-dasharray="427"
+                stroke-dashoffset="427"
+                style="transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease;" />
+              <!-- Needle cap center dot -->
+              <circle cx="80" cy="80" r="5" fill="var(--text-primary)" style="transform:rotate(90deg);" />
+            </svg>
+            <!-- Center text (outside SVG rotation context) -->
+            <div class="risk-center-text">
+              <div class="risk-big" id="risk-value">24</div>
+              <div class="risk-label-small" id="risk-label">MODERATE</div>
+            </div>
+          </div>
+          <!-- Risk legend -->
+          <div class="risk-legend">
+            <span class="risk-legend-item"><span class="risk-legend-dot low"></span> LOW</span>
+            <span class="risk-legend-item"><span class="risk-legend-dot med"></span> MED</span>
+            <span class="risk-legend-item"><span class="risk-legend-dot high"></span> HIGH</span>
+            <span class="risk-legend-item"><span class="risk-legend-dot crit"></span> CRIT</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- span-7: Anomaly Detection Feed -->
+      <div class="terminal-window span-7" style="min-height:420px;">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot amber"></span>
+            <span class="terminal-dot green"></span>
+          </div>
+          <div class="terminal-title">Anomaly Detection Feed</div>
+          <span class="badge badge-accent" style="font-size:9px;">LIVE</span>
+        </div>
+        <div class="terminal-body" id="anomaly-feed">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Row 2: Policy Alignment + Anomaly Score -->
+      <!-- span-6: Policy Alignment -->
+      <div class="card card-padded span-6">
+        <div class="card-header-title">Policy Alignment</div>
+        <div class="policy-row">
+          <div class="policy-item">
+            <div class="policy-header">
+              <span class="policy-label">Data Governance</span>
+              <span class="policy-value" id="pol-data-gov">96%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill green" id="bar-data-gov" style="width:96%;"></div>
+            </div>
+          </div>
+          <div class="policy-item">
+            <div class="policy-header">
+              <span class="policy-label">Access Control</span>
+              <span class="policy-value" id="pol-access">99%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill green" id="bar-access" style="width:99%;"></div>
+            </div>
+          </div>
+          <div class="policy-item">
+            <div class="policy-header">
+              <span class="policy-label">Encryption Compliance</span>
+              <span class="policy-value" id="pol-encrypt">91%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="bar-encrypt" style="width:91%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- span-6: Anomaly Score -->
+      <div class="card card-padded span-6">
+        <div class="card-header-title">Anomaly Score</div>
+        <div style="display:flex; align-items:flex-start; gap:20px; flex-wrap:wrap;">
+          <div style="display:flex; flex-direction:column; align-items:center;">
+            <div class="anomaly-big-score" id="anomaly-score">12.4</div>
+            <div style="font-size:10px; color:var(--text-tertiary); font-family:var(--font-mono); letter-spacing:0.06em; text-transform:uppercase;">Risk Index</div>
+          </div>
+          <div class="anomaly-bars" style="flex:1; min-width:200px;">
+            <div class="anomaly-bar-row">
+              <div class="anomaly-bar-header">
+                <span class="anomaly-bar-label">Behavior Drift</span>
+                <span class="anomaly-bar-value amber" id="bar-behavior-val">18%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill amber" id="bar-behavior" style="width:18%;"></div>
+              </div>
+            </div>
+            <div class="anomaly-bar-row">
+              <div class="anomaly-bar-header">
+                <span class="anomaly-bar-label">Policy Violations</span>
+                <span class="anomaly-bar-value green" id="bar-violations-val">2</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill green" id="bar-violations" style="width:4%;"></div>
+              </div>
+            </div>
+            <div class="anomaly-bar-row">
+              <div class="anomaly-bar-header">
+                <span class="anomaly-bar-label">Threat Detections</span>
+                <span class="anomaly-bar-value red" id="bar-threats-val">1</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill red" id="bar-threats" style="width:2%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="audit-clean">
+          <i class="ti ti-checkbox"></i>
+          <span>Audit log clean — last scan: <strong id="audit-time">--</strong></span>
+        </div>
+      </div>
+
+    </div><!-- /dashboard-grid -->
+  </div><!-- /main content area -->
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Scripts                                                  -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <script src="../../shared/dashboard-core.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const U = window.UniversalAI;
+      const activeAgent = 'aegis';
+
+      // ── State ────────────────────────────────────────────────
+      let currentRisk = 24;       // 0-100
+      let riskLabel = 'MODERATE';
+      let anomalyScore = 12.4;
+      const gaugeCircumference = 427; // matches stroke-dasharray
+
+      // ── Risk → Label & Color ────────────────────────────────
+      function getRiskInfo(risk) {
+        if (risk <= 25) return { label: 'LOW', color: '#10B981' };
+        if (risk <= 50) return { label: 'MODERATE', color: '#F59E0B' };
+        if (risk <= 75) return { label: 'HIGH', color: '#F97316' };
+        return { label: 'CRITICAL', color: '#EF4444' };
+      }
+
+      // ── Update Risk Gauge ───────────────────────────────────
+      function updateRiskGauge(risk, animate = true) {
+        currentRisk = Math.max(0, Math.min(100, risk));
+        const info = getRiskInfo(currentRisk);
+        riskLabel = info.label;
+
+        const arc = document.getElementById('risk-gauge-arc');
+        const valueEl = document.getElementById('risk-value');
+        const labelEl = document.getElementById('risk-label');
+
+        if (!arc || !valueEl || !labelEl) return;
+
+        // 427 represents the full visible arc (~270deg). Map 0-100 risk to offset.
+        // At risk=0: offset=427 (no fill). At risk=100: offset=0 (full fill).
+        const targetOffset = gaugeCircumference * (1 - currentRisk / 100);
+
+        arc.style.stroke = info.color;
+        arc.style.strokeDashoffset = targetOffset;
+
+        if (!animate) {
+          arc.style.transition = 'none';
+          requestAnimationFrame(() => {
+            arc.style.transition = 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease';
+          });
+        }
+
+        valueEl.textContent = Math.round(currentRisk);
+        labelEl.textContent = info.label;
+
+        // Also update the anomaly score to track risk
+        anomalyScore = parseFloat((currentRisk * 0.52).toFixed(1));
+        const scoreEl = document.getElementById('anomaly-score');
+        if (scoreEl) scoreEl.textContent = anomalyScore.toFixed(1);
+      }
+
+      // ── Anomaly Feed Mock Data ──────────────────────────────
+      const mockAnomalies = [
+        { time: '14:32:11', agent: 'AEGIS', type: 'OK', msg: 'Policy scan complete — 3,421 rules verified' },
+        { time: '14:31:45', agent: 'SENTINEL', type: 'OK', msg: 'External threat feed synced — 0 new alerts' },
+        { time: '14:30:22', agent: 'PULSE', type: 'WARN', msg: 'Minor CPU spike on node gcp-us-east-2 (82%)' },
+        { time: '14:29:58', agent: 'AEGIS', type: 'OK', msg: 'Audit log integrity check passed — SHA-256 verified' },
+        { time: '14:28:33', agent: 'ATLAS', type: 'OK', msg: 'Permission boundary scan — 144/144 compliant' },
+        { time: '14:27:19', agent: 'AEGIS', type: 'WARN', msg: 'Unusual API key usage pattern detected (3x normal)' },
+        { time: '14:26:05', agent: 'SENTINEL', type: 'ERROR', msg: 'Blocked unauthorized access attempt from 192.168.7.44' },
+        { time: '14:25:41', agent: 'AEGIS', type: 'OK', msg: 'Encryption rotation cycle completed — TLS 1.3 enforced' },
+        { time: '14:24:18', agent: 'PULSE', type: 'OK', msg: 'Container image scan clean — 0 CVEs detected' },
+        { time: '14:23:52', agent: 'AEGIS', type: 'OK', msg: 'RBAC model re-evaluated — 98.7% efficiency' },
+        { time: '14:22:30', agent: 'ATLAS', type: 'WARN', msg: 'Data lineage gap found in pipeline "etl-finance-03"' },
+        { time: '14:21:14', agent: 'AEGIS', type: 'OK', msg: 'Compliance score updated — 98.2% (ISO 27001 ready)' },
+      ];
+
+      let anomalyIndex = 0;
+
+      function pushAnomaly() {
+        const container = document.getElementById('anomaly-feed');
+        if (!container) return;
+
+        const entry = mockAnomalies[anomalyIndex % mockAnomalies.length];
+        anomalyIndex++;
+
+        const el = document.createElement('div');
+        el.className = 'terminal-line';
+        let typeClass = 'info';
+        if (entry.type === 'WARN') typeClass = 'warn';
+        if (entry.type === 'ERROR') typeClass = 'error';
+        if (entry.type === 'OK') typeClass = 'success';
+        el.className += ' ' + typeClass;
+
+        const agentColorMap = {
+          AEGIS: 'var(--accent)',
+          SENTINEL: '#06B6D4',
+          PULSE: '#EF4444',
+          ATLAS: '#8B5CF6'
+        };
+        const agentColor = agentColorMap[entry.agent] || 'var(--text-secondary)';
+
+        el.innerHTML = '<span class="time">[' + entry.time + ']</span> ' +
+          '<span class="agent-tag" style="color:' + agentColor + ';">[' + entry.agent + ']</span> ' +
+          '<span style="color:var(--text-secondary);">' + entry.msg + '</span>';
+
+        container.appendChild(el);
+
+        // Keep max 15 lines
+        while (container.children.length > 15) {
+          container.firstElementChild.remove();
+        }
+        container.scrollTop = container.scrollHeight;
+      }
+
+      // ── Populate initial anomalies ───────────────────────────
+      function seedAnomalyFeed() {
+        const container = document.getElementById('anomaly-feed');
+        if (!container) return;
+        container.innerHTML = '';
+        // Show last 8 entries
+        for (let i = Math.max(0, mockAnomalies.length - 8); i < mockAnomalies.length; i++) {
+          const entry = mockAnomalies[i];
+          const el = document.createElement('div');
+          el.className = 'terminal-line';
+          let typeClass = 'info';
+          if (entry.type === 'WARN') typeClass = 'warn';
+          if (entry.type === 'ERROR') typeClass = 'error';
+          if (entry.type === 'OK') typeClass = 'success';
+          el.className += ' ' + typeClass;
+
+          const agentColorMap = {
+            AEGIS: 'var(--accent)',
+            SENTINEL: '#06B6D4',
+            PULSE: '#EF4444',
+            ATLAS: '#8B5CF6'
+          };
+          const agentColor = agentColorMap[entry.agent] || 'var(--text-secondary)';
+
+          el.innerHTML = '<span class="time">[' + entry.time + ']</span> ' +
+            '<span class="agent-tag" style="color:' + agentColor + ';">[' + entry.agent + ']</span> ' +
+            '<span style="color:var(--text-secondary);">' + entry.msg + '</span>';
+
+          container.appendChild(el);
+        }
+        container.scrollTop = container.scrollHeight;
+        anomalyIndex = mockAnomalies.length;
+      }
+
+      // ── Compliance Simulator ─────────────────────────────────
+      function simulateCompliance() {
+        // Slightly vary the compliance scores
+        const dataGovBase = 96;
+        const accessBase = 99;
+        const encryptBase = 91;
+        const behaviorBase = 18;
+        const violationsBase = 2;
+        const threatsBase = 1;
+
+        const dg = dataGovBase + (Math.random() * 3 - 1.5);
+        const ac = accessBase + (Math.random() * 2 - 1);
+        const ec = encryptBase + (Math.random() * 3 - 1.5);
+        const bd = behaviorBase + (Math.random() * 6 - 3);
+        const pv = Math.max(0, Math.round(violationsBase + (Math.random() * 2 - 1)));
+        const td = Math.max(0, Math.round(threatsBase + (Math.random() * 1.6 - 0.8)));
+
+        // Update policy alignment bars
+        const dataGovEl = document.getElementById('pol-data-gov');
+        const accessEl = document.getElementById('pol-access');
+        const encryptEl = document.getElementById('pol-encrypt');
+        const barDataGov = document.getElementById('bar-data-gov');
+        const barAccess = document.getElementById('bar-access');
+        const barEncrypt = document.getElementById('bar-encrypt');
+
+        if (dataGovEl) dataGovEl.textContent = Math.round(dg) + '%';
+        if (accessEl) accessEl.textContent = Math.round(ac) + '%';
+        if (encryptEl) encryptEl.textContent = Math.round(ec) + '%';
+        if (barDataGov) barDataGov.style.width = Math.round(dg) + '%';
+        if (barAccess) barAccess.style.width = Math.round(ac) + '%';
+        if (barEncrypt) barEncrypt.style.width = Math.round(ec) + '%';
+
+        // Update anomaly score bars
+        const bvEl = document.getElementById('bar-behavior-val');
+        const pvEl = document.getElementById('bar-violations-val');
+        const tdEl = document.getElementById('bar-threats-val');
+        const bBar = document.getElementById('bar-behavior');
+        const pBar = document.getElementById('bar-violations');
+        const tBar = document.getElementById('bar-threats');
+
+        const bdClamped = Math.max(0, Math.min(100, bd));
+        if (bvEl) bvEl.textContent = Math.round(bdClamped) + '%';
+        if (pvEl) pvEl.textContent = pv;
+        if (tdEl) tdEl.textContent = td;
+        if (bBar) bBar.style.width = bdClamped + '%';
+        if (pBar) pBar.style.width = Math.min(100, pv * 2) + '%';
+        if (tBar) tBar.style.width = Math.min(100, td * 2) + '%';
+
+        // Vary risk slightly
+        const riskVariation = currentRisk + (Math.random() * 6 - 3);
+        updateRiskGauge(riskVariation);
+
+        // Update compliance score in header
+        const compEl = document.getElementById('val-compliance');
+        if (compEl) {
+          const compScore = (98.2 + (Math.random() * 1.4 - 0.7)).toFixed(1);
+          compEl.textContent = compScore + '%';
+        }
+
+        // Update audit timestamp
+        const auditTime = document.getElementById('audit-time');
+        if (auditTime) {
+          const now = new Date();
+          auditTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+      }
+
+      // ── Init on DOM Ready ───────────────────────────────────
+      function init() {
+        // Seed anomaly feed
+        seedAnomalyFeed();
+
+        // Set initial audit time
+        const auditTime = document.getElementById('audit-time');
+        if (auditTime) {
+          const now = new Date();
+          auditTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        // Animate risk gauge on load
+        setTimeout(() => {
+          updateRiskGauge(24);
+        }, 400);
+
+        // Init chat via dashboard-core
+        U.initChat('Aegis Governance', '<i class="ti ti-shield"></i>');
+
+        // Set active agent in shared state
+        U.state.activeAgent = activeAgent;
+
+        // Anomaly feed: push a new entry every 4-7 seconds
+        setInterval(() => {
+          pushAnomaly();
+        }, 4000 + Math.random() * 3000);
+
+        // Compliance simulator every 5 seconds
+        setInterval(simulateCompliance, 5000);
+      }
+
+      // ── Bootstrap ────────────────────────────────────────────
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

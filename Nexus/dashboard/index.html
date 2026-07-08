@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Command Center | Universal AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --neon-green: #39FF14;
+            --bg-dark: #010B13;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-dark);
+            color: #fff;
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+
+        .font-mono {
+            font-family: 'Inconsolata', monospace;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(57, 255, 20, 0.1);
+        }
+
+        main::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.12;
+        }
+
+        .dc {
+            background: #111;
+            border: 1px solid rgba(57, 255, 20, 0.15);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .dc:hover {
+            border-color: rgba(57, 255, 20, 0.4);
+            box-shadow: 0 0 25px rgba(57, 255, 20, 0.08);
+        }
+
+        .particle {
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .particle:hover {
+            transform: scale(1.08);
+            background: rgba(57, 255, 20, 0.15);
+            border-color: #39FF14;
+        }
+    </style>
+</head>
+
+<body class="overflow-hidden">
+    <div class="flex h-screen w-full bg-[#010B13]">
+        <aside class="w-20 bg-[#111] border-r border-[#39FF14]/20 flex flex-col items-center py-8 z-50">
+            <a href="../../index.html" class="mb-12 group cursor-pointer"><i
+                    class="ti ti-cpu text-[#39FF14] text-3xl drop-shadow-[0_0_8px_#39FF14]"></i></a>
+            <nav class="flex-1 flex flex-col gap-6">
+                <a href="../../Chronicle/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Chronicle"><i class="ti ti-brain text-2xl"></i></a>
+                <a href="../../Oracle/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Oracle"><i class="ti ti-trending-up text-2xl"></i></a>
+                <a href="index.html" class="group p-3 text-[#39FF14] flex justify-center relative" title="Nexus">
+                    <div class="absolute inset-y-2 left-0 w-[2px] bg-[#39FF14] shadow-[0_0_15px_#39FF14]"></div><i
+                        class="ti ti-share-2 text-2xl drop-shadow-[0_0_8px_#39FF14]"></i>
+                </a>
+                <a href="../../Pulse/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Pulse"><i class="ti ti-activity text-2xl"></i></a>
+                <a href="../../Atlas/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Atlas"><i class="ti ti-search text-2xl"></i></a>
+                <a href="../../Forge/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Forge"><i class="ti ti-hammer text-2xl"></i></a>
+                <a href="../../Genesis/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Genesis"><i class="ti ti-zap text-2xl"></i></a>
+                <a href="../../Aegis/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Aegis"><i class="ti ti-shield text-2xl"></i></a>
+                <a href="../../Sentinel/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Sentinel"><i class="ti ti-news text-2xl"></i></a>
+            </nav>
+            <div class="mt-auto flex flex-col gap-6">
+                <div id="api-indicator"
+                    class="w-10 h-10 rounded bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 font-mono text-[8px] font-bold">
+                    OFF</div>
+                <div
+                    class="w-10 h-10 rounded bg-[#39FF14]/10 border border-[#39FF14]/20 flex items-center justify-center text-[#39FF14] font-mono text-xs font-bold">
+                    U.AI</div>
+            </div>
+        </aside>
+
+        <main class="flex-1 overflow-y-auto p-8 space-y-8 relative">
+            <header class="flex items-center justify-between border-b border-[#39FF14]/10 pb-8">
+                <div>
+                    <h1 class="font-mono text-3xl font-bold text-[#39FF14] tracking-tighter uppercase">Nexus Command
+                        Center</h1>
+                    <div class="flex items-center gap-3 mt-1"><span
+                            class="w-2 h-2 bg-[#39FF14] rounded-full animate-pulse"></span>
+                        <p class="text-white/40 text-[10px] font-mono uppercase tracking-[0.2em]" id="conn-label">
+                            INSTITUTIONAL ORCHESTRATION</p>
+                    </div>
+                </div>
+                <div
+                    class="flex items-center gap-10 bg-[#111]/50 border border-[#39FF14]/10 px-6 py-3 rounded-sm conn-sensitive">
+                    <div><span class="text-[9px] text-white/30 uppercase font-mono">System Load</span>
+                        <div class="text-[#39FF14] font-mono text-xl font-bold" id="val-load">2.41%</div>
+                    </div>
+                    <div><span class="text-[9px] text-white/30 uppercase font-mono">Uptime</span>
+                        <div class="text-[#39FF14] font-mono text-xl font-bold" id="val-uptime">99.9%</div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-12 gap-8 h-[460px]">
+                <div class="col-span-8 dc rounded-sm relative overflow-hidden">
+                    <div
+                        class="absolute top-5 left-5 z-20 bg-[#010B13]/80 border border-[#39FF14]/30 px-3 py-1.5 flex items-center gap-3">
+                        <div class="w-2 h-2 bg-[#39FF14] rounded-full animate-pulse"></div><span
+                            class="font-mono text-[10px] text-[#39FF14] uppercase tracking-widest font-bold">Ecosystem
+                            Graph</span>
+                    </div>
+                    <div id="network"
+                        class="relative w-full h-full z-10 flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(57,255,20,0.03)_0%,transparent_70%)]">
+                        <svg id="lines" class="absolute inset-0 w-full h-full opacity-25 z-0 pointer-events-none"></svg>
+                        <div id="nexus-core" class="relative w-20 h-20 flex items-center justify-center z-20">
+                            <div class="absolute inset-0 bg-[#39FF14]/10 rounded-full animate-ping"></div>
+                            <div
+                                class="w-16 h-16 bg-[#111] border-2 border-[#39FF14] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(57,255,20,0.2)]">
+                                <i class="ti ti-share-2 text-4xl text-[#39FF14]"></i></div>
+                        </div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:20%;left:15%;">[CHRONICLE]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:75%;left:20%;">[ORACLE]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:15%;left:75%;">[ATLAS]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:80%;left:70%;">[AEGIS]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:45%;left:85%;">[GENESIS]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:10%;left:45%;">[FORGE]</div>
+                        <div class="particle absolute px-3 py-1.5 bg-[#010B13]/90 border border-[#39FF14]/40 font-mono text-[10px] text-[#39FF14] z-20"
+                            style="top:55%;left:78%;">[PULSE]</div>
+                    </div>
+                    <div class="absolute bottom-5 right-5 text-right">
+                        <p class="text-[9px] text-white/30 uppercase font-mono">Nodes</p>
+                        <p class="text-[#39FF14] font-mono text-sm font-bold" id="cluster-count">1,024 CLUSTERS</p>
+                    </div>
+                </div>
+
+                <div class="col-span-4 grid grid-rows-2 gap-8">
+                    <div class="dc rounded-sm p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between mb-4">
+                                <h3 class="text-white/40 text-[10px] font-mono uppercase tracking-[0.2em]">Integrity
+                                </h3><i class="ti ti-activity text-[#39FF14]"></i>
+                            </div>
+                            <div class="text-4xl font-mono text-[#39FF14] font-bold" id="integrity-val">99.98<span
+                                    class="text-lg opacity-40 ml-1">%</span></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-mono mb-2"><span
+                                    class="text-white/30">Latency</span><span class="text-[#39FF14]"
+                                    id="latency-val">12.04 MS</span></div>
+                            <div class="w-full bg-[#39FF14]/5 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-[#39FF14] h-full w-[94%] shadow-[0_0_10px_#39FF14]"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dc rounded-sm p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between mb-4">
+                                <h3 class="text-white/40 text-[10px] font-mono uppercase tracking-[0.2em]">Protocols
+                                </h3><i class="ti ti-lock text-[#39FF14]"></i>
+                            </div>
+                            <div class="text-4xl font-mono text-[#39FF14] font-bold">14<span
+                                    class="text-lg opacity-40 ml-2">SYNCED</span></div>
+                        </div>
+                        <div class="flex flex-wrap gap-2"><span
+                                class="px-2.5 py-1 bg-[#39FF14]/5 border border-[#39FF14]/20 text-[#39FF14] text-[9px] font-mono uppercase">TLS_v3.1</span><span
+                                class="px-2.5 py-1 bg-[#39FF14]/5 border border-[#39FF14]/20 text-[#39FF14] text-[9px] font-mono uppercase">AES_256</span><span
+                                class="px-2.5 py-1 bg-[#39FF14]/5 border border-[#39FF14]/20 text-[#39FF14] text-[9px] font-mono uppercase">PROTO_X</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-8 pb-8">
+                <div class="col-span-5 dc rounded-sm p-6">
+                    <div class="flex justify-between mb-6">
+                        <h3 class="font-mono text-xs text-[#39FF14] font-bold uppercase tracking-widest"><i
+                                class="ti ti-trending-up"></i> Signal Delta</h3><span
+                            class="text-[#39FF14] font-mono text-xl font-bold" id="sig-delta">+12.4%</span>
+                    </div>
+                    <div class="h-[220px]"><canvas id="signalChart"></canvas></div>
+                </div>
+                <div class="col-span-4 dc rounded-sm flex flex-col overflow-hidden">
+                    <div class="p-3 border-b border-[#39FF14]/10 bg-[#010B13]/50 flex justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="flex gap-1">
+                                <div class="w-2 h-2 rounded-full bg-red-500/40"></div>
+                                <div class="w-2 h-2 rounded-full bg-amber-500/40"></div>
+                                <div class="w-2 h-2 rounded-full bg-[#39FF14]/40"></div>
+                            </div><span
+                                class="font-mono text-[9px] text-[#39FF14]/80 uppercase tracking-[0.2em] font-bold">Terminal</span>
+                        </div><span class="text-[8px] font-mono text-white/20">LIVE</span>
+                    </div>
+                    <div class="flex-1 overflow-hidden relative bg-[#010B13]/20">
+                        <div
+                            class="absolute inset-0 pointer-events-none z-20 bg-gradient-to-b from-[#111] via-transparent to-[#111]">
+                        </div>
+                        <div id="terminal" class="p-5 space-y-4 font-mono text-[10px] relative z-10"></div>
+                    </div>
+                </div>
+                <div class="col-span-3 dc rounded-sm p-6 flex flex-col">
+                    <h3 class="font-mono text-xs text-[#39FF14] font-bold uppercase tracking-widest mb-4"><i
+                            class="ti ti-shield-check"></i> Governance</h3>
+                    <div class="flex-1 flex items-center justify-center py-6"><svg viewBox="0 0 100 100"
+                            class="w-[150px] h-[150px] -rotate-90">
+                            <circle cx="50" cy="50" r="44" stroke="currentColor" stroke-width="1.5" fill="transparent"
+                                class="text-[#39FF14]/5" />
+                            <circle id="gauge-arc" cx="50" cy="50" r="44" stroke="#39FF14" stroke-width="3"
+                                fill="transparent" stroke-dasharray="276" stroke-dashoffset="207" />
+                        </svg>
+                        <div class="absolute"><span class="text-4xl font-mono text-[#39FF14] font-bold"
+                                id="risk-pct">25<span class="text-sm opacity-40 ml-1">%</span></span></div>
+                    </div>
+                    <div class="mt-6 space-y-3 pt-4 border-t border-white/5">
+                        <div class="flex justify-between text-[9px] font-mono"><span
+                                class="text-white/30">Compliance</span><span
+                                class="text-[#39FF14] font-bold">98.2/100</span></div>
+                        <div class="flex justify-between text-[9px] font-mono"><span
+                                class="text-white/30">Threats</span><span class="text-[#39FF14] font-bold">CLEAN</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="../../shared/dashboard-core.js"></script>
+    <script>
+        const UAI = window.UniversalAI;
+        UAI.state.activeAgent = 'nexus';
+        const AGENTS = ['chronicle', 'oracle', 'nexus', 'pulse', 'atlas', 'forge', 'genesis', 'aegis', 'sentinel'];
+        UAI.initKeyboardNav(AGENTS);
+
+        // ── Log Stream ───────────────────────────────────────────
+        const LOGS = [{ type: 'OK', agent: 'ATLAS', msg: 'Source corroborated: Node 778' }, { type: 'INFO', agent: 'PULSE', msg: 'Trend detected: AI Autonomy' }, { type: 'SYNC', agent: 'NEXUS', msg: 'Re-routing logic to Forge' }, { type: 'WARN', agent: 'PULSE', msg: 'Sentiment volatility alert' }, { type: 'SAFE', agent: 'AEGIS', msg: 'Policy check: PASSED' }, { type: 'WR', agent: 'CHRONICLE', msg: 'Memory commit: Sector F-09' }];
+        const term = document.getElementById('terminal');
+
+        function pushLog(log) {
+            const el = document.createElement('div');
+            const time = new Date().toLocaleTimeString([], { hour12: false });
+            let c = 'text-[#39FF14]';
+            if (log.type === 'WARN' || log.type === 'ERROR') c = 'text-red-500 font-bold';
+            if (log.type === 'INFO') c = 'text-white/60';
+            if (log.type === 'SYNC') c = 'text-cyan-400';
+            el.className = `opacity-0 translate-y-2 transition-all duration-300 ${c}`;
+            el.innerHTML = `<span class="opacity-20 mr-2">[${time}]</span>[${log.agent}-${log.type}] ${log.msg}`;
+            term.prepend(el);
+            requestAnimationFrame(() => el.classList.remove('opacity-0', 'translate-y-2'));
+            while (term.children.length > 15) term.lastElementChild.remove();
+        }
+
+        async function pollLogs() {
+            if (UAI.state.connected) {
+                const d = await UAI.apiGet('/logs?limit=10');
+                if (d && d.length > 0) { term.innerHTML = ''; d.reverse().forEach(l => pushLog({ type: l.type, agent: l.agent, msg: l.msg })); }
+            } else {
+                pushLog(LOGS[Math.floor(Math.random() * LOGS.length)]);
+            }
+        }
+        setInterval(pollLogs, 2500);
+        for (let i = 0; i < 8; i++) pushLog(LOGS[Math.floor(Math.random() * LOGS.length)]);
+
+        // ── Network Animation ────────────────────────────────────
+        const particles = gsap.utils.toArray('.particle');
+        const svg = document.getElementById('lines');
+        const core = document.getElementById('nexus-core');
+        const network = document.getElementById('network');
+        particles.forEach((p, i) => { gsap.to(p, { x: "random(-50,50)", y: "random(-50,50)", duration: 5 + i, repeat: -1, yoyo: true, ease: "sine.inOut" }); });
+
+        function updateLines() {
+            if (!svg || !core || !network) return;
+            const cR = core.getBoundingClientRect(), nR = network.getBoundingClientRect();
+            const cx = cR.left + cR.width / 2 - nR.left, cy = cR.top + cR.height / 2 - nR.top;
+            svg.innerHTML = '';
+            particles.forEach(p => {
+                const pR = p.getBoundingClientRect();
+                const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                l.setAttribute("x1", cx); l.setAttribute("y1", cy);
+                l.setAttribute("x2", pR.left + pR.width / 2 - nR.left); l.setAttribute("y2", pR.top + pR.height / 2 - nR.top);
+                l.setAttribute("stroke", "#39FF14"); l.setAttribute("stroke-width", "0.5"); l.setAttribute("stroke-dasharray", "3 5"); l.setAttribute("opacity", "0.2");
+                svg.appendChild(l);
+            });
+        }
+        gsap.ticker.add(updateLines);
+
+        // ── Chart ────────────────────────────────────────────────
+        const ctx = document.getElementById('signalChart').getContext('2d');
+        const chart = new Chart(ctx, { type: 'line', data: { labels: Array.from({ length: 30 }, (_, i) => i), datasets: [{ label: 'Signal', data: Array.from({ length: 30 }, () => Math.floor(Math.random() * 60) + 30), borderColor: '#39FF14', borderWidth: 1.5, tension: 0, pointRadius: 0, fill: true, backgroundColor: 'rgba(57,255,20,0.03)' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(57,255,20,0.03)' }, ticks: { color: 'rgba(57,255,20,0.3)', font: { family: 'Inconsolata', size: 8 } } } }, animation: { duration: 0 } });
+        setInterval(() => { chart.data.datasets[0].data.shift(); chart.data.datasets[0].data.push(Math.floor(Math.random() * 60) + 30); chart.update(); }, 3000);
+
+        // ── Gauge Animation ──────────────────────────────────────
+        setInterval(() => { UAI.animateGauge('#gauge-arc', 20 + Math.random() * 15, 100, 2); document.getElementById('risk-pct').innerHTML = Math.round(20 + Math.random() * 15) + '<span class="text-sm opacity-40 ml-1">%</span>'; }, 5000);
+    </script>
+</body>
+
+</html>

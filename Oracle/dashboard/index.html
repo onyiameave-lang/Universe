@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oracle Intelligence — Universal AI</title>
+  <link rel="stylesheet" href="../../shared/theme.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/tabler-icons.min.css">
+  <style>
+    /* ── Oracle-specific layout ──────────────────────────────── */
+    .app-layout {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .main-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .timeframe-pills {
+      display: flex;
+      gap: 6px;
+    }
+    .timeframe-pill {
+      padding: 5px 14px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-primary);
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      transition: all var(--transition-fast);
+      letter-spacing: 0.03em;
+    }
+    .timeframe-pill:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+    .timeframe-pill.active {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+    }
+    .card-body {
+      flex: 1;
+    }
+    .span-4-inner {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 20px;
+    }
+    .signal-big-value {
+      font-size: 48px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      line-height: 1;
+    }
+    .signal-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .signal-label-text {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+    }
+    .signal-label-pct {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .bull-bear-bar {
+      display: flex;
+      height: 24px;
+      border-radius: 100px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .bull-fill {
+      background: #10B981;
+      transition: width 0.6s ease;
+    }
+    .bear-fill {
+      background: #EF4444;
+      transition: width 0.6s ease;
+    }
+    .risk-exposure-val {
+      font-size: 64px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      line-height: 1;
+    }
+    .badge-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .asset-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all var(--transition-fast);
+    }
+    .asset-card:hover {
+      border-color: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+    .asset-name {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+    }
+    .asset-allocation {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .asset-value {
+      font-size: 18px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+    .portfolio-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .portfolio-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-primary);
+    }
+    .portfolio-stat-label {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+    }
+    .portfolio-stat-value {
+      font-size: 20px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+    .pnl-positive {
+      color: #10B981 !important;
+    }
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: calc(100% - 48px);
+    }
+    .card-padded {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .terminal-body.trade-log .terminal-line {
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border-secondary);
+    }
+    .terminal-line.buy {
+      color: #10B981;
+    }
+    .terminal-line.sell {
+      color: #EF4444;
+    }
+  </style>
+</head>
+<body data-agent="oracle">
+
+  <!-- ════════════════════════ APP LAYOUT ═══════════════════════ -->
+  <div class="app-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <a href="../../index.html" class="sidebar-logo">U</a>
+      <nav class="sidebar-nav">
+        <a href="../../Chronicle/dashboard/index.html" class="sidebar-link" title="Chronicle"><i class="ti ti-brain"></i></a>
+        <a href="../../Oracle/dashboard/index.html" class="sidebar-link active" title="Oracle"><i class="ti ti-trending-up"></i></a>
+        <a href="../../Nexus/dashboard/index.html" class="sidebar-link" title="Nexus"><i class="ti ti-share-2"></i></a>
+        <a href="../../Pulse/dashboard/index.html" class="sidebar-link" title="Pulse"><i class="ti ti-activity"></i></a>
+        <a href="../../Atlas/dashboard/index.html" class="sidebar-link" title="Atlas"><i class="ti ti-search"></i></a>
+        <a href="../../Forge/dashboard/index.html" class="sidebar-link" title="Forge"><i class="ti ti-hammer"></i></a>
+        <a href="../../Genesis/dashboard/index.html" class="sidebar-link" title="Genesis"><i class="ti ti-zap"></i></a>
+        <a href="../../Aegis/dashboard/index.html" class="sidebar-link" title="Aegis"><i class="ti ti-shield"></i></a>
+        <a href="../../Sentinel/dashboard/index.html" class="sidebar-link" title="Sentinel"><i class="ti ti-news"></i></a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
+        <span id="api-indicator" class="sidebar-api-indicator status-dot offline"></span>
+      </div>
+    </aside>
+
+    <!-- ── Main Panel ──────────────────────────────────────────── -->
+    <div class="main-panel">
+
+      <!-- ── Header ────────────────────────────────────────────── -->
+      <header class="top-header">
+        <div class="top-header-left">
+          <h1>Oracle Intelligence</h1>
+          <div class="subtitle">PREDICTIVE MARKET ANALYTICS</div>
+        </div>
+        <div class="top-header-right">
+          <div class="top-stat">
+            <div class="stat-label">Forecast Confidence</div>
+            <div class="stat-value" id="val-confidence">94.7%</div>
+          </div>
+          <div class="top-stat">
+            <div class="stat-label">Signals Active</div>
+            <div class="stat-value" id="val-signals">8</div>
+          </div>
+          <button class="theme-toggle" aria-label="Toggle theme"></button>
+        </div>
+      </header>
+
+      <!-- ── Dashboard Grid ────────────────────────────────────── -->
+      <div class="dashboard-grid cols-12">
+
+        <!-- Row 1: Live Market Data (span-8) + Signal/Risk (span-4) -->
+        <!-- Live Market Data -->
+        <div class="card span-8 card-padded" style="min-height:420px;">
+          <div class="card-header">
+            <span class="card-title">Live Market Data</span>
+            <div class="timeframe-pills">
+              <span class="timeframe-pill active" data-tf="1D">1D</span>
+              <span class="timeframe-pill" data-tf="1H">1H</span>
+              <span class="timeframe-pill" data-tf="15M">15M</span>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="marketChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Signal Strength + Risk Exposure (span-4) -->
+        <div class="span-4">
+          <div class="span-4-inner">
+
+            <!-- Signal Strength -->
+            <div class="card card-padded">
+              <div class="card-header">
+                <span class="card-title">Signal Strength</span>
+                <span class="badge badge-accent">LIVE</span>
+              </div>
+              <div class="card-body" style="display:flex;flex-direction:column;justify-content:center;">
+                <div class="signal-big-value" id="signal-strength-val">87</div>
+                <div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono);">/ 100</div>
+                <div style="margin-top:12px;">
+                  <div class="signal-label-row">
+                    <span class="signal-label-text">Bullish</span>
+                    <span class="signal-label-pct" style="color:#10B981;">72%</span>
+                  </div>
+                  <div class="bull-bear-bar">
+                    <div class="bull-fill" id="signal-bar" style="width:72%;"></div>
+                    <div class="bear-fill" style="width:28%;"></div>
+                  </div>
+                  <div class="signal-label-row" style="margin-top:4px;">
+                    <span class="signal-label-text">Bearish</span>
+                    <span class="signal-label-pct" style="color:#EF4444;">28%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Risk Exposure -->
+            <div class="card card-padded">
+              <div class="card-header">
+                <span class="card-title">Risk Exposure</span>
+                <span class="badge badge-success">SAFE</span>
+              </div>
+              <div class="card-body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;">
+                <div class="risk-exposure-val" id="risk-exposure-val">23<span style="font-size:28px;">%</span></div>
+                <div class="badge-row">
+                  <span class="badge badge-success">LOW VOL</span>
+                  <span class="badge badge-accent">HEDGED</span>
+                  <span class="badge badge-success">STABLE</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Row 2: Trade Execution Log (span-5) + Portfolio Distribution (span-7) -->
+        <!-- Trade Execution Log -->
+        <div class="terminal-window span-5" id="trade-terminal" style="min-height:340px;">
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <span class="terminal-dot red"></span>
+              <span class="terminal-dot amber"></span>
+              <span class="terminal-dot green"></span>
+            </div>
+            <span class="terminal-title">Trade Execution Log</span>
+          </div>
+          <div class="terminal-body trade-log" id="trade-log-body"></div>
+        </div>
+
+        <!-- Portfolio Distribution -->
+        <div class="card span-7 card-padded">
+          <div class="card-header">
+            <span class="card-title">Portfolio Distribution</span>
+            <span class="badge badge-accent">AUTO-BALANCED</span>
+          </div>
+          <div class="card-body">
+            <div class="portfolio-grid">
+              <div class="asset-card">
+                <div class="asset-name">BTC</div>
+                <div class="asset-allocation">42.5%</div>
+                <div class="asset-value">$184,250</div>
+                <div class="progress-bar" style="margin-top:6px;">
+                  <div class="progress-fill" style="width:42.5%;background:#F7931A;"></div>
+                </div>
+              </div>
+              <div class="asset-card">
+                <div class="asset-name">ETH</div>
+                <div class="asset-allocation">28.3%</div>
+                <div class="asset-value">$122,800</div>
+                <div class="progress-bar" style="margin-top:6px;">
+                  <div class="progress-fill" style="width:28.3%;background:#627EEA;"></div>
+                </div>
+              </div>
+              <div class="asset-card">
+                <div class="asset-name">SOL</div>
+                <div class="asset-allocation">18.7%</div>
+                <div class="asset-value">$81,150</div>
+                <div class="progress-bar" style="margin-top:6px;">
+                  <div class="progress-fill" style="width:18.7%;background:#9945FF;"></div>
+                </div>
+              </div>
+              <div class="asset-card">
+                <div class="asset-name">INDEX</div>
+                <div class="asset-allocation">10.5%</div>
+                <div class="asset-value">$45,600</div>
+                <div class="progress-bar" style="margin-top:6px;">
+                  <div class="progress-fill" style="width:10.5%;background:var(--accent);"></div>
+                </div>
+              </div>
+            </div>
+            <div class="portfolio-summary">
+              <div>
+                <div class="portfolio-stat-label">Total AUM</div>
+                <div class="portfolio-stat-value">$433,800</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="portfolio-stat-label">Daily P&L</div>
+                <div class="portfolio-stat-value pnl-positive">+$12,450 <span style="font-size:12px;">(+2.96%)</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard-grid -->
+    </div><!-- /main-panel -->
+  </div><!-- /app-layout -->
+
+  <!-- ════════════════════════ SCRIPTS ════════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="../../shared/dashboard-core.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const activeAgent = 'oracle';
+      const UAI = window.UniversalAI;
+
+      // Set active agent in shared state
+      UAI.state.activeAgent = activeAgent;
+
+      // ── Init Chat ───────────────────────────────────────────
+      document.addEventListener('DOMContentLoaded', () => {
+        UAI.initChat('Oracle Intelligence', '<i class="ti ti-trending-up"></i>');
+        UAI.initKeyboardNav([
+          'chronicle', 'oracle', 'nexus', 'pulse', 'atlas', 'forge', 'genesis', 'aegis', 'sentinel'
+        ]);
+
+        initMarketChart();
+        initTradeLog();
+        initLiveUpdates();
+      });
+
+      // ── Live Market Chart ───────────────────────────────────
+      let marketChart = null;
+      let currentTimeframe = '1D';
+      let framePoints = { '15M': 30, '1H': 60, '1D': 120 };
+      let frameInterval = { '15M': 500, '1H': 700, '1D': 1000 };
+
+      function generateData(count, amplitude, noise) {
+        const data = [];
+        let value = 100 + Math.random() * 20;
+        for (let i = 0; i < count; i++) {
+          const t = (i / count) * Math.PI * 4;
+          value = 100 + Math.sin(t) * amplitude + (Math.random() - 0.5) * noise;
+          data.push(value);
+        }
+        return data;
+      }
+
+      function generateLabels(count, tf) {
+        const labels = [];
+        const now = new Date();
+        let stepMs;
+        if (tf === '15M') stepMs = 30 * 1000;
+        else if (tf === '1H') stepMs = 60 * 1000;
+        else stepMs = 5 * 60 * 1000;
+        for (let i = count - 1; i >= 0; i--) {
+          const t = new Date(now.getTime() - i * stepMs);
+          labels.push(t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        }
+        return labels;
+      }
+
+      function getGradient(ctx, color1, color2) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, color1);
+        gradient.addColorStop(1, color2);
+        return gradient;
+      }
+
+      function initMarketChart() {
+        const ctx = document.getElementById('marketChart').getContext('2d');
+        const count = framePoints[currentTimeframe];
+        const labels = generateLabels(count, currentTimeframe);
+        const data = generateData(count, 15, 8);
+
+        const isDark = document.documentElement.classList.contains('dark');
+        const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+        const textColor = isDark ? '#94A3B8' : '#64748B';
+
+        marketChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Oracle Index',
+              data: data,
+              borderColor: '#F59E0B',
+              backgroundColor: getGradient(ctx, 'rgba(245,158,11,0.25)', 'rgba(245,158,11,0.0)'),
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHoverBackgroundColor: '#F59E0B',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 300 },
+            interaction: {
+              intersect: false,
+              mode: 'index'
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                titleColor: isDark ? '#F1F5F9' : '#0F172A',
+                bodyColor: isDark ? '#F1F5F9' : '#0F172A',
+                borderColor: isDark ? '#334155' : '#E2E8F0',
+                borderWidth: 1,
+                displayColors: false,
+                callbacks: {
+                  label: function (ctx) {
+                    return 'Index: ' + ctx.parsed.y.toFixed(2);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: gridColor },
+                ticks: {
+                  color: textColor,
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  maxTicksLimit: 8,
+                  maxRotation: 0
+                }
+              },
+              y: {
+                grid: { color: gridColor },
+                ticks: {
+                  color: textColor,
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  callback: function (v) { return v.toFixed(0); }
+                },
+                min: 70,
+                max: 130
+              }
+            }
+          }
+        });
+
+        // Timeframe pill handler
+        document.querySelectorAll('.timeframe-pill').forEach(pill => {
+          pill.addEventListener('click', function () {
+            document.querySelectorAll('.timeframe-pill').forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+            currentTimeframe = this.dataset.tf;
+            const newCount = framePoints[currentTimeframe];
+            const newLabels = generateLabels(newCount, currentTimeframe);
+            const ampl = currentTimeframe === '15M' ? 8 : currentTimeframe === '1H' ? 12 : 15;
+            const nois = currentTimeframe === '15M' ? 5 : currentTimeframe === '1H' ? 7 : 8;
+            marketChart.data.labels = newLabels;
+            marketChart.data.datasets[0].data = generateData(newCount, ampl, nois);
+            marketChart.update('none');
+          });
+        });
+      }
+
+      // ── Trade Execution Log ──────────────────────────────────
+      const mockTrades = [
+        { time: '09:32:14', action: 'BUY', asset: 'BTC/USDT', qty: '0.42', price: '$62,340', result: 'FILLED', pnl: '+$1,240' },
+        { time: '09:28:07', action: 'SELL', asset: 'ETH/USDT', qty: '5.80', price: '$3,420', result: 'FILLED', pnl: '+$890' },
+        { time: '09:21:55', action: 'BUY', asset: 'SOL/USDT', qty: '42.0', price: '$168.20', result: 'FILLED', pnl: '+$320' },
+        { time: '09:15:30', action: 'SELL', asset: 'BTC/USDT', qty: '0.18', price: '$61,850', result: 'FILLED', pnl: '-$210' },
+        { time: '09:08:12', action: 'BUY', asset: 'INDEX/USDT', qty: '12.0', price: '$3,800', result: 'FILLED', pnl: '+$450' },
+        { time: '09:02:44', action: 'BUY', asset: 'ETH/USDT', qty: '3.20', price: '$3,405', result: 'FILLED', pnl: '+$680' },
+        { time: '08:55:18', action: 'SELL', asset: 'SOL/USDT', qty: '25.0', price: '$167.90', result: 'FILLED', pnl: '-$95' },
+        { time: '08:48:33', action: 'BUY', asset: 'BTC/USDT', qty: '0.65', price: '$62,100', result: 'FILLED', pnl: '+$1,800' },
+        { time: '08:41:09', action: 'SELL', asset: 'INDEX/USDT', qty: '8.0', price: '$3,780', result: 'FILLED', pnl: '+$110' },
+        { time: '08:33:21', action: 'BUY', asset: 'ETH/USDT', qty: '4.50', price: '$3,390', result: 'FILLED', pnl: '+$560' },
+        { time: '08:25:47', action: 'BUY', asset: 'SOL/USDT', qty: '30.0', price: '$167.50', result: 'FILLED', pnl: '+$275' },
+        { time: '08:18:05', action: 'SELL', asset: 'BTC/USDT', qty: '0.30', price: '$61,920', result: 'FILLED', pnl: '-$340' },
+        { time: '08:10:38', action: 'BUY', asset: 'INDEX/USDT', qty: '5.0', price: '$3,760', result: 'FILLED', pnl: '+$200' },
+      ];
+
+      function renderTradeLog() {
+        const container = document.getElementById('trade-log-body');
+        if (!container) return;
+        container.innerHTML = '';
+        mockTrades.forEach(trade => {
+          const el = document.createElement('div');
+          const cls = trade.action === 'BUY' ? 'buy' : 'sell';
+          el.className = 'terminal-line ' + cls;
+          const icon = trade.action === 'BUY' ? '▲' : '▼';
+          el.innerHTML = [
+            '<span class="time">[' + trade.time + ']</span>',
+            '<span style="color:' + (trade.action === 'BUY' ? '#10B981' : '#EF4444') + ';font-weight:700;">' + icon + ' ' + trade.action + '</span>',
+            '<span style="margin:0 6px;color:var(--text-secondary);">' + trade.asset + '</span>',
+            '<span style="color:var(--text-tertiary);margin-right:6px;">Qty:' + trade.qty + '</span>',
+            '<span style="color:var(--text-tertiary);margin-right:6px;">@' + trade.price + '</span>',
+            '<span style="color:var(--text-primary);margin-right:6px;">' + trade.result + '</span>',
+            '<span style="color:' + (trade.pnl.startsWith('+') ? '#10B981' : '#EF4444') + ';font-weight:600;">' + trade.pnl + '</span>',
+          ].join('');
+          container.appendChild(el);
+        });
+      }
+
+      function initTradeLog() {
+        renderTradeLog();
+        // Simulate new trades coming in
+        setInterval(() => {
+          const actions = ['BUY', 'SELL'];
+          const assets = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'INDEX/USDT'];
+          const action = actions[Math.floor(Math.random() * 2)];
+          const asset = assets[Math.floor(Math.random() * assets.length)];
+          const qty = (Math.random() * 2 + 0.1).toFixed(2);
+          const price = '$' + (Math.random() * 10000 + 1000).toFixed(0);
+          const pnlVal = (Math.random() * 2000 - 400).toFixed(0);
+          const pnlSign = pnlVal >= 0 ? '+' : '';
+          const now = new Date();
+          const time = now.toLocaleTimeString([], { hour12: false });
+
+          const newTrade = {
+            time: time,
+            action: action,
+            asset: asset,
+            qty: qty,
+            price: price,
+            result: 'FILLED',
+            pnl: pnlSign + '$' + Math.abs(parseInt(pnlVal))
+          };
+
+          mockTrades.unshift(newTrade);
+          if (mockTrades.length > 20) mockTrades.pop();
+          renderTradeLog();
+        }, 8000 + Math.random() * 6000);
+      }
+
+      // ── Live Updates ─────────────────────────────────────────
+      function initLiveUpdates() {
+        // Signal strength live fluctuation
+        setInterval(() => {
+          const signalVal = document.getElementById('signal-strength-val');
+          const signalBar = document.getElementById('signal-bar');
+          const confidenceVal = document.getElementById('val-confidence');
+          const signalsVal = document.getElementById('val-signals');
+          const riskVal = document.getElementById('risk-exposure-val');
+
+          if (signalVal) {
+            const newSignal = Math.floor(83 + Math.random() * 9);
+            signalVal.textContent = newSignal;
+          }
+          if (signalBar) {
+            const bullishPct = Math.floor(68 + Math.random() * 9);
+            signalBar.style.width = bullishPct + '%';
+            const bearBar = signalBar.nextElementSibling;
+            if (bearBar) bearBar.style.width = (100 - bullishPct) + '%';
+          }
+          if (confidenceVal) {
+            const conf = (93.5 + Math.random() * 2.3).toFixed(1);
+            confidenceVal.textContent = conf + '%';
+          }
+          if (signalsVal) {
+            const sig = Math.floor(6 + Math.random() * 5);
+            signalsVal.textContent = sig;
+          }
+          if (riskVal) {
+            const risk = Math.floor(20 + Math.random() * 8);
+            riskVal.innerHTML = risk + '<span style="font-size:28px;">%</span>';
+          }
+        }, 3000);
+
+        // Live market data push
+        setInterval(() => {
+          if (!marketChart) return;
+          const dataset = marketChart.data.datasets[0].data;
+          const labels = marketChart.data.labels;
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+          // Shift left
+          labels.shift();
+          labels.push(timeStr);
+
+          // Generate new datapoint
+          const lastVal = dataset[dataset.length - 1];
+          const t = (dataset.length / framePoints[currentTimeframe]) * Math.PI * 4;
+          const ampl = currentTimeframe === '15M' ? 8 : currentTimeframe === '1H' ? 12 : 15;
+          const nois = currentTimeframe === '15M' ? 5 : currentTimeframe === '1H' ? 7 : 8;
+          const target = 100 + Math.sin(t) * ampl + (Math.random() - 0.5) * nois;
+          const newVal = lastVal * 0.7 + target * 0.3;
+
+          dataset.shift();
+          dataset.push(newVal);
+
+          marketChart.update('none');
+        }, frameInterval[currentTimeframe]);
+
+        // Adjust interval when timeframe changes
+        const observer = new MutationObserver(() => {
+          const activePill = document.querySelector('.timeframe-pill.active');
+          if (activePill) {
+            const tf = activePill.dataset.tf;
+            // Interval is handled in the pill click + the static setInterval above
+            // We re-read the interval each tick via closure; just read currentTimeframe
+          }
+        });
+        document.querySelectorAll('.timeframe-pill').forEach(p => {
+          observer.observe(p, { attributes: true, attributeFilter: ['class'] });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

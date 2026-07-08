@@ -1,0 +1,28 @@
+{
+  "agent": "oracle",
+  "lessons": [
+    {
+      "source": "heuristic",
+      "task": "strategy.evolve",
+      "root_cause": "EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'current_stop'",
+      "lesson": "Task 'strategy.evolve' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.evolve",
+      "root_cause": "EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'current_stop'",
+      "lesson": "Task 'strategy.evolve' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    }
+  ],
+  "failure_signatures": {
+    "strategy.evolve::EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'curr": 2
+  }
+}

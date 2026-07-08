@@ -1,0 +1,48 @@
+{
+  "agent": "atlas",
+  "lessons": [
+    {
+      "source": "heuristic",
+      "task": "research_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'research_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "research_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'research_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "research_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'research_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "research_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'research_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
+    }
+  ],
+  "failure_signatures": {
+    "research_path::all attempts failed": 4
+  }
+}

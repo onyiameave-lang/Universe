@@ -1,0 +1,49 @@
+{
+  "agent": "forge",
+  "lessons": [
+    {
+      "source": "heuristic",
+      "task": "training.run",
+      "root_cause": "provide X+y or path+target_column",
+      "lesson": "Task 'training.run' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "training.run",
+      "root_cause": "provide X+y or path+target_column",
+      "lesson": "Task 'training.run' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "training.run",
+      "root_cause": "provide X+y or path+target_column",
+      "lesson": "Task 'training.run' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "training.from_csv",
+      "root_cause": "provide X+y or path+target_column",
+      "lesson": "Task 'training.from_csv' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    }
+  ],
+  "failure_signatures": {
+    "training.run::provide X+y or path+target_column": 3,
+    "training.from_csv::provide X+y or path+target_column": 1
+  }
+}

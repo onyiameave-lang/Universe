@@ -1,0 +1,1177 @@
+{
+  "agent": "nexus",
+  "strategies": [
+    {
+      "strategy_id": "strat-551cf28e36",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "failed: failure"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783276501.432129,
+      "status": "candidate",
+      "created_at": 1783276309.1165366,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-ab9f0f25de",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783276309.1165366,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-fb10e9b3c7",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783276309.1165366,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-3f759821e8",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised)",
+      "description": "Variation of 'direct_specialist' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: failure"
+      ],
+      "reasons_against": [
+        "failed: failure"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783276501.438552,
+      "status": "candidate",
+      "created_at": 1783276501.432129,
+      "lineage": "strat-551cf28e36",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-08ae83ceec",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: failure"
+      ],
+      "reasons_against": [
+        "failed: failure"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783276501.4450517,
+      "status": "candidate",
+      "created_at": 1783276501.4397323,
+      "lineage": "strat-3f759821e8",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-7e5439410a",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: failure"
+      ],
+      "reasons_against": [
+        "failed: no agent for research"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783324472.2789104,
+      "status": "candidate",
+      "created_at": 1783276501.4461398,
+      "lineage": "strat-08ae83ceec",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-b2d1329c7b",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783291007.2338462,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-879caa620c",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783291007.2338462,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-d8e7a11bdd",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783291007.2338462,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-eb4c930aac",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783323303.7725573,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-78384498ec",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783323303.7725573,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-081e6515b0",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783323303.7725573,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-85febbb32b",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783324409.5860183,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-c970530e2b",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783324409.5915349,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-c61f02af71",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783324409.5940406,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-18294db15e",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for research"
+      ],
+      "reasons_against": [
+        "failed: no agent for research"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783324474.8109074,
+      "status": "candidate",
+      "created_at": 1783324474.8048778,
+      "lineage": "strat-7e5439410a",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-5f2a240aa4",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for research"
+      ],
+      "reasons_against": [
+        "failed: no agent for research"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783324477.2824702,
+      "status": "candidate",
+      "created_at": 1783324477.2787304,
+      "lineage": "strat-18294db15e",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f13f62db83",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for research"
+      ],
+      "reasons_against": [
+        "failed: no agent for trading"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783326385.2903552,
+      "status": "candidate",
+      "created_at": 1783324479.863565,
+      "lineage": "strat-5f2a240aa4",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-0ec3db4baf",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783325640.7137592,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-e0499fa1fc",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783325640.7159014,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-486394ac69",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783325640.716973,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-1bd07ae1e1",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326266.853385,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-5b3156b9cc",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326266.8604078,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-cd47badca9",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326266.8604078,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-1173ed0fe6",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326297.1009784,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-eff324e667",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326297.1009784,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-933347b2ea",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326297.1009784,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-6e84238057",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326340.285082,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-23214b2dd5",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326340.2894034,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-679fce0cd8",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326340.2917986,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-b17ebdc8f2",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for trading"
+      ],
+      "reasons_against": [
+        "failed: no agent for trading"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783326385.3631794,
+      "status": "candidate",
+      "created_at": 1783326385.3550391,
+      "lineage": "strat-f13f62db83",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-361de3052d",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for trading"
+      ],
+      "reasons_against": [
+        "failed: no agent for trading"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783326385.4473152,
+      "status": "candidate",
+      "created_at": 1783326385.3959148,
+      "lineage": "strat-b17ebdc8f2",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-5683588056",
+      "problem_type": "routing",
+      "name": "direct_specialist (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'direct_specialist (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: no agent for trading"
+      ],
+      "reasons_against": [],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783326385.449117,
+      "lineage": "strat-361de3052d",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-ed1d015287",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458700.6552339,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-21c0af02ae",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458700.658154,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-3e9ff7fca1",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458700.661038,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-e3f2be9510",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458737.4207282,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-95557dcad1",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458737.4247491,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-bc49c67af3",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458737.4267595,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f64e5e4d67",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458959.7457917,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-8f881eea79",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458959.7488165,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-fdb7e96f9d",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458959.7538445,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-ef738b48b6",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458997.7158554,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-345a200a13",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458997.7219038,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-3efb96b44a",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783458997.72895,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-9df12a2c56",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783459146.9571514,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-06ff64bf35",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783459146.962726,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f182e26b1e",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783459146.966743,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-0e2082d08f",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783476984.0219603,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-c0ffb07ca2",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783476984.0300233,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f0dc41e90e",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783476984.035067,
+      "lineage": null,
+      "confidence": 0.0
+    }
+  ]
+}

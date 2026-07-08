@@ -1,0 +1,18 @@
+{
+  "agent": "pulse",
+  "lessons": [
+    {
+      "source": "heuristic",
+      "task": "social_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'social_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    }
+  ],
+  "failure_signatures": {
+    "social_path::all attempts failed": 1
+  }
+}

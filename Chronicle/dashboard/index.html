@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chronicle Memory | Universal AI</title>
+    <link rel="stylesheet" href="../../shared/theme.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        /* Chronicle-specific overrides — NO Tailwind */
+        body {
+            overflow: hidden;
+        }
+
+        .main-layout {
+            display: flex;
+            height: 100vh;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            min-width: 0;
+        }
+
+        .storage-card {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 0;
+        }
+
+        .ops-card {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .kg-card,
+        .index-card {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0;
+        }
+
+        .card-title {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .storage-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .storage-label-name {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .storage-label-pct {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .compression-section {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .compression-label {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .compression-value {
+            font-family: var(--font-mono);
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .kg-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .kg-stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            padding: 3px 0;
+        }
+
+        .kg-stat-label {
+            color: var(--text-tertiary);
+        }
+
+        .kg-stat-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .ops-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ops-entry {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-primary);
+            font-family: var(--font-mono);
+            font-size: 10px;
+            transition: background var(--transition-fast);
+        }
+
+        .ops-entry:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .ops-type {
+            font-weight: 700;
+            font-size: 9px;
+            letter-spacing: 0.06em;
+            padding: 2px 7px;
+            border-radius: 4px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .ops-type.commit {
+            background: rgba(16, 185, 129, 0.12);
+            color: #10B981;
+        }
+
+        .ops-type.query {
+            background: rgba(59, 130, 246, 0.12);
+            color: #3B82F6;
+        }
+
+        .ops-type.merge {
+            background: rgba(139, 92, 246, 0.12);
+            color: #8B5CF6;
+        }
+
+        .ops-type.index {
+            background: rgba(20, 184, 166, 0.12);
+            color: #14B8A6;
+        }
+
+        .ops-type.flush {
+            background: rgba(249, 115, 22, 0.12);
+            color: #F97316;
+        }
+
+        .ops-type.sync {
+            background: rgba(6, 182, 212, 0.12);
+            color: #06B6D4;
+        }
+
+        .ops-type.write {
+            background: rgba(245, 158, 11, 0.12);
+            color: #F59E0B;
+        }
+
+        .ops-time {
+            color: var(--text-tertiary);
+            flex-shrink: 0;
+            font-size: 9px;
+        }
+
+        .ops-detail {
+            color: var(--text-secondary);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .index-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .stream-counter {
+            font-size: 10px;
+            font-family: var(--font-mono);
+        }
+
+        .kg-stats-divider {
+            padding-top: 12px;
+            border-top: 1px solid var(--border-primary);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+    </style>
+</head>
+
+<body data-agent="chronicle">
+    <div class="main-layout">
+        <!-- ═══════════════ SIDEBAR ═══════════════ -->
+        <aside class="sidebar">
+            <a href="../../index.html" class="sidebar-logo">U</a>
+            <nav class="sidebar-nav">
+                <a href="../../Chronicle/dashboard/index.html" class="sidebar-link active" title="Chronicle"><i class="ti ti-brain"></i></a>
+                <a href="../../Oracle/dashboard/index.html" class="sidebar-link" title="Oracle"><i class="ti ti-trending-up"></i></a>
+                <a href="../../Nexus/dashboard/index.html" class="sidebar-link" title="Nexus"><i class="ti ti-share-2"></i></a>
+                <a href="../../Pulse/dashboard/index.html" class="sidebar-link" title="Pulse"><i class="ti ti-activity"></i></a>
+                <a href="../../Atlas/dashboard/index.html" class="sidebar-link" title="Atlas"><i class="ti ti-search"></i></a>
+                <a href="../../Forge/dashboard/index.html" class="sidebar-link" title="Forge"><i class="ti ti-hammer"></i></a>
+                <a href="../../Genesis/dashboard/index.html" class="sidebar-link" title="Genesis"><i class="ti ti-zap"></i></a>
+                <a href="../../Aegis/dashboard/index.html" class="sidebar-link" title="Aegis"><i class="ti ti-shield"></i></a>
+                <a href="../../Sentinel/dashboard/index.html" class="sidebar-link" title="Sentinel"><i class="ti ti-news"></i></a>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="theme-toggle" aria-label="Toggle theme"></button>
+                <span id="api-indicator" class="sidebar-api-indicator status-dot offline"></span>
+            </div>
+        </aside>
+
+        <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+        <main class="main-content">
+            <!-- ── Top Header ── -->
+            <header class="top-header">
+                <div class="top-header-left">
+                    <h1>Chronicle Memory</h1>
+                    <p class="subtitle">MEMORY RECONCILIATION ACTIVE</p>
+                </div>
+                <div class="top-header-right">
+                    <div class="top-stat">
+                        <div class="stat-label">Storage Total</div>
+                        <div class="stat-value" id="val-storage">1.84 TB</div>
+                    </div>
+                    <div class="top-stat">
+                        <div class="stat-label">Records</div>
+                        <div class="stat-value" id="val-records">4,294,967</div>
+                    </div>
+                    <button class="theme-toggle" aria-label="Toggle theme"></button>
+                </div>
+            </header>
+
+            <!-- ── Dashboard Grid ── -->
+            <div class="dashboard-grid cols-12" style="grid-template-rows: 480px auto;">
+
+                <!-- Row 1, Col 1-7: Memory Reconciliation Stream -->
+                <div class="terminal-window span-7" style="min-height:0;">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <div class="terminal-dot red"></div>
+                            <div class="terminal-dot amber"></div>
+                            <div class="terminal-dot green"></div>
+                        </div>
+                        <span class="terminal-title">Memory Reconciliation Stream</span>
+                        <span class="badge badge-accent stream-counter" id="stream-count">0 EVENTS</span>
+                    </div>
+                    <div class="terminal-body" id="memory-stream"></div>
+                </div>
+
+                <!-- Row 1, Col 8-12: Storage Utilization -->
+                <div class="card span-5 storage-card">
+                    <h3 class="card-title">Storage Utilization</h3>
+
+                    <!-- EPISODIC -->
+                    <div>
+                        <div class="storage-label">
+                            <span class="storage-label-name">EPISODIC</span>
+                            <span class="storage-label-pct" style="color:#10B981;" id="episodic-pct">62.4%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="episodic-bar" style="width:62.4%;background:#10B981;"></div>
+                        </div>
+                    </div>
+
+                    <!-- SEMANTIC -->
+                    <div>
+                        <div class="storage-label">
+                            <span class="storage-label-name">SEMANTIC</span>
+                            <span class="storage-label-pct" style="color:#06B6D4;" id="semantic-pct">24.1%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="semantic-bar" style="width:24.1%;background:#06B6D4;"></div>
+                        </div>
+                    </div>
+
+                    <!-- PROCEDURAL -->
+                    <div>
+                        <div class="storage-label">
+                            <span class="storage-label-name">PROCEDURAL</span>
+                            <span class="storage-label-pct" style="color:#F59E0B;" id="procedural-pct">13.5%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="procedural-bar" style="width:13.5%;background:#F59E0B;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Compression Ratio -->
+                    <div class="compression-section">
+                        <span class="compression-label">Compression Ratio</span>
+                        <div class="compression-value">7.3:1</div>
+                    </div>
+                </div>
+
+                <!-- Row 2, Col 1-4: Knowledge Graph -->
+                <div class="card span-4 kg-card">
+                    <h3 class="card-title">Knowledge Graph</h3>
+                    <div class="kg-grid">
+                        <div>
+                            <div class="metric-label">Entities</div>
+                            <div class="metric-value" id="entity-count" style="font-size:24px;">12,847</div>
+                            <div class="metric-sub" style="color:#10B981;">+142 today</div>
+                        </div>
+                        <div>
+                            <div class="metric-label">Relations</div>
+                            <div class="metric-value" id="relation-count" style="font-size:24px;">98,332</div>
+                            <div class="metric-sub" style="color:#10B981;">+891 today</div>
+                        </div>
+                    </div>
+                    <div class="kg-stats-divider">
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Graph Density</span>
+                            <span class="kg-stat-value">0.0012</span>
+                        </div>
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Avg Degree</span>
+                            <span class="kg-stat-value">15.3</span>
+                        </div>
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Clusters</span>
+                            <span class="kg-stat-value">417</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2, Col 5-8: Index Health -->
+                <div class="card span-4 index-card" style="align-items:center;">
+                    <h3 class="card-title" style="align-self:stretch;">Index Health</h3>
+                    <div class="gauge-container" style="width:160px;height:160px;">
+                        <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                            <circle cx="50" cy="50" r="44" stroke="currentColor" stroke-width="6" fill="transparent"
+                                style="color:var(--bg-tertiary);" />
+                            <circle id="index-gauge-arc" cx="50" cy="50" r="44" stroke="var(--accent)" stroke-width="6"
+                                fill="transparent" stroke-dasharray="276" stroke-dashoffset="48.024"
+                                stroke-linecap="round" />
+                        </svg>
+                        <div class="gauge-value">
+                            <div class="big" style="font-size:36px;">82.6<span
+                                    style="font-size:16px;opacity:0.5;">%</span></div>
+                            <div class="label">Health Score</div>
+                        </div>
+                    </div>
+                    <div class="index-stats">
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Fragmentation</span>
+                            <span class="kg-stat-value" style="color:#10B981;">LOW</span>
+                        </div>
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Query Latency</span>
+                            <span class="kg-stat-value">3.2ms</span>
+                        </div>
+                        <div class="kg-stat-row">
+                            <span class="kg-stat-label">Cache Hit Rate</span>
+                            <span class="kg-stat-value">94.7%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2, Col 9-12: Recent Operations -->
+                <div class="card span-4 ops-card">
+                    <h3 class="card-title">Recent Operations</h3>
+                    <div class="ops-list" id="recent-ops"></div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast container for notifications -->
+    <div id="toast-container"></div>
+
+    <!-- ═══════════════ SCRIPTS ═══════════════ -->
+    <script src="../../shared/dashboard-core.js"></script>
+    <script>
+        (function () {
+            'use strict';
+
+            const UAI = window.UniversalAI;
+
+            // ── Agent Identity ─────────────────────────────────────
+            UAI.state.activeAgent = 'chronicle';
+            const AGENTS = ['chronicle', 'oracle', 'nexus', 'pulse', 'atlas', 'forge', 'genesis', 'aegis', 'sentinel'];
+            UAI.initKeyboardNav(AGENTS);
+
+            // ── Init Chat ──────────────────────────────────────────
+            UAI.initChat('Chronicle Memory', '<i class="ti ti-brain"></i>');
+
+            // ── DOM References ─────────────────────────────────────
+            const streamEl = document.getElementById('memory-stream');
+            const streamCountEl = document.getElementById('stream-count');
+            const episodicBar = document.getElementById('episodic-bar');
+            const episodicPct = document.getElementById('episodic-pct');
+            const semanticBar = document.getElementById('semantic-bar');
+            const semanticPct = document.getElementById('semantic-pct');
+            const proceduralBar = document.getElementById('procedural-bar');
+            const proceduralPct = document.getElementById('procedural-pct');
+            const entityCountEl = document.getElementById('entity-count');
+            const relationCountEl = document.getElementById('relation-count');
+            const valRecords = document.getElementById('val-records');
+            const recentOpsEl = document.getElementById('recent-ops');
+            const gaugeArc = document.getElementById('index-gauge-arc');
+
+            // ── Stream State ───────────────────────────────────────
+            let streamEventCount = 0;
+            const MAX_STREAM_LINES = 25;
+
+            // ── Mock Chronicle Log Generator ───────────────────────
+            const logTemplates = [
+                { type: 'COMMIT', msgs: ['Memory sector F-', 'Snapshot block 0x', 'Delta segment ', 'Persist chunk '],
+                    suffixes: ['09', '3A7F', '882', 'B12'], colorClass: 'success', tagColor: '#10B981' },
+                { type: 'QUERY', msgs: ['Vector search proximity=0.', 'Subgraph traversal node_', 'Pattern match "',
+                        'Full-text scan term='], suffixes: ['92', '4471', 'agent memory"', 'chronicle'],
+                    colorClass: 'info', tagColor: '#3B82F6' },
+                { type: 'SYNC', msgs: ['Replicating shard ', 'Consistency check passed: ', 'Cross-node sync delta=',
+                        'Merkle tree verified at height '], suffixes: ['4/8', '99.7%', '+12KB', '2,441,903'],
+                    colorClass: 'sync', tagColor: '#06B6D4' },
+                { type: 'WRITE', msgs: ['Appending to segment ', 'Buffered write ', 'Flushing journal entry ',
+                        'Atomic write batch '], suffixes: ['7A', '4.2KB', '#109283', '#44'],
+                    colorClass: 'info', tagColor: '#F59E0B' },
+                { type: 'MERGE', msgs: ['Compacting layer ', 'Merging delta segments ', 'Reconciling fork branch=',
+                        'Union graph partition '], suffixes: ['L3→L4', 'E/F', 'main', 'P-17'],
+                    colorClass: 'info', tagColor: '#8B5CF6' },
+                { type: 'INDEX', msgs: ['Rebuilding inverted index ', 'B-tree rebalance node=',
+                        'Sparse vector index update dim=', 'Hash index refresh bucket '],
+                    suffixes: ['cells=2.1M', '4096', '768', '#55'], colorClass: 'info', tagColor: '#14B8A6' },
+                { type: 'WARN', msgs: ['Memory pressure threshold ', 'Slow query detected: ', 'Fragment count elevated: ',
+                        'Cache eviction rate spiked: '], suffixes: ['82%', '342ms', '1,204', '17%'],
+                    colorClass: 'warn', tagColor: '#EF4444' },
+                { type: 'FLUSH', msgs: ['Checkpoint written ', 'Durability barrier passed ', 'Log segment sealed ',
+                        'WAL flush complete size='], suffixes: ['t=1204102', 'fync=ok', '#L-882', '16MB'],
+                    colorClass: 'info', tagColor: '#F97316' },
+            ];
+
+            function randomLog() {
+                const t = logTemplates[Math.floor(Math.random() * logTemplates.length)];
+                const idx = Math.floor(Math.random() * t.msgs.length);
+                return {
+                    time: new Date().toLocaleTimeString([], { hour12: false }),
+                    type: t.type,
+                    msg: t.msgs[idx] + t.suffixes[idx],
+                    colorClass: t.colorClass,
+                    tagColor: t.tagColor,
+                };
+            }
+
+            function pushLogLine(log) {
+                const el = document.createElement('div');
+                el.className = 'terminal-line ' + log.colorClass;
+                el.innerHTML =
+                    '<span class="time">[' + log.time + ']</span>' +
+                    '<span class="agent-tag" style="color:' + log.tagColor + ';">[CHRONICLE-' + log.type + ']</span> ' +
+                    log.msg;
+                streamEl.appendChild(el);
+                while (streamEl.children.length > MAX_STREAM_LINES) {
+                    streamEl.firstElementChild.remove();
+                }
+                streamEl.scrollTop = streamEl.scrollHeight;
+                streamEventCount++;
+                streamCountEl.textContent = streamEventCount.toLocaleString() + ' EVENTS';
+            }
+
+            // Seed initial stream lines
+            function seedStream(count) {
+                for (let i = 0; i < count; i++) {
+                    const log = randomLog();
+                    // Stagger timestamps going back
+                    const d = new Date(Date.now() - (count - i) * 1800);
+                    log.time = d.toLocaleTimeString([], { hour12: false });
+                    pushLogLine(log);
+                }
+            }
+
+            // ── Storage Bar Simulator ───────────────────────────────
+            function simulateStorage() {
+                const episodic = 62.4 + (Math.random() - 0.5) * 0.6;
+                const semantic = 24.1 + (Math.random() - 0.5) * 0.3;
+                const procedural = 100 - episodic - semantic;
+                const ePct = Math.max(60, Math.min(65, episodic));
+                const sPct = Math.max(22, Math.min(26, semantic));
+                const pPct = Math.max(11, Math.min(15, 100 - ePct - sPct));
+
+                episodicBar.style.width = ePct.toFixed(1) + '%';
+                episodicPct.textContent = ePct.toFixed(1) + '%';
+                semanticBar.style.width = sPct.toFixed(1) + '%';
+                semanticPct.textContent = sPct.toFixed(1) + '%';
+                proceduralBar.style.width = pPct.toFixed(1) + '%';
+                proceduralPct.textContent = pPct.toFixed(1) + '%';
+            }
+
+            // ── Graph Stats Updater ─────────────────────────────────
+            let entityBase = 12847;
+            let relationBase = 98332;
+            let recordBase = 4294967;
+            let entityToday = 142;
+            let relationToday = 891;
+
+            function updateGraphStats() {
+                entityBase += Math.floor(Math.random() * 3);
+                relationBase += Math.floor(Math.random() * 12);
+                recordBase += Math.floor(Math.random() * 40);
+                entityToday += Math.floor(Math.random() * 2);
+                relationToday += Math.floor(Math.random() * 7);
+
+                entityCountEl.textContent = entityBase.toLocaleString();
+                relationCountEl.textContent = relationBase.toLocaleString();
+                valRecords.textContent = recordBase.toLocaleString();
+
+                // Update the "+N today" subtext
+                const entitySub = entityCountEl.parentElement.querySelector('.metric-sub');
+                const relationSub = relationCountEl.parentElement.querySelector('.metric-sub');
+                if (entitySub) entitySub.textContent = '+' + entityToday + ' today';
+                if (relationSub) relationSub.textContent = '+' + relationToday + ' today';
+            }
+
+            // ── Recent Operations Populator ─────────────────────────
+            const opTypes = ['COMMIT', 'QUERY', 'MERGE', 'INDEX', 'FLUSH', 'SYNC', 'WRITE'];
+            const opDetails = {
+                COMMIT: ['Sector F-09 snapshot', 'Block 0x3A7F finalised', 'Delta segment 882', 'Persist chunk B12'],
+                QUERY: ['Vector search p=0.92', 'Subgraph trav node_4471', 'Pattern "agent recall"', 'Full-text: memory'],
+                MERGE: ['Compacting L3→L4', 'Delta segments E/F', 'Fork reconcile main', 'Union partition P-17'],
+                INDEX: ['Inverted idx rebuild', 'B-tree rebalance 4096', 'Sparse vector dim=768', 'Hash refresh #55'],
+                FLUSH: ['Checkpoint t=1204102', 'Durability barrier ok', 'Log segment L-882', 'WAL flush complete'],
+                SYNC: ['Shard replicate 4/8', 'Merkle verify ok', 'Delta sync +12KB', 'Consistency 99.7%'],
+                WRITE: ['Append segment 7A', 'Buffered 4.2KB', 'Journal #109283', 'Atomic batch #44'],
+            };
+
+            function addOperation() {
+                const type = opTypes[Math.floor(Math.random() * opTypes.length)];
+                const details = opDetails[type];
+                const detail = details[Math.floor(Math.random() * details.length)];
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false });
+
+                const entry = document.createElement('div');
+                entry.className = 'ops-entry';
+                entry.innerHTML =
+                    '<span class="ops-type ' + type.toLowerCase() + '">' + type + '</span>' +
+                    '<span class="ops-detail">' + detail + '</span>' +
+                    '<span class="ops-time">' + time + '</span>';
+
+                recentOpsEl.insertBefore(entry, recentOpsEl.firstChild);
+                while (recentOpsEl.children.length > 20) {
+                    recentOpsEl.lastElementChild.remove();
+                }
+            }
+
+            function seedOperations(count) {
+                for (let i = 0; i < count; i++) {
+                    const type = opTypes[Math.floor(Math.random() * opTypes.length)];
+                    const details = opDetails[type];
+                    const detail = details[Math.floor(Math.random() * details.length)];
+                    const d = new Date(Date.now() - (count - i) * 45000);
+                    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: false });
+
+                    const entry = document.createElement('div');
+                    entry.className = 'ops-entry';
+                    entry.innerHTML =
+                        '<span class="ops-type ' + type.toLowerCase() + '">' + type + '</span>' +
+                        '<span class="ops-detail">' + detail + '</span>' +
+                        '<span class="ops-time">' + time + '</span>';
+                    recentOpsEl.appendChild(entry);
+                }
+            }
+
+            // ── Gauge Animation ─────────────────────────────────────
+            function animateIndexGauge(targetValue) {
+                const circumference = 276;
+                const targetOffset = circumference * (1 - targetValue / 100);
+                if (typeof gsap !== 'undefined' && gaugeArc) {
+                    gsap.to(gaugeArc, {
+                        strokeDashoffset: targetOffset,
+                        duration: 1.8,
+                        ease: 'power2.out',
+                    });
+                }
+                // Update the text as well
+                const bigEl = document.querySelector('#index-gauge-arc').closest('.gauge-container').querySelector(
+                    '.big');
+                if (bigEl) {
+                    const startVal = parseFloat(bigEl.textContent);
+                    if (typeof gsap !== 'undefined') {
+                        gsap.to({ v: startVal }, {
+                            v: targetValue,
+                            duration: 1.8,
+                            ease: 'power2.out',
+                            onUpdate: function () {
+                                bigEl.innerHTML = this.targets()[0].v.toFixed(1) +
+                                    '<span style="font-size:16px;opacity:0.5;">%</span>';
+                            },
+                        });
+                    } else {
+                        bigEl.innerHTML = targetValue.toFixed(1) +
+                            '<span style="font-size:16px;opacity:0.5;">%</span>';
+                    }
+                }
+            }
+
+            function simulateGauge() {
+                const newVal = 78 + Math.random() * 9; // 78-87 range
+                animateIndexGauge(newVal);
+            }
+
+            // ── Periodic Timers ─────────────────────────────────────
+            // Log stream: push a new line every 1.2–2.5s
+            function scheduleLog() {
+                pushLogLine(randomLog());
+                setTimeout(scheduleLog, 1200 + Math.random() * 1300);
+            }
+
+            // Storage bars: update every 4s
+            setInterval(simulateStorage, 4000);
+
+            // Graph stats: update every 6s
+            setInterval(updateGraphStats, 6000);
+
+            // Recent operations: add every 8s
+            setInterval(addOperation, 8000);
+
+            // Gauge: re-animate every 12s
+            setInterval(simulateGauge, 12000);
+
+            // ── Initial Seed ────────────────────────────────────────
+            seedStream(14);
+            seedOperations(12);
+            scheduleLog();
+
+            // Initial gauge animation after short delay
+            setTimeout(function () {
+                animateIndexGauge(82.6);
+            }, 600);
+
+            // ── Connection Polling (dashboard-core handles this) ───
+            // Additional chronicle-specific polling
+            async function chroniclePoll() {
+                if (UAI.state.connected) {
+                    const data = await UAI.apiGet('/agents/chronicle/status');
+                    if (data) {
+                        // Could update real stats here
+                    }
+                }
+            }
+            setInterval(chroniclePoll, 10000);
+
+            console.log('[Chronicle] Memory dashboard initialised. Agent: chronicle | Chat: Ctrl+J');
+        })();
+    </script>
+</body>
+
+</html>

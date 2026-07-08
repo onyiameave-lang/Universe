@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal AI — Agent Ecosystem</title>
+    <link rel="stylesheet" href="shared/theme.css">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        .agent-card {
+            display: flex;
+            flex-direction: column;
+            padding: 28px;
+            text-decoration: none;
+            color: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .agent-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--accent);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform var(--transition-normal);
+        }
+
+        .agent-card:hover::after {
+            transform: scaleX(1);
+        }
+
+        .agent-icon-wrap {
+            width: 52px;
+            height: 52px;
+            border-radius: var(--radius-md);
+            background: var(--accent-light);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            margin-bottom: 16px;
+            transition: all var(--transition-normal);
+        }
+
+        .agent-card:hover .agent-icon-wrap {
+            background: var(--accent);
+            color: #FFFFFF;
+            transform: scale(1.08);
+        }
+
+        .agent-name {
+            font-family: var(--font-mono);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-primary);
+        }
+
+        .agent-role {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-tertiary);
+            margin-top: 6px;
+        }
+
+        .agent-status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: auto;
+            padding-top: 20px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-tertiary);
+            letter-spacing: 0.05em;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 48px 0 36px;
+        }
+
+        .hero-title {
+            font-family: var(--font-mono);
+            font-size: 40px;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.03em;
+            margin-bottom: 8px;
+        }
+
+        .hero-subtitle {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--text-tertiary);
+        }
+
+        .ecosystem-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 8px 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 100px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+            letter-spacing: 0.05em;
+        }
+
+        .log-stream-wrap {
+            margin: 0 32px 40px;
+        }
+
+        .footer-bar {
+            text-align: center;
+            padding: 20px 32px 40px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-tertiary);
+            letter-spacing: 0.08em;
+        }
+
+        .footer-bar code {
+            padding: 4px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            color: var(--accent);
+            margin: 0 6px;
+            cursor: pointer;
+            user-select: all;
+        }
+    </style>
+</head>
+
+<body data-agent="portal">
+    <div style="max-width:1200px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;">
+
+        <!-- Hero -->
+        <div class="hero">
+            <div style="font-size:48px;margin-bottom:12px;">🧠</div>
+            <h1 class="hero-title">Universal AI</h1>
+            <p class="hero-subtitle">Institutional-Grade Autonomous Agent Ecosystem</p>
+            <div class="ecosystem-status" id="ecosystem-status">
+                <span id="api-status-dot" class="status-dot offline"></span>
+                <span id="api-status-text">API DISCONNECTED</span>
+                <span style="opacity:0.4;">·</span>
+                <span>9 REPOSITORIES</span>
+            </div>
+        </div>
+
+        <!-- Agent Grid -->
+        <div class="dashboard-grid cols-3" style="padding:0 32px 32px;" id="agent-grid">
+            <!-- Nexus -->
+            <a href="Nexus/dashboard/index.html" class="card agent-card" data-agent-card="nexus">
+                <div class="agent-icon-wrap"><i class="ti ti-share-2"></i></div>
+                <div class="agent-name">Nexus</div>
+                <div class="agent-role">Command Center · Orchestration</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-nexus"></span>
+                    <span id="status-nexus">---</span>
+                </div>
+            </a>
+            <!-- Oracle -->
+            <a href="Oracle/dashboard/index.html" class="card agent-card" data-agent-card="oracle">
+                <div class="agent-icon-wrap"><i class="ti ti-trending-up"></i></div>
+                <div class="agent-name">Oracle</div>
+                <div class="agent-role">Financial Intelligence · Trading</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-oracle"></span>
+                    <span id="status-oracle">---</span>
+                </div>
+            </a>
+            <!-- Atlas -->
+            <a href="Atlas/dashboard/index.html" class="card agent-card" data-agent-card="atlas">
+                <div class="agent-icon-wrap"><i class="ti ti-search"></i></div>
+                <div class="agent-name">Atlas</div>
+                <div class="agent-role">Research · Corroboration</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-atlas"></span>
+                    <span id="status-atlas">---</span>
+                </div>
+            </a>
+            <!-- Pulse -->
+            <a href="Pulse/dashboard/index.html" class="card agent-card" data-agent-card="pulse">
+                <div class="agent-icon-wrap"><i class="ti ti-activity"></i></div>
+                <div class="agent-name">Pulse</div>
+                <div class="agent-role">Sentiment · Trend Analysis</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-pulse"></span>
+                    <span id="status-pulse">---</span>
+                </div>
+            </a>
+            <!-- Aegis -->
+            <a href="Aegis/dashboard/index.html" class="card agent-card" data-agent-card="aegis">
+                <div class="agent-icon-wrap"><i class="ti ti-shield"></i></div>
+                <div class="agent-name">Aegis</div>
+                <div class="agent-role">Governance · Risk · Compliance</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-aegis"></span>
+                    <span id="status-aegis">---</span>
+                </div>
+            </a>
+            <!-- Sentinel -->
+            <a href="Sentinel/dashboard/index.html" class="card agent-card" data-agent-card="sentinel">
+                <div class="agent-icon-wrap"><i class="ti ti-news"></i></div>
+                <div class="agent-name">Sentinel</div>
+                <div class="agent-role">News · Validation · Clustering</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-sentinel"></span>
+                    <span id="status-sentinel">---</span>
+                </div>
+            </a>
+            <!-- Forge -->
+            <a href="Forge/dashboard/index.html" class="card agent-card" data-agent-card="forge">
+                <div class="agent-icon-wrap"><i class="ti ti-hammer"></i></div>
+                <div class="agent-name">Forge</div>
+                <div class="agent-role">Training · Model Evolution</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-forge"></span>
+                    <span id="status-forge">---</span>
+                </div>
+            </a>
+            <!-- Genesis -->
+            <a href="Genesis/dashboard/index.html" class="card agent-card" data-agent-card="genesis">
+                <div class="agent-icon-wrap"><i class="ti ti-zap"></i></div>
+                <div class="agent-name">Genesis</div>
+                <div class="agent-role">Factory · Agent Creation</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-genesis"></span>
+                    <span id="status-genesis">---</span>
+                </div>
+            </a>
+            <!-- Chronicle -->
+            <a href="Chronicle/dashboard/index.html" class="card agent-card" data-agent-card="chronicle">
+                <div class="agent-icon-wrap"><i class="ti ti-brain"></i></div>
+                <div class="agent-name">Chronicle</div>
+                <div class="agent-role">Memory · Knowledge Graph</div>
+                <div class="agent-status-line">
+                    <span class="status-dot offline" id="dot-chronicle"></span>
+                    <span id="status-chronicle">---</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- Live Log Stream -->
+        <div class="log-stream-wrap">
+            <div class="terminal-window" style="max-height:300px;">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <span class="terminal-dot red"></span>
+                        <span class="terminal-dot amber"></span>
+                        <span class="terminal-dot green"></span>
+                    </div>
+                    <span class="terminal-title">System Terminal</span>
+                    <span id="log-stream-status"
+                        style="font-family:var(--font-mono);font-size:9px;color:var(--text-tertiary);">LIVE</span>
+                </div>
+                <div class="terminal-body" id="log-stream" style="max-height:240px;">
+                    <div class="terminal-line info" style="opacity:0.5;font-style:italic;">Awaiting ecosystem boot...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-bar">
+            <span>Start the API server with</span> <code>python api.py</code>
+            <span style="margin-left:12px;">·</span>
+            <span style="margin-left:12px;">Ctrl+[ / Ctrl+] to navigate</span>
+            <span style="margin-left:12px;">·</span>
+            <span style="margin-left:12px;">Ctrl+J to chat</span>
+            <span style="margin-left:12px;">·</span>
+            <span style="margin-left:12px;">Ctrl+Shift+T for theme</span>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="shared/dashboard-core.js"></script>
+    <script>
+        const UAI = window.UniversalAI;
+        UAI.state.activeAgent = 'portal';
+        const AGENTS = ['chronicle', 'oracle', 'nexus', 'pulse', 'atlas', 'forge', 'genesis', 'aegis', 'sentinel'];
+        UAI.initKeyboardNav(AGENTS);
+
+        // Init chat for the ecosystem portal
+        UAI.initChat('Universal AI Ecosystem', '<i class="ti ti-cpu"></i>');
+
+        // ── GSAP card entrance ────────────────────────────────────
+        document.querySelectorAll('.agent-card').forEach((card, i) => {
+            gsap.from(card, { opacity: 0, y: 24, duration: 0.45, delay: i * 0.04, ease: 'power2.out' });
+        });
+
+        // ── Status polling ───────────────────────────────────────
+        async function pollStatus() {
+            const data = await UAI.apiGet('/');
+            if (data && data.active_agents) {
+                data.active_agents.forEach(name => {
+                    const dot = document.getElementById('dot-' + name);
+                    const status = document.getElementById('status-' + name);
+                    if (dot) { dot.classList.remove('offline'); dot.classList.add('online'); }
+                    if (status) { status.textContent = 'ONLINE'; status.style.color = '#10B981'; }
+                });
+                AGENTS.forEach(name => {
+                    if (!data.active_agents.includes(name)) {
+                        const dot = document.getElementById('dot-' + name);
+                        const status = document.getElementById('status-' + name);
+                        if (dot) { dot.classList.remove('online'); dot.classList.add('offline'); }
+                        if (status) { status.textContent = 'OFFLINE'; status.style.color = ''; }
+                    }
+                });
+                document.getElementById('api-status-dot').classList.remove('offline');
+                document.getElementById('api-status-dot').classList.add('online');
+                document.getElementById('api-status-text').textContent = 'API CONNECTED · ' + data.active_agents.length + ' AGENTS LIVE';
+                document.getElementById('api-status-text').style.color = '#10B981';
+            } else {
+                document.getElementById('api-status-dot').classList.remove('online');
+                document.getElementById('api-status-dot').classList.add('offline');
+                document.getElementById('api-status-text').textContent = 'API DISCONNECTED';
+                document.getElementById('api-status-text').style.color = '';
+                AGENTS.forEach(name => {
+                    const dot = document.getElementById('dot-' + name);
+                    const status = document.getElementById('status-' + name);
+                    if (dot) { dot.classList.remove('online'); dot.classList.add('offline'); }
+                    if (status) { status.textContent = '---'; status.style.color = ''; }
+                });
+            }
+        }
+
+        // ── Log streaming ────────────────────────────────────────
+        const logStream = document.getElementById('log-stream');
+        async function pollLogs() {
+            const data = await UAI.apiGet('/logs?limit=12');
+            if (!data || data.length === 0) return;
+            logStream.innerHTML = '';
+            data.reverse().forEach(log => {
+                const type = log.type || 'INFO';
+                let typeClass = 'info';
+                if (type === 'WARN' || type === 'ERROR') typeClass = 'error';
+                if (type === 'SYNC' || type === 'BOOT') typeClass = 'sync';
+                const el = document.createElement('div');
+                el.className = 'terminal-line ' + typeClass;
+                el.innerHTML = `<span class="time">[${log.time || '--:--:--'}]</span> <span class="agent-tag">[${log.agent || 'SYSTEM'}]</span> ${log.msg || ''}`;
+                logStream.appendChild(el);
+            });
+        }
+
+        pollStatus();
+        pollLogs();
+        setInterval(pollStatus, 5000);
+        setInterval(pollLogs, 3000);
+    </script>
+</body>
+
+</html>
