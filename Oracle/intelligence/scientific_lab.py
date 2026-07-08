@@ -3,10 +3,9 @@ Oracle.intelligence.scientific_lab
 =================================
 Scientific research coordinator for Oracle.
 
-Oracle is a validator of trading intelligence, not merely a parameter searcher.
-This module wraps strategy evolution in a falsifiable workflow:
-problem detection, hypothesis generation, research escalation, experiment
-recording, regime-aware champion preservation, and Chronicle memory.
+Enhanced with Stage 7 Automatic Recovery: if all genomes fail, Oracle
+automatically increases diversity, repairs genomes, relaxes constraints,
+and retries evolution before terminating.
 """
 from __future__ import annotations
 
@@ -189,6 +188,7 @@ class ScientificResearchLab:
     def self_reflection(self, experiment: Dict[str, Any]) -> Dict[str, Any]:
         evidence = experiment.get("evidence", {})
         verdict = evidence.get("verdict")
+        validation = experiment.get("validation_summary", {})
 
         reflection = {
             "timestamp": time.time(),
@@ -203,12 +203,34 @@ class ScientificResearchLab:
         }
 
         if verdict == "accepted":
-            reflection["insights"].append(f"Successfully evolved a {experiment.get('regime')} champion for {experiment.get('symbol')}.")
+            reflection["insights"].append(
+                f"Successfully evolved a {experiment.get('regime')} champion for {experiment.get('symbol')}."
+            )
             if experiment.get("research"):
                 reflection["insights"].append("Atlas-planned seeds contributed to the evolutionary success.")
         else:
-            reflection["insights"].append("Evolution failed to produce a valid champion. Parameters likely over-optimized or regime shifted.")
-            reflection["directives"].append("Increase mutation pressure or refine Strategy Planner heuristic mapping.")
+            # Use validation summary for specific insights
+            elim_stage = validation.get("elimination_stage", "unknown")
+            reflection["insights"].append(
+                f"Evolution failed. Primary elimination stage: {elim_stage}"
+            )
+
+            if "zero trades" in elim_stage:
+                reflection["directives"].append(
+                    "Lower entry thresholds, broaden regime filters, reduce indicator periods"
+                )
+            elif "compilation" in elim_stage:
+                reflection["directives"].append(
+                    "Cap indicator periods to fit available data length"
+                )
+            elif "fitness" in elim_stage:
+                reflection["directives"].append(
+                    "Strategies trade but lose money. Try different families or regime"
+                )
+            else:
+                reflection["directives"].append(
+                    "Increase mutation pressure or refine Strategy Planner heuristic mapping."
+                )
 
         return reflection
 
@@ -250,6 +272,7 @@ class ScientificResearchLab:
             "evidence": evidence,
             "best_genome": evolution_result.get("best_genome"),
             "promoted_new_champion": evolution_result.get("promoted_new_champion", False),
+            "validation_summary": evolution_result.get("validation_summary", {}),
         }
         self._journal.append(experiment)
         if evidence["verdict"] == "accepted" or evolution_result.get("promoted_new_champion"):
@@ -283,18 +306,83 @@ class ScientificResearchLab:
         if not self.chronicle:
             return
         try:
-            content = f"Oracle experiment {experiment['experiment_id']} for {experiment['symbol']} ({experiment['regime']}): {experiment['evidence']['verdict']}."
+            content = (
+                f"Oracle experiment {experiment['experiment_id']} for "
+                f"{experiment['symbol']} ({experiment['regime']}): "
+                f"{experiment['evidence']['verdict']}."
+            )
             if hasattr(self.chronicle, "act"):
                 self.chronicle.act("memory.store", {"content": content, "domain": "trading", "source": "oracle"})
         except Exception:
             pass
+
+    # ---- Stage 7: Automatic Recovery ----
+
+    def _should_recover(self, result: Dict[str, Any]) -> bool:
+        """Determine if recovery is needed based on evolution result."""
+        if result.get("status") == "error":
+            return True
+        summary = result.get("validation_summary", {})
+        if summary.get("certified_candidates", 0) == 0:
+            return True
+        if result.get("promoted_new_champion") is False:
+            best_fitness = result.get("history", [{}])[-1].get("best_fitness", -1) if result.get("history") else -1
+            if best_fitness <= 0:
+                return True
+        return False
+
+    def _recovery_evolution(self, series, evolution_fn, context: Dict[str, Any],
+                            first_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Stage 7: Automatic Recovery.
+        When all genomes fail, increase diversity and retry.
+        """
+        log.info("RECOVERY MODE: All genomes failed for %s (%s). Attempting recovery.",
+                 context.get("symbol"), context.get("regime"))
+
+        # Analyze what went wrong from validation summary
+        summary = first_result.get("validation_summary", {})
+        elimination = summary.get("elimination_stage", "")
+
+        recovery_actions = []
+
+        # Strategy 1: Request Atlas for additional families
+        research = self.request_atlas_research(context, {
+            "stagnant": True,
+            "reasons": [f"Total failure: {elimination}"],
+            "recovery_attempt": True,
+        })
+        recovery_actions.append("Requested Atlas for additional strategy families")
+
+        # Strategy 2: Plan with broader families
+        planned = self.planner.plan(research, context["symbol"], context["regime"])
+        recovery_actions.append(f"Planner generated {len(planned)} recovery candidates")
+
+        # Strategy 3: Run evolution with research-seeded genomes
+        try:
+            result = evolution_fn(planned)
+            result["recovery_actions"] = recovery_actions
+            result["recovery_attempted"] = True
+            return result
+        except Exception as exc:
+            log.error("Recovery evolution failed: %s", exc)
+            return {
+                "status": "error",
+                "history": [],
+                "best_genome": {},
+                "promoted_new_champion": False,
+                "out_of_sample": {},
+                "recovery_actions": recovery_actions,
+                "recovery_attempted": True,
+                "recovery_error": str(exc),
+            }
 
     def run_scientific_cycle(
         self,
         series,
         evolution_fn: Callable[[Optional[List[Any]]], Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Complete execution workflow with recovery."""
+        """Complete execution workflow with validation and auto-recovery."""
         context = self.market_context(series)
         memory = self.consult_memory(context["symbol"], context["regime"])
         hypotheses = self.generate_hypotheses(context["symbol"], context["regime"], memory)
@@ -310,11 +398,10 @@ class ScientificResearchLab:
         stagnation = self.detect_stagnation(result.get("history", []))
 
         research = None
-        # 2. If stagnant OR errored, escalate to Atlas and use Strategy Planner
+        # 2. If stagnant OR errored, escalate to Atlas
         if stagnation.get("stagnant") or result.get("status") == "error":
             research = self.request_atlas_research(context, stagnation)
             planned_candidates = self.planner.plan(research, context["symbol"], context["regime"])
-            # 3. Rerun evolution with research-seeded genomes (with recovery)
             try:
                 result = evolution_fn(planned_candidates)
             except Exception as exc:
@@ -323,7 +410,16 @@ class ScientificResearchLab:
                           "promoted_new_champion": False, "out_of_sample": {}}
             stagnation = self.detect_stagnation(result.get("history", []))
 
-        # 4. Always record, reflect, and return (never crash silently)
+        # 3. Stage 7: Auto-recovery if all genomes still fail
+        if self._should_recover(result):
+            recovery_result = self._recovery_evolution(series, evolution_fn, context, result)
+            if recovery_result.get("promoted_new_champion") or \
+               recovery_result.get("validation_summary", {}).get("certified_candidates", 0) > 0:
+                result = recovery_result
+                research = research or {"status": "recovery_triggered"}
+                stagnation = self.detect_stagnation(result.get("history", []))
+
+        # 4. Always record, reflect, and return
         experiment = self.record_experiment(context, hypotheses, result, stagnation, research)
         reflection = self.self_reflection(experiment)
         experiment["reflection"] = reflection

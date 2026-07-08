@@ -10450,5 +10450,537 @@
       }
     },
     "promoted_new_champion": false
+  },
+  {
+    "experiment_id": "exp-f22e3201",
+    "created_at": 1783488272.9242425,
+    "symbol": "EURUSD",
+    "regime": "trending_down",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-5c823dd4",
+        "symbol": "EURUSD",
+        "regime": "trending_down",
+        "family": "bear_trend_continuation",
+        "statement": "Bear trend continuation improves when exits trail volatility.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-3e829b8e",
+        "symbol": "EURUSD",
+        "regime": "trending_down",
+        "family": "failed_rally_short",
+        "statement": "Shorting failed rallies outperforms oversold reversal in bear regimes.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": [],
+      "best_fitness_delta": null
+    },
+    "research": {
+      "status": "complete",
+      "report": {
+        "report_id": "rpt-a0b4a0f90d",
+        "query": "Research profitable quantitative trading approaches for EURUSD under trending_down conditions. Include strategy families, academic findings, microstructure observations, and institutional risk models.",
+        "domain": "financial_markets",
+        "summary": "Insufficient evidence to synthesize.",
+        "consensus": null,
+        "dissent": [],
+        "contradictions": [],
+        "agreement_narrative": null,
+        "findings": [
+          "No external evidence gathered; sources unreachable or no matches."
+        ],
+        "key_terms": [],
+        "evidence": [],
+        "prior_memory": [],
+        "source_status": {
+          "semantic_scholar": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "arxiv": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "wikipedia": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "gdelt": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "hackernews": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "_summary": "no evidence gathered (sources unreachable or no matches)"
+        },
+        "confidence": 0.0,
+        "confidence_factors": {
+          "reason": "no evidence gathered"
+        },
+        "rounds": [
+          {
+            "round": 1,
+            "depth": "standard",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 2,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 3,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          }
+        ],
+        "limitations": [
+          "Confidence 0.0 below target 0.6 after 3 round(s).",
+          "Single-source: corroboration weak."
+        ],
+        "duration_sec": 28.64
+      },
+      "note": "all paths below target; returned best-effort broad sweep"
+    },
+    "evidence": {
+      "score": -1.5,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "error",
+        "history": [],
+        "best_genome": {},
+        "promoted_new_champion": false,
+        "out_of_sample": {}
+      },
+      "criteria": {
+        "net_profit": 0.0,
+        "max_drawdown": 1.0,
+        "sharpe_proxy": 0.0
+      }
+    },
+    "best_genome": {},
+    "promoted_new_champion": false,
+    "validation_summary": {}
+  },
+  {
+    "experiment_id": "exp-48e7038a",
+    "created_at": 1783489448.9300463,
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-e2ca2671",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-ba8437f6",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": true,
+      "reasons": [
+        "convergence: identical best fitness in last 3 generations"
+      ],
+      "best_fitness_delta": 1.9469,
+      "fitness_path": [
+        -1.0,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469
+      ]
+    },
+    "research": {
+      "status": "complete",
+      "report": {
+        "report_id": "rpt-e8b7083f23",
+        "query": "Research profitable quantitative trading approaches for EURUSD under ranging conditions. Include strategy families, academic findings, microstructure observations, and institutional risk models.",
+        "domain": "financial_markets",
+        "summary": "Insufficient evidence to synthesize.",
+        "consensus": null,
+        "dissent": [],
+        "contradictions": [],
+        "agreement_narrative": null,
+        "findings": [
+          "No external evidence gathered; sources unreachable or no matches."
+        ],
+        "key_terms": [],
+        "evidence": [],
+        "prior_memory": [],
+        "source_status": {
+          "semantic_scholar": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "arxiv": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "wikipedia": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "gdelt": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "hackernews": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "_summary": "no evidence gathered (sources unreachable or no matches)"
+        },
+        "confidence": 0.0,
+        "confidence_factors": {
+          "reason": "no evidence gathered"
+        },
+        "rounds": [
+          {
+            "round": 1,
+            "depth": "standard",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 2,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 3,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          }
+        ],
+        "limitations": [
+          "Confidence 0.0 below target 0.6 after 3 round(s).",
+          "Single-source: corroboration weak."
+        ],
+        "duration_sec": 32.12
+      },
+      "note": "all paths below target; returned best-effort broad sweep"
+    },
+    "evidence": {
+      "score": -1.5,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "error",
+        "message": "insufficient history to backtest"
+      },
+      "criteria": {
+        "net_profit": 0.0,
+        "max_drawdown": 1.0,
+        "sharpe_proxy": 0.0
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-6a0bb2",
+      "generation": 4,
+      "parents": [
+        "cross-b53dac"
+      ],
+      "fitness": 0.9469,
+      "backtests": 10,
+      "best_return": 0.0216,
+      "best_sharpe": 0.509,
+      "trend_weight": 0.422,
+      "momentum_weight": 0.506,
+      "modules": {
+        "market_regime": {
+          "logic_type": "permissive",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ],
+            "volatility_limit": 1.111
+          }
+        },
+        "trend": {
+          "logic_type": "dual_ema",
+          "params": {
+            "fast": 5,
+            "slow": 20
+          }
+        },
+        "momentum": {
+          "logic_type": "macd_hist",
+          "params": {
+            "fast": 6,
+            "slow": 18,
+            "threshold": 0
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "entry": {
+          "logic_type": "default",
+          "params": {
+            "threshold": 0.314
+          }
+        },
+        "exit": {
+          "logic_type": "default",
+          "params": {
+            "sl_mult": 1.119,
+            "tp_mult": 2.439
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {
+            "max_dd_limit": 0.247
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {
+            "base_risk": 0.01
+          }
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "validation_summary": {
+      "total_genomes": 16,
+      "valid_genomes": 16,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 2,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 14,
+      "certified_candidates": 14,
+      "champion_promoted": false,
+      "elimination_stage": "none (candidates exist)",
+      "top_reports": [
+        {
+          "genome_id": "mut-6a0bb2",
+          "family": "dual_ema",
+          "regime": "ranging",
+          "structure_valid": true,
+          "missing_modules": [],
+          "compiled": true,
+          "compilation_errors": [],
+          "effective_warmup": 35,
+          "max_indicator_period": 30,
+          "tradeable_bars": 56,
+          "backtest_status": "complete",
+          "total_trades": 4,
+          "long_trades": 0,
+          "short_trades": 0,
+          "signals_generated": 0,
+          "signals_hold": 0,
+          "signals_filtered_regime": 0,
+          "signals_filtered_volatility": 0,
+          "signals_filtered_entry": 0,
+          "zero_trade_reason": "",
+          "profit": 0.0216,
+          "drawdown": 0.01,
+          "win_rate": 0.75,
+          "sharpe": 0.509,
+          "fitness_breakdown": {
+            "profit_score": 0.0432,
+            "risk_score": 0.99,
+            "consistency_score": 0.75,
+            "trade_frequency_score": 0.4,
+            "generalization_score": 0.7633,
+            "certification_score": 0.9469,
+            "final_score": 0.9469
+          },
+          "rejected": false,
+          "rejection_reasons": [],
+          "recovery_actions": []
+        },
+        {
+          "genome_id": "mut-a51fa0",
+          "family": "dual_ema",
+          "regime": "ranging",
+          "structure_valid": true,
+          "missing_modules": [],
+          "compiled": true,
+          "compilation_errors": [],
+          "effective_warmup": 35,
+          "max_indicator_period": 30,
+          "tradeable_bars": 56,
+          "backtest_status": "complete",
+          "total_trades": 4,
+          "long_trades": 0,
+          "short_trades": 0,
+          "signals_generated": 0,
+          "signals_hold": 0,
+          "signals_filtered_regime": 0,
+          "signals_filtered_volatility": 0,
+          "signals_filtered_entry": 0,
+          "zero_trade_reason": "",
+          "profit": 0.0216,
+          "drawdown": 0.01,
+          "win_rate": 0.75,
+          "sharpe": 0.509,
+          "fitness_breakdown": {
+            "profit_score": 0.0432,
+            "risk_score": 0.99,
+            "consistency_score": 0.75,
+            "trade_frequency_score": 0.4,
+            "generalization_score": 0.7633,
+            "certification_score": 0.9469,
+            "final_score": 0.9469
+          },
+          "rejected": false,
+          "rejection_reasons": [],
+          "recovery_actions": []
+        },
+        {
+          "genome_id": "mut-8bf2d1",
+          "family": "dual_ema",
+          "regime": "ranging",
+          "structure_valid": true,
+          "missing_modules": [],
+          "compiled": true,
+          "compilation_errors": [],
+          "effective_warmup": 35,
+          "max_indicator_period": 30,
+          "tradeable_bars": 56,
+          "backtest_status": "complete",
+          "total_trades": 4,
+          "long_trades": 0,
+          "short_trades": 0,
+          "signals_generated": 0,
+          "signals_hold": 0,
+          "signals_filtered_regime": 0,
+          "signals_filtered_volatility": 0,
+          "signals_filtered_entry": 0,
+          "zero_trade_reason": "",
+          "profit": 0.0216,
+          "drawdown": 0.01,
+          "win_rate": 0.75,
+          "sharpe": 0.509,
+          "fitness_breakdown": {
+            "profit_score": 0.0432,
+            "risk_score": 0.99,
+            "consistency_score": 0.75,
+            "trade_frequency_score": 0.4,
+            "generalization_score": 0.7633,
+            "certification_score": 0.9469,
+            "final_score": 0.9469
+          },
+          "rejected": false,
+          "rejection_reasons": [],
+          "recovery_actions": []
+        },
+        {
+          "genome_id": "mut-10cc54",
+          "family": "dual_ema",
+          "regime": "ranging",
+          "structure_valid": true,
+          "missing_modules": [],
+          "compiled": true,
+          "compilation_errors": [],
+          "effective_warmup": 35,
+          "max_indicator_period": 30,
+          "tradeable_bars": 56,
+          "backtest_status": "complete",
+          "total_trades": 4,
+          "long_trades": 0,
+          "short_trades": 0,
+          "signals_generated": 0,
+          "signals_hold": 0,
+          "signals_filtered_regime": 0,
+          "signals_filtered_volatility": 0,
+          "signals_filtered_entry": 0,
+          "zero_trade_reason": "",
+          "profit": 0.0216,
+          "drawdown": 0.01,
+          "win_rate": 0.75,
+          "sharpe": 0.509,
+          "fitness_breakdown": {
+            "profit_score": 0.0432,
+            "risk_score": 0.99,
+            "consistency_score": 0.75,
+            "trade_frequency_score": 0.4,
+            "generalization_score": 0.7633,
+            "certification_score": 0.9469,
+            "final_score": 0.9469
+          },
+          "rejected": false,
+          "rejection_reasons": [],
+          "recovery_actions": []
+        },
+        {
+          "genome_id": "mut-650a92",
+          "family": "dual_ema",
+          "regime": "ranging",
+          "structure_valid": true,
+          "missing_modules": [],
+          "compiled": true,
+          "compilation_errors": [],
+          "effective_warmup": 35,
+          "max_indicator_period": 30,
+          "tradeable_bars": 56,
+          "backtest_status": "complete",
+          "total_trades": 4,
+          "long_trades": 0,
+          "short_trades": 0,
+          "signals_generated": 0,
+          "signals_hold": 0,
+          "signals_filtered_regime": 0,
+          "signals_filtered_volatility": 0,
+          "signals_filtered_entry": 0,
+          "zero_trade_reason": "",
+          "profit": 0.0216,
+          "drawdown": 0.01,
+          "win_rate": 0.75,
+          "sharpe": 0.509,
+          "fitness_breakdown": {
+            "profit_score": 0.0432,
+            "risk_score": 0.99,
+            "consistency_score": 0.75,
+            "trade_frequency_score": 0.4,
+            "generalization_score": 0.7633,
+            "certification_score": 0.9469,
+            "final_score": 0.9469
+          },
+          "rejected": false,
+          "rejection_reasons": [],
+          "recovery_actions": []
+        }
+      ]
+    }
   }
 ]
