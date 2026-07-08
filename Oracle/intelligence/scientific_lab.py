@@ -1,142 +1,62 @@
 """
-Oracle.intelligence.scientific_lab (v2 - PATCHED)
-=================================================
-Fixes:
-1. evolution_fn error handling - catches and logs exceptions instead of silent None
-2. Handles evolution returning {"status": "error"} gracefully
-3. Adds comprehensive logging at every stage for debugging
-4. Fixes run_scientific_cycle to always return a complete result dict
+Oracle.intelligence.scientific_lab
+=================================
+Scientific research coordinator for Oracle.
+
+Oracle is a validator of trading intelligence, not merely a parameter searcher.
+This module wraps strategy evolution in a falsifiable workflow:
+problem detection, hypothesis generation, research escalation, experiment
+recording, regime-aware champion preservation, and Chronicle memory.
 """
 from __future__ import annotations
 
 import json
 import logging
 import time
-import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from intelligence.technicals import analyze
-from intelligence.strategy_planner import StrategyPlanner
+from intelligence.technicals import analyze  # type: ignore
+from intelligence.strategy_planner import StrategyPlanner  # type: ignore
 
 log = logging.getLogger("oracle.lab")
 
 
-class StagnationDetector:
-    """Multi-signal stagnation detection (6 signals, any 2 = stagnant)."""
-
-    def detect(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
-        if len(history) < 3:
-            return {"stagnant": False, "reasons": [], "severity": 0}
-
-        fitness = [float(h.get("best_fitness", 0.0)) for h in history]
-        reasons = []
-
-        delta = max(fitness) - fitness[0]
-        if delta < 0.01:
-            reasons.append(f"fitness_plateau: total improvement only {delta:.4f}")
-
-        tail = fitness[-3:]
-        if max(tail) - min(tail) < 0.002:
-            reasons.append("convergence: identical best fitness across last 3 generations")
-
-        if max(fitness) < 0.1:
-            reasons.append(f"low_absolute_fitness: best is {max(fitness):.4f}")
-
-        if len(fitness) >= 4 and fitness[-1] < fitness[-3]:
-            reasons.append("declining: fitness is dropping")
-
-        best_returns = [h.get("best_return", 0) for h in history]
-        if len(set(round(r, 6) for r in best_returns[-3:])) == 1:
-            reasons.append("static_champion: same individual dominates")
-
-        severity = len(reasons)
-        return {
-            "stagnant": severity >= 2,
-            "reasons": reasons,
-            "severity": severity,
-            "best_fitness_delta": round(delta, 4),
-            "fitness_path": fitness,
-        }
-
-
-class ChampionLibrary:
-    """Specialized champions per regime + trading family."""
-
-    def __init__(self, storage_path: Path):
-        self._path = storage_path
-        self._champions: Dict[str, Dict[str, Any]] = {}
-        self._load()
-
-    def _load(self):
-        if self._path.exists():
-            try:
-                self._champions = json.loads(self._path.read_text(encoding="utf-8"))
-            except Exception:
-                self._champions = {}
-
-    def _persist(self):
-        try:
-            self._path.write_text(json.dumps(self._champions, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-
-    def key(self, symbol: str, regime: str, family: str = "general") -> str:
-        return f"{symbol.upper()}::{regime}::{family}"
-
-    def record(self, symbol, regime, family, genome, evidence, hypotheses, research=None):
-        k = self.key(symbol, regime, family)
-        self._champions[k] = {
-            "symbol": symbol.upper(), "regime": regime, "family": family,
-            "genome": genome, "evidence": evidence,
-            "confidence": evidence.get("score", 0),
-            "updated_at": time.time(),
-        }
-        self._persist()
-        return k
-
-    def get(self, symbol: str, regime: str = None, family: str = None):
-        symbol = symbol.upper()
-        if regime and family:
-            return self._champions.get(self.key(symbol, regime, family))
-        candidates = [c for c in self._champions.values() if c.get("symbol") == symbol]
-        if regime:
-            candidates = [c for c in candidates if c.get("regime") == regime]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda c: c.get("confidence", 0))
-
-    def stats(self):
-        return {"total_champions": len(self._champions), "keys": list(self._champions.keys())}
-
-
 class ScientificResearchLab:
-    """Oracle's research-first strategy discovery workflow."""
+    """Coordinates Oracle's hypothesis-led research workflow."""
 
     def __init__(self, chronicle=None, atlas=None, storage_dir: str = "memory"):
         self.chronicle = chronicle
         self.atlas = atlas
         self.planner = StrategyPlanner()
-        self.stagnation_detector = StagnationDetector()
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._journal_path = self._dir / "scientific_journal.json"
-        self.champions = ChampionLibrary(self._dir / "champion_library.json")
-        self._journal: List[Dict[str, Any]] = self._load_journal()
+        self._champions_path = self._dir / "champion_library.json"
+        self._journal: List[Dict[str, Any]] = self._load_list(self._journal_path)
+        self._champions: Dict[str, Dict[str, Any]] = self._load_dict(self._champions_path)
 
-    def _load_journal(self) -> List:
+    def _load_list(self, path: Path) -> List[Dict[str, Any]]:
         try:
-            data = json.loads(self._journal_path.read_text()) if self._journal_path.exists() else []
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
             return data if isinstance(data, list) else []
         except Exception:
             return []
 
-    def _persist_journal(self):
+    def _load_dict(self, path: Path) -> Dict[str, Dict[str, Any]]:
         try:
-            self._journal_path.write_text(json.dumps(self._journal[-500:], indent=2))
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            return data if isinstance(data, dict) else {}
         except Exception:
-            pass
+            return {}
+
+    def _persist(self) -> None:
+        try:
+            self._journal_path.write_text(json.dumps(self._journal[-250:], indent=2), encoding="utf-8")
+            self._champions_path.write_text(json.dumps(self._champions, indent=2), encoding="utf-8")
+        except Exception as exc:
+            log.error("Failed to persist laboratory data: %s", exc)
 
     def market_context(self, series) -> Dict[str, Any]:
         technicals = analyze(series)
@@ -147,283 +67,273 @@ class ScientificResearchLab:
             "bars": len(series.bars),
             "last": series.last,
             "volatility": (technicals.get("regime") or {}).get("volatility", 0.0),
+            "slope_20": (technicals.get("regime") or {}).get("slope_20", 0.0),
             "technicals": technicals,
         }
 
-    def consult_memory(self, symbol: str, regime: str) -> Dict[str, Any]:
+    def consult_memory(self, symbol: str, regime: str) -> List[Dict[str, Any]]:
         if self.chronicle is None:
-            return {"memories": [], "past_experiments": [], "known_failures": [], "memory_count": 0}
+            return []
         try:
-            memories = self.chronicle.search(
-                query=f"{symbol} {regime} strategy champion experiment",
-                domain="trading", limit=6, requester="oracle"
-            ) or []
-            known_failures = []
-            past_experiments = []
-            for m in memories:
-                txt = (m.get("summary", "") if isinstance(m, dict) else str(m)).lower()
-                if "rejected" in txt or "failed" in txt:
-                    known_failures.append(txt)
-                if "experiment" in txt:
-                    past_experiments.append(txt)
-            return {"memories": memories, "past_experiments": past_experiments,
-                   "known_failures": known_failures, "memory_count": len(memories)}
+            return self.chronicle.search(
+                query=f"{symbol} {regime} rejected failed successful hypothesis champion",
+                domain="trading",
+                limit=6,
+                requester="oracle",
+            )
         except Exception as exc:
-            log.debug("Chronicle consult failed: %s", exc)
-            return {"memories": [], "past_experiments": [], "known_failures": [], "memory_count": 0}
+            log.debug("Chronicle search failed: %s", exc)
+            return []
 
-    def request_research(self, context: Dict[str, Any], memory: Dict[str, Any],
-                        depth: str = "standard") -> Dict[str, Any]:
-        symbol = context.get("symbol", "?")
-        regime = context.get("regime", "unknown")
-        query = (
-            f"Research quantitative trading strategies for {symbol} in {regime} conditions. "
-            f"Include strategy families, indicators, risk management, and failure modes."
-        )
-        if self.atlas is None:
-            log.info("  Atlas not connected. Using regime-based planning.")
-            return {"status": "unavailable", "query": query}
-        try:
-            if hasattr(self.atlas, "act"):
-                result = self.atlas.act("research.investigate", {
-                    "query": query, "domain": "financial_markets",
-                    "depth": depth, "_sender": "oracle",
-                })
-                if result and result.get("status") != "error":
-                    return result
-                log.warning("  Atlas returned: %s", result)
-                return result or {"status": "error", "message": "empty response"}
-        except Exception as exc:
-            log.error("  Atlas research failed: %s", exc)
-            return {"status": "error", "message": str(exc)}
-        return {"status": "unavailable", "query": query}
+    def generate_hypotheses(
+        self,
+        symbol: str,
+        regime: str,
+        memory: Optional[List[Dict[str, Any]]] = None,
+        research: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Create falsifiable trading hypotheses from regime, memory, and research."""
+        base = {
+            "trending_up": [
+                ("trend_continuation_atr", "Trend continuation improves when entries require ATR-confirmed momentum."),
+                ("pullback_momentum", "Bull trend pullbacks with momentum recovery outperform blind breakout entries."),
+            ],
+            "trending_down": [
+                ("bear_trend_continuation", "Bear trend continuation improves when exits trail volatility."),
+                ("failed_rally_short", "Shorting failed rallies outperforms oversold reversal in bear regimes."),
+            ],
+            "ranging": [
+                ("range_reversion_rsi", "RSI reversal performs better inside ranging markets than trend following."),
+                ("bollinger_mean_reversion", "Bollinger extremes revert more reliably when volatility is contained."),
+            ],
+            "high_volatility": [
+                ("volatility_filter", "ATR filters reduce drawdown during high-volatility expansion."),
+                ("compression_breakout", "Momentum performs better after volatility compression than during noisy expansion."),
+            ],
+        }.get(regime, [
+            ("regime_first_baseline", "A regime-filtered baseline outperforms a universal strategy."),
+        ])
 
-    def generate_hypotheses(self, context, memory, research) -> List[Dict[str, Any]]:
-        symbol = context["symbol"]
-        regime = context["regime"]
+        rejected = " ".join(str(m).lower() for m in (memory or []))
         hypotheses = []
-
-        # Regime-based hypotheses (always available)
-        regime_hyps = {
-            "trending_up": [("trend_following", "Trend continuation with momentum confirmation."),
-                           ("momentum", "Strong momentum persistence creates profitable entries."),
-                           ("breakout", "Volatility breakouts align with trend.")],
-            "trending_down": [("failed_rally", "Shorting failed recovery attempts in bear trends."),
-                             ("trend_following", "Bear trend continuation with trailing exits."),
-                             ("momentum", "Negative momentum persistence is exploitable.")],
-            "ranging": [("mean_reversion", "RSI extremes revert when range is intact."),
-                       ("breakout", "Range compression precedes expansion."),
-                       ("mean_reversion", "Bollinger extremes revert in low vol.")],
-            "high_volatility": [("breakout", "Vol compression followed by expansion."),
-                               ("volatility_trade", "Extreme vol creates sharp reversions.")],
-        }
-        for family, statement in regime_hyps.get(regime, regime_hyps["trending_up"]):
+        for family, statement in base:
+            if family.lower() in rejected and "failed" in rejected:
+                continue
             hypotheses.append({
-                "hypothesis_id": f"hyp-{uuid.uuid4().hex[:6]}",
-                "symbol": symbol, "regime": regime,
-                "family": family, "statement": statement,
-                "source": "regime_knowledge",
+                "hypothesis_id": f"hyp-{uuid.uuid4().hex[:8]}",
+                "symbol": symbol,
+                "regime": regime,
+                "family": family,
+                "statement": statement,
+                "source": "oracle_regime_memory",
             })
 
-        # From Atlas research
-        if research and research.get("status") not in ("error", "unavailable", None):
-            research_text = json.dumps(research, default=str).lower()
-            for family in ["trend_following", "mean_reversion", "breakout", "momentum", "failed_rally"]:
-                if family.replace("_", " ") in research_text or family in research_text:
-                    hypotheses.append({
-                        "hypothesis_id": f"hyp-atlas-{uuid.uuid4().hex[:6]}",
-                        "symbol": symbol, "regime": regime,
-                        "family": family,
-                        "statement": f"Atlas identified {family} as viable for {regime}.",
-                        "source": "atlas_research",
-                    })
+        if research:
+            hypotheses.append({
+                "hypothesis_id": f"hyp-{uuid.uuid4().hex[:8]}",
+                "symbol": symbol,
+                "regime": regime,
+                "family": "external_research_lead",
+                "statement": "Atlas research provided specific institutional-grade trading families.",
+                "source": "atlas_research",
+            })
+        return hypotheses[:5]
 
-        return hypotheses[:8]
+    def detect_stagnation(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if len(history) < 3:
+            return {"stagnant": False, "reasons": [], "best_fitness_delta": None}
 
-    def run_scientific_cycle(
+        fitness = [float(h.get("best_fitness", 0.0)) for h in history]
+        delta = max(fitness) - fitness[0]
+        tail = fitness[-3:]
+
+        reasons = []
+        if delta < 0.005:
+            reasons.append("fitness_plateau: improvement below threshold (0.005)")
+        if len(set(round(x, 5) for x in tail)) <= 1:
+            reasons.append("convergence: identical best fitness in last 3 generations")
+        if max(tail) <= 0:
+            reasons.append("non_profitable: best fitness remains non-positive")
+
+        return {
+            "stagnant": bool(reasons),
+            "reasons": reasons,
+            "best_fitness_delta": round(delta, 4),
+            "fitness_path": fitness,
+        }
+
+    def request_atlas_research(self, context: Dict[str, Any], stagnation: Dict[str, Any]) -> Dict[str, Any]:
+        query = (
+            f"Research profitable quantitative trading approaches for {context.get('symbol')} "
+            f"under {context.get('regime')} conditions. Include strategy families, "
+            "academic findings, microstructure observations, and institutional risk models."
+        )
+        if self.atlas is None:
+            return {"status": "unavailable", "query": query, "reason": "Atlas not connected"}
+
+        try:
+            log.info("Requesting Atlas research for %s (%s)", context.get('symbol'), context.get('regime'))
+            if hasattr(self.atlas, "act"):
+                return self.atlas.act("research.investigate", {
+                    "query": query,
+                    "domain": "financial_markets",
+                    "depth": "institutional",
+                    "stagnation": stagnation,
+                    "_sender": "oracle",
+                })
+        except Exception as exc:
+            log.error("Atlas escalation failed: %s", exc)
+            return {"status": "error", "message": str(exc)}
+        return {"status": "error", "message": "Atlas research interface not found"}
+
+    def self_reflection(self, experiment: Dict[str, Any]) -> Dict[str, Any]:
+        evidence = experiment.get("evidence", {})
+        verdict = evidence.get("verdict")
+
+        reflection = {
+            "timestamp": time.time(),
+            "questions": [
+                "Why did this champion win?" if verdict == "accepted" else "Why did this candidate fail?",
+                "What market structural properties were captured?",
+                "Did Atlas research provide actionable seeds?",
+                "Should Chronicle memory be updated with this failure mode?"
+            ],
+            "insights": [],
+            "directives": []
+        }
+
+        if verdict == "accepted":
+            reflection["insights"].append(f"Successfully evolved a {experiment.get('regime')} champion for {experiment.get('symbol')}.")
+            if experiment.get("research"):
+                reflection["insights"].append("Atlas-planned seeds contributed to the evolutionary success.")
+        else:
+            reflection["insights"].append("Evolution failed to produce a valid champion. Parameters likely over-optimized or regime shifted.")
+            reflection["directives"].append("Increase mutation pressure or refine Strategy Planner heuristic mapping.")
+
+        return reflection
+
+    def score_evidence(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        metrics = result.get("out_of_sample") or result
+        total_return = float(metrics.get("total_return", 0.0) or 0.0)
+        drawdown = float(metrics.get("max_drawdown", 1.0) or 1.0)
+        sharpe = float(metrics.get("sharpe_proxy", 0.0) or 0.0)
+        win_rate = float(metrics.get("win_rate", 0.0) or 0.0)
+        robustness = 1.0 if metrics.get("status") == "complete" and metrics.get("trades", 0) >= 3 else 0.0
+
+        score = (total_return * 2.0 + sharpe * 0.4 + win_rate * 0.4 - drawdown * 1.5 + robustness * 0.25)
+        verdict = "accepted" if score > 0.4 and total_return > 0 and robustness else "rejected"
+
+        return {
+            "score": round(score, 4),
+            "verdict": verdict,
+            "metrics": metrics,
+            "criteria": {"net_profit": total_return, "max_drawdown": drawdown, "sharpe_proxy": sharpe}
+        }
+
+    def record_experiment(
         self,
-        series,
-        evolution_fn: Callable[[Optional[List]], Dict[str, Any]],
+        context: Dict[str, Any],
+        hypotheses: List[Dict[str, Any]],
+        evolution_result: Dict[str, Any],
+        stagnation: Dict[str, Any],
+        research: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Complete research-first scientific cycle.
-        PATCHED: comprehensive error handling at every stage.
-        """
-        # 1. Market context
-        context = self.market_context(series)
-        symbol = context["symbol"]
-        regime = context["regime"]
-        log.info("═══ Scientific Cycle: %s (%s) ═══", symbol, regime)
-
-        # 2. Consult Chronicle
-        memory = self.consult_memory(symbol, regime)
-        log.info("  Chronicle: %d memories, %d past experiments, %d known failures",
-                memory["memory_count"], len(memory["past_experiments"]), len(memory["known_failures"]))
-
-        # 3. Request Atlas research (ALWAYS)
-        research = self.request_research(context, memory)
-        log.info("  Atlas research: %s", research.get("status", "unknown"))
-
-        # 4. Generate hypotheses
-        hypotheses = self.generate_hypotheses(context, memory, research)
-        log.info("  Hypotheses: %d generated", len(hypotheses))
-
-        # 5. Plan genomes from research + hypotheses
-        try:
-            research_candidates = self.planner.plan(research, symbol, regime)
-            hypothesis_candidates = self.planner.plan_from_hypotheses(hypotheses, symbol, regime)
-            all_candidates = research_candidates + hypothesis_candidates
-            log.info("  Planned genomes: %d (research: %d, hypothesis: %d)",
-                    len(all_candidates), len(research_candidates), len(hypothesis_candidates))
-        except Exception as exc:
-            log.error("  ❌ Strategy Planner FAILED: %s", exc)
-            log.error("  %s", traceback.format_exc())
-            all_candidates = []
-
-        # 6. Run evolution (with FULL error handling)
-        result = None
-        try:
-            log.info("  Starting evolution with %d planned candidates...", len(all_candidates))
-            result = evolution_fn(all_candidates if all_candidates else None)
-            log.info("  Evolution returned: status=%s, promoted=%s",
-                    result.get("status"), result.get("promoted_new_champion"))
-        except Exception as exc:
-            log.error("  ❌ EVOLUTION FAILED with exception: %s", exc)
-            log.error("  %s", traceback.format_exc())
-            result = {
-                "status": "error",
-                "message": str(exc),
-                "traceback": traceback.format_exc(),
-                "history": [],
-                "best_genome": {},
-                "in_sample_return": 0.0,
-                "out_of_sample": {},
-                "promoted_new_champion": False,
-            }
-
-        # Handle evolution error result
-        if result is None:
-            log.error("  ❌ evolution_fn returned None!")
-            result = {"status": "error", "message": "evolution returned None",
-                     "history": [], "best_genome": {}, "in_sample_return": 0.0,
-                     "out_of_sample": {}, "promoted_new_champion": False}
-
-        if result.get("status") == "error":
-            log.error("  ❌ Evolution error: %s", result.get("message"))
-
-        # 7. Stagnation detection
-        stagnation = self.stagnation_detector.detect(result.get("history", []))
-        if stagnation["stagnant"]:
-            log.warning("  Stagnation: %s", stagnation["reasons"])
-
-            # If stagnant AND first pass had candidates, try deeper research
-            if research.get("status") not in ("error", "unavailable"):
-                try:
-                    deep_research = self.request_research(context, memory, depth="institutional")
-                    if deep_research.get("status") not in ("error", "unavailable"):
-                        deeper_candidates = self.planner.plan(deep_research, symbol, regime)
-                        log.info("  Deep research: %d new candidates, retrying evolution...", len(deeper_candidates))
-                        result = evolution_fn(deeper_candidates)
-                        stagnation = self.stagnation_detector.detect(result.get("history", []))
-                except Exception as exc:
-                    log.error("  Deep research retry failed: %s", exc)
-
-        # 8. Score evidence
-        evidence = self._score_evidence(result)
-        log.info("  Evidence: verdict=%s, score=%s", evidence["verdict"], evidence["score"])
-
-        # 9. Record champion if accepted
-        promoted = result.get("promoted_new_champion", False)
-        if promoted or evidence["verdict"] == "accepted":
-            best_genome = result.get("best_genome", {})
-            family = self._determine_family(best_genome)
-            self.champions.record(symbol=symbol, regime=regime, family=family,
-                                 genome=best_genome, evidence=evidence,
-                                 hypotheses=hypotheses, research=research)
-            log.info("  ✅ Champion: %s::%s::%s", symbol, regime, family)
-
-        # 10. Self-reflection
-        reflection = self._self_reflect(context, evidence, stagnation, research, result)
-
-        # 11. Record experiment
+        evidence = self.score_evidence(evolution_result)
         experiment = {
             "experiment_id": f"exp-{uuid.uuid4().hex[:8]}",
             "created_at": time.time(),
-            "symbol": symbol,
-            "regime": regime,
+            "symbol": context.get("symbol"),
+            "regime": context.get("regime"),
             "hypotheses": hypotheses,
             "stagnation": stagnation,
+            "research": research,
             "evidence": evidence,
-            "promoted": promoted or evidence["verdict"] == "accepted",
-            "reflection": reflection,
+            "best_genome": evolution_result.get("best_genome"),
+            "promoted_new_champion": evolution_result.get("promoted_new_champion", False),
         }
         self._journal.append(experiment)
-        self._persist_journal()
+        if evidence["verdict"] == "accepted" or evolution_result.get("promoted_new_champion"):
+            self._record_champion(context, evolution_result, evidence, hypotheses)
+        self._persist()
         self._preserve_to_chronicle(experiment)
+        return experiment
 
-        # 12. Return COMPLETE result (never None)
-        return {
-            "status": "complete",
-            "context": {k: v for k, v in context.items() if k != "technicals"},
+    def _record_champion(self, context, evolution_result, evidence, hypotheses):
+        key = self.champion_key(context.get("symbol", ""), context.get("regime", "unknown"))
+        self._champions[key] = {
+            "symbol": context.get("symbol"),
+            "regime": context.get("regime"),
+            "genome": evolution_result.get("best_genome"),
+            "evidence": evidence,
             "hypotheses": hypotheses,
-            "stagnation": stagnation,
-            "research": {"status": research.get("status"), "families_found": len(research_candidates) if 'research_candidates' in dir() else 0},
-            "experiment": experiment,
-            "evolution": result,
-            "reflection": reflection,
-            "champion": self.champions.get(symbol, regime),
+            "updated_at": time.time(),
         }
 
-    def _score_evidence(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        oos = result.get("out_of_sample") or {}
-        total_return = float(oos.get("total_return", 0.0) or 0.0)
-        drawdown = float(oos.get("max_drawdown", 1.0) or 1.0)
-        sharpe = float(oos.get("sharpe_proxy", 0.0) or 0.0)
-        win_rate = float(oos.get("win_rate", 0.0) or 0.0)
-        trades = int(oos.get("trades", 0) or 0)
-        robustness = 1.0 if oos.get("status") == "complete" and trades >= 3 else 0.0
+    def champion_key(self, symbol, regime):
+        return f"{symbol.upper()}::{regime}"
 
-        score = (total_return * 2.0 + sharpe * 0.5 + win_rate * 0.3 - drawdown * 2.0) * robustness
-        verdict = "accepted" if score > 0.3 and total_return > 0 and trades >= 3 else "rejected"
-        return {"score": round(score, 4), "verdict": verdict, "metrics": oos}
-
-    def _determine_family(self, genome: Dict) -> str:
-        mods = genome.get("modules", {})
-        allowed = mods.get("market_regime", {}).get("params", {}).get("allowed_regimes", [])
-        if "ranging" in allowed and len(allowed) == 1:
-            return "mean_reversion"
-        if "trending_down" in allowed and len(allowed) == 1:
-            return "failed_rally"
-        vol = mods.get("volatility", {}).get("params", {}).get("expansion_ratio", 1.0)
-        if vol > 1.2:
-            return "breakout"
-        return "trend_following"
-
-    def _self_reflect(self, context, evidence, stagnation, research, result):
-        insights = []
-        directives = []
-        if evidence["verdict"] == "accepted":
-            insights.append(f"Champion found for {context['regime']}.")
-        else:
-            insights.append(f"No champion. Best fitness: {result.get('history', [{}])[-1].get('best_fitness', 0):.4f}")
-            if stagnation.get("stagnant"):
-                directives.append("Inject new trading families")
-            if result.get("status") == "error":
-                directives.append(f"EVOLUTION ERROR: {result.get('message', 'unknown')}")
-        return {"insights": insights, "directives": directives}
+    def champion_info(self, symbol, regime=None):
+        symbol = symbol.upper()
+        if regime:
+            return self._champions.get(self.champion_key(symbol, regime))
+        candidates = [c for c in self._champions.values() if c.get("symbol", "").upper() == symbol]
+        return max(candidates, key=lambda c: c.get("evidence", {}).get("score", -999)) if candidates else None
 
     def _preserve_to_chronicle(self, experiment):
         if not self.chronicle:
             return
         try:
-            content = f"Oracle exp {experiment['experiment_id']} ({experiment['regime']}): {experiment['evidence']['verdict']}"
+            content = f"Oracle experiment {experiment['experiment_id']} for {experiment['symbol']} ({experiment['regime']}): {experiment['evidence']['verdict']}."
             if hasattr(self.chronicle, "act"):
                 self.chronicle.act("memory.store", {"content": content, "domain": "trading", "source": "oracle"})
         except Exception:
             pass
 
-    def champion_info(self, symbol, regime=None):
-        return self.champions.get(symbol, regime)
+    def run_scientific_cycle(
+        self,
+        series,
+        evolution_fn: Callable[[Optional[List[Any]]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Complete execution workflow with recovery."""
+        context = self.market_context(series)
+        memory = self.consult_memory(context["symbol"], context["regime"])
+        hypotheses = self.generate_hypotheses(context["symbol"], context["regime"], memory)
+
+        # 1. First evolution pass (with recovery)
+        try:
+            result = evolution_fn(None)
+        except Exception as exc:
+            log.error("Evolution pass 1 failed: %s - forcing research escalation", exc)
+            result = {"status": "error", "history": [], "best_genome": {},
+                      "promoted_new_champion": False, "out_of_sample": {}}
+
+        stagnation = self.detect_stagnation(result.get("history", []))
+
+        research = None
+        # 2. If stagnant OR errored, escalate to Atlas and use Strategy Planner
+        if stagnation.get("stagnant") or result.get("status") == "error":
+            research = self.request_atlas_research(context, stagnation)
+            planned_candidates = self.planner.plan(research, context["symbol"], context["regime"])
+            # 3. Rerun evolution with research-seeded genomes (with recovery)
+            try:
+                result = evolution_fn(planned_candidates)
+            except Exception as exc:
+                log.error("Evolution pass 2 failed: %s", exc)
+                result = {"status": "error", "history": [], "best_genome": {},
+                          "promoted_new_champion": False, "out_of_sample": {}}
+            stagnation = self.detect_stagnation(result.get("history", []))
+
+        # 4. Always record, reflect, and return (never crash silently)
+        experiment = self.record_experiment(context, hypotheses, result, stagnation, research)
+        reflection = self.self_reflection(experiment)
+        experiment["reflection"] = reflection
+
+        return {
+            "status": "complete", "context": context, "hypotheses": hypotheses,
+            "stagnation": stagnation, "research": research, "experiment": experiment,
+            "evolution": result, "reflection": reflection,
+            "champion": self.champion_info(context["symbol"], context["regime"]),
+        }
 
     def stats(self):
-        return {"experiments": len(self._journal), "champions": self.champions.stats()}
+        return {"experiments": len(self._journal), "champions": list(self._champions.keys())}

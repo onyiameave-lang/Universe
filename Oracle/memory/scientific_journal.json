@@ -10233,5 +10233,222 @@
       "fitness": 238.6275
     },
     "promoted_new_champion": false
+  },
+  {
+    "experiment_id": "exp-3e7ee929",
+    "created_at": 1783487237.3864863,
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-9937ace8",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-d07a86d5",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": true,
+      "reasons": [
+        "fitness_plateau: improvement below threshold (0.005)",
+        "convergence: identical best fitness in last 3 generations"
+      ],
+      "best_fitness_delta": 0.0,
+      "fitness_path": [
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469,
+        0.9469
+      ]
+    },
+    "research": {
+      "status": "complete",
+      "report": {
+        "report_id": "rpt-dee8bebd97",
+        "query": "Research profitable quantitative trading approaches for EURUSD under ranging conditions. Include strategy families, academic findings, microstructure observations, and institutional risk models.",
+        "domain": "financial_markets",
+        "summary": "Insufficient evidence to synthesize.",
+        "consensus": null,
+        "dissent": [],
+        "contradictions": [],
+        "agreement_narrative": null,
+        "findings": [
+          "No external evidence gathered; sources unreachable or no matches."
+        ],
+        "key_terms": [],
+        "evidence": [],
+        "prior_memory": [],
+        "source_status": {
+          "semantic_scholar": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "arxiv": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "wikipedia": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "gdelt": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "hackernews": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "_summary": "no evidence gathered (sources unreachable or no matches)"
+        },
+        "confidence": 0.0,
+        "confidence_factors": {
+          "reason": "no evidence gathered"
+        },
+        "rounds": [
+          {
+            "round": 1,
+            "depth": "standard",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 2,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          },
+          {
+            "round": 3,
+            "depth": "deep",
+            "evidence": 0,
+            "confidence": 0.0
+          }
+        ],
+        "limitations": [
+          "Confidence 0.0 below target 0.6 after 3 round(s).",
+          "Single-source: corroboration weak."
+        ],
+        "duration_sec": 36.3
+      },
+      "note": "all paths below target; returned best-effort broad sweep"
+    },
+    "evidence": {
+      "score": -1.509,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 1,
+        "win_rate": 0.0,
+        "total_return": -0.0045,
+        "final_equity": 9954.7,
+        "profit_factor": 0.0,
+        "max_drawdown": 0.0,
+        "sharpe_proxy": 0.0,
+        "sortino_proxy": -1.0,
+        "recovery_factor": 0.0,
+        "expectancy": -45.3,
+        "consistency": 0.0,
+        "avg_pnl": -45.3
+      },
+      "criteria": {
+        "net_profit": -0.0045,
+        "max_drawdown": 1.0,
+        "sharpe_proxy": 0.0
+      }
+    },
+    "best_genome": {
+      "genome_id": "rand-scalp-40e0",
+      "generation": 0,
+      "parents": [],
+      "fitness": 0.9469,
+      "backtests": 10,
+      "best_return": 0.0216,
+      "best_sharpe": 0.509,
+      "trend_weight": 0.557,
+      "momentum_weight": 0.495,
+      "modules": {
+        "market_regime": {
+          "logic_type": "permissive",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ],
+            "volatility_limit": 1.129
+          }
+        },
+        "trend": {
+          "logic_type": "ema_slope",
+          "params": {
+            "period": 11
+          }
+        },
+        "momentum": {
+          "logic_type": "stochastic",
+          "params": {
+            "period": 4,
+            "upper": 78,
+            "lower": 21
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "entry": {
+          "logic_type": "default",
+          "params": {
+            "threshold": 0.333
+          }
+        },
+        "exit": {
+          "logic_type": "default",
+          "params": {
+            "sl_mult": 0.985,
+            "tp_mult": 1.532
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {
+            "max_dd_limit": 0.151
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {
+            "base_risk": 0.01
+          }
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false
   }
 ]

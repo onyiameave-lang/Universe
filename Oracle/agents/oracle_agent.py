@@ -7,13 +7,13 @@ sovereignty.)
 
 Beyond institutional. Oracle no longer chooses from a fixed menu of hand-written
 strategies. It:
-  * EVOLVES its own strategies as genetic genomes (composable indicator rules),
-    validated by walk-forward backtest + OUT-OF-SAMPLE certification (overfitting
-    guard). Champions persist and are used for live signals.
-  * FUSES technical + news (Sentinel) + social (Pulse) + memory (Chronicle) with
-    weights that LEARN per-symbol from realized trade outcomes (adaptive_fusion).
-  * RISK-GATES every trade (sizing, stops, drawdown kill-switch); paper by default.
-  * PRESERVES evolved strategies + outcomes to Chronicle (auditable DNA).
+ * EVOLVES its own strategies as genetic genomes (composable indicator rules),
+   validated by walk-forward backtest + OUT-OF-SAMPLE certification (overfitting
+   guard). Champions persist and are used for live signals.
+ * FUSES technical + news (Sentinel) + social (Pulse) + memory (Chronicle) with
+   weights that LEARN per-symbol from realized trade outcomes (adaptive_fusion).
+ * RISK-GATES every trade (sizing, stops, drawdown kill-switch); paper by default.
+ * PRESERVES evolved strategies + outcomes to Chronicle (auditable DNA).
 
 Nothing bypasses the risk gate. Evolved strategies are human-readable rule sets,
 not black boxes, so every decision remains explainable and constitutional.
@@ -32,13 +32,13 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-from core.market_data import MarketData                       # type: ignore
-from core.risk import RiskManager                             # type: ignore
-from core.backtester import Backtester                        # type: ignore
-from intelligence.technicals import analyze                    # type: ignore
-from intelligence.evolution import EvolutionLab                # type: ignore
-from intelligence.strategy_genome import StrategyGenome        # type: ignore
-from intelligence.adaptive_fusion import AdaptiveFusion        # type: ignore
+from core.market_data import MarketData  # type: ignore
+from core.risk import RiskManager  # type: ignore
+from core.backtester import Backtester  # type: ignore
+from intelligence.technicals import analyze  # type: ignore
+from intelligence.evolution import EvolutionLab  # type: ignore
+from intelligence.strategy_genome import StrategyGenome  # type: ignore
+from intelligence.adaptive_fusion import AdaptiveFusion  # type: ignore
 from intelligence.scientific_lab import ScientificResearchLab  # type: ignore
 
 try:
@@ -77,7 +77,7 @@ class OracleAgent(BaseAgent):
     def __init__(self, chronicle_client=None, sentinel_client=None, pulse_client=None,
                  atlas_client=None, equity: float = 10000.0, **kw):
         super().__init__(chronicle_client=chronicle_client, atlas_client=atlas_client,
-                        storage_dir=str(_REPO_ROOT / "memory"), **kw)
+                         storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.data = MarketData()
         self.risk = RiskManager(equity=equity)
         self.backtester = Backtester(risk_per_trade=self.risk.risk_per_trade, starting_equity=equity)
@@ -98,7 +98,6 @@ class OracleAgent(BaseAgent):
     # ---- evidence streams (same sources, adaptive weights) ----
 
     def _streams(self, symbol: str, technicals: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        # technical direction from the evolved champion if present, else indicators
         regime = (technicals.get("regime") or {}).get("regime", "ranging")
         champ = self.evolution.champion(symbol, regime)
         champion_source = "evolution_library"
@@ -112,14 +111,14 @@ class OracleAgent(BaseAgent):
                 s = md["series"]
                 vote = champ.vote(s)
                 tech = {"direction": vote, "confidence": 0.75, "source": "evolved_champion",
-                       "champion_source": champion_source, "regime": regime, "genome": champ.genome_id}
+                        "champion_source": champion_source, "regime": regime, "genome": champ.genome_id}
             else:
                 tech = {"direction": 0.0, "confidence": 0.0}
         else:
             tech = self._technical_from_indicators(technicals)
         return {"technical": tech,
-               "news": self._news(symbol), "social": self._social(symbol),
-               "memory": self._memory(symbol, (technicals.get("regime") or {}).get("regime", "ranging"))}
+                "news": self._news(symbol), "social": self._social(symbol),
+                "memory": self._memory(symbol, (technicals.get("regime") or {}).get("regime", "ranging"))}
 
     def _technical_from_indicators(self, t):
         if "error" in t:
@@ -153,7 +152,7 @@ class OracleAgent(BaseAgent):
             s = self.pulse.sentiment_for(symbol)
             conf = s.get("confidence", 0.0) * (0.3 if s.get("manipulation_warning") else 1.0)
             return {"direction": s.get("sentiment", 0.0), "confidence": conf,
-                   "manipulation_warning": s.get("manipulation_warning", False)}
+                    "manipulation_warning": s.get("manipulation_warning", False)}
         except Exception:
             return {"direction": 0.0, "confidence": 0.0}
 
@@ -162,7 +161,7 @@ class OracleAgent(BaseAgent):
             return {"direction": 0.0, "confidence": 0.0}
         try:
             mems = self.chronicle.search(query=f"{symbol} {regime} outcome", domain="trading",
-                                        limit=4, requester="oracle")
+                                         limit=4, requester="oracle")
             if not mems:
                 return {"direction": 0.0, "confidence": 0.0}
             score, n = 0.0, 0
@@ -183,7 +182,7 @@ class OracleAgent(BaseAgent):
         if md["status"] != "complete":
             return {"status": "error", "message": md.get("message"), "symbol": symbol}
         return {"status": "complete", "symbol": symbol, "source": md["source"],
-               "last": md["series"].last, "technicals": analyze(md["series"])}
+                "last": md["series"].last, "technicals": analyze(md["series"])}
 
     def signal(self, symbol):
         market = self.analyze_market(symbol)
@@ -192,9 +191,9 @@ class OracleAgent(BaseAgent):
         streams = self._streams(symbol, market["technicals"])
         fused = self.fusion.fuse(symbol, streams)
         return {"status": "complete", "symbol": symbol, "signal": fused,
-               "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
-               "using_evolved_champion": streams["technical"].get("source") == "evolved_champion",
-               "_technicals": market["technicals"]}
+                "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
+                "using_evolved_champion": streams["technical"].get("source") == "evolved_champion",
+                "_technicals": market["technicals"]}
 
     # ---- BaseAgent contract ----
 
@@ -226,7 +225,7 @@ class OracleAgent(BaseAgent):
             context = self.lab.market_context(series)
             memory = self.lab.consult_memory(context["symbol"], context["regime"])
             return {"status": "complete", "context": {k: v for k, v in context.items() if k != "technicals"},
-                   "hypotheses": self.lab.generate_hypotheses(context["symbol"], context["regime"], memory)}
+                    "hypotheses": self.lab.generate_hypotheses(context["symbol"], context["regime"], memory)}
         if task == "strategy.champion":
             regime = ctx.get("regime")
             if not regime:
@@ -235,22 +234,23 @@ class OracleAgent(BaseAgent):
                     regime = self.lab.market_context(md["series"])["regime"]
             info = self.evolution.champion_info(symbol, regime) or self.lab.champion_info(symbol, regime)
             return {"status": "complete", "champion": info} if info else \
-                   {"status": "complete", "champion": None,
-                    "note": "no regime-aware champion yet; run strategy.evolve"}
+                {"status": "complete", "champion": None,
+                 "note": "no regime-aware champion yet; run strategy.evolve"}
         if task == "strategy.backtest":
             md = self.data.get(symbol)
             series = md["series"] if md["status"] == "complete" else self.data.synthetic(symbol)
             regime = (analyze(series).get("regime") or {}).get("regime", "ranging")
             champ = self.evolution.champion(symbol, regime)
             if champ:
-                def decide(c, h, l):
-                    class _S: pass
+                def decide(c, h, l, **kwargs):  # FIX: added **kwargs
+                    class _S:
+                        pass
                     s = _S(); s.closes = c; s.highs = h; s.lows = l
                     return {"call": champ.call(s)}
             else:
-                decide = lambda c, h, l: {"call": self._indicator_call(c, h, l)}
+                decide = lambda c, h, l, **kwargs: {"call": self._indicator_call(c, h, l)}  # FIX: added **kwargs
             return {"status": "complete", "backtest": self.backtester.run(series, decide),
-                   "used_champion": champ is not None}
+                    "used_champion": champ is not None}
         if task == "trade.propose":
             sig = self.signal(symbol)
             if sig["status"] != "complete":
@@ -265,12 +265,12 @@ class OracleAgent(BaseAgent):
             if not plan["approved"]:
                 return {"status": "error", "message": "risk gate rejected", "risk": plan}
             return {"status": "complete", "plan": plan, "signal": s,
-                   "using_evolved_champion": sig["using_evolved_champion"],
-                   "_streams": s["streams"]}
+                    "using_evolved_champion": sig["using_evolved_champion"],
+                    "_streams": s["streams"]}
         if task == "trade.execute":
             plan = ctx.get("plan")
             return self.risk.open_position(plan) if plan else \
-                   {"status": "error", "message": "no plan; run trade.propose"}
+                {"status": "error", "message": "no plan; run trade.propose"}
         if task == "fusion.learn":
             return {"status": "complete", **self.fusion.learn_from_outcome(
                 symbol, ctx.get("streams", {}), ctx.get("realized_direction", 0))}
@@ -284,7 +284,8 @@ class OracleAgent(BaseAgent):
 
     def _indicator_call(self, closes, highs, lows):
         from intelligence.technicals import analyze as _an
-        class _S: pass
+        class _S:
+            pass
         s = _S(); s.closes = closes; s.highs = highs; s.lows = lows
         t = _an(s)
         if "error" in t:
