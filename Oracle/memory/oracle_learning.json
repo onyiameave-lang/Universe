@@ -20,9 +20,30 @@
       "confidence": 0.4,
       "repeated": false,
       "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.evolve",
+      "root_cause": "EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'current_stop'",
+      "lesson": "Task 'strategy.evolve' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.evolve",
+      "root_cause": "list index out of range",
+      "lesson": "Task 'strategy.evolve' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
     }
   ],
   "failure_signatures": {
-    "strategy.evolve::EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'curr": 2
+    "strategy.evolve::EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'curr": 3,
+    "strategy.evolve::list index out of range": 1
   }
 }

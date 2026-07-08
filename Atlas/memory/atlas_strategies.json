@@ -2197,12 +2197,14 @@
       "reasons_for": [
         "addresses failure: below confidence target via this path"
       ],
-      "reasons_against": [],
-      "attempts": 0,
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
       "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783482638.4047916,
       "status": "candidate",
       "created_at": 1783476944.6695807,
       "lineage": "strat-b723b94e66",
@@ -2390,6 +2392,326 @@
       "status": "candidate",
       "created_at": 1783478544.0870392,
       "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-722ef255c1",
+      "problem_type": "research_path",
+      "name": "academic_rigor",
+      "description": "",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "peer-reviewed; highest credibility"
+      ],
+      "reasons_against": [
+        "slow; misses very recent work"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783482584.305117,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-8c956b99cf",
+      "problem_type": "research_path",
+      "name": "frontier_scan",
+      "description": "",
+      "handler": "_strat_frontier",
+      "params": {},
+      "reasons_for": [
+        "catches cutting-edge preprints + practitioner signal"
+      ],
+      "reasons_against": [
+        "less validated than peer review"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783482584.305117,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-4663c91982",
+      "problem_type": "research_path",
+      "name": "market_pulse",
+      "description": "",
+      "handler": "_strat_market",
+      "params": {},
+      "reasons_for": [
+        "fast; real-world/news coverage"
+      ],
+      "reasons_against": [
+        "lower credibility; noisier"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783482584.320013,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-53eda3b0ad",
+      "problem_type": "research_path",
+      "name": "broad_desk",
+      "description": "",
+      "handler": "_strat_broad",
+      "params": {},
+      "reasons_for": [
+        "maximum corroboration across all sources"
+      ],
+      "reasons_against": [
+        "slowest; most requests"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783482584.324022,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-4e5a660da3",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783482656.1104875,
+      "status": "candidate",
+      "created_at": 1783482638.4219363,
+      "lineage": "strat-42d5b14243",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-3a9aec7e56",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783482676.3214025,
+      "status": "candidate",
+      "created_at": 1783482656.1204543,
+      "lineage": "strat-4e5a660da3",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-15734c439f",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783484113.2968159,
+      "status": "candidate",
+      "created_at": 1783482676.324554,
+      "lineage": "strat-3a9aec7e56",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-22c2b0ff37",
+      "problem_type": "research_path",
+      "name": "academic_rigor",
+      "description": "",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "peer-reviewed; highest credibility"
+      ],
+      "reasons_against": [
+        "slow; misses very recent work"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484053.6514866,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-4aee2fb1b9",
+      "problem_type": "research_path",
+      "name": "frontier_scan",
+      "description": "",
+      "handler": "_strat_frontier",
+      "params": {},
+      "reasons_for": [
+        "catches cutting-edge preprints + practitioner signal"
+      ],
+      "reasons_against": [
+        "less validated than peer review"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484053.6655788,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-c161069216",
+      "problem_type": "research_path",
+      "name": "market_pulse",
+      "description": "",
+      "handler": "_strat_market",
+      "params": {},
+      "reasons_for": [
+        "fast; real-world/news coverage"
+      ],
+      "reasons_against": [
+        "lower credibility; noisier"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484053.6706028,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-6a6601287d",
+      "problem_type": "research_path",
+      "name": "broad_desk",
+      "description": "",
+      "handler": "_strat_broad",
+      "params": {},
+      "reasons_for": [
+        "maximum corroboration across all sources"
+      ],
+      "reasons_against": [
+        "slowest; most requests"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484053.6741707,
+      "lineage": null,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-63885a9086",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783484133.1245196,
+      "status": "candidate",
+      "created_at": 1783484113.3130274,
+      "lineage": "strat-15734c439f",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-27b141169f",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1783484152.0743284,
+      "status": "candidate",
+      "created_at": 1783484133.1245196,
+      "lineage": "strat-63885a9086",
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-d5162440b2",
+      "problem_type": "research_path",
+      "name": "academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)",
+      "description": "Variation of 'academic_rigor (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised) (revised)' avoiding the prior failure mode.",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "addresses failure: below confidence target via this path"
+      ],
+      "reasons_against": [],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783484152.0743284,
+      "lineage": "strat-27b141169f",
       "confidence": 0.0
     }
   ]
