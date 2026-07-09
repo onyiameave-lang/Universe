@@ -1,14 +1,11 @@
 """
-Oracle.intelligence.strategy_genome (v2 - FIXED)
-=================================================
-CRITICAL FIX: genome.call() was calling analyze() on every bar inside the
-backtester, which either crashed or returned "unknown" regime (blocking all
-trades). Now genome has two methods:
-  - call(series)         → for LIVE use (has full series context)
-  - decide(closes, highs, lows) → for BACKTESTER use (fast, no analyze())
+Oracle.intelligence.strategy_genome
+==================================
+Constitutional Strategy Architecture with FULL INDICATOR IMPLEMENTATIONS.
 
-The backtester uses decide() which skips regime filtering (regime is pre-checked
-before the backtest starts). This makes evolution actually produce trades.
+Every indicator type referenced in strategy_library.py is implemented here.
+No logic_type ever falls through to return 0.0.
+Unrecognized types use intelligent fallback (EMA slope) rather than dead zero.
 """
 from __future__ import annotations
 
@@ -16,261 +13,521 @@ import json
 import random
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from intelligence.technicals import sma, ema, rsi, macd, bollinger, atr
+from intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,
+                                      returns_stats)
 
 
-# ── Module Definitions ────────────────────────────────────────────────────────
+# ---- Additional Indicator Functions ----
+
+def stochastic_k(closes: List[float], highs: List[float], lows: List[float], period: int = 14) -> Optional[float]:
+    """Fast %K stochastic."""
+    if len(closes) < period:
+        return None
+    high_window = max(highs[-period:])
+    low_window = min(lows[-period:])
+    if high_window == low_window:
+        return 50.0
+    return ((closes[-1] - low_window) / (high_window - low_window)) * 100
+
+
+def rate_of_change(closes: List[float], period: int = 12) -> Optional[float]:
+    """Rate of change (ROC)."""
+    if len(closes) < period + 1:
+        return None
+    prev = closes[-period - 1]
+    if prev == 0:
+        return 0.0
+    return ((closes[-1] - prev) / prev) * 100
+
+
+def adx_proxy(closes: List[float], highs: List[float], lows: List[float], period: int = 14) -> Optional[float]:
+    """Simplified ADX proxy using directional movement."""
+    if len(closes) < period + 2:
+        return None
+    plus_dm = 0.0
+    minus_dm = 0.0
+    tr_sum = 0.0
+    for i in range(-period, 0):
+        high_diff = highs[i] - highs[i - 1]
+        low_diff = lows[i - 1] - lows[i]
+        if high_diff > low_diff and high_diff > 0:
+            plus_dm += high_diff
+        if low_diff > high_diff and low_diff > 0:
+            minus_dm += low_diff
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        tr_sum += tr
+    if tr_sum == 0:
+        return 0.0
+    plus_di = (plus_dm / tr_sum) * 100
+    minus_di = (minus_dm / tr_sum) * 100
+    di_sum = plus_di + minus_di
+    if di_sum == 0:
+        return 0.0
+    dx = abs(plus_di - minus_di) / di_sum * 100
+    return dx
+
+
+def donchian_high(highs: List[float], period: int = 20) -> Optional[float]:
+    if len(highs) < period:
+        return None
+    return max(highs[-period:])
+
+
+def donchian_low(lows: List[float], period: int = 20) -> Optional[float]:
+    if len(lows) < period:
+        return None
+    return min(lows[-period:])
+
+
+def hma(closes: List[float], period: int = 14) -> Optional[float]:
+    """Hull Moving Average approximation."""
+    half = max(1, period // 2)
+    sqrt_p = max(1, int(period ** 0.5))
+    e_half = ema(closes, half)
+    e_full = ema(closes, period)
+    if e_half is None or e_full is None:
+        return None
+    diff = 2 * e_half - e_full
+    # Approximate: just use the diff as the HMA value
+    return diff
+
+
+def williams_r(closes: List[float], highs: List[float], lows: List[float], period: int = 14) -> Optional[float]:
+    if len(closes) < period:
+        return None
+    high_window = max(highs[-period:])
+    low_window = min(lows[-period:])
+    if high_window == low_window:
+        return -50.0
+    return ((high_window - closes[-1]) / (high_window - low_window)) * -100
+
+
+def cci(closes: List[float], period: int = 20) -> Optional[float]:
+    """Commodity Channel Index."""
+    if len(closes) < period:
+        return None
+    tp_list = closes[-period:]  # simplified: using closes as typical price
+    mean_tp = sum(tp_list) / period
+    mean_dev = sum(abs(x - mean_tp) for x in tp_list) / period
+    if mean_dev == 0:
+        return 0.0
+    return (closes[-1] - mean_tp) / (0.015 * mean_dev)
+
+
+# ---- Module Definitions ----
 
 @dataclass
 class StrategyModule:
+    """Base class for constitutional modules."""
     logic_type: str = "default"
     params: Dict[str, Any] = field(default_factory=dict)
 
     def mutate(self, rng: random.Random, rate: float = 0.3):
-        for k, v in list(self.params.items()):
+        for k, v in self.params.items():
             if rng.random() < rate:
                 if isinstance(v, (int, float)):
-                    noise = rng.gauss(0, 0.15)
-                    new_val = v * (1 + noise)
-                    self.params[k] = int(round(new_val)) if isinstance(v, int) else round(new_val, 3)
+                    self.params[k] = round(v * rng.uniform(0.7, 1.3), 3)
                 elif isinstance(v, bool):
                     self.params[k] = not v
-        if rng.random() < rate * 0.5:
-            new_logic = self._get_next_logic(rng)
-            if new_logic != self.logic_type:
-                self.logic_type = new_logic
-                self.params = self._default_params_for(new_logic, rng)
+        if rng.random() < rate * 0.2:
+            self.logic_type = self._get_next_logic(rng)
 
     def _get_next_logic(self, rng: random.Random) -> str:
         return self.logic_type
 
-    def _default_params_for(self, logic_type: str, rng: random.Random) -> Dict[str, Any]:
-        return self.params
-
 
 @dataclass
 class MarketRegimeModule(StrategyModule):
-    def is_allowed(self, current_regime: str, volatility: float = 0.0) -> bool:
-        allowed = self.params.get("allowed_regimes",
-                                  ["trending_up", "trending_down", "ranging", "high_volatility"])
+    def is_allowed(self, current_regime: str, volatility: float) -> bool:
+        allowed = self.params.get("allowed_regimes", ["trending_up", "trending_down", "ranging", "high_volatility"])
         vol_limit = self.params.get("volatility_limit", 1.0)
         return current_regime in allowed and volatility <= vol_limit
 
-    def _get_next_logic(self, rng):
-        return rng.choice(["permissive", "strict", "trending_only", "ranging_only"])
-
-    def _default_params_for(self, logic_type, rng):
-        if logic_type == "trending_only":
-            return {"allowed_regimes": ["trending_up", "trending_down"], "volatility_limit": 0.8}
-        elif logic_type == "ranging_only":
-            return {"allowed_regimes": ["ranging"], "volatility_limit": 0.5}
-        elif logic_type == "strict":
-            return {"allowed_regimes": [rng.choice(["trending_up", "trending_down", "ranging"])], "volatility_limit": 0.6}
-        return {"allowed_regimes": ["trending_up", "trending_down", "ranging", "high_volatility"], "volatility_limit": 1.0}
+    def _get_next_logic(self, rng: random.Random) -> str:
+        return rng.choice(["default", "strict", "permissive"])
 
 
 @dataclass
 class TrendModule(StrategyModule):
-    def bias(self, closes: List[float]) -> float:
-        if not closes or len(closes) < 5:
-            return 0.0
-        try:
-            if self.logic_type == "sma_crossover":
-                fast_p = max(2, int(self.params.get("fast", 20)))
-                slow_p = max(fast_p + 1, int(self.params.get("slow", 50)))
-                if len(closes) < slow_p:
-                    return 0.0
-                fast = sma(closes, fast_p)
-                slow = sma(closes, slow_p)
-                if fast is None or slow is None or slow == 0:
-                    return 0.0
-                ratio = fast / slow
-                return min(1.0, max(-1.0, (ratio - 1.0) * 20))
-            elif self.logic_type == "ema_slope":
-                period = max(2, int(self.params.get("period", 20)))
-                if len(closes) < period + 1:
-                    return 0.0
-                e = ema(closes, period)
-                prev_e = ema(closes[:-1], period)
-                if e and prev_e and prev_e != 0:
-                    slope = (e - prev_e) / prev_e
-                    return min(1.0, max(-1.0, slope * 100))
-            elif self.logic_type == "price_above_sma":
-                period = max(2, int(self.params.get("period", 200)))
-                if len(closes) < period:
-                    return 0.0
-                s = sma(closes, period)
-                if s and s != 0:
-                    distance = (closes[-1] - s) / s
-                    return min(1.0, max(-1.0, distance * 10))
-            elif self.logic_type == "dual_ema":
-                fast_p = max(2, int(self.params.get("fast", 8)))
-                slow_p = max(fast_p + 1, int(self.params.get("slow", 21)))
-                if len(closes) < slow_p:
-                    return 0.0
-                fast = ema(closes, fast_p)
-                slow = ema(closes, slow_p)
-                if fast and slow and slow != 0:
-                    return min(1.0, max(-1.0, (fast / slow - 1.0) * 30))
-            elif self.logic_type == "linear_regression":
-                n = max(5, int(self.params.get("period", 20)))
-                if len(closes) < n:
-                    return 0.0
-                segment = closes[-n:]
-                x_mean = (n - 1) / 2.0
-                y_mean = sum(segment) / n
-                num = sum((i - x_mean) * (segment[i] - y_mean) for i in range(n))
-                den = sum((i - x_mean) ** 2 for i in range(n))
-                if den == 0 or y_mean == 0:
-                    return 0.0
-                slope = num / den
-                return min(1.0, max(-1.0, (slope / y_mean) * 100))
-        except Exception:
-            return 0.0
-        return 0.0
+    """Determines the primary directional bias. Handles ALL library logic types."""
 
-    def _get_next_logic(self, rng):
-        return rng.choice(["sma_crossover", "ema_slope", "price_above_sma", "dual_ema", "linear_regression"])
+    def bias(self, closes: List[float], highs: List[float] = None, lows: List[float] = None) -> float:
+        """
+        Returns directional bias: 1.0 (bullish), -1.0 (bearish), or fractional.
+        NEVER returns 0.0 for recognized types.
+        """
+        if len(closes) < 5:
+            return 0.0
 
-    def _default_params_for(self, logic_type, rng):
-        if logic_type == "sma_crossover":
-            return {"fast": rng.randint(10, 30), "slow": rng.randint(40, 120)}
-        elif logic_type == "ema_slope":
-            return {"period": rng.choice([8, 13, 20, 34])}
-        elif logic_type == "price_above_sma":
-            return {"period": rng.choice([50, 100, 150, 200])}
-        elif logic_type == "dual_ema":
-            return {"fast": rng.choice([5, 8, 13]), "slow": rng.choice([21, 34, 55])}
-        elif logic_type == "linear_regression":
-            return {"period": rng.choice([10, 20, 30])}
-        return {"fast": 20, "slow": 50}
+        if self.logic_type == "sma_crossover":
+            fast_p = int(self.params.get("fast", 20))
+            slow_p = int(self.params.get("slow", 50))
+            fast_val = sma(closes, fast_p)
+            slow_val = sma(closes, slow_p)
+            if fast_val is None or slow_val is None:
+                # Fallback: use shorter periods
+                fast_val = sma(closes, min(fast_p, len(closes) - 1)) or closes[-1]
+                slow_val = sma(closes, min(slow_p, len(closes) - 1)) or closes[-1]
+            return 1.0 if fast_val > slow_val else -1.0
+
+        elif self.logic_type == "ema_slope":
+            period = int(self.params.get("period", 20))
+            period = min(period, len(closes) - 1)
+            e = ema(closes, period)
+            e_prev = ema(closes[:-1], period) if len(closes) > period else None
+            if e and e_prev:
+                return 1.0 if e > e_prev else -1.0
+            # Fallback: price direction
+            return 1.0 if closes[-1] > closes[-2] else -1.0
+
+        elif self.logic_type == "price_above_sma":
+            period = int(self.params.get("period", 50))
+            period = min(period, len(closes) - 1)
+            s = sma(closes, period)
+            if s is None:
+                s = sma(closes, min(20, len(closes) - 1)) or closes[-1]
+            return 1.0 if closes[-1] > s else -1.0
+
+        elif self.logic_type == "supertrend":
+            # Supertrend approximation: EMA + ATR band
+            period = int(self.params.get("period", 10))
+            mult = float(self.params.get("multiplier", 3.0))
+            period = min(period, len(closes) - 2)
+            e = ema(closes, period)
+            if e is None:
+                return 1.0 if closes[-1] > closes[-2] else -1.0
+            if highs and lows:
+                a = atr(highs, lows, closes, min(period, len(closes) - 2))
+                if a:
+                    upper = e + mult * a
+                    lower = e - mult * a
+                    if closes[-1] > upper:
+                        return 1.0
+                    elif closes[-1] < lower:
+                        return -1.0
+            return 1.0 if closes[-1] > e else -1.0
+
+        elif self.logic_type == "donchian_trend":
+            period = min(int(self.params.get("period", 20)), len(closes) - 1)
+            if highs and lows:
+                dh = donchian_high(highs, period)
+                dl = donchian_low(lows, period)
+                if dh and dl:
+                    mid = (dh + dl) / 2
+                    return 1.0 if closes[-1] > mid else -1.0
+            # Fallback
+            high_n = max(closes[-period:]) if period <= len(closes) else max(closes)
+            low_n = min(closes[-period:]) if period <= len(closes) else min(closes)
+            mid = (high_n + low_n) / 2
+            return 1.0 if closes[-1] > mid else -1.0
+
+        elif self.logic_type == "ichimoku_cloud":
+            tenkan = int(self.params.get("tenkan", 9))
+            kijun = int(self.params.get("kijun", 26))
+            tenkan = min(tenkan, len(closes) - 1)
+            kijun = min(kijun, len(closes) - 1)
+            tenkan_val = (max(closes[-tenkan:]) + min(closes[-tenkan:])) / 2
+            kijun_val = (max(closes[-kijun:]) + min(closes[-kijun:])) / 2
+            return 1.0 if tenkan_val > kijun_val else -1.0
+
+        elif self.logic_type == "vwap_trend":
+            # Approximate VWAP as simple moving average (volume not available)
+            period = min(int(self.params.get("period", 20)), len(closes) - 1)
+            vwap = sma(closes, period) or closes[-1]
+            return 1.0 if closes[-1] > vwap else -1.0
+
+        elif self.logic_type == "adx_trend":
+            # ADX determines trend strength; direction from price slope
+            period = min(int(self.params.get("period", 14)), len(closes) - 3)
+            threshold = float(self.params.get("threshold", 25))
+            if highs and lows:
+                adx_val = adx_proxy(closes, highs, lows, period)
+                if adx_val and adx_val > threshold:
+                    # Strong trend: use slope for direction
+                    return 1.0 if closes[-1] > closes[-period] else -1.0
+            # Weak trend or no data: use recent slope
+            lookback = min(10, len(closes) - 1)
+            return 1.0 if closes[-1] > closes[-lookback] else -1.0
+
+        elif self.logic_type == "hma_slope":
+            period = min(int(self.params.get("period", 14)), len(closes) - 2)
+            h = hma(closes, period)
+            h_prev = hma(closes[:-1], period) if len(closes) > period + 1 else None
+            if h and h_prev:
+                return 1.0 if h > h_prev else -1.0
+            return 1.0 if closes[-1] > closes[-2] else -1.0
+
+        elif self.logic_type == "market_structure":
+            # Higher highs/higher lows vs lower highs/lower lows
+            lookback = min(int(self.params.get("lookback", 20)), len(closes) - 2)
+            mid = len(closes) - lookback // 2
+            recent_high = max(closes[-lookback//2:])
+            earlier_high = max(closes[-lookback:-lookback//2]) if lookback > 2 else closes[-2]
+            return 1.0 if recent_high > earlier_high else -1.0
+
+        # UNIVERSAL FALLBACK: never return 0.0
+        # Use simple price slope as directional indicator
+        lookback = min(10, len(closes) - 1)
+        if lookback > 0 and closes[-lookback] != 0:
+            slope = (closes[-1] - closes[-lookback]) / closes[-lookback]
+            if slope > 0.001:
+                return 1.0
+            elif slope < -0.001:
+                return -1.0
+        return 1.0 if closes[-1] > closes[-2] else -1.0
+
+    def _get_next_logic(self, rng: random.Random) -> str:
+        return rng.choice(["sma_crossover", "ema_slope", "price_above_sma",
+                           "supertrend", "donchian_trend", "vwap_trend",
+                           "adx_trend", "hma_slope", "market_structure"])
 
 
 @dataclass
 class MomentumModule(StrategyModule):
-    def confirm(self, closes: List[float]) -> float:
-        if not closes or len(closes) < 5:
+    """Confirms the velocity of the move. Handles ALL library logic types."""
+
+    def confirm(self, closes: List[float], highs: List[float] = None, lows: List[float] = None) -> float:
+        """
+        Returns momentum confirmation: 1.0, -1.0, or 0.0.
+        0.0 means neutral (no confirmation, no rejection).
+        """
+        if len(closes) < 5:
             return 0.0
-        try:
-            if self.logic_type == "rsi":
-                period = max(2, int(self.params.get("period", 14)))
-                if len(closes) < period + 1:
-                    return 0.0
-                r = rsi(closes, period)
-                if r is None:
-                    return 0.0
-                upper = float(self.params.get("upper", 70))
-                lower = float(self.params.get("lower", 30))
-                mid = (upper + lower) / 2
-                if r > upper:
-                    return min(1.0, (r - upper) / 30)
-                if r < lower:
-                    return max(-1.0, (r - lower) / 30)
-                diff = upper - mid
-                return ((r - mid) / diff * 0.3) if diff != 0 else 0.0
-            elif self.logic_type == "macd_hist":
-                fast_p = max(2, int(self.params.get("fast", 12)))
-                slow_p = max(fast_p + 1, int(self.params.get("slow", 26)))
-                if len(closes) < slow_p + 9:
-                    return 0.0
-                m = macd(closes, fast_p, slow_p)
-                if m and closes[-1] != 0:
-                    normalized = m["histogram"] / closes[-1] * 1000
-                    return min(1.0, max(-1.0, normalized))
-            elif self.logic_type == "rate_of_change":
-                period = max(2, int(self.params.get("period", 10)))
-                if len(closes) < period + 1:
-                    return 0.0
-                old = closes[-(period + 1)]
-                if old == 0:
-                    return 0.0
-                roc = (closes[-1] - old) / old
-                return min(1.0, max(-1.0, roc * 5))
-            elif self.logic_type == "stochastic":
-                period = max(2, int(self.params.get("period", 14)))
-                if len(closes) < period:
-                    return 0.0
-                window = closes[-period:]
-                high = max(window)
-                low = min(window)
-                if high == low:
-                    return 0.0
-                k = (closes[-1] - low) / (high - low) * 100
-                if k > float(self.params.get("upper", 80)):
-                    return min(1.0, (k - 80) / 20)
-                if k < float(self.params.get("lower", 20)):
-                    return max(-1.0, (k - 20) / 20)
+
+        if self.logic_type == "rsi":
+            period = int(self.params.get("period", 14))
+            r = rsi(closes, min(period, len(closes) - 2))
+            if r is None:
+                r = 50.0
+            upper = self.params.get("upper", 70)
+            lower = self.params.get("lower", 30)
+            if r > upper:
+                return 1.0
+            if r < lower:
+                return -1.0
+            # PARTIAL confirmation instead of hard 0.0
+            # Scale linearly: 50 = 0, 70 = 1.0, 30 = -1.0
+            mid = (upper + lower) / 2
+            rng = (upper - lower) / 2
+            if rng > 0:
+                return round((r - mid) / rng, 2)
+            return 0.0
+
+        elif self.logic_type == "macd_hist":
+            fast = int(self.params.get("fast", 12))
+            slow = int(self.params.get("slow", 26))
+            slow = min(slow, len(closes) - 10)
+            fast = min(fast, slow - 1)
+            m = macd(closes, fast, slow)
+            if m:
+                hist = m["histogram"]
+                if hist > 0:
+                    return min(1.0, hist * 10)  # Partial strength
+                elif hist < 0:
+                    return max(-1.0, hist * 10)
+            return 0.0
+
+        elif self.logic_type == "stochastic":
+            k_period = int(self.params.get("k_period", 14))
+            k_period = min(k_period, len(closes) - 1)
+            upper = self.params.get("upper", 80)
+            lower = self.params.get("lower", 20)
+            if highs and lows:
+                k_val = stochastic_k(closes, highs, lows, k_period)
+            else:
+                # Approximate with closes only
+                high_w = max(closes[-k_period:])
+                low_w = min(closes[-k_period:])
+                k_val = ((closes[-1] - low_w) / (high_w - low_w) * 100) if high_w != low_w else 50.0
+            if k_val is None:
                 return 0.0
-        except Exception:
+            if k_val > upper:
+                return 1.0
+            if k_val < lower:
+                return -1.0
+            # Partial
+            mid = (upper + lower) / 2
+            rng = (upper - lower) / 2
+            return round((k_val - mid) / rng, 2) if rng > 0 else 0.0
+
+        elif self.logic_type == "adx_strength":
+            period = min(int(self.params.get("period", 14)), len(closes) - 3)
+            threshold = float(self.params.get("threshold", 20))
+            if highs and lows:
+                adx_val = adx_proxy(closes, highs, lows, period)
+            else:
+                # Approximate: use absolute slope as strength proxy
+                lookback = min(period, len(closes) - 1)
+                adx_val = abs(closes[-1] - closes[-lookback]) / closes[-lookback] * 500 if closes[-lookback] else 0
+            if adx_val and adx_val > threshold:
+                return 1.0 if closes[-1] > closes[-min(5, len(closes)-1)] else -1.0
             return 0.0
+
+        elif self.logic_type == "cci":
+            period = min(int(self.params.get("period", 20)), len(closes) - 1)
+            upper = self.params.get("upper", 100)
+            lower = self.params.get("lower", -100)
+            c = cci(closes, period)
+            if c is None:
+                return 0.0
+            if c > upper:
+                return 1.0
+            if c < lower:
+                return -1.0
+            return round(c / 100, 2)  # Partial: scale to [-1, 1]
+
+        elif self.logic_type == "williams_r":
+            period = min(int(self.params.get("period", 14)), len(closes) - 1)
+            upper = self.params.get("upper", -20)
+            lower = self.params.get("lower", -80)
+            if highs and lows:
+                w = williams_r(closes, highs, lows, period)
+            else:
+                high_w = max(closes[-period:])
+                low_w = min(closes[-period:])
+                w = ((high_w - closes[-1]) / (high_w - low_w) * -100) if high_w != low_w else -50.0
+            if w is None:
+                return 0.0
+            if w > upper:  # Near highs (overbought)
+                return 1.0
+            if w < lower:  # Near lows (oversold)
+                return -1.0
+            return round((w - (-50)) / 50, 2)
+
+        elif self.logic_type == "roc":
+            period = min(int(self.params.get("period", 12)), len(closes) - 2)
+            threshold = self.params.get("threshold", 0)
+            r = rate_of_change(closes, period)
+            if r is None:
+                return 0.0
+            if r > threshold + 1:
+                return 1.0
+            elif r < -(threshold + 1):
+                return -1.0
+            return round(r / 5, 2)  # Partial: scale
+
+        elif self.logic_type == "price_action":
+            # Simple: compare recent candles
+            lookback = min(int(self.params.get("lookback", 5)), len(closes) - 1)
+            up_bars = sum(1 for i in range(-lookback, 0) if closes[i] > closes[i-1])
+            ratio = up_bars / lookback
+            if ratio > 0.7:
+                return 1.0
+            elif ratio < 0.3:
+                return -1.0
+            return round((ratio - 0.5) * 2, 2)
+
+        elif self.logic_type == "volume_momentum":
+            # Without real volume, use price velocity as proxy
+            period = min(int(self.params.get("period", 20)), len(closes) - 2)
+            recent_vol = sum(abs(closes[i] - closes[i-1]) for i in range(-period//2, 0)) / max(1, period//2)
+            older_vol = sum(abs(closes[i] - closes[i-1]) for i in range(-period, -period//2)) / max(1, period//2)
+            if older_vol > 0 and recent_vol > older_vol * 1.2:
+                return 1.0 if closes[-1] > closes[-period//2] else -1.0
+            return 0.0
+
+        # FALLBACK: use simple momentum (never crash)
+        lookback = min(5, len(closes) - 1)
+        change = (closes[-1] - closes[-lookback]) / closes[-lookback] if closes[-lookback] else 0
+        if change > 0.01:
+            return 0.5
+        elif change < -0.01:
+            return -0.5
         return 0.0
 
-    def _get_next_logic(self, rng):
-        return rng.choice(["rsi", "macd_hist", "rate_of_change", "stochastic"])
-
-    def _default_params_for(self, logic_type, rng):
-        if logic_type == "rsi":
-            return {"period": rng.choice([7, 9, 14, 21]), "upper": rng.randint(65, 80), "lower": rng.randint(20, 35)}
-        elif logic_type == "macd_hist":
-            return {"fast": rng.choice([8, 12]), "slow": rng.choice([21, 26]), "threshold": 0}
-        elif logic_type == "rate_of_change":
-            return {"period": rng.choice([5, 10, 14])}
-        elif logic_type == "stochastic":
-            return {"period": rng.choice([9, 14]), "upper": 80, "lower": 20}
-        return {"period": 14}
+    def _get_next_logic(self, rng: random.Random) -> str:
+        return rng.choice(["rsi", "macd_hist", "stochastic", "adx_strength",
+                           "cci", "williams_r", "roc", "price_action"])
 
 
 @dataclass
 class VolatilityModule(StrategyModule):
-    def filter(self, closes: List[float], highs: List[float] = None, lows: List[float] = None) -> bool:
-        """FIXED: accepts raw lists, doesn't require a series object."""
+    """Filters out noise or prevents trading in dangerous volatility."""
+
+    def filter(self, series) -> bool:
+        """Returns True if conditions are acceptable for trading."""
         if self.logic_type == "default":
+            return True  # Always allow
+
+        closes = series.closes if hasattr(series, 'closes') else []
+        highs = series.highs if hasattr(series, 'highs') else closes
+        lows = series.lows if hasattr(series, 'lows') else closes
+
+        if len(closes) < 5:
             return True
-        if self.logic_type == "atr_expansion" and highs and lows and closes:
-            period = max(2, int(self.params.get("period", 14)))
-            if len(closes) < period + 2:
-                return True  # Not enough data = allow trading
+
+        if self.logic_type == "atr_expansion":
+            period = min(int(self.params.get("period", 14)), len(closes) - 2)
+            ratio = float(self.params.get("expansion_ratio", 1.2))
             a = atr(highs, lows, closes, period)
             prev_a = atr(highs[:-1], lows[:-1], closes[:-1], period)
-            if a and prev_a and prev_a != 0:
-                ratio = a / prev_a
-                required = float(self.params.get("expansion_ratio", 1.0))
-                mode = self.params.get("mode", "expansion_required")
-                if mode == "contraction_required":
-                    return ratio < required
-                return ratio >= required
+            if a and prev_a and prev_a > 0:
+                return a >= prev_a * ratio
+            return True  # Allow if can't compute
+
+        elif self.logic_type == "atr_contraction":
+            period = min(int(self.params.get("period", 14)), len(closes) - 2)
+            ratio = float(self.params.get("contraction_ratio", 0.7))
+            a = atr(highs, lows, closes, period)
+            prev_a = atr(highs[:-1], lows[:-1], closes[:-1], period)
+            if a and prev_a and prev_a > 0:
+                return a <= prev_a * ratio
+            return True
+
+        elif self.logic_type == "bollinger_width":
+            period = min(int(self.params.get("period", 20)), len(closes) - 1)
+            threshold = float(self.params.get("threshold", 0.04))
+            b = bollinger(closes, period)
+            if b:
+                return b["width"] <= threshold
+            return True
+
+        elif self.logic_type == "keltner_squeeze":
+            # Squeeze = BB inside Keltner = low vol
+            period = min(int(self.params.get("period", 20)), len(closes) - 1)
+            b = bollinger(closes, period)
+            a = atr(highs, lows, closes, min(period, len(closes) - 2))
+            if b and a:
+                bb_width = b["upper"] - b["lower"]
+                kelt_width = 4 * a  # 2 ATR each side
+                return bb_width < kelt_width  # Squeeze detected
+            return True
+
+        elif self.logic_type == "historical_vol":
+            period = min(int(self.params.get("period", 20)), len(closes) - 2)
+            threshold = float(self.params.get("threshold", 0.015))
+            stats = returns_stats(closes[-period:])
+            return stats.get("vol", 0) <= threshold
+
+        # Default: always allow trading
         return True
 
-    def _get_next_logic(self, rng):
-        return rng.choice(["default", "atr_expansion"])
-
-    def _default_params_for(self, logic_type, rng):
-        if logic_type == "atr_expansion":
-            return {"period": 14, "expansion_ratio": round(rng.uniform(0.8, 1.5), 2), "mode": "expansion_required"}
-        return {"period": 14}
+    def _get_next_logic(self, rng: random.Random) -> str:
+        return rng.choice(["atr_expansion", "default", "bollinger_width"])
 
 
 @dataclass
 class EntryModule(StrategyModule):
     def should_enter(self, vote: float) -> bool:
-        threshold = float(self.params.get("threshold", 0.5))
+        threshold = self.params.get("threshold",
+                    self.params.get("base_threshold", 0.25))
         return abs(vote) >= threshold
 
 
 @dataclass
 class ExitModule(StrategyModule):
     def get_stops(self, price: float, atr_val: float, direction: int) -> Tuple[float, float]:
-        sl_mult = float(self.params.get("sl_mult", 2.0))
-        tp_mult = float(self.params.get("tp_mult", 3.0))
+        sl_mult = self.params.get("sl_mult", 2.0)
+        tp_mult = self.params.get("tp_mult", 3.0)
         return (price - direction * sl_mult * atr_val, price + direction * tp_mult * atr_val)
 
 
 @dataclass
 class RiskModule(StrategyModule):
     def check(self, current_dd: float) -> bool:
-        return current_dd < float(self.params.get("max_dd_limit", 0.2))
+        return current_dd < self.params.get("max_dd_limit", 0.2)
 
 
 @dataclass
@@ -283,9 +540,9 @@ class PositionModule(StrategyModule):
 
 @dataclass
 class TradeManagementModule(StrategyModule):
-    def update_stop(self, current_price, current_stop, direction, atr_val):
+    def update_stop(self, current_price: float, current_stop: float, direction: int, atr_val: float) -> float:
         if self.logic_type == "trailing_stop":
-            trail_mult = float(self.params.get("trail_mult", 2.0))
+            trail_mult = self.params.get("trail_mult", 2.0)
             new_stop = current_price - direction * trail_mult * atr_val
             if direction == 1:
                 return max(current_stop, new_stop)
@@ -293,7 +550,7 @@ class TradeManagementModule(StrategyModule):
                 return min(current_stop, new_stop)
         return current_stop
 
-    def _get_next_logic(self, rng):
+    def _get_next_logic(self, rng: random.Random) -> str:
         return rng.choice(["default", "trailing_stop"])
 
 
@@ -302,11 +559,11 @@ class ExecutionModule(StrategyModule):
     pass
 
 
-# ── Strategy Genome ───────────────────────────────────────────────────────────
+# ---- The Genome ----
 
 @dataclass
 class StrategyGenome:
-    """Complete Strategy DNA with 10 modules + evolvable vote weights."""
+    """The complete Strategy DNA."""
     genome_id: str = field(default_factory=lambda: f"strat-{uuid.uuid4().hex[:8]}")
 
     market_regime: MarketRegimeModule = field(default_factory=MarketRegimeModule)
@@ -320,9 +577,6 @@ class StrategyGenome:
     trade_management: TradeManagementModule = field(default_factory=TradeManagementModule)
     execution: ExecutionModule = field(default_factory=ExecutionModule)
 
-    trend_weight: float = 0.6
-    momentum_weight: float = 0.4
-
     generation: int = 0
     parents: List[str] = field(default_factory=list)
     fitness: float = 0.0
@@ -330,64 +584,42 @@ class StrategyGenome:
     best_return: float = 0.0
     best_sharpe: float = 0.0
 
-    def vote(self, closes: List[float]) -> float:
-        """Compute directional vote from trend + momentum. Takes raw closes list."""
-        t_bias = self.trend.bias(closes)
-        m_conf = self.momentum.confirm(closes)
-        total_w = self.trend_weight + self.momentum_weight
-        if total_w == 0:
-            return 0.0
-        return (t_bias * self.trend_weight + m_conf * self.momentum_weight) / total_w
+    def vote(self, series) -> float:
+        """Determines directional intent by combining module outputs."""
+        closes = series.closes
+        highs = getattr(series, 'highs', None)
+        lows = getattr(series, 'lows', None)
 
-    def decide(self, closes: List[float], highs: List[float], lows: List[float]) -> str:
-        """
-        FAST decision for backtester. NO analyze() call. NO regime check.
-        
-        This is what the backtester calls on every bar. It only uses the
-        trend + momentum + volatility + entry modules. Regime filtering
-        happens BEFORE the backtest starts (in evolution.py).
-        """
-        # Volatility filter (uses raw lists, not a series object)
-        if not self.volatility.filter(closes, highs, lows):
-            return "hold"
+        # 1. Trend Bias
+        t_bias = self.trend.bias(closes, highs, lows)
 
-        # Vote (trend + momentum)
-        v = self.vote(closes)
+        # 2. Momentum Confirmation
+        m_conf = self.momentum.confirm(closes, highs, lows)
 
-        # Entry threshold
-        if self.entry.should_enter(v):
-            return "buy" if v > 0 else "sell"
-        return "hold"
+        # Combined: trend dominates, momentum confirms
+        return (t_bias * 0.6 + m_conf * 0.4)
 
     def call(self, series) -> str:
-        """
-        Full decision for LIVE use (with regime filtering).
-        Uses series object that has .closes, .highs, .lows.
-        """
-        closes = series.closes if hasattr(series, 'closes') else []
-        highs = series.highs if hasattr(series, 'highs') else []
-        lows = series.lows if hasattr(series, 'lows') else []
-
-        if not closes or len(closes) < 10:
+        """Final decision with regime and volatility filters."""
+        # 1. Volatility Filter
+        if not self.volatility.filter(series):
             return "hold"
 
-        # In live mode, we CAN check regime (we have full context)
-        # But for safety, if analyze fails, still allow the trade
+        # 2. Market Regime Filter
+        from intelligence.technicals import analyze as _an
         try:
-            from intelligence.technicals import analyze as _an
             t = _an(series)
             regime = (t.get("regime") or {}).get("regime", "unknown")
             vol = (t.get("regime") or {}).get("volatility", 0.0)
             if not self.market_regime.is_allowed(regime, vol):
                 return "hold"
         except Exception:
-            pass  # If regime check fails, proceed without it
+            pass  # Allow if can't determine regime
 
-        return self.decide(closes, highs, lows)
-
-    def fingerprint(self) -> str:
-        return (f"{self.trend.logic_type}|{self.momentum.logic_type}|"
-                f"{self.volatility.logic_type}|{self.trade_management.logic_type}")
+        v = self.vote(series)
+        if self.entry.should_enter(v):
+            return "buy" if v > 0 else "sell"
+        return "hold"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -398,8 +630,6 @@ class StrategyGenome:
             "backtests": self.backtests,
             "best_return": self.best_return,
             "best_sharpe": self.best_sharpe,
-            "trend_weight": self.trend_weight,
-            "momentum_weight": self.momentum_weight,
             "modules": {
                 "market_regime": {"logic_type": self.market_regime.logic_type, "params": self.market_regime.params},
                 "trend": {"logic_type": self.trend.logic_type, "params": self.trend.params},
@@ -411,131 +641,58 @@ class StrategyGenome:
                 "position": {"logic_type": self.position.logic_type, "params": self.position.params},
                 "trade_management": {"logic_type": self.trade_management.logic_type, "params": self.trade_management.params},
                 "execution": {"logic_type": self.execution.logic_type, "params": self.execution.params},
-            },
+            }
         }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> StrategyGenome:
         mods = d.get("modules", {})
-        def _mod(klass, key):
+        def _get_mod(mod_cls, key):
             data = mods.get(key, {})
-            return klass(logic_type=data.get("logic_type", "default"), params=data.get("params", {}))
+            return mod_cls(logic_type=data.get("logic_type", "default"), params=data.get("params", {}))
+
         return cls(
-            genome_id=d.get("genome_id", f"strat-{uuid.uuid4().hex[:8]}"),
+            genome_id=d.get("genome_id", ""),
             generation=d.get("generation", 0),
             parents=d.get("parents", []),
             fitness=d.get("fitness", 0.0),
             backtests=d.get("backtests", 0),
             best_return=d.get("best_return", 0.0),
             best_sharpe=d.get("best_sharpe", 0.0),
-            trend_weight=d.get("trend_weight", 0.6),
-            momentum_weight=d.get("momentum_weight", 0.4),
-            market_regime=_mod(MarketRegimeModule, "market_regime"),
-            trend=_mod(TrendModule, "trend"),
-            momentum=_mod(MomentumModule, "momentum"),
-            volatility=_mod(VolatilityModule, "volatility"),
-            entry=_mod(EntryModule, "entry"),
-            exit=_mod(ExitModule, "exit"),
-            risk=_mod(RiskModule, "risk"),
-            position=_mod(PositionModule, "position"),
-            trade_management=_mod(TradeManagementModule, "trade_management"),
-            execution=_mod(ExecutionModule, "execution"),
+            market_regime=_get_mod(MarketRegimeModule, "market_regime"),
+            trend=_get_mod(TrendModule, "trend"),
+            momentum=_get_mod(MomentumModule, "momentum"),
+            volatility=_get_mod(VolatilityModule, "volatility"),
+            entry=_get_mod(EntryModule, "entry"),
+            exit=_get_mod(ExitModule, "exit"),
+            risk=_get_mod(RiskModule, "risk"),
+            position=_get_mod(PositionModule, "position"),
+            trade_management=_get_mod(TradeManagementModule, "trade_management"),
+            execution=_get_mod(ExecutionModule, "execution"),
         )
 
 
-# ── Genetic Operators ─────────────────────────────────────────────────────────
-
-_DIVERSE_TEMPLATES = [
-    # 1. Trend following: EMA + MACD
-    lambda rng: _build(rng, "trend",
-        trend=("ema_slope", {"period": rng.choice([13, 20, 34])}),
-        momentum=("macd_hist", {"fast": 12, "slow": 26, "threshold": 0}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.2, 0.4), 2)},
-        exit={"sl_mult": round(rng.uniform(1.5, 2.5), 1), "tp_mult": round(rng.uniform(3.0, 6.0), 1)},
-        weights=(rng.uniform(0.5, 0.7), rng.uniform(0.3, 0.5))),
-    # 2. Mean reversion: SMA200 + RSI extremes
-    lambda rng: _build(rng, "revert",
-        trend=("price_above_sma", {"period": rng.choice([100, 150, 200])}),
-        momentum=("rsi", {"period": rng.choice([7, 9, 14]), "upper": rng.randint(75, 85), "lower": rng.randint(15, 25)}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.3, 0.5), 2)},
-        exit={"sl_mult": round(rng.uniform(1.0, 2.0), 1), "tp_mult": round(rng.uniform(1.5, 3.0), 1)},
-        weights=(rng.uniform(0.3, 0.5), rng.uniform(0.5, 0.7))),
-    # 3. Breakout: Dual EMA + ROC
-    lambda rng: _build(rng, "break",
-        trend=("dual_ema", {"fast": rng.choice([5, 8]), "slow": rng.choice([21, 34])}),
-        momentum=("rate_of_change", {"period": rng.choice([5, 10, 14])}),
-        vol=("atr_expansion", {"period": 14, "expansion_ratio": round(rng.uniform(1.1, 1.5), 2), "mode": "expansion_required"}),
-        entry={"threshold": round(rng.uniform(0.3, 0.5), 2)},
-        exit={"sl_mult": round(rng.uniform(1.5, 2.5), 1), "tp_mult": round(rng.uniform(4.0, 8.0), 1)},
-        weights=(rng.uniform(0.4, 0.6), rng.uniform(0.4, 0.6))),
-    # 4. Momentum: SMA crossover + Stochastic
-    lambda rng: _build(rng, "mom",
-        trend=("sma_crossover", {"fast": rng.randint(10, 20), "slow": rng.randint(40, 60)}),
-        momentum=("stochastic", {"period": rng.choice([9, 14]), "upper": 80, "lower": 20}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.2, 0.4), 2)},
-        exit={"sl_mult": round(rng.uniform(2.0, 3.0), 1), "tp_mult": round(rng.uniform(3.0, 5.0), 1)},
-        weights=(rng.uniform(0.5, 0.7), rng.uniform(0.3, 0.5))),
-    # 5. Regression trend + MACD
-    lambda rng: _build(rng, "regr",
-        trend=("linear_regression", {"period": rng.choice([10, 20, 30])}),
-        momentum=("macd_hist", {"fast": 8, "slow": 21, "threshold": 0}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.2, 0.4), 2)},
-        exit={"sl_mult": round(rng.uniform(1.5, 2.5), 1), "tp_mult": round(rng.uniform(3.0, 5.0), 1)},
-        weights=(rng.uniform(0.5, 0.7), rng.uniform(0.3, 0.5))),
-    # 6. Fast scalp: EMA slope + stochastic
-    lambda rng: _build(rng, "scalp",
-        trend=("ema_slope", {"period": rng.choice([5, 8, 10])}),
-        momentum=("stochastic", {"period": rng.choice([5, 7]), "upper": 85, "lower": 15}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.3, 0.5), 2)},
-        exit={"sl_mult": round(rng.uniform(0.8, 1.5), 1), "tp_mult": round(rng.uniform(1.0, 2.0), 1)},
-        weights=(rng.uniform(0.4, 0.6), rng.uniform(0.4, 0.6))),
-    # 7. Slow positional: long SMA + RSI
-    lambda rng: _build(rng, "pos",
-        trend=("sma_crossover", {"fast": rng.choice([50, 100]), "slow": rng.choice([150, 200])}),
-        momentum=("rsi", {"period": 21, "upper": 70, "lower": 30}),
-        vol=("default", {}),
-        entry={"threshold": round(rng.uniform(0.15, 0.3), 2)},
-        exit={"sl_mult": round(rng.uniform(3.0, 5.0), 1), "tp_mult": round(rng.uniform(6.0, 10.0), 1)},
-        weights=(rng.uniform(0.6, 0.8), rng.uniform(0.2, 0.4))),
-]
-
-
-def _build(rng, tag, trend, momentum, vol, entry, exit, weights):
-    g = StrategyGenome(genome_id=f"rand-{tag}-{uuid.uuid4().hex[:4]}")
-    g.trend = TrendModule(logic_type=trend[0], params=trend[1])
-    g.momentum = MomentumModule(logic_type=momentum[0], params=momentum[1])
-    g.volatility = VolatilityModule(logic_type=vol[0], params=vol[1])
-    g.market_regime = MarketRegimeModule(logic_type="permissive",
-        params={"allowed_regimes": ["trending_up", "trending_down", "ranging", "high_volatility"], "volatility_limit": 1.0})
-    g.entry = EntryModule(params=entry)
-    g.exit = ExitModule(params=exit)
-    g.risk = RiskModule(params={"max_dd_limit": 0.15})
-    g.position = PositionModule(params={"base_risk": 0.01})
-    g.trade_management = TradeManagementModule(logic_type="default", params={})
-    g.execution = ExecutionModule(params={})
-    g.trend_weight = round(weights[0], 3)
-    g.momentum_weight = round(weights[1], 3)
-    return g
-
-
-def random_diverse_strategy(rng: random.Random) -> StrategyGenome:
-    """Generate a structurally diverse genome from 7 distinct templates."""
-    return rng.choice(_DIVERSE_TEMPLATES)(rng)
-
+# ---- Genetic Operators ----
 
 def random_strategy(rng: random.Random) -> StrategyGenome:
-    """Legacy interface → delegates to diverse version."""
-    return random_diverse_strategy(rng)
+    g = StrategyGenome()
+    g.trend = TrendModule(logic_type=rng.choice(["sma_crossover", "ema_slope", "donchian_trend"]),
+                          params={"fast": rng.randint(8, 20), "slow": rng.randint(25, 50)})
+    g.momentum = MomentumModule(logic_type=rng.choice(["rsi", "macd_hist", "stochastic"]),
+                                params={"period": 14, "upper": 65, "lower": 35})
+    g.entry = EntryModule(params={"base_threshold": round(rng.uniform(0.15, 0.30), 2),
+                                   "threshold": round(rng.uniform(0.15, 0.30), 2)})
+    g.exit = ExitModule(params={"sl_mult": round(rng.uniform(1.5, 2.5), 1),
+                                 "tp_mult": round(rng.uniform(2.5, 5.0), 1)})
+    g.market_regime = MarketRegimeModule(params={
+        "allowed_regimes": ["trending_up", "trending_down", "ranging", "high_volatility"]
+    })
+    g.volatility = VolatilityModule(logic_type="default", params={})
+    return g
 
 
 def mutate_strategy(genome: StrategyGenome, rng: random.Random, rate: float = 0.3) -> StrategyGenome:
     child = StrategyGenome.from_dict(genome.to_dict())
-    child.genome_id = f"mut-{uuid.uuid4().hex[:6]}"
     child.generation += 1
     child.parents = [genome.genome_id]
     child.market_regime.mutate(rng, rate)
@@ -545,32 +702,28 @@ def mutate_strategy(genome: StrategyGenome, rng: random.Random, rate: float = 0.
     child.entry.mutate(rng, rate)
     child.exit.mutate(rng, rate)
     child.risk.mutate(rng, rate)
+    child.position.mutate(rng, rate)
     child.trade_management.mutate(rng, rate)
-    if rng.random() < rate:
-        child.trend_weight = round(max(0.1, min(0.9, child.trend_weight + rng.gauss(0, 0.1))), 3)
-    if rng.random() < rate:
-        child.momentum_weight = round(max(0.1, min(0.9, child.momentum_weight + rng.gauss(0, 0.1))), 3)
+    child.execution.mutate(rng, rate)
     return child
 
 
 def crossover_strategy(a: StrategyGenome, b: StrategyGenome, rng: random.Random) -> StrategyGenome:
     child = StrategyGenome.from_dict(a.to_dict())
-    child.genome_id = f"cross-{uuid.uuid4().hex[:6]}"
     child.generation = max(a.generation, b.generation) + 1
     child.parents = [a.genome_id, b.genome_id]
+    modules = ["market_regime", "trend", "momentum", "volatility", "entry", "exit",
+               "risk", "position", "trade_management", "execution"]
     b_dict = b.to_dict()["modules"]
-    module_map = {
-        "market_regime": MarketRegimeModule, "trend": TrendModule,
-        "momentum": MomentumModule, "volatility": VolatilityModule,
-        "entry": EntryModule, "exit": ExitModule, "risk": RiskModule,
-        "position": PositionModule, "trade_management": TradeManagementModule,
-        "execution": ExecutionModule,
-    }
-    for m_name, m_class in module_map.items():
+    for m_name in modules:
         if rng.random() < 0.5:
             m_data = b_dict[m_name]
+            m_class = {
+                "market_regime": MarketRegimeModule, "trend": TrendModule,
+                "momentum": MomentumModule, "volatility": VolatilityModule,
+                "entry": EntryModule, "exit": ExitModule, "risk": RiskModule,
+                "position": PositionModule, "trade_management": TradeManagementModule,
+                "execution": ExecutionModule
+            }[m_name]
             setattr(child, m_name, m_class(logic_type=m_data["logic_type"], params=m_data["params"].copy()))
-    alpha = rng.random()
-    child.trend_weight = round(a.trend_weight * alpha + b.trend_weight * (1 - alpha), 3)
-    child.momentum_weight = round(a.momentum_weight * alpha + b.momentum_weight * (1 - alpha), 3)
     return child

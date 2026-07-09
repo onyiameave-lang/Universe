@@ -1,7 +1,116 @@
 {
+  "EURUSD::ranging": {
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "activation_rules": {
+      "symbol": "EURUSD",
+      "regime": "ranging"
+    },
+    "genome": {
+      "genome_id": "ptw-073b",
+      "generation": 12,
+      "parents": [
+        "market-g4-26e"
+      ],
+      "fitness": 8.0268,
+      "backtests": 5,
+      "best_return": 0.0199,
+      "best_sharpe": 0.554,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "market_structure",
+          "params": {
+            "lookback": 23,
+            "slow": 48
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 14,
+            "upper": 74,
+            "lower": 15
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.265,
+            "regime_bonus": 0.1,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 10,
+            "tp_mult": 3.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "in_sample": {
+      "return": 0.0199,
+      "fitness": 8.0268
+    },
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 2,
+      "win_rate": 1.0,
+      "total_return": 0.0175,
+      "final_equity": 10175.32,
+      "profit_factor": null,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 1.406,
+      "sortino_proxy": 0.0,
+      "recovery_factor": 0.0,
+      "expectancy": 87.66,
+      "consistency": 1.0,
+      "avg_pnl": 87.66
+    },
+    "certified_at": 1783492946.2582014
+  },
   "EURUSD::trending_down": {
     "symbol": "EURUSD",
     "regime": "trending_down",
+    "activation_rules": {
+      "symbol": "EURUSD",
+      "regime": "trending_down"
+    },
     "genome": {
       "genome_id": "msw-11b8",
       "generation": 14,
@@ -78,53 +187,34 @@
         }
       }
     },
-    "evidence": {
-      "score": -0.4508,
-      "verdict": "rejected",
-      "metrics": {
-        "status": "complete",
-        "trades": 3,
-        "win_rate": 0.667,
-        "total_return": 0.0284,
-        "final_equity": 10284.28,
-        "profit_factor": 16.82,
-        "max_drawdown": 0.0,
-        "sharpe_proxy": 1.189,
-        "sortino_proxy": 9.134,
-        "recovery_factor": 0.0,
-        "expectancy": 94.76,
-        "consistency": 0.667,
-        "avg_pnl": 94.76
-      },
-      "criteria": {
-        "net_profit": 0.0284,
-        "max_drawdown": 1.0,
-        "sharpe_proxy": 1.189
-      }
+    "in_sample": {
+      "return": 0.0199,
+      "fitness": 7.409
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-58441463",
-        "symbol": "EURUSD",
-        "regime": "trending_down",
-        "family": "bear_trend_continuation",
-        "statement": "Bear trend continuation improves when exits trail volatility.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-712a7259",
-        "symbol": "EURUSD",
-        "regime": "trending_down",
-        "family": "failed_rally_short",
-        "statement": "Shorting failed rallies outperforms oversold reversal in bear regimes.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "updated_at": 1783502003.6982403
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 3,
+      "win_rate": 0.667,
+      "total_return": 0.0284,
+      "final_equity": 10284.28,
+      "profit_factor": 16.82,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 1.189,
+      "sortino_proxy": 9.134,
+      "recovery_factor": 0.0,
+      "expectancy": 94.76,
+      "consistency": 0.667,
+      "avg_pnl": 94.76
+    },
+    "certified_at": 1783502003.6880755
   },
   "BTCUSD::high_volatility": {
     "symbol": "BTCUSD",
     "regime": "high_volatility",
+    "activation_rules": {
+      "symbol": "BTCUSD",
+      "regime": "high_volatility"
+    },
     "genome": {
       "genome_id": "volatili-91abaf",
       "generation": 0,
@@ -198,55 +288,34 @@
         }
       }
     },
-    "evidence": {
-      "score": 0.9592,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 5,
-        "win_rate": 0.8,
-        "total_return": 0.0399,
-        "final_equity": 10399.39,
-        "profit_factor": 4.994,
-        "max_drawdown": 0.01,
-        "sharpe_proxy": 0.811,
-        "sortino_proxy": 1.786,
-        "recovery_factor": 3.994,
-        "expectancy": 79.88,
-        "consistency": 0.8,
-        "avg_pnl": 79.88
-      },
-      "criteria": {
-        "net_profit": 0.0399,
-        "max_drawdown": 0.01,
-        "sharpe_proxy": 0.811,
-        "trades": 5
-      }
+    "in_sample": {
+      "return": 0.0412,
+      "fitness": 6.7225
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-23442641",
-        "symbol": "BTCUSD",
-        "regime": "high_volatility",
-        "family": "volatility_filter",
-        "statement": "ATR filters reduce drawdown during high-volatility expansion.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-5a8e2eef",
-        "symbol": "BTCUSD",
-        "regime": "high_volatility",
-        "family": "compression_breakout",
-        "statement": "Momentum performs better after volatility compression than during noisy expansion.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "updated_at": 1783502575.1679244
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 5,
+      "win_rate": 0.8,
+      "total_return": 0.0399,
+      "final_equity": 10399.39,
+      "profit_factor": 4.994,
+      "max_drawdown": 0.01,
+      "sharpe_proxy": 0.811,
+      "sortino_proxy": 1.786,
+      "recovery_factor": 3.994,
+      "expectancy": 79.88,
+      "consistency": 0.8,
+      "avg_pnl": 79.88
+    },
+    "certified_at": 1783502575.1490688
   },
   "ETHUSD::high_volatility": {
     "symbol": "ETHUSD",
     "regime": "high_volatility",
-    "version": 1,
+    "activation_rules": {
+      "symbol": "ETHUSD",
+      "regime": "high_volatility"
+    },
     "genome": {
       "genome_id": "volatili-557082",
       "generation": 0,
@@ -320,54 +389,10 @@
         }
       }
     },
-    "genome_id": "volatili-557082",
-    "parent_champion_id": null,
-    "parent_version": 0,
-    "ancestor_chain": [],
-    "generation": 0,
-    "experiment_id": "exp-888ad615",
-    "evidence": {
-      "score": 0.976,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 8,
-        "win_rate": 0.375,
-        "total_return": 0.0033,
-        "final_equity": 10032.67,
-        "profit_factor": 1.078,
-        "max_drawdown": 0.0297,
-        "sharpe_proxy": 0.035,
-        "sortino_proxy": 0.057,
-        "recovery_factor": 0.11,
-        "expectancy": 4.08,
-        "consistency": 0.375,
-        "avg_pnl": 4.08
-      },
-      "criteria": {
-        "return": 0.0033,
-        "trades": 8
-      }
+    "in_sample": {
+      "return": 0.0615,
+      "fitness": 11.6125
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-b71ba49e",
-        "symbol": "ETHUSD",
-        "regime": "high_volatility",
-        "family": "volatility_filter",
-        "statement": "ATR filters reduce drawdown during high-volatility expansion.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-1135af6d",
-        "symbol": "ETHUSD",
-        "regime": "high_volatility",
-        "family": "compression_breakout",
-        "statement": "Momentum performs better after volatility compression.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "in_sample": 0.0615,
     "out_of_sample": {
       "status": "complete",
       "trades": 8,
@@ -383,13 +408,11 @@
       "consistency": 0.375,
       "avg_pnl": 4.08
     },
-    "fitness": 11.6125,
-    "certified_at": 1783503393.7315702
+    "certified_at": 1783503393.717979
   },
   "AUDUSD::trending_up": {
     "symbol": "AUDUSD",
     "regime": "trending_up",
-    "version": 1,
     "genome": {
       "genome_id": "mut-a28f7b",
       "generation": 6,
@@ -463,54 +486,10 @@
         }
       }
     },
-    "genome_id": "mut-a28f7b",
-    "parent_champion_id": null,
-    "parent_version": 0,
-    "ancestor_chain": [],
-    "generation": 6,
-    "experiment_id": "exp-a89db2fa",
-    "evidence": {
-      "score": 0.9776,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 5,
-        "win_rate": 0.4,
-        "total_return": 0.0009,
-        "final_equity": 10008.52,
-        "profit_factor": 1.029,
-        "max_drawdown": 0.0199,
-        "sharpe_proxy": 0.014,
-        "sortino_proxy": 0.022,
-        "recovery_factor": 0.043,
-        "expectancy": 1.7,
-        "consistency": 0.4,
-        "avg_pnl": 1.7
-      },
-      "criteria": {
-        "return": 0.0009,
-        "trades": 5
-      }
+    "in_sample": {
+      "return": 0.0688,
+      "fitness": 8.23
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-d9b117ca",
-        "symbol": "AUDUSD",
-        "regime": "trending_up",
-        "family": "trend_continuation_atr",
-        "statement": "Trend continuation improves when entries require ATR-confirmed momentum.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-8f8fc8a5",
-        "symbol": "AUDUSD",
-        "regime": "trending_up",
-        "family": "pullback_momentum",
-        "statement": "Bull trend pullbacks with momentum recovery outperform blind breakout entries.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "in_sample": 0.0688,
     "out_of_sample": {
       "status": "complete",
       "trades": 5,
@@ -526,13 +505,15 @@
       "consistency": 0.4,
       "avg_pnl": 1.7
     },
-    "fitness": 8.23,
-    "certified_at": 1783503809.9899848
+    "certified_at": 1783503809.986574,
+    "generation": 6,
+    "parents": [
+      "xov-fa8af6"
+    ]
   },
   "AUDUSD=X::trending_down": {
     "symbol": "AUDUSD=X",
     "regime": "trending_down",
-    "version": 1,
     "genome": {
       "genome_id": "mut-7b389f",
       "generation": 6,
@@ -609,54 +590,10 @@
         }
       }
     },
-    "genome_id": "mut-7b389f",
-    "parent_champion_id": null,
-    "parent_version": 0,
-    "ancestor_chain": [],
-    "generation": 6,
-    "experiment_id": "exp-519870f2",
-    "evidence": {
-      "score": 2.1912,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 2,
-        "win_rate": 1.0,
-        "total_return": 0.0222,
-        "final_equity": 10222.43,
-        "profit_factor": null,
-        "max_drawdown": 0.0,
-        "sharpe_proxy": 2.867,
-        "sortino_proxy": 0.0,
-        "recovery_factor": 0.0,
-        "expectancy": 111.22,
-        "consistency": 1.0,
-        "avg_pnl": 111.22
-      },
-      "criteria": {
-        "return": 0.0222,
-        "trades": 2
-      }
+    "in_sample": {
+      "return": 0.0159,
+      "fitness": 9.4445
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-c79d15a5",
-        "symbol": "AUDUSD=X",
-        "regime": "trending_down",
-        "family": "bear_trend_continuation",
-        "statement": "Bear trend continuation improves when exits trail volatility.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-580ad03d",
-        "symbol": "AUDUSD=X",
-        "regime": "trending_down",
-        "family": "failed_rally_short",
-        "statement": "Shorting failed rallies outperforms oversold reversal in bear regimes.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "in_sample": 0.0159,
     "out_of_sample": {
       "status": "complete",
       "trades": 2,
@@ -672,13 +609,15 @@
       "consistency": 1.0,
       "avg_pnl": 111.22
     },
-    "fitness": 9.4445,
-    "certified_at": 1783503975.072282
+    "certified_at": 1783503975.072282,
+    "generation": 6,
+    "parents": [
+      "xov-8ba823"
+    ]
   },
   "GBPUSD=X::ranging": {
     "symbol": "GBPUSD=X",
     "regime": "ranging",
-    "version": 1,
     "genome": {
       "genome_id": "market-94b2b5",
       "generation": 8,
@@ -749,54 +688,10 @@
         }
       }
     },
-    "genome_id": "market-94b2b5",
-    "parent_champion_id": null,
-    "parent_version": 0,
-    "ancestor_chain": [],
-    "generation": 8,
-    "experiment_id": "exp-d6db969d",
-    "evidence": {
-      "score": 1.2768,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 2,
-        "win_rate": 0.5,
-        "total_return": 0.0116,
-        "final_equity": 10116.41,
-        "profit_factor": 4.466,
-        "max_drawdown": 0.0,
-        "sharpe_proxy": 0.634,
-        "sortino_proxy": 2.451,
-        "recovery_factor": 0.0,
-        "expectancy": 58.2,
-        "consistency": 0.5,
-        "avg_pnl": 58.2
-      },
-      "criteria": {
-        "return": 0.0116,
-        "trades": 2
-      }
+    "in_sample": {
+      "return": 0.0249,
+      "fitness": 5.6259
     },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-e475c611",
-        "symbol": "GBPUSD=X",
-        "regime": "ranging",
-        "family": "range_reversion_rsi",
-        "statement": "RSI reversal performs better inside ranging markets than trend following.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-c65b8aa2",
-        "symbol": "GBPUSD=X",
-        "regime": "ranging",
-        "family": "bollinger_mean_reversion",
-        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "in_sample": 0.0249,
     "out_of_sample": {
       "status": "complete",
       "trades": 2,
@@ -812,7 +707,10 @@
       "consistency": 0.5,
       "avg_pnl": 58.2
     },
-    "fitness": 5.6259,
-    "certified_at": 1783504267.6454523
+    "certified_at": 1783504267.6423707,
+    "generation": 8,
+    "parents": [
+      "xov-1448db"
+    ]
   }
 }

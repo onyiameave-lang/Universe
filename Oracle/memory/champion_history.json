@@ -1,249 +1,5 @@
-{
-  "EURUSD::trending_down": {
-    "symbol": "EURUSD",
-    "regime": "trending_down",
-    "genome": {
-      "genome_id": "msw-11b8",
-      "generation": 14,
-      "parents": [
-        "ptw-130b"
-      ],
-      "fitness": 7.409,
-      "backtests": 10,
-      "best_return": 0.0199,
-      "best_sharpe": 0.554,
-      "modules": {
-        "market_regime": {
-          "logic_type": "default",
-          "params": {
-            "allowed_regimes": [
-              "trending_up",
-              "trending_down",
-              "ranging",
-              "high_volatility"
-            ]
-          }
-        },
-        "trend": {
-          "logic_type": "adx_trend",
-          "params": {
-            "period": 14,
-            "threshold": 25,
-            "slow": 48
-          }
-        },
-        "momentum": {
-          "logic_type": "williams_r",
-          "params": {
-            "period": 14,
-            "upper": 60,
-            "lower": 15
-          }
-        },
-        "volatility": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "entry": {
-          "logic_type": "adaptive",
-          "params": {
-            "base_threshold": 0.259,
-            "regime_bonus": 0.1,
-            "threshold": 0.259
-          }
-        },
-        "exit": {
-          "logic_type": "default",
-          "params": {
-            "sl_mult": 2.267,
-            "tp_mult": 4.848,
-            "atr_override": null
-          }
-        },
-        "risk": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "position": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "trade_management": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "execution": {
-          "logic_type": "default",
-          "params": {}
-        }
-      }
-    },
-    "evidence": {
-      "score": -0.4508,
-      "verdict": "rejected",
-      "metrics": {
-        "status": "complete",
-        "trades": 3,
-        "win_rate": 0.667,
-        "total_return": 0.0284,
-        "final_equity": 10284.28,
-        "profit_factor": 16.82,
-        "max_drawdown": 0.0,
-        "sharpe_proxy": 1.189,
-        "sortino_proxy": 9.134,
-        "recovery_factor": 0.0,
-        "expectancy": 94.76,
-        "consistency": 0.667,
-        "avg_pnl": 94.76
-      },
-      "criteria": {
-        "net_profit": 0.0284,
-        "max_drawdown": 1.0,
-        "sharpe_proxy": 1.189
-      }
-    },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-58441463",
-        "symbol": "EURUSD",
-        "regime": "trending_down",
-        "family": "bear_trend_continuation",
-        "statement": "Bear trend continuation improves when exits trail volatility.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-712a7259",
-        "symbol": "EURUSD",
-        "regime": "trending_down",
-        "family": "failed_rally_short",
-        "statement": "Shorting failed rallies outperforms oversold reversal in bear regimes.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "updated_at": 1783502003.6982403
-  },
-  "BTCUSD::high_volatility": {
-    "symbol": "BTCUSD",
-    "regime": "high_volatility",
-    "genome": {
-      "genome_id": "volatili-91abaf",
-      "generation": 0,
-      "parents": [],
-      "fitness": 6.7225,
-      "backtests": 12,
-      "best_return": 0.0412,
-      "best_sharpe": 0.513,
-      "modules": {
-        "market_regime": {
-          "logic_type": "default",
-          "params": {
-            "allowed_regimes": [
-              "trending_up",
-              "trending_down",
-              "ranging",
-              "high_volatility"
-            ]
-          }
-        },
-        "trend": {
-          "logic_type": "ema_slope",
-          "params": {
-            "period": 10
-          }
-        },
-        "momentum": {
-          "logic_type": "adx_strength",
-          "params": {
-            "period": 14,
-            "threshold": 20
-          }
-        },
-        "volatility": {
-          "logic_type": "atr_expansion",
-          "params": {
-            "period": 14,
-            "expansion_ratio": 1.26
-          }
-        },
-        "entry": {
-          "logic_type": "adaptive",
-          "params": {
-            "base_threshold": 0.133,
-            "regime_bonus": 0.1,
-            "threshold": 0.133
-          }
-        },
-        "exit": {
-          "logic_type": "atr_stops",
-          "params": {
-            "sl_mult": 2.5,
-            "tp_mult": 7.0
-          }
-        },
-        "risk": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "position": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "trade_management": {
-          "logic_type": "default",
-          "params": {}
-        },
-        "execution": {
-          "logic_type": "default",
-          "params": {}
-        }
-      }
-    },
-    "evidence": {
-      "score": 0.9592,
-      "verdict": "accepted",
-      "metrics": {
-        "status": "complete",
-        "trades": 5,
-        "win_rate": 0.8,
-        "total_return": 0.0399,
-        "final_equity": 10399.39,
-        "profit_factor": 4.994,
-        "max_drawdown": 0.01,
-        "sharpe_proxy": 0.811,
-        "sortino_proxy": 1.786,
-        "recovery_factor": 3.994,
-        "expectancy": 79.88,
-        "consistency": 0.8,
-        "avg_pnl": 79.88
-      },
-      "criteria": {
-        "net_profit": 0.0399,
-        "max_drawdown": 0.01,
-        "sharpe_proxy": 0.811,
-        "trades": 5
-      }
-    },
-    "hypotheses": [
-      {
-        "hypothesis_id": "hyp-23442641",
-        "symbol": "BTCUSD",
-        "regime": "high_volatility",
-        "family": "volatility_filter",
-        "statement": "ATR filters reduce drawdown during high-volatility expansion.",
-        "source": "oracle_regime_memory"
-      },
-      {
-        "hypothesis_id": "hyp-5a8e2eef",
-        "symbol": "BTCUSD",
-        "regime": "high_volatility",
-        "family": "compression_breakout",
-        "statement": "Momentum performs better after volatility compression than during noisy expansion.",
-        "source": "oracle_regime_memory"
-      }
-    ],
-    "updated_at": 1783502575.1679244
-  },
-  "ETHUSD::high_volatility": {
+[
+  {
     "symbol": "ETHUSD",
     "regime": "high_volatility",
     "version": 1,
@@ -386,7 +142,7 @@
     "fitness": 11.6125,
     "certified_at": 1783503393.7315702
   },
-  "AUDUSD::trending_up": {
+  {
     "symbol": "AUDUSD",
     "regime": "trending_up",
     "version": 1,
@@ -529,7 +285,7 @@
     "fitness": 8.23,
     "certified_at": 1783503809.9899848
   },
-  "AUDUSD=X::trending_down": {
+  {
     "symbol": "AUDUSD=X",
     "regime": "trending_down",
     "version": 1,
@@ -675,7 +431,7 @@
     "fitness": 9.4445,
     "certified_at": 1783503975.072282
   },
-  "GBPUSD=X::ranging": {
+  {
     "symbol": "GBPUSD=X",
     "regime": "ranging",
     "version": 1,
@@ -815,4 +571,4 @@
     "fitness": 5.6259,
     "certified_at": 1783504267.6454523
   }
-}
+]
