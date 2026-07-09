@@ -622,6 +622,15 @@ class StrategyGenome:
         return "hold"
 
     def to_dict(self) -> Dict[str, Any]:
+        # Backfill exit params with the same defaults ExitModule.get_stops()
+        # uses at runtime, so the persisted DNA always records the actual
+        # stop/target it was certified with -- crossover/mutation can drop
+        # these keys from self.exit.params while get_stops() still silently
+        # applies its own default, which made the stored record incomplete.
+        exit_params = dict(self.exit.params)
+        exit_params.setdefault("sl_mult", 2.0)
+        exit_params.setdefault("tp_mult", 3.0)
+
         return {
             "genome_id": self.genome_id,
             "generation": self.generation,
@@ -636,7 +645,7 @@ class StrategyGenome:
                 "momentum": {"logic_type": self.momentum.logic_type, "params": self.momentum.params},
                 "volatility": {"logic_type": self.volatility.logic_type, "params": self.volatility.params},
                 "entry": {"logic_type": self.entry.logic_type, "params": self.entry.params},
-                "exit": {"logic_type": self.exit.logic_type, "params": self.exit.params},
+                "exit": {"logic_type": self.exit.logic_type, "params": exit_params},
                 "risk": {"logic_type": self.risk.logic_type, "params": self.risk.params},
                 "position": {"logic_type": self.position.logic_type, "params": self.position.params},
                 "trade_management": {"logic_type": self.trade_management.logic_type, "params": self.trade_management.params},

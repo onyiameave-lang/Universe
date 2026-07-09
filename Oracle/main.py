@@ -165,8 +165,8 @@ def format_genome_dna(genome_dict: dict) -> str:
     # Exit
     exit_mod = modules.get("exit", {})
     exit_params = exit_mod.get("params", {})
-    sl = exit_params.get("sl_mult", "?")
-    tp = exit_params.get("tp_mult", "?")
+    sl = exit_params.get("sl_mult", 2.0)  # matches ExitModule.get_stops() runtime default
+    tp = exit_params.get("tp_mult", 3.0)  # matches ExitModule.get_stops() runtime default
     lines.append(f"  Exit:         SL={sl}x ATR, TP={tp}x ATR")
     if exit_params.get("trail_mult"):
         lines.append(f"  Trailing:     {exit_params['trail_mult']}x ATR")
