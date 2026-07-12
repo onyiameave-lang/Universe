@@ -6,6 +6,9 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch: {}   # lets you trigger it manually from the GitHub Actions tab too
 
+permissions:
+  contents: write   # required so the final step can commit/push results back
+
 jobs:
   soak:
     runs-on: ubuntu-latest
