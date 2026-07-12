@@ -1,64 +1,64 @@
 # Oracle V1 Benchmarks
 
 > Auto-generated. Do not edit manually.
-> Last updated: 2026-07-12T02:07:25Z
+> Last updated: 2026-07-12T21:58:54Z
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
 | Oracle Version | 1.0.0 |
-| Total Experiments | 53 |
-| Accepted | 5 |
-| Rejected | 48 |
-| Champions Promoted | 5 |
-| Promotion Rate | 9.4% |
+| Total Experiments | 137 |
+| Accepted | 17 |
+| Rejected | 120 |
+| Champions Promoted | 17 |
+| Promotion Rate | 12.4% |
 
 ## Performance
 
 | Metric | Value |
 |--------|-------|
-| Avg IS Return | 0.0741 |
-| Avg OOS Return | -0.0002 |
-| Avg Sharpe | -0.087 |
-| Avg Drawdown | 0.0318 |
-| Avg Trades | 9.6 |
-| Avg Fitness | 6.7588 |
-| Best Fitness Ever | 14.7661 |
-| Generalization Score | 0.2045 |
+| Avg IS Return | 0.0463 |
+| Avg OOS Return | 0.0001 |
+| Avg Sharpe | -2.375 |
+| Avg Drawdown | 0.0207 |
+| Avg Trades | 6.0 |
+| Avg Fitness | 7.0702 |
+| Best Fitness Ever | 15.9707 |
+| Generalization Score | -0.6025 |
 
 ## Oracle Intelligence Score (OIS)
 
 | Component | Score |
 |-----------|-------|
-| **Overall** | **21.8 / 100** |
-| Research Quality | 18.9 |
+| **Overall** | **19.0 / 100** |
+| Research Quality | 24.8 |
 | Champion Quality | 0.0 |
-| Knowledge Growth | 18.9 |
-| Generalization | 10.2 |
+| Knowledge Growth | 24.8 |
+| Generalization | 0.0 |
 | Evolution Efficiency | 0.0 |
-| Scientific Confidence | 95.5 |
-| Learning Progress | 45.1 |
+| Scientific Confidence | 59.9 |
+| Learning Progress | 55.7 |
 
 ## Research Insights
 
 | Category | Best |
 |----------|------|
-| Best Market | SPX (2 champions, fitness=5.344) |
-| Best Regime | trending_up (3 champions, fitness=5.182) |
-| Best Strategy Family | market_structure (1 champions, fitness=8.712) |
-| Best Trend Indicator | market_structure (1 champions, fitness=8.712) |
-| Best Momentum Indicator | volume_momentum (2 champions, fitness=6.691) |
-| Most Used Indicator | market_structure (12 uses) |
+| Best Market | USDCAD (3 champions, fitness=5.263) |
+| Best Regime | trending_up (9 champions, fitness=6.645) |
+| Best Strategy Family | sma_crossover (4 champions, fitness=6.243) |
+| Best Trend Indicator | sma_crossover (4 champions, fitness=6.243) |
+| Best Momentum Indicator | williams_r (5 champions, fitness=6.024) |
+| Most Used Indicator | market_structure (36 uses) |
 
 ## Knowledge
 
 | Metric | Value |
 |--------|-------|
-| Knowledge Items | 5 |
-| Chronicle Entries | 5 |
-| Failure Database | 48 |
-| Hypotheses Generated | 106 |
+| Knowledge Items | 17 |
+| Chronicle Entries | 17 |
+| Failure Database | 120 |
+| Hypotheses Generated | 274 |
 
 ## Runtime
 

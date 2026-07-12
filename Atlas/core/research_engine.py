@@ -96,12 +96,20 @@ class ResearchEngine:
         # claim extraction + contradiction/consensus analysis
         claims_by_source = []
         for e in all_evidence[:12]:
+            title = getattr(e, "title", "") or ""
+            text = e.text or ""
+            # Skip bare-title evidence (no real abstract available) -- a
+            # title is metadata, not a claim, and letting it into consensus
+            # clustering let a paper TITLE get labeled "the consensus" purely
+            # from high source credibility + superficial keyword overlap.
+            if len(text.strip()) < len(title.strip()) + 15:
+                continue
             for c in extract_claims(e.text, max_claims=2):
                 claims_by_source.append((c, e.source, e.credibility))
         agreement = self.contradiction.analyze(all_evidence, claims_by_source)
 
         corpus = " ".join(e.text for e in all_evidence[:6])
-        summary = self._synthesize(query, corpus, agreement, domain) if corpus else ""
+        summary = self._synthesize(query, corpus, agreement, domain, all_evidence[:6]) if corpus else ""
         key_terms = [k for k, _ in keywords(corpus, top_n=8)] if corpus else []
 
         findings = []
@@ -138,7 +146,8 @@ class ResearchEngine:
         self._preserve(report)
         return report
 
-    def _synthesize(self, query: str, corpus: str, agreement: Dict, domain: str) -> str:
+    def _synthesize(self, query: str, corpus: str, agreement: Dict, domain: str,
+                   documents: Optional[List[Any]] = None) -> str:
         if self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
@@ -152,9 +161,38 @@ class ResearchEngine:
                     return r.text.strip()
             except Exception:
                 pass
-        base = summarize(corpus, query=query, max_sentences=4)
-        if agreement.get("narrative"):
-            base = agreement["narrative"] + " " + base
+
+        # Non-LLM fallback: take ONE representative sentence per source document
+        # rather than merging every document into one blob and picking globally
+        # "salient" sentences -- that approach interleaves sentences from
+        # entirely unrelated papers into a single incoherent paragraph, since
+        # term-frequency salience has no notion of document boundaries.
+        if documents:
+            per_doc_sentences = []
+            seen = set()
+            for doc in documents:
+                text = getattr(doc, "text", "") or ""
+                title = getattr(doc, "title", "") or ""
+                # Many crossref/pubmed results only have a title, no abstract
+                # -- text == title (or barely longer) isn't a real sentence,
+                # just metadata, and produces an uninformative/repetitive
+                # "summary" if treated as one.
+                if not text.strip() or len(text.strip()) < len(title.strip()) + 15:
+                    continue
+                top_sentence = summarize(text, query=query, max_sentences=1)
+                if top_sentence and top_sentence not in seen:
+                    per_doc_sentences.append(top_sentence)
+                    seen.add(top_sentence)
+                if len(per_doc_sentences) >= 4:
+                    break
+            base = " ".join(per_doc_sentences)
+        else:
+            base = summarize(corpus, query=query, max_sentences=4)
+            seen = set()
+
+        narrative = agreement.get("narrative")
+        if narrative and narrative not in base:
+            base = narrative + " " + base
         return base
 
     # ---- hypotheses with argument weighing ----

@@ -27,20 +27,31 @@ from __future__ import annotations
 import concurrent.futures
 import io
 import json
+import logging
 import os
 import re
+import ssl
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-try:
-    from shared.config import get_config
-except ImportError:
-    get_config = None
-
 _USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
 _TIMEOUT = 12
+
+def _build_ssl_context() -> Optional["ssl.SSLContext"]:
+    """Use certifi's CA bundle if available, so requests don't depend on
+    the OS's certificate store (a common source of CERTIFICATE_VERIFY_FAILED
+    on Windows machines with corporate AV/VPN TLS inspection or an outdated
+    system cert store). Falls back to Python's default context if certifi
+    isn't installed."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return None
+
+_SSL_CONTEXT = _build_ssl_context()
 
 # Per-source credibility priors (Book II Part III Ch VI). Peer-reviewed > preprint
 # > encyclopedia > practitioner forum > raw web. Refined by corroboration later.
@@ -74,13 +85,14 @@ class Evidence:
 def _http_get(url: str, headers: Optional[Dict[str, str]] = None, raw: bool = False):
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT) as resp:
             data = resp.read()
             if raw:
                 return data
             charset = resp.headers.get_content_charset() or "utf-8"
             return data.decode(charset, errors="replace")
-    except Exception:
+    except Exception as exc:
+        logging.getLogger("atlas.sources").warning("HTTP fetch failed for %s: %s", url, exc)
         return None
 
 
@@ -171,7 +183,7 @@ class SemanticScholarSource:
         params = urllib.parse.urlencode({"query": query, "limit": limit,
                                         "fields": "title,abstract,year,authors,citationCount,url"})
         headers = {}
-        key = get_config().semantic_scholar_key if get_config else os.getenv("SEMANTIC_SCHOLAR_KEY", "").strip()
+        key = os.getenv("SEMANTIC_SCHOLAR_KEY", "").strip()
         if key:
             headers["x-api-key"] = key
         body = _http_get(f"{self.API}?{params}", headers=headers)
@@ -419,13 +431,27 @@ class CrossrefSource:
                 continue
             authors = ", ".join(f"{a.get('given','')} {a.get('family','')}".strip()
                               for a in (it.get("author") or [])[:3])
-            out.append(Evidence("crossref", title, it.get("abstract", title),
+            raw_abstract = it.get("abstract", "") or ""
+            abstract = self._clean_jats(raw_abstract) if raw_abstract else title
+            out.append(Evidence("crossref", title, abstract or title,
                               url=it.get("URL", ""), author=authors,
                               citations=it.get("is-referenced-by-count", 0) or 0,
                               date=str((it.get("published-print") or it.get("published-online") or {})
                                       .get("date-parts", [[""]])[0][0]),
                               credibility=SOURCE_CREDIBILITY["crossref"]))
         return out
+
+    @staticmethod
+    def _clean_jats(raw: str) -> str:
+        """Crossref abstracts come back as JATS XML, e.g.
+        '<jats:title>Abstract</jats:title><jats:p>real text</jats:p>'.
+        Strip all tags, drop a leading bare 'Abstract' label, and collapse
+        whitespace, so the extracted text is clean prose, not markup."""
+        text = re.sub(r"<[^>]+>", " ", raw)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text.lower().startswith("abstract"):
+            text = text[len("abstract"):].strip(" :.")
+        return text
 
 
 # register crossref into any SourceRegistry instances created after import
