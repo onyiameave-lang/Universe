@@ -1,0 +1,396 @@
+{
+  "oracle_version": "1.0.0",
+  "last_updated": "2026-07-12T02:07:25Z",
+  "total_experiments": 53,
+  "accepted_experiments": 5,
+  "rejected_experiments": 48,
+  "champions_promoted": 5,
+  "champion_promotion_rate": 0.0943,
+  "average_is_return": 0.074087,
+  "average_oos_return": -0.000213,
+  "average_sharpe": -0.087,
+  "average_drawdown": 0.0318,
+  "average_trades": 9.55,
+  "average_fitness": 6.7588,
+  "best_fitness_ever": 14.7661,
+  "average_confidence": 0.0,
+  "generalization_score": 0.2045,
+  "average_runtime_seconds": 0.0,
+  "total_runtime_seconds": 0.0,
+  "knowledge_items": 5,
+  "chronicle_entries": 5,
+  "publications_generated": 0,
+  "atlas_hypotheses_generated": 106,
+  "failure_database_size": 48,
+  "by_market": {
+    "EURUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 9.2159,
+      "_sum_fitness": 36.8635
+    },
+    "GBPUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 6.9825,
+      "_sum_fitness": 27.9298
+    },
+    "USDJPY": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 4.5684,
+      "_sum_fitness": 18.2736
+    },
+    "AUDUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 4.1546,
+      "_sum_fitness": 16.6183
+    },
+    "USDCAD": {
+      "experiments": 4,
+      "promoted": 1,
+      "avg_fitness": 6.6005,
+      "_sum_fitness": 26.4018
+    },
+    "XAUUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 7.1324,
+      "_sum_fitness": 28.5295
+    },
+    "USOIL": {
+      "experiments": 6,
+      "promoted": 0,
+      "avg_fitness": 6.1052,
+      "_sum_fitness": 36.630900000000004
+    },
+    "SPX": {
+      "experiments": 3,
+      "promoted": 2,
+      "avg_fitness": 5.3438,
+      "_sum_fitness": 16.0315
+    },
+    "NASDAQ": {
+      "experiments": 3,
+      "promoted": 0,
+      "avg_fitness": 6.8559,
+      "_sum_fitness": 20.5677
+    },
+    "BTCUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 6.1966,
+      "_sum_fitness": 24.7862
+    },
+    "ETHUSD": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 7.6234,
+      "_sum_fitness": 30.4936
+    },
+    "XAGUSD": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 8.3215,
+      "_sum_fitness": 8.3215
+    },
+    "USDCHF": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 0.6004,
+      "_sum_fitness": 0.6004
+    },
+    "NZDUSD": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 8.2066,
+      "_sum_fitness": 8.2066
+    },
+    "EURGBP": {
+      "experiments": 1,
+      "promoted": 1,
+      "avg_fitness": 1.6438,
+      "_sum_fitness": 1.6438
+    },
+    "EURJPY": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 11.6887,
+      "_sum_fitness": 11.6887
+    },
+    "GBPJPY": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 13.6007,
+      "_sum_fitness": 13.6007
+    },
+    "SOLUSD": {
+      "experiments": 1,
+      "promoted": 1,
+      "avg_fitness": 8.5009,
+      "_sum_fitness": 8.5009
+    },
+    "XRPUSD": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 7.7622,
+      "_sum_fitness": 7.7622
+    },
+    "BNBUSD": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 14.7661,
+      "_sum_fitness": 14.7661
+    }
+  },
+  "by_regime": {
+    "trending_down": {
+      "experiments": 10,
+      "promoted": 1,
+      "avg_fitness": 6.3332,
+      "_sum_fitness": 63.3322
+    },
+    "ranging": {
+      "experiments": 11,
+      "promoted": 0,
+      "avg_fitness": 7.8555,
+      "_sum_fitness": 86.4109
+    },
+    "trending_up": {
+      "experiments": 11,
+      "promoted": 3,
+      "avg_fitness": 5.1823,
+      "_sum_fitness": 57.0048
+    },
+    "high_volatility": {
+      "experiments": 21,
+      "promoted": 1,
+      "avg_fitness": 7.2128,
+      "_sum_fitness": 151.46939999999998
+    }
+  },
+  "by_family": {
+    "market_structure": {
+      "experiments": 12,
+      "promoted": 1,
+      "avg_fitness": 8.7122,
+      "_sum_fitness": 104.5466
+    },
+    "supertrend": {
+      "experiments": 6,
+      "promoted": 0,
+      "avg_fitness": 5.8539,
+      "_sum_fitness": 35.123599999999996
+    },
+    "sma_crossover": {
+      "experiments": 11,
+      "promoted": 1,
+      "avg_fitness": 6.5391,
+      "_sum_fitness": 71.93039999999999
+    },
+    "adx_trend": {
+      "experiments": 4,
+      "promoted": 1,
+      "avg_fitness": 3.6936,
+      "_sum_fitness": 14.774300000000002
+    },
+    "hma_slope": {
+      "experiments": 4,
+      "promoted": 1,
+      "avg_fitness": 6.7561,
+      "_sum_fitness": 27.024299999999997
+    },
+    "ichimoku_cloud": {
+      "experiments": 7,
+      "promoted": 1,
+      "avg_fitness": 7.7721,
+      "_sum_fitness": 54.405
+    },
+    "donchian_trend": {
+      "experiments": 5,
+      "promoted": 0,
+      "avg_fitness": 7.3253,
+      "_sum_fitness": 36.626400000000004
+    },
+    "ema_slope": {
+      "experiments": 3,
+      "promoted": 0,
+      "avg_fitness": 4.2645,
+      "_sum_fitness": 12.7934
+    },
+    "vwap_trend": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 0.9933,
+      "_sum_fitness": 0.9933
+    }
+  },
+  "by_trend_indicator": {
+    "market_structure": {
+      "experiments": 12,
+      "promoted": 1,
+      "avg_fitness": 8.7122,
+      "_sum_fitness": 104.5466
+    },
+    "supertrend": {
+      "experiments": 6,
+      "promoted": 0,
+      "avg_fitness": 5.8539,
+      "_sum_fitness": 35.123599999999996
+    },
+    "sma_crossover": {
+      "experiments": 11,
+      "promoted": 1,
+      "avg_fitness": 6.5391,
+      "_sum_fitness": 71.93039999999999
+    },
+    "adx_trend": {
+      "experiments": 4,
+      "promoted": 1,
+      "avg_fitness": 3.6936,
+      "_sum_fitness": 14.774300000000002
+    },
+    "hma_slope": {
+      "experiments": 4,
+      "promoted": 1,
+      "avg_fitness": 6.7561,
+      "_sum_fitness": 27.024299999999997
+    },
+    "ichimoku_cloud": {
+      "experiments": 7,
+      "promoted": 1,
+      "avg_fitness": 7.7721,
+      "_sum_fitness": 54.405
+    },
+    "donchian_trend": {
+      "experiments": 5,
+      "promoted": 0,
+      "avg_fitness": 7.3253,
+      "_sum_fitness": 36.626400000000004
+    },
+    "ema_slope": {
+      "experiments": 3,
+      "promoted": 0,
+      "avg_fitness": 4.2645,
+      "_sum_fitness": 12.7934
+    },
+    "vwap_trend": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 0.9933,
+      "_sum_fitness": 0.9933
+    }
+  },
+  "by_momentum_indicator": {
+    "cci": {
+      "experiments": 5,
+      "promoted": 0,
+      "avg_fitness": 6.7634,
+      "_sum_fitness": 33.817099999999996
+    },
+    "macd_hist": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 6.8537,
+      "_sum_fitness": 27.415
+    },
+    "adx_strength": {
+      "experiments": 10,
+      "promoted": 1,
+      "avg_fitness": 7.3607,
+      "_sum_fitness": 73.60660000000001
+    },
+    "stochastic": {
+      "experiments": 9,
+      "promoted": 0,
+      "avg_fitness": 6.1401,
+      "_sum_fitness": 55.26090000000001
+    },
+    "roc": {
+      "experiments": 5,
+      "promoted": 1,
+      "avg_fitness": 6.9806,
+      "_sum_fitness": 34.9028
+    },
+    "williams_r": {
+      "experiments": 11,
+      "promoted": 1,
+      "avg_fitness": 5.7308,
+      "_sum_fitness": 63.038500000000006
+    },
+    "price_action": {
+      "experiments": 1,
+      "promoted": 0,
+      "avg_fitness": 10.2774,
+      "_sum_fitness": 10.2774
+    },
+    "rsi": {
+      "experiments": 4,
+      "promoted": 0,
+      "avg_fitness": 8.2841,
+      "_sum_fitness": 33.1365
+    },
+    "volume_momentum": {
+      "experiments": 4,
+      "promoted": 2,
+      "avg_fitness": 6.6906,
+      "_sum_fitness": 26.762500000000003
+    }
+  },
+  "by_volatility_filter": {
+    "keltner_squeeze": {
+      "experiments": 10,
+      "promoted": 2,
+      "avg_fitness": 5.7618,
+      "_sum_fitness": 57.618399999999994
+    },
+    "default": {
+      "experiments": 6,
+      "promoted": 0,
+      "avg_fitness": 5.7594,
+      "_sum_fitness": 34.5564
+    },
+    "bollinger_width": {
+      "experiments": 8,
+      "promoted": 0,
+      "avg_fitness": 6.0555,
+      "_sum_fitness": 48.4441
+    },
+    "atr_contraction": {
+      "experiments": 12,
+      "promoted": 0,
+      "avg_fitness": 6.6688,
+      "_sum_fitness": 80.025
+    },
+    "atr_expansion": {
+      "experiments": 12,
+      "promoted": 1,
+      "avg_fitness": 8.1795,
+      "_sum_fitness": 98.15360000000001
+    },
+    "historical_vol": {
+      "experiments": 5,
+      "promoted": 2,
+      "avg_fitness": 7.884,
+      "_sum_fitness": 39.4198
+    }
+  },
+  "ois": {
+    "overall": 21.8,
+    "research_quality": 18.9,
+    "champion_quality": 0,
+    "knowledge_growth": 18.9,
+    "generalization": 10.2,
+    "evolution_efficiency": 0,
+    "scientific_confidence": 95.5,
+    "learning_progress": 45.1
+  },
+  "_sum_is_return": 3.9266000000000028,
+  "_sum_oos_return": -0.011300000000000029,
+  "_sum_sharpe": -4.611999999999999,
+  "_sum_drawdown": 1.685800000000001,
+  "_sum_trades": 506.0,
+  "_sum_fitness": 358.21729999999997,
+  "_sum_runtime": 0.0
+}

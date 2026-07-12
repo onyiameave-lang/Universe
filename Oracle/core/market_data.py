@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import csv
 import io
+import json
+import logging
 import math
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _UA = "MarketOracleAI/1.0 (AI Ecosystem financial intelligence)"
@@ -69,7 +72,8 @@ def _get(url: str) -> Optional[str]:
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
             return r.read().decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        logging.getLogger("oracle.market_data").warning("stooq request failed for %s: %s", url, exc)
         return None
 
 
@@ -96,14 +100,34 @@ class YFinanceSource:
                               float(row["Low"]), float(row["Close"]),
                               float(row.get("Volume", 0) or 0)))
             return Series(symbol, bars, "yfinance")
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("oracle.market_data").warning(
+                "yfinance fetch failed for %s: %s", symbol, exc)
             return None
 
     def _map(self, symbol: str) -> str:
         # map common FX/crypto notations to yfinance tickers
-        m = {"EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X",
-             "XAUUSD": "GC=F", "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD",
-             "SPX": "^GSPC", "NASDAQ": "^IXIC", "DXY": "DX-Y.NYB", "USOIL": "CL=F"}
+        m = {
+            # FX majors and crosses (Yahoo requires =X on 6-char pairs; USDJPY is the one exception)
+            "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X",
+            "AUDUSD": "AUDUSD=X", "USDCAD": "USDCAD=X", "USDCHF": "USDCHF=X",
+            "NZDUSD": "NZDUSD=X", "EURGBP": "EURGBP=X", "EURJPY": "EURJPY=X",
+            "GBPJPY": "GBPJPY=X",
+            # metals / commodities
+            "XAUUSD": "GC=F", "USOIL": "CL=F",
+            # crypto (Yahoo requires -USD)
+            "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "SOLUSD": "SOL-USD",
+            "XRPUSD": "XRP-USD", "BNBUSD": "BNB-USD", "ADAUSD": "ADA-USD",
+            # indices (Yahoo requires ^ prefix)
+            "SPX": "^GSPC", "NASDAQ": "^IXIC", "DJI": "^DJI", "RUT": "^RUT",
+            "VIX": "^VIX", "FTSE": "^FTSE", "DAX": "^GDAXI", "CAC40": "^FCHI",
+            "NIKKEI": "^N225", "HSI": "^HSI", "SENSEX": "^BSESN", "ASX200": "^AXJO",
+            "DXY": "DX-Y.NYB",
+            # major US mega-cap stocks (already in Yahoo's native format, pass through)
+            "AAPL": "AAPL", "MSFT": "MSFT", "NVDA": "NVDA", "GOOGL": "GOOGL",
+            "AMZN": "AMZN", "META": "META", "TSLA": "TSLA", "BRKB": "BRK-B",
+            "LLY": "LLY", "V": "V", "JPM": "JPM",
+        }
         return m.get(symbol.upper(), symbol)
 
 
@@ -127,29 +151,96 @@ class StooqSource:
                 continue
         if not bars:
             return None
-        # keep ~6 months of daily bars
-        return Series(symbol, bars[-130:], "stooq")
+        # keep roughly `period`'s worth of daily bars (rough trading-day estimates)
+        _PERIOD_BARS = {"1mo": 22, "3mo": 65, "6mo": 130, "1y": 252, "2y": 504, "5y": 1260, "max": None}
+        n = _PERIOD_BARS.get(period, 504)
+        return Series(symbol, bars[-n:] if n else bars, "stooq")
 
     def _map(self, symbol: str) -> str:
-        m = {"EURUSD": "eurusd", "GBPUSD": "gbpusd", "USDJPY": "usdjpy",
-             "XAUUSD": "xauusd", "BTCUSD": "btcusd", "SPX": "^spx", "USOIL": "cl.f"}
+        m = {
+            "EURUSD": "eurusd", "GBPUSD": "gbpusd", "USDJPY": "usdjpy",
+            "AUDUSD": "audusd", "USDCAD": "usdcad", "USDCHF": "usdchf",
+            "NZDUSD": "nzdusd", "EURGBP": "eurgbp", "EURJPY": "eurjpy",
+            "GBPJPY": "gbpjpy",
+            "XAUUSD": "xauusd", "USOIL": "cl.f",
+            "BTCUSD": "btcusd", "ETHUSD": "ethusd", "SOLUSD": "solusd",
+            "XRPUSD": "xrpusd", "BNBUSD": "bnbusd", "ADAUSD": "adausd",
+            "SPX": "^spx", "NASDAQ": "^ndq", "DJI": "^dji", "RUT": "^rut",
+            "VIX": "^vix", "FTSE": "^ftm", "DAX": "^dax", "CAC40": "^cac",
+            "NIKKEI": "^nkx", "HSI": "^hsi", "SENSEX": "^sensex", "ASX200": "^asx",
+        }
         return m.get(symbol.upper(), symbol.lower())
 
 
 class MarketData:
-    """Aggregates sources with failover. Honest empty result when all fail."""
+    """Aggregates sources with failover. Falls back to a local disk cache
+    of the last successful fetch per symbol if every live source fails
+    (offline, rate-limited, network down) -- always honest about whether
+    data is live or cached, and how stale a cache hit is."""
 
-    def __init__(self):
+    def __init__(self, cache_dir: Optional[str] = None):
         self.sources = [YFinanceSource(), StooqSource()]
+        self.cache_dir = Path(cache_dir or (Path(__file__).resolve().parent.parent / "data_cache"))
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def get(self, symbol: str, period: str = "6mo", interval: str = "1d") -> Dict[str, Any]:
+    def _cache_path(self, symbol: str) -> Path:
+        safe = symbol.upper().replace("/", "_")
+        return self.cache_dir / f"{safe}.json"
+
+    def _save_cache(self, symbol: str, series: "Series") -> None:
+        try:
+            payload = {
+                "symbol": series.symbol, "source": series.source,
+                "cached_at": time.time(),
+                "bars": [{"ts": b.ts, "open": b.open, "high": b.high,
+                          "low": b.low, "close": b.close, "volume": b.volume}
+                         for b in series.bars],
+            }
+            self._cache_path(symbol).write_text(json.dumps(payload), encoding="utf-8")
+        except Exception as exc:
+            logging.getLogger("oracle.market_data").warning(
+                "failed to cache %s: %s", symbol, exc)
+
+    def _load_cache(self, symbol: str) -> Optional[Dict[str, Any]]:
+        path = self._cache_path(symbol)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            bars = [Bar(**b) for b in payload["bars"]]
+            series = Series(symbol=payload["symbol"], bars=bars,
+                           source=f"cache:{payload.get('source', 'unknown')}")
+            age_hours = (time.time() - payload.get("cached_at", 0)) / 3600.0
+            return {"series": series, "age_hours": age_hours}
+        except Exception as exc:
+            logging.getLogger("oracle.market_data").warning(
+                "failed to read cache for %s: %s", symbol, exc)
+            return None
+
+    def get(self, symbol: str, period: str = "6mo", interval: str = "1d",
+           allow_cache_fallback: bool = True) -> Dict[str, Any]:
         for src in self.sources:
             if not getattr(src, "available", False):
                 continue
             series = src.fetch(symbol, period, interval)
             if series and series.bars:
+                self._save_cache(symbol, series)
                 return {"status": "complete", "series": series,
                        "source": series.source, "bars": len(series.bars)}
+
+        if allow_cache_fallback:
+            cached = self._load_cache(symbol)
+            if cached is not None:
+                logging.getLogger("oracle.market_data").warning(
+                    "all live sources failed for %s; using cached data (%.1fh old)",
+                    symbol, cached["age_hours"])
+                return {"status": "complete", "series": cached["series"],
+                       "source": cached["series"].source, "bars": len(cached["series"].bars),
+                       "cache_age_hours": round(cached["age_hours"], 1),
+                       "warning": f"live sources unreachable, using {cached['age_hours']:.1f}h-old cached data"}
+
+        return {"status": "error", "series": None,
+               "message": f"no live market data for {symbol} (sources unreachable, no cache available)"}
         return {"status": "error", "series": None,
                "message": f"no live market data for {symbol} (sources unreachable)"}
 

@@ -118,6 +118,12 @@ def self_audit(agent: AegisAgent) -> dict:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+    # The `from agents.auditor_agent import AegisAgent` import above already
+    # registered Aegis's own "core" package in sys.modules. Clear that out
+    # before loading any peer repo, or their "from core.X import Y" imports
+    # will silently resolve against Aegis's core/ instead of their own.
+    _unload_conflicting_modules()
+
     chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
                       storage_dir=str(_REPO_ROOT.parent / "Chronicle" / "memory" / "store"))
     _unload_conflicting_modules()
@@ -160,8 +166,13 @@ def main():
                 for _ in range(nn):
                     out = agent.act("audit.action", {"repository": name, "agent": name,
                         "action": "silent_failure", "action_context": {"silent": True}, "_sender": "user"})
-                print(f"After {nn} violations -> exposure={out.get('risk_exposure')}")
-                print(json.dumps(out.get("response", {}), indent=2))
+                if out.get("status") == "error":
+                    print(f"ERROR on final call: {out.get('message')}")
+                    if out.get("trace"):
+                        print(out["trace"])
+                else:
+                    print(f"After {nn} violations -> exposure={out.get('risk_exposure')}")
+                    print(json.dumps(out.get("response", {}), indent=2))
             elif cmd == "anomaly" and len(parts) >= 4:
                 print(json.dumps(agent.act("anomaly.observe",
                     {"agent": parts[1], "latency_ms": float(parts[2]),

@@ -9,14 +9,16 @@ import json
 import logging
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Load environment variables from .env file in the root.
-load_dotenv(ROOT / ".env")
+try:
+    from shared.config import get_config
+    get_config() # Triggers load_dotenv in shared.config
+except ImportError:
+    pass
 
 REPO_MAP = {
     "chronicle": ("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent"),
@@ -42,15 +44,19 @@ CONFLICTING_MODULES = [
 
 def _unload_conflicting_modules():
     """Forcibly unload modules that cause namespace collisions between repositories."""
-    modules_to_delete = []
     for mod_name in CONFLICTING_MODULES:
-        # Find the module and all its submodules
-        for m in list(sys.modules.keys()):
-            if m == mod_name or m.startswith(mod_name + '.'):
-                modules_to_delete.append(m)
-    for m in modules_to_delete:
-        if m in sys.modules:
-            del sys.modules[m]
+        if mod_name in sys.modules:
+            del sys.modules[mod_name]
+    mods_to_del = []
+    # Find all modules and sub-modules that match the conflicting names.
+    for mod in list(sys.modules.keys()):
+        for conflict in CONFLICTING_MODULES:
+            if mod == conflict or mod.startswith(conflict + '.'):
+                mods_to_del.append(mod)
+    
+    for mod in mods_to_del:
+        if mod in sys.modules:
+            del sys.modules[mod]
 
 
 def _load(folder, rel, cls, **kw):
@@ -58,26 +64,18 @@ def _load(folder, rel, cls, **kw):
     if not path.exists():
         return None
     r = ROOT / folder
-    # Prioritize the current agent's folder at index 0
-    if str(r) in sys.path:
-        sys.path.remove(str(r))
-    sys.path.insert(0, str(r))
-    
+    if str(r) not in sys.path:
+        sys.path.insert(0, str(r))
     try:
         spec = importlib.util.spec_from_file_location(f"{folder}_{cls}", path)
         if spec is None or spec.loader is None:
             return None
         m = importlib.util.module_from_spec(spec)
-        # Ensure the module knows its own path for relative imports
-        m.__package__ = folder
         spec.loader.exec_module(m)
         return getattr(m, cls)
     except (ImportError, AttributeError, FileNotFoundError) as exc:
         logging.getLogger("ecosystem").warning("load %s failed: %s", folder, exc)
         return None
-    finally:
-        # We don't remove from sys.path yet because some agents might need it for deferred imports
-        pass
 
 
 def main():
@@ -105,13 +103,6 @@ def main():
                 chronicle = inst # Set for subsequent agents
             elif name == "atlas":
                 inst = C(chronicle_client=chronicle)
-            elif name == "oracle":
-                inst = C(
-                    chronicle_client=chronicle,
-                    atlas_client=agents.get("atlas"),
-                    sentinel_client=agents.get("sentinel"),
-                    pulse_client=agents.get("pulse"),
-                )
             else:
                 # Generic case for most agents
                 try:

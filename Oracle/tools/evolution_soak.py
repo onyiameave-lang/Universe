@@ -38,7 +38,21 @@ for p in (_REPO_ROOT, _ECO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-DEFAULT_SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "BTCUSD"]
+DEFAULT_SYMBOLS = [
+    # FX majors + crosses
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
+    "EURGBP", "EURJPY", "GBPJPY",
+    # metals / commodities
+    "XAUUSD", "USOIL",
+    # crypto
+    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    # indices
+    "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
+    "NIKKEI", "HSI", "SENSEX", "ASX200",
+    # mega-cap stocks
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRKB",
+    "LLY", "V", "JPM",
+]
 DEFAULT_GENERATIONS = 15
 MIN_TRADES = 15  # below this, treat the verdict as low-confidence
 LOG_PATH = _REPO_ROOT / "logs" / "evolution_soak.csv"
@@ -180,15 +194,17 @@ def run_one_symbol(agent, symbol: str, generations: int, writer, f) -> None:
           f"trades={champion_oos_trades} sharpe={champion_sharpe} win_rate={champion_win_rate}{flag}")
 
 
-def run_pass(agent, symbols, generations):
+def run_pass(agent, symbols, generations, delay_sec: float = 3.0):
     _ensure_log_header()
     with open(LOG_PATH, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
-        for symbol in symbols:
+        for i, symbol in enumerate(symbols):
             try:
                 run_one_symbol(agent, symbol, generations, writer, f)
             except Exception as exc:
                 print(f"  {symbol}: ERROR {exc}")
+            if i < len(symbols) - 1:
+                time.sleep(delay_sec)
 
 
 def main():
@@ -197,6 +213,8 @@ def main():
     ap.add_argument("--generations", type=int, default=DEFAULT_GENERATIONS)
     ap.add_argument("--loop", action="store_true", help="keep running indefinitely")
     ap.add_argument("--every-hours", type=float, default=6.0)
+    ap.add_argument("--delay-sec", type=float, default=3.0,
+                    help="pause between symbols to avoid tripping data-source rate limits")
     args = ap.parse_args()
 
     agent, peers = _boot_agent()
@@ -206,7 +224,7 @@ def main():
 
     try:
         while True:
-            run_pass(agent, args.symbols, args.generations)
+            run_pass(agent, args.symbols, args.generations, args.delay_sec)
             if not args.loop:
                 break
             print(f"\nSleeping {args.every_hours}h until next pass...")
@@ -219,8 +237,8 @@ def main():
             if peer:
                 try:
                     peer.stop()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"  Warning: failed to stop peer {peer}: {exc}")
     print("Soak test shutdown complete.")
 
 

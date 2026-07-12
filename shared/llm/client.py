@@ -55,7 +55,7 @@ except Exception:
 DEFAULT_MODELS = {
     "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
     "openai": os.getenv("OPENAI_MODEL", "gpt-4o"),
-    "gemini": os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
+    "gemini": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
 }
 
 

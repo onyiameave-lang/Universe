@@ -27,6 +27,9 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from shared.config import get_config
+_cfg = get_config()
+
 _UA = "SentinelNewsAI/1.0 (AI Ecosystem news intelligence)"
 _TIMEOUT = 12
 
@@ -91,10 +94,10 @@ class RSSCollector:
     available = True
 
     def __init__(self, feeds=None):
-        env_feeds = os.getenv("ENABLED_NEWS_FEEDS", "").strip()
+        env_feeds = _cfg.enabled_news_feeds
         self.feeds = feeds or DEFAULT_FEEDS
         if env_feeds:
-            self.feeds = [(f"custom{i}", u.strip()) for i, u in enumerate(env_feeds.split(","))]
+            self.feeds = [(f"custom{i}", u.strip()) for i, u in enumerate(env_feeds)]
 
     def collect(self, topics=None, limit=8) -> List[Article]:
         out = []
@@ -133,10 +136,10 @@ class NewsAPICollector:
 
     @property
     def available(self) -> bool:
-        return bool(os.getenv("NEWSAPI_KEY", "").strip())
+        return bool(_cfg.newsapi_key.strip())
 
     def collect(self, topics=None, limit=8) -> List[Article]:
-        key = os.getenv("NEWSAPI_KEY", "").strip()
+        key = _cfg.newsapi_key.strip()
         if not key:
             return []
         q = " OR ".join(topics or ["markets", "economy", "forex"])

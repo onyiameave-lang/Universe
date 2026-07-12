@@ -256,6 +256,8 @@ def main():
                 oos = evo.get("out_of_sample", {})
                 print(f"\n Training Return:    {is_return or 0:.4f}")
                 if oos:
+                    if oos.get("status") == "error":
+                        print(f" ⚠ CERTIFICATION ERRORED: {oos.get('message', 'unknown error')}")
                     print(f" Validation Return:  {oos.get('total_return', 0):.4f}")
                     print(f" Validation Trades:  {oos.get('trades', 0)}")
                     if oos.get("sharpe_proxy"):
@@ -384,8 +386,8 @@ def main():
         if peer:
             try:
                 peer.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.getLogger("oracle.main").warning("failed to stop peer %s: %s", peer, exc)
     print("\n Oracle shutdown complete.")
 
 

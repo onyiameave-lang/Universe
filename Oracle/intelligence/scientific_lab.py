@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from intelligence.technicals import analyze  # type: ignore
 from intelligence.strategy_planner import StrategyPlanner  # type: ignore
+from benchmarks.benchmark_engine import BenchmarkEngine  # type: ignore
 
 log = logging.getLogger("oracle.lab")
 
@@ -45,6 +46,7 @@ class ScientificResearchLab:
         self._journal: List[Dict[str, Any]] = self._load_list(self._journal_path)
         self._champions: Dict[str, Dict[str, Any]] = self._load_dict(self._champions_path)
         self._champion_history: List[Dict[str, Any]] = self._load_list(self._history_path)
+        self.benchmark = BenchmarkEngine(storage_dir=str(self._dir.parent / "benchmarks"))
 
     def _load_list(self, path):
         try:
@@ -613,8 +615,10 @@ class ScientificResearchLab:
         self._validate_consistency(experiment, result, promoted)
 
         log.info("STATE: Experiment(%s) → Reflection → Report COMPLETE", experiment_id)
+    
 
-        return {
+                # Build final result
+        final_result = {
             "status": "complete",
             "context": context,
             "hypotheses": hypotheses,
@@ -623,10 +627,18 @@ class ScientificResearchLab:
             "experiment": experiment,
             "evolution": result,
             "reflection": reflection,
-            "champion": self.champion_info(symbol, regime),
-            "dna_report": dna_report,  # ISSUE 5: Always populated
+            "champion": self.champion_info(context["symbol"], context["regime"]),
+            "dna_report": dna_report,
             "champion_comparison": comparison,
         }
+
+        # Benchmark update (automatic, never crashes Oracle)
+        try:
+            self.benchmark.record_experiment(final_result)
+        except Exception:
+            pass
+
+        return final_result
 
     def _validate_consistency(self, experiment, result, promoted):
         """Ensure no contradictory states."""

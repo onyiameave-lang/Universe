@@ -1,0 +1,44 @@
+name: Oracle Evolution Soak
+
+on:
+  schedule:
+    # every 6 hours, regardless of whether any local machine is on
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}   # lets you trigger it manually from the GitHub Actions tab too
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy pandas yfinance python-dotenv
+
+      - name: Run evolution soak (one pass)
+        working-directory: Oracle
+        run: python tools/evolution_soak.py --generations 15 --delay-sec 3
+        env:
+          # add any API keys you use (Gemini, etc.) as GitHub repo secrets,
+          # then reference them here, e.g.:
+          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ORACLE_PAPER_TRADING: "true"
+
+      - name: Commit updated logs and champions back to the repo
+        run: |
+          git config user.name "oracle-soak-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Oracle/logs/evolution_soak.csv Oracle/memory/evolved_strategies.json Oracle/data_cache/ || true
+          git diff --cached --quiet || git commit -m "Automated soak pass: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push

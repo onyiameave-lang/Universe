@@ -185,8 +185,8 @@ class LiveTrader:
             if peer:
                 try:
                     peer.stop()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning("failed to stop peer %s: %s", peer, exc)
 
 
 def main():

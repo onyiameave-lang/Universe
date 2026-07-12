@@ -22,18 +22,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-try:
-    from shared.config import get_config
-    _cfg = get_config()
-    RISK_PER_TRADE = _cfg.rl_risk_per_trade
-    MAX_POSITIONS = _cfg.rl_max_positions
-    MAX_DRAWDOWN = _cfg.rl_max_drawdown_pct
-except Exception:
-    RISK_PER_TRADE = float(os.getenv("RL_RISK_PER_TRADE", "0.01"))
-    MAX_POSITIONS = int(os.getenv("RL_MAX_POSITIONS", "1"))
-    MAX_DRAWDOWN = float(os.getenv("RL_MAX_DRAWDOWN_PCT", "0.20"))
-
-PAPER_TRADING = os.getenv("ORACLE_PAPER_TRADING", "true").lower() in ("1", "true", "yes")
+from shared.config import get_config
+_cfg = get_config()
+RISK_PER_TRADE = _cfg.rl_risk_per_trade
+MAX_POSITIONS = _cfg.rl_max_positions
+MAX_DRAWDOWN = _cfg.rl_max_drawdown_pct
+PAPER_TRADING = _cfg.oracle_paper_trading
 
 
 @dataclass

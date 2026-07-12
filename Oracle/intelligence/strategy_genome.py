@@ -10,6 +10,7 @@ Unrecognized types use intelligent fallback (EMA slope) rather than dead zero.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import uuid
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,
                                       returns_stats)
+
+log = logging.getLogger("oracle.genome")
 
 
 # ---- Additional Indicator Functions ----
@@ -613,8 +616,8 @@ class StrategyGenome:
             vol = (t.get("regime") or {}).get("volatility", 0.0)
             if not self.market_regime.is_allowed(regime, vol):
                 return "hold"
-        except Exception:
-            pass  # Allow if can't determine regime
+        except Exception as exc:
+            log.warning("Could not determine regime, allowing trade through unfiltered: %s", exc)
 
         v = self.vote(series)
         if self.entry.should_enter(v):
