@@ -7,7 +7,17 @@ reading os.environ directly. (Book IV Ch VII.)
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional
+
+try:
+    from dotenv import load_dotenv
+    # Load .env from the root of the Universal_AI directory
+    _ROOT = Path(__file__).resolve().parent.parent
+    if (_ROOT / ".env").exists():
+        load_dotenv(_ROOT / ".env")
+except ImportError:
+    pass
 
 
 def _bool(name, default=False):
@@ -50,6 +60,7 @@ class EcosystemConfig:
     # external sources
     enabled_news_sources: List[str] = field(default_factory=lambda: _list(
         "ENABLED_NEWS_SOURCES", ["rss", "newsapi", "gdelt", "hackernews"]))
+    enabled_news_feeds: List[str] = field(default_factory=lambda: _list("ENABLED_NEWS_FEEDS", []))
     enabled_social_sources: List[str] = field(default_factory=lambda: _list(
         "ENABLED_SOCIAL_SOURCES", ["reddit", "hackernews", "stocktwits"]))
     # keys (passthrough; all optional)
@@ -57,10 +68,17 @@ class EcosystemConfig:
     anthropic_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
     gemini_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     newsapi_key: str = field(default_factory=lambda: os.getenv("NEWSAPI_KEY", ""))
+    semantic_scholar_key: str = field(default_factory=lambda: os.getenv("SEMANTIC_SCHOLAR_KEY", ""))
     mt5_login: str = field(default_factory=lambda: os.getenv("MT5_LOGIN", ""))
     mt5_password: str = field(default_factory=lambda: os.getenv("MT5_PASSWORD", ""))
     mt5_server: str = field(default_factory=lambda: os.getenv("MT5_SERVER", ""))
     oracle_paper_trading: bool = field(default_factory=lambda: _bool("ORACLE_PAPER_TRADING", True))
+    oracle_allow_live: bool = field(default_factory=lambda: _bool("ORACLE_ALLOW_LIVE", False))
+    # llm defaults
+    anthropic_model: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"))
+    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-pro"))
+    llm_provider_order: List[str] = field(default_factory=lambda: _list("LLM_PROVIDER_ORDER", ["anthropic", "openai", "gemini"]))
 
 
 _config: Optional[EcosystemConfig] = None

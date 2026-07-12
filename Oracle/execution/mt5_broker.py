@@ -25,11 +25,12 @@ Never hardcode credentials (Engineering Rule: no hardcoded secrets).
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from shared.config import get_config
+_cfg = get_config()
 log = logging.getLogger("oracle.mt5")
 
 # symbol mapping: ecosystem notation -> common MT5 broker symbols (override via env)
@@ -63,8 +64,8 @@ class MT5Broker:
         self._mt5 = None
         self.status = BrokerStatus()
         self.symbol_map = symbol_map or DEFAULT_SYMBOL_MAP
-        self.allow_live = os.getenv("ORACLE_ALLOW_LIVE", "false").lower() in ("1", "true", "yes")
-        self.paper = os.getenv("ORACLE_PAPER_TRADING", "true").lower() in ("1", "true", "yes")
+        self.allow_live = _cfg.oracle_allow_live
+        self.paper = _cfg.oracle_paper_trading
 
     @property
     def available(self) -> bool:
@@ -89,9 +90,9 @@ class MT5Broker:
         import MetaTrader5 as mt5
         self._mt5 = mt5
 
-        login = login or (int(os.getenv("MT5_LOGIN", "0")) or None)
-        password = password or os.getenv("MT5_PASSWORD", "") or None
-        server = server or os.getenv("MT5_SERVER", "") or None
+        login = login or (int(_cfg.mt5_login) if _cfg.mt5_login else None)
+        password = password or _cfg.mt5_password or None
+        server = server or _cfg.mt5_server or None
 
         ok = mt5.initialize(login=login, password=password, server=server) if login else mt5.initialize()
         if not ok:

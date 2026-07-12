@@ -34,6 +34,11 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+try:
+    from shared.config import get_config
+except ImportError:
+    get_config = None
+
 _USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
 _TIMEOUT = 12
 
@@ -166,7 +171,7 @@ class SemanticScholarSource:
         params = urllib.parse.urlencode({"query": query, "limit": limit,
                                         "fields": "title,abstract,year,authors,citationCount,url"})
         headers = {}
-        key = os.getenv("SEMANTIC_SCHOLAR_KEY", "").strip()
+        key = get_config().semantic_scholar_key if get_config else os.getenv("SEMANTIC_SCHOLAR_KEY", "").strip()
         if key:
             headers["x-api-key"] = key
         body = _http_get(f"{self.API}?{params}", headers=headers)

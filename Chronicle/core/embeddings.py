@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import hashlib
 import math
-import os
 import re
 from typing import List, Optional
+
+from shared.config import get_config
+_cfg = get_config()
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -31,7 +33,7 @@ class EmbeddingModel:
         self._backend = "hashing"
         self._st_model = None
         if prefer_transformer is None:
-            prefer_transformer = os.getenv("MEMORY_USE_REAL_EMBEDDINGS", "false").lower() in ("1", "true", "yes")
+            prefer_transformer = _cfg.memory_use_real_embeddings
         if prefer_transformer:
             self._try_load_transformer()
 

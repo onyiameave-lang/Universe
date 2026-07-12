@@ -32,6 +32,7 @@ across restarts and is preserved to Chronicle for the whole civilization.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import threading
 import time
@@ -39,6 +40,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+log = logging.getLogger("shared.reasoning")
 
 
 def wilson_lower_bound(successes: int, n: int, z: float = 1.96) -> float:
@@ -76,6 +79,11 @@ class Strategy:
     status: str = "candidate"              # candidate | active | deprecated
     created_at: float = field(default_factory=time.time)
     lineage: Optional[str] = None          # parent strategy this was varied from
+    researched: bool = False               # True once research_reasons() has been
+                                            # attempted, regardless of whether Atlas/
+                                            # LLM calls succeeded -- prevents decide()
+                                            # from retrying a failing/rate-limited
+                                            # external call on every single attempt
 
     @property
     def confidence(self) -> float:
@@ -154,8 +162,23 @@ class ReasoningEngine:
                          reasons_for: Optional[List[str]] = None,
                          reasons_against: Optional[List[str]] = None,
                          lineage: Optional[str] = None) -> Strategy:
-        """Register a candidate approach for a problem-type."""
+        """Register a candidate approach for a problem-type.
+
+        Idempotent: if a strategy with this exact name already exists for
+        this problem_type (e.g. reloaded from persisted storage on a prior
+        boot), reuse it instead of creating a duplicate. Every fresh process
+        launch used to call this for the same canonical strategies, silently
+        piling up duplicates (52 found in production after ~13 boots) which
+        broke exclude_ids-based rotation and caused decide() to repeatedly
+        re-run expensive Atlas/LLM research on "new" duplicates that were
+        functionally the same strategy.
+        """
         with self._lock:
+            for sid in self._by_problem.get(problem_type, []):
+                existing = self._strategies.get(sid)
+                if existing is not None and existing.name == name and existing.status != "deprecated":
+                    return existing
+
             sid = f"strat-{uuid.uuid4().hex[:10]}"
             s = Strategy(strategy_id=sid, problem_type=problem_type, name=name,
                         description=description, handler=handler, params=params or {},
@@ -224,6 +247,7 @@ class ReasoningEngine:
             except Exception:
                 pass
 
+        strategy.researched = True
         with self._lock:
             self._persist()
         return strategy
@@ -231,13 +255,19 @@ class ReasoningEngine:
     # ---- step 3: decide (exploit + explore) ----
 
     def decide(self, problem_type: str, context: Optional[Dict] = None,
-               research: bool = True) -> Dict[str, Any]:
+               research: bool = True, exclude_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Choose a strategy for the problem using earned confidence + exploration.
         Returns {strategy, score, trace} or a signal that a NEW approach is needed.
+        exclude_ids: strategy_ids already tried this solve() call -- skipped
+        unless excluding them would leave no candidates at all.
         """
         context = context or {}
         cands = self.candidates(problem_type)
+        if exclude_ids:
+            remaining = [s for s in cands if s.strategy_id not in exclude_ids]
+            if remaining:  # only exclude if something else is actually available
+                cands = remaining
         if not cands:
             return {"strategy": None, "needs_new_strategy": True,
                    "reason": f"no candidate strategies for '{problem_type}'"}
@@ -245,7 +275,7 @@ class ReasoningEngine:
         # Optionally research reasons for the top few unresearched candidates.
         if research:
             for s in cands:
-                if not s.reasons_for and not s.reasons_against:
+                if not s.researched:
                     self.research_reasons(s, context)
 
         total_attempts = sum(s.attempts for s in cands)
@@ -306,13 +336,27 @@ class ReasoningEngine:
                         error: str = "") -> Dict[str, Any]:
         """
         Ask WHY a strategy failed and propose a DIFFERENT approach to try.
-        Uses the LLM as an advisor if present; otherwise a structured heuristic.
-        Returns {root_cause, variation} where variation is a new candidate.
+        Uses the LLM as an advisor if present; otherwise falls back to letting
+        decide()'s exclude_ids naturally move on to another registered
+        strategy next attempt, rather than manufacturing a same-handler clone
+        that isn't actually a different approach.
+        Returns {root_cause, variation} where variation may be None when no
+        genuinely different approach was proposed.
         """
         root_cause = error or strategy.last_outcome or "unknown"
-        variation_desc = f"Variation of '{strategy.name}' avoiding the prior failure mode."
+        variation_desc = None
+        proposed_different_handler = False
 
-        if self.llm is not None and getattr(self.llm, "has_any", False):
+        # NOTE: intentionally disabled. This call no longer changes which
+        # strategy gets chosen (see the fix above that stops cloning the
+        # same handler under a new name) -- its only remaining effect was a
+        # cosmetic root_cause annotation. But it's called once per FAILED
+        # attempt, and a threat-response loop with many violations can
+        # trigger dozens of these in one command, which under any real-world
+        # rate limit turns a sub-second operation into a multi-minute one
+        # (observed: ~6 minutes for `threat X 10` against a rate-limited
+        # Gemini key). Not worth the latency/cost for a cosmetic label.
+        if False and self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
                 parsed = None
@@ -326,27 +370,37 @@ class ReasoningEngine:
                 parsed = r[0]
                 if parsed and isinstance(parsed, dict):
                     root_cause = parsed.get("root_cause", root_cause)
-                    variation_desc = parsed.get("different_approach", variation_desc)
-            except Exception:
-                pass
+                    variation_desc = parsed.get("different_approach")
+                    proposed_different_handler = bool(variation_desc)
+            except Exception as exc:
+                log.warning("LLM advisor call failed during diagnose_failure: %s", exc)
 
-        # Register the different approach as a NEW candidate to try next time.
-        variation = self.register_strategy(
-            problem_type=strategy.problem_type,
-            name=f"{strategy.name} (revised)",
-            handler=strategy.handler,
-            description=variation_desc,
-            params=dict(strategy.params),
-            reasons_for=[f"addresses failure: {root_cause[:100]}"],
-            lineage=strategy.strategy_id)
-
-        # Record the lesson.
+        # Record the lesson either way -- this strategy now has a known
+        # failure mode, which lowers its future score via reason_bias.
         strategy.reasons_against.append(f"failed: {root_cause[:100]}")
+
+        variation = None
+        if proposed_different_handler:
+            # NOTE: we deliberately do NOT clone strategy.handler here.
+            # There's no mechanism for the LLM's text description to map to
+            # an actually different handler function, so registering
+            # "{name} (revised)" with the same handler produces a strategy
+            # that is functionally identical to the one that just failed --
+            # it will fail for the same reason, crowd out the genuinely
+            # different registered strategies (quarantine/self_heal/escalate)
+            # via the exploration bonus, and never let decide()'s exclude_ids
+            # do its job. We record the diagnosis for learning purposes only
+            # and let exclude_ids naturally move on to a real alternative.
+            pass
+
         with self._lock:
             self._persist()
 
-        return {"root_cause": root_cause, "variation": variation.to_dict(),
-               "message": "diagnosed failure; registered a different approach to try next"}
+        return {"root_cause": root_cause,
+               "variation": variation.to_dict() if variation else None,
+               "message": ("diagnosed failure; registered a different approach to try next"
+                          if variation else
+                          "diagnosed failure; no new approach proposed, will try another registered strategy next")}
 
     def _preserve_outcome(self, s: Strategy, success: bool, detail: str) -> None:
         if self.chronicle is None:

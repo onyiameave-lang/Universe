@@ -426,6 +426,7 @@ class EvolutionLab:
         regime = self._regime_for(series)
         champion_key = self._champion_key(symbol, regime)
         total_bars = len(series.bars)
+        self.stagnation = StagnationDetector()  # Reset stagnation detector for each run
 
         split = int(total_bars * 0.60)
         split = max(40, min(split, total_bars - 25))

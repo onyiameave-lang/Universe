@@ -165,8 +165,8 @@ def format_genome_dna(genome_dict: dict) -> str:
     # Exit
     exit_mod = modules.get("exit", {})
     exit_params = exit_mod.get("params", {})
-    sl = exit_params.get("sl_mult", "?")
-    tp = exit_params.get("tp_mult", "?")
+    sl = exit_params.get("sl_mult", 2.0)  # matches ExitModule.get_stops() runtime default
+    tp = exit_params.get("tp_mult", 3.0)  # matches ExitModule.get_stops() runtime default
     lines.append(f"  Exit:         SL={sl}x ATR, TP={tp}x ATR")
     if exit_params.get("trail_mult"):
         lines.append(f"  Trailing:     {exit_params['trail_mult']}x ATR")
@@ -256,6 +256,8 @@ def main():
                 oos = evo.get("out_of_sample", {})
                 print(f"\n Training Return:    {is_return or 0:.4f}")
                 if oos:
+                    if oos.get("status") == "error":
+                        print(f" ⚠ CERTIFICATION ERRORED: {oos.get('message', 'unknown error')}")
                     print(f" Validation Return:  {oos.get('total_return', 0):.4f}")
                     print(f" Validation Trades:  {oos.get('trades', 0)}")
                     if oos.get("sharpe_proxy"):
@@ -384,8 +386,8 @@ def main():
         if peer:
             try:
                 peer.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.getLogger("oracle.main").warning("failed to stop peer %s: %s", peer, exc)
     print("\n Oracle shutdown complete.")
 
 

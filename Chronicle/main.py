@@ -34,6 +34,10 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.chronicle_agent import ChronicleAgent
 
 _REPO_ROOT = Path(__file__).resolve().parent
 for p in (_REPO_ROOT, _REPO_ROOT.parent):

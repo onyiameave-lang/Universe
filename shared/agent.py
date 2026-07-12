@@ -224,16 +224,14 @@ class BaseAgent(abc.ABC):
 
         for attempt in range(1, max_attempts + 1):
             # 2-3. RESEARCH reasons + DECIDE by earned track record.
-            decision = self.reasoning.decide(problem_type, context, research=True)
+            decision = self.reasoning.decide(problem_type, context, research=True,
+                                            exclude_ids=tried_ids)
             if decision.get("needs_new_strategy"):
                 return {"status": "error", "problem_type": problem_type,
                        "message": "no strategy available; agent must register approaches",
                        "trace": trace}
 
             strategy: Strategy = decision["strategy_obj"]
-            # avoid re-trying the exact same failed strategy within one solve()
-            if strategy.strategy_id in tried_ids and attempt > 1:
-                pass  # exploration may still re-surface it; that's acceptable
             tried_ids.append(strategy.strategy_id)
 
             handler: Optional[Callable] = getattr(self, strategy.handler, None)
@@ -275,8 +273,9 @@ class BaseAgent(abc.ABC):
 
             # 5b. FAILURE: diagnose WHY and try something DIFFERENT next loop.
             diag = self.reasoning.diagnose_failure(strategy, context, error=err)
+            variation = diag.get("variation") or {}
             trace[-1]["diagnosis"] = {"root_cause": diag.get("root_cause"),
-                                     "variation": diag.get("variation", {}).get("name")}
+                                     "variation": variation.get("name")}
 
         # exhausted attempts
         self._failed += 1

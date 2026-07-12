@@ -10,6 +10,7 @@ Unrecognized types use intelligent fallback (EMA slope) rather than dead zero.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import uuid
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,
                                       returns_stats)
+
+log = logging.getLogger("oracle.genome")
 
 
 # ---- Additional Indicator Functions ----
@@ -613,8 +616,8 @@ class StrategyGenome:
             vol = (t.get("regime") or {}).get("volatility", 0.0)
             if not self.market_regime.is_allowed(regime, vol):
                 return "hold"
-        except Exception:
-            pass  # Allow if can't determine regime
+        except Exception as exc:
+            log.warning("Could not determine regime, allowing trade through unfiltered: %s", exc)
 
         v = self.vote(series)
         if self.entry.should_enter(v):
@@ -622,6 +625,15 @@ class StrategyGenome:
         return "hold"
 
     def to_dict(self) -> Dict[str, Any]:
+        # Backfill exit params with the same defaults ExitModule.get_stops()
+        # uses at runtime, so the persisted DNA always records the actual
+        # stop/target it was certified with -- crossover/mutation can drop
+        # these keys from self.exit.params while get_stops() still silently
+        # applies its own default, which made the stored record incomplete.
+        exit_params = dict(self.exit.params)
+        exit_params.setdefault("sl_mult", 2.0)
+        exit_params.setdefault("tp_mult", 3.0)
+
         return {
             "genome_id": self.genome_id,
             "generation": self.generation,
@@ -636,7 +648,7 @@ class StrategyGenome:
                 "momentum": {"logic_type": self.momentum.logic_type, "params": self.momentum.params},
                 "volatility": {"logic_type": self.volatility.logic_type, "params": self.volatility.params},
                 "entry": {"logic_type": self.entry.logic_type, "params": self.entry.params},
-                "exit": {"logic_type": self.exit.logic_type, "params": self.exit.params},
+                "exit": {"logic_type": self.exit.logic_type, "params": exit_params},
                 "risk": {"logic_type": self.risk.logic_type, "params": self.risk.params},
                 "position": {"logic_type": self.position.logic_type, "params": self.position.params},
                 "trade_management": {"logic_type": self.trade_management.logic_type, "params": self.trade_management.params},
