@@ -40,6 +40,31 @@ for p in (_REPO_ROOT, _ECO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+CONFLICTING_MODULES = [
+    "core", "agents", "intelligence", "memory", "research", "models", "training",
+    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
+    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
+    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
+    "execution", "registry"
+]
+
+def _unload_conflicting_modules():
+    """Forcibly unload modules that cause namespace collisions between repositories.
+    Every repo (Chronicle, Atlas, Aegis, Nexus itself) ships its own core/agents/
+    etc packages with identical names, so without clearing them from sys.modules
+    between loads, a peer's "from core.X import Y" silently resolves against
+    whichever repo's core/ happened to be imported first -- which is why every
+    single peer load (Chronicle, Atlas, Aegis) was failing with 'No module
+    named core.embeddings' / 'core.research_engine' / 'core.audit_log'."""
+    modules_to_delete = []
+    for mod_name in CONFLICTING_MODULES:
+        for m in list(sys.modules.keys()):
+            if m == mod_name or m.startswith(mod_name + '.'):
+                modules_to_delete.append(m)
+    for m in modules_to_delete:
+        if m in sys.modules:
+            del sys.modules[m]
+
 from agents.coordinator_agent import NexusAgent  # type: ignore
 
 LIVE_REPOS = {
@@ -68,6 +93,7 @@ def _load_class(folder, rel, cls):
 
 def boot():
     log = logging.getLogger("nexus")
+    _unload_conflicting_modules()
     chronicle = None
     Ch = _load_class("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
     if Ch:
@@ -76,6 +102,7 @@ def boot():
             chronicle.start()
         except Exception as exc:
             log.warning("Chronicle failed: %s", exc)
+    _unload_conflicting_modules()
     atlas = None
     At = _load_class("Atlas", "agents/research_agent.py", "AtlasAgent")
     if At:
@@ -84,6 +111,7 @@ def boot():
             atlas.start()
         except Exception:
             atlas = None
+    _unload_conflicting_modules()
     nexus = NexusAgent(chronicle_client=chronicle, atlas_client=atlas)
     nexus.start()
     if chronicle:
@@ -105,6 +133,7 @@ def boot():
             nexus.register_agent(name, agent)
         except Exception as exc:
             log.warning("%s failed: %s", name, exc)
+        _unload_conflicting_modules()
     return nexus
 
 

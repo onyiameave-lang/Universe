@@ -250,18 +250,19 @@
       "reasons_against": [
         "slow; misses very recent work",
         "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 4,
+      "attempts": 5,
       "successes": 2,
-      "failures": 2,
+      "failures": 3,
       "last_outcome": "failure",
-      "last_used": 1783893586.2250957,
-      "status": "candidate",
+      "last_used": 1783894923.1383965,
+      "status": "deprecated",
       "created_at": 1783892933.369465,
       "lineage": null,
       "researched": true,
-      "confidence": 0.15
+      "confidence": 0.1176
     },
     {
       "strategy_id": "strat-4410741d0f",
@@ -276,13 +277,14 @@
       "reasons_against": [
         "less validated than peer review",
         "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 2,
+      "attempts": 3,
       "successes": 0,
-      "failures": 2,
+      "failures": 3,
       "last_outcome": "failure",
-      "last_used": 1783893590.193852,
+      "last_used": 1783894927.2926593,
       "status": "candidate",
       "created_at": 1783892933.3704672,
       "lineage": null,
@@ -327,18 +329,43 @@
       ],
       "reasons_against": [
         "slowest; most requests",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 2,
+      "attempts": 3,
       "successes": 1,
-      "failures": 1,
-      "last_outcome": "success",
-      "last_used": 1783893812.8167648,
+      "failures": 2,
+      "last_outcome": "failure",
+      "last_used": 1783894919.3246634,
       "status": "candidate",
       "created_at": 1783892933.3743958,
       "lineage": null,
       "researched": true,
-      "confidence": 0.0945
+      "confidence": 0.0615
+    },
+    {
+      "strategy_id": "strat-6e85018ae9",
+      "problem_type": "research_path",
+      "name": "academic_rigor",
+      "description": "",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "peer-reviewed; highest credibility"
+      ],
+      "reasons_against": [
+        "slow; misses very recent work"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783896762.046609,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
     }
   ]
 }
