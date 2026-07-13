@@ -111,6 +111,54 @@
       "lineage": null,
       "researched": true,
       "confidence": 0.0615
+    },
+    {
+      "strategy_id": "strat-e10decd6fe",
+      "problem_type": "threat_response",
+      "name": "warn_and_monitor",
+      "description": "",
+      "handler": "_strat_warn",
+      "params": {},
+      "reasons_for": [
+        "proportional for low exposure"
+      ],
+      "reasons_against": [
+        "weak for repeat offenders"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783896762.3388586,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-7e1356a09a",
+      "problem_type": "threat_response",
+      "name": "quarantine",
+      "description": "",
+      "handler": "_strat_quarantine",
+      "params": {},
+      "reasons_for": [
+        "stops active harm at moderate exposure"
+      ],
+      "reasons_against": [
+        "disruptive"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783896762.3407524,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
     }
   ]
 }
