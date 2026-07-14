@@ -44,12 +44,33 @@ from execution.mt5_broker import MT5Broker  # type: ignore
 
 log = logging.getLogger("oracle.live")
 
+CONFLICTING_MODULES = [
+    "core", "agents", "intelligence", "memory", "research", "models", "training",
+    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
+    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
+    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
+    "execution", "registry"
+]
+
+def _unload_conflicting_modules():
+    """Forcibly unload modules that cause namespace collisions between repositories."""
+    modules_to_delete = []
+    for mod_name in CONFLICTING_MODULES:
+        for m in list(sys.modules.keys()):
+            if m == mod_name or m.startswith(mod_name + '.'):
+                modules_to_delete.append(m)
+    for m in modules_to_delete:
+        if m in sys.modules:
+            del sys.modules[m]
+
 
 def _load(folder, rel, cls, **kw):
+    path_added = False
     try:
         root = _ECO_ROOT / folder
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
+            path_added = True
         import importlib.util
         path = root / rel
         if not path.exists():
@@ -63,6 +84,9 @@ def _load(folder, rel, cls, **kw):
     except Exception as exc:
         log.warning("load %s failed: %s", folder, exc)
         return None
+    finally:
+        if path_added:
+            sys.path.pop(0)
 
 
 class LiveTrader:
@@ -80,12 +104,17 @@ class LiveTrader:
         self._open_context: Dict[str, Dict] = {}   # symbol -> streams at entry (for learning)
 
         # boot Oracle + its evidence peers
+        _unload_conflicting_modules()
         self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
+        _unload_conflicting_modules()
         self.sentinel = _load("Sentinel", "agents/sentinel_agent.py", "SentinelAgent",
                             chronicle_client=self.chronicle)
+        _unload_conflicting_modules()
         self.pulse = _load("Pulse", "agents/pulse_agent.py", "PulseAgent",
                           chronicle_client=self.chronicle)
+        _unload_conflicting_modules()
         self.atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent")
+        _unload_conflicting_modules()
         from agents.oracle_agent import OracleAgent  # type: ignore
         self.oracle = OracleAgent(chronicle_client=self.chronicle, sentinel_client=self.sentinel,
                                  pulse_client=self.pulse, atlas_client=self.atlas)

@@ -90,7 +90,14 @@ class MT5Broker:
         import MetaTrader5 as mt5
         self._mt5 = mt5
 
-        login = login or (int(_cfg.mt5_login) if _cfg.mt5_login else None)
+        if not login and _cfg.mt5_login:
+            try:
+                login = int(_cfg.mt5_login)
+            except ValueError:
+                reason = f"Invalid MT5_LOGIN in .env: '{_cfg.mt5_login}'. It must be a numeric account number."
+                log.error(reason)
+                self.status = BrokerStatus(connected=False, reason=reason)
+                return self.status.to_dict()
         password = password or _cfg.mt5_password or None
         server = server or _cfg.mt5_server or None
 

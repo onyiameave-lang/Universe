@@ -278,14 +278,16 @@
         "less validated than peer review",
         "failed: below confidence target via this path",
         "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 3,
+      "attempts": 5,
       "successes": 0,
-      "failures": 3,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1783894927.2926593,
-      "status": "candidate",
+      "last_used": 1783972268.4878426,
+      "status": "deprecated",
       "created_at": 1783892933.3704672,
       "lineage": null,
       "researched": true,
@@ -304,14 +306,17 @@
       "reasons_against": [
         "lower credibility; noisier",
         "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 2,
+      "attempts": 5,
       "successes": 0,
-      "failures": 2,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1783893798.8569844,
-      "status": "candidate",
+      "last_used": 1783972360.8032584,
+      "status": "deprecated",
       "created_at": 1783892933.3732553,
       "lineage": null,
       "researched": true,
@@ -330,21 +335,53 @@
       "reasons_against": [
         "slowest; most requests",
         "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
         "failed: below confidence target via this path"
       ],
-      "attempts": 3,
+      "attempts": 5,
       "successes": 1,
-      "failures": 2,
+      "failures": 4,
       "last_outcome": "failure",
-      "last_used": 1783894919.3246634,
-      "status": "candidate",
+      "last_used": 1783972150.6851158,
+      "status": "deprecated",
       "created_at": 1783892933.3743958,
       "lineage": null,
       "researched": true,
-      "confidence": 0.0615
+      "confidence": 0.0362
     },
     {
       "strategy_id": "strat-6e85018ae9",
+      "problem_type": "research_path",
+      "name": "academic_rigor",
+      "description": "",
+      "handler": "_strat_academic",
+      "params": {},
+      "reasons_for": [
+        "peer-reviewed; highest credibility"
+      ],
+      "reasons_against": [
+        "slow; misses very recent work",
+        "caution: Academic rigor,",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path",
+        "failed: below confidence target via this path"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1783972368.0361586,
+      "status": "deprecated",
+      "created_at": 1783896762.046609,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-191b8bc263",
       "problem_type": "research_path",
       "name": "academic_rigor",
       "description": "",
@@ -362,7 +399,79 @@
       "last_outcome": "",
       "last_used": 0.0,
       "status": "candidate",
-      "created_at": 1783896762.046609,
+      "created_at": 1783972584.1071403,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f893d49b4b",
+      "problem_type": "research_path",
+      "name": "frontier_scan",
+      "description": "",
+      "handler": "_strat_frontier",
+      "params": {},
+      "reasons_for": [
+        "catches cutting-edge preprints + practitioner signal"
+      ],
+      "reasons_against": [
+        "less validated than peer review"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783972584.1091502,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-583b3921c1",
+      "problem_type": "research_path",
+      "name": "market_pulse",
+      "description": "",
+      "handler": "_strat_market",
+      "params": {},
+      "reasons_for": [
+        "fast; real-world/news coverage"
+      ],
+      "reasons_against": [
+        "lower credibility; noisier"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783972584.1117992,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-22bcd1b691",
+      "problem_type": "research_path",
+      "name": "broad_desk",
+      "description": "",
+      "handler": "_strat_broad",
+      "params": {},
+      "reasons_for": [
+        "maximum corroboration across all sources"
+      ],
+      "reasons_against": [
+        "slowest; most requests"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1783972584.1146855,
       "lineage": null,
       "researched": false,
       "confidence": 0.0

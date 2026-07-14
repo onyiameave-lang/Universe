@@ -24,10 +24,21 @@ from typing import Any, Dict, List, Optional
 
 _WORD = re.compile(r"[a-z0-9]+")
 
+
+def _normalize(word: str) -> str:
+    """Truncate to a short prefix so common inflections of the same word
+    collide on lookup -- e.g. 'trade', 'trading', 'traded', 'trader' all
+    normalize to 'trad'. Cheap alternative to real stemming; short words
+    are left as-is since truncating them further would cause unrelated
+    words to collide."""
+    return word[:5] if len(word) > 5 else word
+
 SEED_VOCAB: Dict[str, Dict[str, float]] = {
     "trading": {"trade": 3, "market": 3, "forex": 3, "stock": 2, "price": 2, "buy": 2,
                 "sell": 2, "currency": 2, "eurusd": 3, "portfolio": 2, "position": 2,
-                "risk": 1.5, "profit": 1.5, "chart": 1.5, "signal": 2},
+                "risk": 1.5, "profit": 1.5, "chart": 1.5, "signal": 2,
+                "evolve": 3, "strategy": 3, "backtest": 3, "champion": 2.5,
+                "genome": 2.5, "oracle": 2, "sharpe": 2.5, "drawdown": 2.5},
     "news": {"news": 3, "headline": 3, "article": 2, "press": 2, "media": 2, "report": 1.5,
              "breaking": 2, "story": 1.5, "journalist": 2, "coverage": 1.5},
     "social": {"social": 3, "twitter": 3, "reddit": 3, "sentiment": 3, "trending": 2,
@@ -49,7 +60,7 @@ SEED_VOCAB: Dict[str, Dict[str, float]] = {
 DOMAIN_TO_REPO = {"trading": "oracle", "prediction": "oracle", "news": "sentinel",
                   "social": "pulse", "research": "atlas", "training": "forge",
                   "memory": "chronicle", "governance": "aegis", "creation": "genesis",
-                  "coordination": "nexus", "general": "nexus"}
+                  "coordination": "nexus", "general": "atlas"}
 
 
 class DomainClassifier:
@@ -64,11 +75,20 @@ class DomainClassifier:
     def _load(self) -> None:
         if self._path.exists():
             try:
-                self._vocab = json.loads(self._path.read_text(encoding="utf-8"))
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+                self._vocab = {d: self._normalize_vocab(v) for d, v in raw.items()}
                 return
             except Exception:
                 pass
-        self._vocab = {d: dict(v) for d, v in SEED_VOCAB.items()}
+        self._vocab = {d: self._normalize_vocab(v) for d, v in SEED_VOCAB.items()}
+
+    @staticmethod
+    def _normalize_vocab(vocab: Dict[str, float]) -> Dict[str, float]:
+        normalized: Dict[str, float] = {}
+        for word, weight in vocab.items():
+            key = _normalize(word)
+            normalized[key] = normalized.get(key, 0.0) + weight
+        return normalized
 
     def _persist(self) -> None:
         try:
@@ -77,18 +97,20 @@ class DomainClassifier:
             pass  # aegis:allow-silent
 
     def _tokens(self, text: str) -> List[str]:
-        return _WORD.findall((text or "").lower())
+        return [_normalize(w) for w in _WORD.findall((text or "").lower())]
 
     def classify(self, query: str) -> Dict[str, Any]:
         tokens = self._tokens(query)
         if not tokens:
-            return {"domain": "general", "repository": "nexus", "confidence": 0.0, "scores": {}}
+            return {"domain": "general", "repository": DOMAIN_TO_REPO.get("general", "nexus"),
+                   "confidence": 0.0, "scores": {}}
         with self._lock:
             scores = {domain: sum(vocab.get(tok, 0.0) for tok in tokens)
                      for domain, vocab in self._vocab.items()}
             scores = {d: s for d, s in scores.items() if s > 0}
         if not scores:
-            return {"domain": "general", "repository": "nexus", "confidence": 0.3, "scores": {}}
+            return {"domain": "general", "repository": DOMAIN_TO_REPO.get("general", "nexus"),
+                   "confidence": 0.3, "scores": {}}
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         top_domain = ranked[0][0]
         exp = {d: math.exp(s) for d, s in ranked}
