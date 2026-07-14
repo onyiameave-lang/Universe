@@ -215,8 +215,19 @@ class ReasoningEngine:
             except Exception:
                 pass
 
-        # From Atlas: real research on the approach (contradicting evidence too).
-        if self.atlas is not None:
+        # NOTE: intentionally disabled. This sent bare internal strategy
+        # identifiers (e.g. "direct_specialist", "memory_first") plus the
+        # problem_type to Atlas as if they were real-world research topics
+        # -- producing queries like "direct_specialist for routing" with no
+        # reference to what the user actually asked. Atlas dutifully
+        # "researched" these nonsense phrases via Semantic Scholar/GDELT/
+        # arXiv/HackerNews, which never returns anything meaningful (they
+        # aren't real subjects), while burning minutes of wall time and real
+        # API quota on every reasoning decision across every repo that
+        # shares this code. Observed: an unrelated user query ("what is
+        # CRISPR off-target effects") produced 8+ minutes of API calls
+        # about "direct_specialist for routing" with zero CRISPR content.
+        if False and self.atlas is not None:
             try:
                 out = self.atlas.handle({"task": "research.investigate",
                                         "context": {"query": f"{strategy.name} for {strategy.problem_type}",
@@ -233,8 +244,15 @@ class ReasoningEngine:
             except Exception:
                 pass
 
-        # From LLM (optional advisor only): ask for one contradicting reason.
-        if self.llm is not None and getattr(self.llm, "has_any", False):
+        # NOTE: intentionally disabled, same reasoning as the Atlas branch
+        # above. This asks the LLM to critique a bare internal strategy
+        # name + problem_type (e.g. "Approach 'direct_specialist' for
+        # problem 'routing'") with zero context about what the user
+        # actually asked -- it only ever produced a cosmetic
+        # "reasons_against" caution string, never affected which strategy
+        # actually got chosen, while being a major contributor to the
+        # rate-limit storms observed across every repo sharing this code.
+        if False and self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
                 r = self.llm.complete(

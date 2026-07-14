@@ -337,6 +337,15 @@ class BaseAgent(abc.ABC):
         try:
             receiver = getattr(msg, "receiver", None) or (msg.get("receiver") if isinstance(msg, dict) else None)
             channel = getattr(msg, "channel", None) or (msg.get("channel") if isinstance(msg, dict) else None)
+            task = getattr(msg, "task", None) or (msg.get("task") if isinstance(msg, dict) else None)
+            # Heartbeats are pure liveness pings, not task requests. Routing
+            # them through handle()->act() made every agent "fail" to
+            # recognize every other agent's heartbeat, over and over, which
+            # the learning system then tried to explain via a real LLM call
+            # on every occurrence -- a continuous background cost with zero
+            # benefit. Observe them for liveness only; don't act() on them.
+            if task == "heartbeat":
+                return
             if receiver in (self.name, "*") or channel in self.channels:
                 self.handle(msg)
         except Exception as exc:

@@ -67120,11 +67120,111 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 6706
+    },
+    {
+      "root_cause": "The 'heartbeat' task was routed to the 'chronicle' agent, but 'chronicle' does not declare 'heartbeat' as one of its capabilities. The agent correctly reported it as an 'Unknown task'.",
+      "lesson": "Tasks must only be routed to agents that explicitly declare the capability to perform them. Routing decisions should be strictly based on the target agent's advertised capabilities.",
+      "adjustment": "Implement a pre-routing validation step to ensure that the requested task (e.g., 'heartbeat') is present in the target agent's (e.g., 'chronicle') declared 'capabilities' list before task assignment. If the capability is not found, the task should be rerouted to an appropriate agent (e.g., 'pulse' for system health checks) or flagged as unroutable.",
+      "confidence": 1.0,
+      "source": "llm_reflection",
+      "task": "heartbeat",
+      "repeated": true,
+      "repeat_count": 6707
+    },
+    {
+      "root_cause": "The task 'heartbeat' was attempted on the 'atlas' agent, but 'atlas' does not declare 'heartbeat' as one of its capabilities. The error 'Unknown task: heartbeat' directly indicates that the task was not recognized or supported by the target agent.",
+      "lesson": "Tasks must only be routed to agents that explicitly declare the capability to handle them. System-level tasks, such as 'heartbeat' for liveness checks, require a dedicated handler or a clear, consistent protocol for how agents should respond, rather than being treated as a general capability.",
+      "adjustment": "Before routing any task to an agent, Nexus must verify that the requested task is present in the target agent's 'capabilities' list. If the task is not found, it should not be routed to that agent. For system-level tasks like 'heartbeat', Nexus should either handle them internally as part of its coordination function or route them to a designated system monitoring agent that explicitly declares such a capability, rather than to domain-specific agents like Atlas.",
+      "confidence": 0.95,
+      "source": "llm_reflection",
+      "task": "heartbeat",
+      "repeated": true,
+      "repeat_count": 6708
+    },
+    {
+      "root_cause": "The task 'heartbeat' was routed to the 'aegis' agent, but 'aegis' does not list 'heartbeat' as one of its capabilities. The error 'Unknown task: heartbeat' directly reflects this mismatch.",
+      "lesson": "Before routing a task to an agent, always verify that the requested task is explicitly listed within the agent's 'capabilities'.",
+      "adjustment": "Implement a pre-routing check that compares the requested task against the target agent's `capabilities` list. If the task is not found, the routing should fail early with a clear message, or attempt to find an alternative agent with the required capability. For a 'heartbeat' type function, consider if 'ecosystem.health' or 'monitor.start' (followed by 'monitor.alerts') from Aegis's capabilities could serve a similar purpose, or if a dedicated 'heartbeat' capability needs to be developed and assigned to an appropriate agent.",
+      "confidence": 1.0,
+      "source": "llm_reflection",
+      "task": "heartbeat",
+      "repeated": true,
+      "repeat_count": 6709
+    },
+    {
+      "source": "heuristic",
+      "task": "heartbeat",
+      "root_cause": "Unknown task: heartbeat",
+      "lesson": "Task 'heartbeat' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 6710
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 5
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 5
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 6
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 6
     }
   ],
   "failure_signatures": {
-    "heartbeat::Unknown task: heartbeat": 6706,
-    "routing::all attempts failed": 3,
-    "ecosystem.route::no approach succeeded in 3 attempts": 3
+    "heartbeat::Unknown task: heartbeat": 6710,
+    "routing::all attempts failed": 6,
+    "ecosystem.route::no approach succeeded in 3 attempts": 6
   }
 }
