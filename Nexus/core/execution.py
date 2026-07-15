@@ -32,6 +32,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 # Priority -> latency budget (seconds). Book II Part II Ch V.
 PRIORITY_BUDGET = {1: 8.0, 2: 6.0, 3: 4.0, 4: 3.0, 5: 2.0}   # emergency..background
 
+# Some agents do fundamentally slower work than the priority-based budget
+# assumes -- Atlas's real research pipeline is multi-source and multi-round,
+# subject to external API rate limits, and routinely takes well beyond the
+# 2-8s window above. Without this floor, every single Atlas call breached
+# its SLA regardless of priority, making routing to Atlas structurally
+# non-functional no matter how well Atlas itself worked.
+AGENT_MIN_BUDGET = {"atlas": 90.0}
+
 
 class CircuitBreaker:
     """Per-agent 3-state breaker: closed -> open -> half-open -> closed."""
@@ -142,7 +150,7 @@ class Executor:
                    "_breaker": breaker.status()}
 
         # 3. budgeted execution
-        budget = PRIORITY_BUDGET.get(priority, 3.0)
+        budget = max(PRIORITY_BUDGET.get(priority, 3.0), AGENT_MIN_BUDGET.get(agent_name, 0.0))
         start = time.time()
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             fut = pool.submit(self._dispatch, agent_name, task, context)

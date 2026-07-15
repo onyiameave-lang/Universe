@@ -79,7 +79,8 @@ def _load_class(folder, rel, cls):
     if not path.exists():
         return None
     root = _ECO_ROOT / folder
-    if str(root) not in sys.path:
+    path_added = str(root) not in sys.path
+    if path_added:
         sys.path.insert(0, str(root))
     try:
         spec = importlib.util.spec_from_file_location(f"{folder}_{cls}", path)
@@ -89,6 +90,12 @@ def _load_class(folder, rel, cls):
     except Exception as exc:
         logging.getLogger("nexus").warning("load %s failed: %s", folder, exc)
         return None
+    finally:
+        # Don't leave this peer's root sitting at the front of sys.path --
+        # it would shadow Nexus's own same-named core/agents/etc packages
+        # for any lazy import that happens later, well after boot.
+        if path_added and str(root) in sys.path:
+            sys.path.remove(str(root))
 
 
 def boot():

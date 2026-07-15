@@ -3021,5 +3021,154 @@
     },
     "fitness": 6.8603,
     "certified_at": 1783890046.0318127
+  },
+  "EURUSD::ranging": {
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "version": 1,
+    "genome": {
+      "genome_id": "mut-d8302b",
+      "generation": 18,
+      "parents": [
+        "xov-b25197"
+      ],
+      "fitness": 5.1256,
+      "backtests": 6,
+      "best_return": 0.0199,
+      "best_sharpe": 0.554,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "ichimoku_cloud",
+          "params": {
+            "tenkan": 9,
+            "kijun": 26,
+            "slow": 48
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 12,
+            "upper": 79,
+            "lower": 16
+          }
+        },
+        "volatility": {
+          "logic_type": "atr_contraction",
+          "params": {
+            "period": 14,
+            "contraction_ratio": 0.7
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.265,
+            "regime_bonus": 0.1,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "genome_id": "mut-d8302b",
+    "parent_champion_id": null,
+    "parent_version": 0,
+    "ancestor_chain": [],
+    "generation": 18,
+    "experiment_id": "exp-e5da9136",
+    "evidence": {
+      "score": 1.3796,
+      "verdict": "accepted",
+      "metrics": {
+        "status": "complete",
+        "trades": 2,
+        "win_rate": 0.5,
+        "total_return": 0.014,
+        "final_equity": 10140.32,
+        "profit_factor": 15.496,
+        "max_drawdown": 0.0,
+        "sharpe_proxy": 0.879,
+        "sortino_proxy": 10.25,
+        "recovery_factor": 0.0,
+        "expectancy": 70.16,
+        "consistency": 0.5,
+        "avg_pnl": 70.16
+      },
+      "criteria": {
+        "return": 0.014,
+        "trades": 2
+      }
+    },
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-a428770a",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-080cf04b",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "in_sample": 0.0199,
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 2,
+      "win_rate": 0.5,
+      "total_return": 0.014,
+      "final_equity": 10140.32,
+      "profit_factor": 15.496,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 0.879,
+      "sortino_proxy": 10.25,
+      "recovery_factor": 0.0,
+      "expectancy": 70.16,
+      "consistency": 0.5,
+      "avg_pnl": 70.16
+    },
+    "fitness": 5.1256,
+    "certified_at": 1784151579.2666802
   }
 }

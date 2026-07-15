@@ -1000,11 +1000,31 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 25
+    },
+    {
+      "source": "heuristic",
+      "task": "agent.error",
+      "root_cause": "Unknown task: agent.error",
+      "lesson": "Task 'agent.error' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 42
+    },
+    {
+      "source": "heuristic",
+      "task": "agent.error",
+      "root_cause": "Unknown task: agent.error",
+      "lesson": "Task 'agent.error' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 43
     }
   ],
   "failure_signatures": {
     "threat_response::all attempts failed": 25,
-    "agent.error::Unknown task: agent.error": 41,
+    "agent.error::Unknown task: agent.error": 43,
     "audit.action::'NoneType' object has no attribute 'get'": 34
   }
 }

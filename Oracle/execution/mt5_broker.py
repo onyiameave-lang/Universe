@@ -35,8 +35,22 @@ log = logging.getLogger("oracle.mt5")
 
 # symbol mapping: ecosystem notation -> common MT5 broker symbols (override via env)
 DEFAULT_SYMBOL_MAP = {
-    "EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "USDJPY": "USDJPY", "XAUUSD": "XAUUSD",
-    "BTCUSD": "BTCUSD", "SPX": "US500", "NASDAQ": "USTEC", "USOIL": "XTIUSD",
+    # FX majors + crosses
+    "EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "USDJPY": "USDJPY", "AUDUSD": "AUDUSD",
+    "USDCAD": "USDCAD", "USDCHF": "USDCHF", "NZDUSD": "NZDUSD", "EURGBP": "EURGBP",
+    "EURJPY": "EURJPY", "GBPJPY": "GBPJPY",
+    # metals / commodities
+    "XAUUSD": "XAUUSD", "USOIL": "XTIUSD",
+    # crypto
+    "BTCUSD": "BTCUSD", "ETHUSD": "ETHUSD", "SOLUSD": "SOLUSD", "XRPUSD": "XRPUSD",
+    "BNBUSD": "BNBUSD", "ADAUSD": "ADAUSD",
+    # indices
+    "SPX": "US500", "NASDAQ": "USTEC", "DJI": "US30", "RUT": "US2000", "VIX": "VIX",
+    "FTSE": "UK100", "DAX": "DE40", "CAC40": "FRA40", "NIKKEI": "JPN225",
+    "HSI": "HK50", "SENSEX": "IN50", "ASX200": "AUS200",
+    # mega-cap stocks
+    "AAPL": "AAPL", "MSFT": "MSFT", "NVDA": "NVDA", "GOOGL": "GOOGL", "AMZN": "AMZN",
+    "META": "META", "TSLA": "TSLA", "BRKB": "BRKB", "LLY": "LLY", "V": "V", "JPM": "JPM",
 }
 
 
