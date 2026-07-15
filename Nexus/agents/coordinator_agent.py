@@ -113,15 +113,17 @@ class NexusAgent(BaseAgent):
         if self._needs_multiple(c.get("query", "")):
             return {"status": "error", "message": "multi-domain; not direct"}
         cls = self.classifier.classify(c.get("query", ""))
-        agent = self.registry.find_by_domain(cls["domain"])
+        agent = self.registry.get(cls["repository"]) or self.registry.find_by_domain(cls["domain"])
         if agent is None:
-            return {"status": "error", "message": f"no agent for {cls['domain']}"}
+            return {"status": "error", "message": f"no agent for {cls['domain']} (repository={cls['repository']})"}
         from core.orchestration import PRIMARY_TASK
         out = self.executor.call(agent.name, PRIMARY_TASK.get(agent.name, ""),
                                {"query": c.get("query", ""), "symbol": c.get("query", "").upper()},
                                priority=c.get("priority", 4))
-        return {"status": "complete" if out.get("status") != "error" else "error",
-               "routed_to": agent.name, "result": out, "classification": cls}
+        status = "complete" if out.get("status") != "error" else "error"
+        return {"status": status, "routed_to": agent.name, "result": out,
+               "classification": cls,
+               "message": out.get("message", "") if status == "error" else ""}
 
     def _strat_memory_first(self, c):
         if self._needs_multiple(c.get("query", "")):

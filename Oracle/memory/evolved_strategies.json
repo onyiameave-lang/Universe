@@ -2,18 +2,14 @@
   "EURUSD::ranging": {
     "symbol": "EURUSD",
     "regime": "ranging",
-    "activation_rules": {
-      "symbol": "EURUSD",
-      "regime": "ranging"
-    },
     "genome": {
-      "genome_id": "ptw-073b",
-      "generation": 12,
+      "genome_id": "mut-d8302b",
+      "generation": 18,
       "parents": [
-        "market-g4-26e"
+        "xov-b25197"
       ],
-      "fitness": 8.0268,
-      "backtests": 5,
+      "fitness": 5.1256,
+      "backtests": 6,
       "best_return": 0.0199,
       "best_sharpe": 0.554,
       "modules": {
@@ -29,25 +25,26 @@
           }
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "ichimoku_cloud",
           "params": {
-            "lookback": 23,
+            "tenkan": 9,
+            "kijun": 26,
             "slow": 48
           }
         },
         "momentum": {
           "logic_type": "williams_r",
           "params": {
-            "period": 14,
-            "upper": 74,
-            "lower": 15
+            "period": 12,
+            "upper": 79,
+            "lower": 16
           }
         },
         "volatility": {
-          "logic_type": "bollinger_width",
+          "logic_type": "atr_contraction",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "period": 14,
+            "contraction_ratio": 0.7
           }
         },
         "entry": {
@@ -59,10 +56,11 @@
           }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 10,
-            "tp_mult": 3.0
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
           }
         },
         "risk": {
@@ -85,24 +83,28 @@
     },
     "in_sample": {
       "return": 0.0199,
-      "fitness": 8.0268
+      "fitness": 5.1256
     },
     "out_of_sample": {
       "status": "complete",
       "trades": 2,
-      "win_rate": 1.0,
-      "total_return": 0.0175,
-      "final_equity": 10175.32,
-      "profit_factor": null,
+      "win_rate": 0.5,
+      "total_return": 0.014,
+      "final_equity": 10140.32,
+      "profit_factor": 15.496,
       "max_drawdown": 0.0,
-      "sharpe_proxy": 1.406,
-      "sortino_proxy": 0.0,
+      "sharpe_proxy": 0.879,
+      "sortino_proxy": 10.25,
       "recovery_factor": 0.0,
-      "expectancy": 87.66,
-      "consistency": 1.0,
-      "avg_pnl": 87.66
+      "expectancy": 70.16,
+      "consistency": 0.5,
+      "avg_pnl": 70.16
     },
-    "certified_at": 1783492946.2582014
+    "certified_at": 1784151579.256805,
+    "generation": 18,
+    "parents": [
+      "xov-b25197"
+    ]
   },
   "EURUSD::trending_down": {
     "symbol": "EURUSD",

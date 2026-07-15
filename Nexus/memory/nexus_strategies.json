@@ -14,14 +14,17 @@
       "reasons_against": [
         "misses multi-domain nuance",
         "failed: no agent for general",
-        "failed: no agent for general"
+        "failed: no agent for general",
+        "failed: No module named 'core.orchestration'",
+        "failed: failure",
+        "failed: SLA breach: atlas exceeded 3.0s"
       ],
-      "attempts": 2,
+      "attempts": 5,
       "successes": 0,
-      "failures": 2,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1784015862.5785868,
-      "status": "candidate",
+      "last_used": 1784109931.7098823,
+      "status": "deprecated",
       "created_at": 1783998071.2616053,
       "lineage": null,
       "researched": true,
@@ -40,14 +43,17 @@
       "reasons_against": [
         "slightly slower",
         "failed: no agent for general",
-        "failed: no agent for general"
+        "failed: no agent for general",
+        "failed: No module named 'core.orchestration'",
+        "failed: failure",
+        "failed: SLA breach: atlas exceeded 3.0s"
       ],
-      "attempts": 2,
+      "attempts": 5,
       "successes": 0,
-      "failures": 2,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1784015867.1436737,
-      "status": "candidate",
+      "last_used": 1784109939.853796,
+      "status": "deprecated",
       "created_at": 1783998071.2626173,
       "lineage": null,
       "researched": true,
@@ -66,15 +72,90 @@
       "reasons_against": [
         "uses several agents",
         "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed",
         "failed: single-domain; orchestration not needed"
       ],
-      "attempts": 2,
+      "attempts": 5,
       "successes": 0,
-      "failures": 2,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1784015867.1467135,
-      "status": "candidate",
+      "last_used": 1784109939.8709583,
+      "status": "deprecated",
       "created_at": 1783998071.2626173,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-be6941041a",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "last_outcome": "success",
+      "last_used": 1784149705.5802495,
+      "status": "candidate",
+      "created_at": 1784149683.1987069,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.2065
+    },
+    {
+      "strategy_id": "strat-ea9e323f62",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784149683.1997092,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-b014e1e5d0",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784149683.20071,
       "lineage": null,
       "researched": true,
       "confidence": 0.0

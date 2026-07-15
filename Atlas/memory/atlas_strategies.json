@@ -391,18 +391,19 @@
         "peer-reviewed; highest credibility"
       ],
       "reasons_against": [
-        "slow; misses very recent work"
+        "slow; misses very recent work",
+        "failed: below confidence target via this path"
       ],
-      "attempts": 0,
-      "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
-      "status": "candidate",
+      "attempts": 6,
+      "successes": 5,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1784151595.7518742,
+      "status": "active",
       "created_at": 1783972584.1071403,
       "lineage": null,
-      "researched": false,
-      "confidence": 0.0
+      "researched": true,
+      "confidence": 0.4365
     },
     {
       "strategy_id": "strat-f893d49b4b",
@@ -415,17 +416,18 @@
         "catches cutting-edge preprints + practitioner signal"
       ],
       "reasons_against": [
-        "less validated than peer review"
+        "less validated than peer review",
+        "failed: below confidence target via this path"
       ],
-      "attempts": 0,
+      "attempts": 1,
       "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1784151603.0105267,
       "status": "candidate",
       "created_at": 1783972584.1091502,
       "lineage": null,
-      "researched": false,
+      "researched": true,
       "confidence": 0.0
     },
     {
@@ -439,17 +441,18 @@
         "fast; real-world/news coverage"
       ],
       "reasons_against": [
-        "lower credibility; noisier"
+        "lower credibility; noisier",
+        "failed: below confidence target via this path"
       ],
-      "attempts": 0,
+      "attempts": 1,
       "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1784151640.4179945,
       "status": "candidate",
       "created_at": 1783972584.1117992,
       "lineage": null,
-      "researched": false,
+      "researched": true,
       "confidence": 0.0
     },
     {
@@ -473,7 +476,7 @@
       "status": "candidate",
       "created_at": 1783972584.1146855,
       "lineage": null,
-      "researched": false,
+      "researched": true,
       "confidence": 0.0
     }
   ]

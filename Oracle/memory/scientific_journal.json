@@ -50496,5 +50496,491 @@
       "top_reports": []
     },
     "certification_audit": {}
+  },
+  {
+    "experiment_id": "exp-e5da9136",
+    "created_at": 1784151579.3648748,
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-a428770a",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-080cf04b",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": [],
+      "best_fitness_delta": 5.5617
+    },
+    "research": null,
+    "evidence": {
+      "score": 1.3796,
+      "verdict": "accepted",
+      "metrics": {
+        "status": "complete",
+        "trades": 2,
+        "win_rate": 0.5,
+        "total_return": 0.014,
+        "final_equity": 10140.32,
+        "profit_factor": 15.496,
+        "max_drawdown": 0.0,
+        "sharpe_proxy": 0.879,
+        "sortino_proxy": 10.25,
+        "recovery_factor": 0.0,
+        "expectancy": 70.16,
+        "consistency": 0.5,
+        "avg_pnl": 70.16
+      },
+      "criteria": {
+        "return": 0.014,
+        "trades": 2
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-d8302b",
+      "generation": 18,
+      "parents": [
+        "xov-b25197"
+      ],
+      "fitness": 5.1256,
+      "backtests": 6,
+      "best_return": 0.0199,
+      "best_sharpe": 0.554,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "ichimoku_cloud",
+          "params": {
+            "tenkan": 9,
+            "kijun": 26,
+            "slow": 48
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 12,
+            "upper": 79,
+            "lower": 16
+          }
+        },
+        "volatility": {
+          "logic_type": "atr_contraction",
+          "params": {
+            "period": 14,
+            "contraction_ratio": 0.7
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.265,
+            "regime_bonus": 0.1,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": true,
+    "champion_comparison": {
+      "decision": "promote",
+      "reason": "No incumbent champion exists",
+      "candidate_score": 22.3585,
+      "incumbent_score": null
+    },
+    "champion_version": 1,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": true,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1784151579.4790177,
+      "insights": [
+        "Champion certified for EURUSD (ranging)",
+        "Trend: ichimoku_cloud, Momentum: williams_r",
+        "OOS: return=0.0140, trades=2, sharpe=0.879",
+        "Generalization: acceptable generalization"
+      ],
+      "directives": [
+        "Seed future populations from this champion's DNA",
+        "Store winning module combination in Chronicle"
+      ],
+      "conclusion": "The winning strategy uses ichimoku_cloud trend detection with williams_r momentum confirmation and atr_contraction volatility filtering. It achieved 0.0140 return over 2 OOS trades (Sharpe=0.879), indicating acceptable generalization. This genome should serve as the reference for future ranging evolution."
+    }
+  },
+  {
+    "experiment_id": "exp-f32d5ee9",
+    "created_at": 1784151678.2829251,
+    "symbol": "BTCUSD",
+    "regime": "high_volatility",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-8eb4faeb",
+        "symbol": "BTCUSD",
+        "regime": "high_volatility",
+        "family": "volatility_filter",
+        "statement": "ATR filters reduce drawdown during high-volatility expansion.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-905bebd1",
+        "symbol": "BTCUSD",
+        "regime": "high_volatility",
+        "family": "compression_breakout",
+        "statement": "Momentum performs better after volatility compression.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": true,
+      "reasons": [
+        "fitness_plateau",
+        "convergence"
+      ],
+      "best_fitness_delta": 0.0
+    },
+    "research": {
+      "status": "complete",
+      "report": {
+        "report_id": "rpt-4c5ad2f0b7",
+        "query": "Research profitable quantitative trading approaches for BTCUSD under high_volatility conditions.",
+        "domain": "financial_markets",
+        "summary": "The evidence presents a single consensus claim The use of reinforcement learning for quantitative trading is a promising area of research that can help develop more sophisticated and efficient trading systems. We remark that in the absence of linear correlations the trading profit would vanish and discuss why the trading strategy is potentially interesting to hedge volatility risk for S&amp;P index-based products. It is used the approach of a quantitative trading strategy, commonly used in quantitative finance, in order to assess the profitability of the strategy in the short term. Moreover, the results show the algorithm's effectiveness in extracting profitable policy while meeting an investor's risk preference under a conservative frictional market with a transaction cost of 0.15% per trade.",
+        "consensus": {
+          "claim": "By developing the sophistication and efficiency of trading systems, it may be possible to make financial markets more efficient and generate higher returns for investors.",
+          "source": "arxiv",
+          "credibility": 0.82,
+          "corroborating_claims": 1
+        },
+        "dissent": [],
+        "contradictions": [],
+        "agreement_narrative": "The evidence presents a single consensus claim",
+        "findings": [
+          "Gathered 6 items across 1 independent sources over 3 round(s)."
+        ],
+        "key_terms": [
+          "trading",
+          "de",
+          "based",
+          "strategy",
+          "learning",
+          "quantitative",
+          "reinforcement",
+          "rl"
+        ],
+        "evidence": [
+          {
+            "source": "arxiv",
+            "title": "Quantitative Trading using Deep Q Learning",
+            "text": "Reinforcement learning (RL) is a subfield of machine learning that has been used in many fields, such as robotics, gaming, and autonomous systems. There has been growing interest in using RL for quantitative trading, where the goal is to make trades that generate profits in financial markets. This paper presents the use of RL for quantitative trading and reports a case study based on an RL-based trading algorithm. The results show that RL can be a useful tool for quantitative trading and can perform better than traditional trading algorithms. The use of reinforcement learning for quantitative trading is a promising area of research that can help develop more sophisticated and efficient tradi",
+            "url": "http://arxiv.org/abs/2304.06037v2",
+            "author": "Soumyadip Sarkar",
+            "date": "2023-04-03",
+            "citations": 0,
+            "relevance": 0.323,
+            "credibility": 0.82,
+            "corroboration": 0
+          },
+          {
+            "source": "arxiv",
+            "title": "Ensemble properties of high frequency data and intraday trading rules",
+            "text": "Regarding the intraday sequence of high frequency returns of the S&amp;P index as daily realizations of a given stochastic process, we first demonstrate that the scaling properties of the aggregated return distribution can be employed to define a martingale stochastic model which consistently replicates conditioned expectations of the S&amp;P 500 high frequency data in the morning of each trading day. Then, a more general formulation of the above scaling properties allows to extend the model to the afternoon trading session. We finally outline an application in which conditioned forecasting is used to implement a trend-following trading strategy capable of exploiting linear correlations pres",
+            "url": "http://arxiv.org/abs/1202.2447v2",
+            "author": "Fulvio Baldovin, Francesco Camana, Massimiliano Caporin",
+            "date": "2012-02-11",
+            "citations": 0,
+            "relevance": 0.234,
+            "credibility": 0.82,
+            "corroboration": 0
+          },
+          {
+            "source": "arxiv",
+            "title": "Biased Roulette Wheel: A Quantitative Trading Strategy Approach",
+            "text": "The purpose of this research paper it is to present a new approach in the framework of a biased roulette wheel. It is used the approach of a quantitative trading strategy, commonly used in quantitative finance, in order to assess the profitability of the strategy in the short term. The tools of backtesting and walk-forward optimization were used to achieve such task. The data has been generated from a real European roulette wheel from an on-line casino based in Riga, Latvia. It has been recorded 10,980 spins and sent to the computer through a voice-to-text software for further numerical analysis in R. It has been observed that the probabilities of occurrence of the numbers at the roulette wh",
+            "url": "http://arxiv.org/abs/1609.09601v1",
+            "author": "Giancarlo Salirrosas Mart\u00ednez",
+            "date": "2016-09-30",
+            "citations": 0,
+            "relevance": 0.186,
+            "credibility": 0.82,
+            "corroboration": 0
+          },
+          {
+            "source": "arxiv",
+            "title": "Conditional Value-at-Risk for Quantitative Trading: A Direct Reinforcement Learning Approach",
+            "text": "We propose a convex formulation for a trading system with the Conditional Value-at-Risk as a risk-adjusted performance measure under the notion of Direct Reinforcement Learning. Due to convexity, the proposed approach can uncover a lucrative trading policy in a \"pure\" online manner where it can interactively learn and update the policy without multi-epoch training and validation. We assess our proposed algorithm on a real financial market where it trades one of the largest US trust funds, SPDR, for three years. Numerical experiments demonstrate the algorithm's robustness in detecting central market-regime switching. Moreover, the results show the algorithm's effectiveness in extracting profi",
+            "url": "http://arxiv.org/abs/2109.14438v1",
+            "author": "Ali Al-Ameer, Khaled Alshehri",
+            "date": "2021-09-29",
+            "citations": 0,
+            "relevance": 0.183,
+            "credibility": 0.82,
+            "corroboration": 0
+          },
+          {
+            "source": "arxiv",
+            "title": "Dynamic Grid Trading Strategy: From Zero Expectation to Market Outperformance",
+            "text": "We propose a profitable trading strategy for the cryptocurrency market based on grid trading. Starting with an analysis of the expected value of the traditional grid strategy, we show that under simple assumptions, its expected return is essentially zero. We then introduce a novel Dynamic Grid-based Trading (DGT) strategy that adapts to market conditions by dynamically resetting grid positions. Our backtesting results using minute-level data from Bitcoin and Ethereum between January 2021 and July 2024 demonstrate that the DGT strategy significantly outperforms both the traditional grid and buy-and-hold strategies in terms of internal rate of return and risk control.",
+            "url": "http://arxiv.org/abs/2506.11921v1",
+            "author": "Kai-Yuan Chen, Kai-Hsin Chen, Jyh-Shing Roger Jang",
+            "date": "2025-06-13",
+            "citations": 0,
+            "relevance": 0.175,
+            "credibility": 0.82,
+            "corroboration": 0
+          },
+          {
+            "source": "arxiv",
+            "title": "151 Estrategias de Trading (151 Trading Strategies)",
+            "text": "This book, which is in Spanish, provides detailed descriptions, including over 550 mathematical formulas, for over 150 trading strategies across a host of asset classes (and trading styles). This includes stocks, options, fixed income, futures, ETFs, indexes, commodities, foreign exchange, convertibles, structured assets, volatility (as an asset class), real estate, distressed assets, cash, cryptocurrencies, miscellany (such as weather, energy, inflation), global macro, infrastructure, and tax arbitrage. Some strategies are based on machine learning algorithms (such as artificial neural networks, Bayes, k-nearest neighbors). We also give: source code for illustrating out-of-sample backtestin",
+            "url": "http://arxiv.org/abs/1912.04492v1",
+            "author": "Zura Kakushadze, Juan Andr\u00e9s Serur",
+            "date": "2019-11-14",
+            "citations": 0,
+            "relevance": 0.103,
+            "credibility": 0.82,
+            "corroboration": 0
+          }
+        ],
+        "prior_memory": [],
+        "source_status": {
+          "semantic_scholar": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "arxiv": {
+            "gathered": 6,
+            "status": "ok"
+          },
+          "wikipedia": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "gdelt": {
+            "gathered": 0,
+            "status": "no_results"
+          },
+          "hackernews": {
+            "gathered": 0,
+            "status": "no_results"
+          }
+        },
+        "confidence": 0.4279,
+        "confidence_factors": {
+          "quantity": 1.0,
+          "avg_credibility": 0.82,
+          "avg_relevance": 0.201,
+          "source_diversity": 0.333,
+          "corroboration": 0.0,
+          "citation_impact": 0.0,
+          "evidence_count": 6,
+          "distinct_sources": 1
+        },
+        "rounds": [
+          {
+            "round": 1,
+            "depth": "standard",
+            "evidence": 3,
+            "confidence": 0.3624
+          },
+          {
+            "round": 2,
+            "depth": "deep",
+            "evidence": 6,
+            "confidence": 0.4279
+          },
+          {
+            "round": 3,
+            "depth": "deep",
+            "evidence": 6,
+            "confidence": 0.4279
+          }
+        ],
+        "limitations": [
+          "Confidence 0.4279 below target 0.6 after 3 round(s).",
+          "Single-source: corroboration weak."
+        ],
+        "duration_sec": 36.47
+      },
+      "note": "all paths below target; returned best-effort broad sweep"
+    },
+    "evidence": {
+      "score": 1.7806,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 5,
+        "win_rate": 0.8,
+        "total_return": 0.0589,
+        "final_equity": 10589.27,
+        "profit_factor": 25.19,
+        "max_drawdown": 0.0,
+        "sharpe_proxy": 1.657,
+        "sortino_proxy": 10.818,
+        "recovery_factor": 0.0,
+        "expectancy": 117.85,
+        "consistency": 0.8,
+        "avg_pnl": 117.85
+      },
+      "criteria": {
+        "return": 0.0589,
+        "trades": 5
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-a7f3d4",
+      "generation": 26,
+      "parents": [
+        "xov-51d25d"
+      ],
+      "fitness": 3.6333,
+      "backtests": 21,
+      "best_return": 0.0097,
+      "best_sharpe": 0.192,
+      "modules": {
+        "market_regime": {
+          "logic_type": "strict",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ],
+            "volatility_limit": 1.0
+          }
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 20,
+            "slow": 50
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 13,
+            "upper": 60,
+            "lower": 15
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.275,
+            "regime_bonus": 0.104,
+            "threshold": 0.252
+          }
+        },
+        "exit": {
+          "logic_type": "default",
+          "params": {
+            "sl_mult": 2.88,
+            "tp_mult": 4.0,
+            "atr_override": null
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "fixed_fractional",
+          "params": {
+            "base_risk": 0.01
+          }
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {}
   }
 ]
