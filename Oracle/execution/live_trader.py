@@ -148,8 +148,8 @@ class LiveTrader:
         try:
             while cycles is None or cycle < cycles:
                 cycle += 1
-                self._tick()
-                if self._kill_switch_check():
+                fired_mid_cycle = self._tick()
+                if fired_mid_cycle or self._kill_switch_check():
                     print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
                     print(self.broker.close_all())
                     break
@@ -164,12 +164,18 @@ class LiveTrader:
             self._learn_from_closed()
             self.broker.disconnect()
 
-    def _tick(self) -> None:
+    def _tick(self) -> bool:
+        """Returns True if the kill switch fired mid-cycle (caller should stop)."""
         for symbol in self.symbols:
+            if self._kill_switch_check():
+                return True
             # 1. signal
             sig = self.oracle.act("trade.propose", {"symbol": symbol, "_sender": "live_trader"})
             if sig.get("status") != "complete":
-                log.info("[%s] no trade: %s", symbol, sig.get("message"))
+                reasons = (sig.get("risk") or {}).get("reasons")
+                detail = f"{sig.get('message')} -> {reasons}" if reasons else sig.get("message")
+                log.info("[%s] no trade: %s", symbol, detail)
+                print(f"[{symbol}] no trade: {detail}")
                 continue
             plan = sig["plan"]
             # remember streams so we can learn from the outcome later
@@ -185,6 +191,9 @@ class LiveTrader:
             else:
                 print(f"[{symbol}] signal={plan['direction']} conf={sig['signal']['confidence']} "
                       f"(execution disabled: MT5 not connected)")
+            if self._trades_this_session >= self.max_trades:
+                break
+        return False
 
     def _kill_switch_check(self) -> bool:
         if self._start_equity is None or not self.broker.status.connected:
