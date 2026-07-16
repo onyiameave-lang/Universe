@@ -121,7 +121,7 @@ class ChronicleAgent(BaseAgent):
         except ValueError:
             pillar_enum = MemoryPillar.SEMANTIC
         text = content if isinstance(content, str) else str(content)
-        if not summary and self.has_brain and len(text) > 300:
+        if not summary and self.has_brain and len(text) > 300 and False:
             advice = self.think(f"Summarize in one sentence for a memory index:\n\n{text[:1500]}",
                                temperature=0.2, max_tokens=80)
             summary = advice.strip() if advice else text[:160]
