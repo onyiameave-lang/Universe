@@ -3433,13 +3433,15 @@
     "symbol": "BNBUSD",
     "regime": "high_volatility",
     "genome": {
-      "genome_id": "imm-a3fc14",
-      "generation": 0,
-      "parents": [],
-      "fitness": 14.8636,
-      "backtests": 3,
-      "best_return": 0.0508,
-      "best_sharpe": 2.909,
+      "genome_id": "mut-35a5aa",
+      "generation": 20,
+      "parents": [
+        "xov-8b0b2d"
+      ],
+      "fitness": 14.2321,
+      "backtests": 11,
+      "best_return": 0.049,
+      "best_sharpe": 2.366,
       "modules": {
         "market_regime": {
           "logic_type": "default",
@@ -3453,48 +3455,55 @@
           }
         },
         "trend": {
-          "logic_type": "donchian_trend",
+          "logic_type": "sma_crossover",
           "params": {
-            "period": 20
+            "fast": 29,
+            "slow": 60
           }
         },
         "momentum": {
           "logic_type": "cci",
           "params": {
-            "period": 20,
+            "period": 22,
             "upper": 85,
             "lower": 15
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "atr_expansion",
           "params": {
-            "period": 20
+            "period": 14,
+            "expansion_ratio": 1.2
           }
         },
         "entry": {
-          "logic_type": "adaptive",
+          "logic_type": "default",
           "params": {
-            "base_threshold": 0.192,
-            "regime_bonus": 0.1,
-            "threshold": 0.192
+            "threshold": 0.5,
+            "confirmation_required": 0
           }
         },
         "exit": {
           "logic_type": "time_exit",
           "params": {
-            "max_bars": 20,
-            "sl_mult": 2.0,
+            "max_bars": 19,
+            "sl_mult": 1.93,
             "tp_mult": 3.0
           }
         },
         "risk": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "max_dd_limit": 0.2,
+            "risk_per_trade": 0.01,
+            "max_correlated_positions": 3
+          }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "fixed_fractional",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "trade_management": {
           "logic_type": "default",
@@ -3507,27 +3516,29 @@
       }
     },
     "in_sample": {
-      "return": 0.0508,
-      "fitness": 14.8636
+      "return": 0.049,
+      "fitness": 14.2321
     },
     "out_of_sample": {
       "status": "complete",
-      "trades": 5,
-      "win_rate": 0.6,
-      "total_return": 0.0104,
-      "final_equity": 10103.95,
-      "profit_factor": 1.515,
-      "max_drawdown": 0.0199,
-      "sharpe_proxy": 0.185,
-      "sortino_proxy": 0.325,
-      "recovery_factor": 0.522,
-      "expectancy": 20.79,
-      "consistency": 0.6,
-      "avg_pnl": 20.79
+      "trades": 3,
+      "win_rate": 0.667,
+      "total_return": 0.0108,
+      "final_equity": 10108.27,
+      "profit_factor": 2.083,
+      "max_drawdown": 0.01,
+      "sharpe_proxy": 0.351,
+      "sortino_proxy": 0.625,
+      "recovery_factor": 1.083,
+      "expectancy": 36.09,
+      "consistency": 0.667,
+      "avg_pnl": 36.09
     },
-    "certified_at": 1783914688.6228325,
-    "generation": 0,
-    "parents": []
+    "certified_at": 1784297286.5005786,
+    "generation": 20,
+    "parents": [
+      "xov-8b0b2d"
+    ]
   },
   "ADAUSD::high_volatility": {
     "symbol": "ADAUSD",
@@ -4998,14 +5009,14 @@
     "symbol": "USDJPY",
     "regime": "ranging",
     "genome": {
-      "genome_id": "mut-2ba8e1",
-      "generation": 22,
+      "genome_id": "adapti-bcdec0",
+      "generation": 38,
       "parents": [
-        "xov-4cab86"
+        "xov-f916bd"
       ],
-      "fitness": 6.3459,
+      "fitness": 7.0071,
       "backtests": 15,
-      "best_return": 0.0053,
+      "best_return": 0.0059,
       "best_sharpe": 0.0,
       "modules": {
         "market_regime": {
@@ -5020,40 +5031,38 @@
           }
         },
         "trend": {
-          "logic_type": "donchian_trend",
+          "logic_type": "supertrend",
           "params": {
-            "period": 18,
-            "slow": 33
+            "period": 10,
+            "multiplier": 3.0,
+            "slow": 48
           }
         },
         "momentum": {
-          "logic_type": "adx_strength",
+          "logic_type": "rsi",
           "params": {
-            "period": 16,
-            "threshold": 19
+            "period": 14,
+            "upper": 70,
+            "lower": 30
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
-          "params": {
-            "period": 14,
-            "contraction_ratio": 0.7
-          }
+          "logic_type": "default",
+          "params": {}
         },
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.264,
-            "regime_bonus": 0.093,
-            "threshold": 0.5
+            "base_threshold": 0.29,
+            "regime_bonus": 0.1
           }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 10,
-            "tp_mult": 3.0,
-            "sl_mult": 2.0
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 1.5
           }
         },
         "risk": {
@@ -5075,28 +5084,28 @@
       }
     },
     "in_sample": {
-      "return": 0.0053,
-      "fitness": 6.3459
+      "return": 0.0059,
+      "fitness": 7.0071
     },
     "out_of_sample": {
       "status": "complete",
       "trades": 3,
       "win_rate": 1.0,
-      "total_return": 0.0403,
-      "final_equity": 10402.9,
+      "total_return": 0.0407,
+      "final_equity": 10407.08,
       "profit_factor": null,
       "max_drawdown": 0.0,
-      "sharpe_proxy": 5.64,
+      "sharpe_proxy": 6.212,
       "sortino_proxy": 0.0,
       "recovery_factor": 0.0,
-      "expectancy": 134.3,
+      "expectancy": 135.69,
       "consistency": 1.0,
-      "avg_pnl": 134.3
+      "avg_pnl": 135.69
     },
-    "certified_at": 1784276504.8893383,
-    "generation": 22,
+    "certified_at": 1784296485.7270987,
+    "generation": 38,
     "parents": [
-      "xov-4cab86"
+      "xov-f916bd"
     ]
   },
   "GBPJPY::ranging": {
