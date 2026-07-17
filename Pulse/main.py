@@ -1,114 +1,108 @@
 """
-Pulse - Social Intelligence  (Universe-oracle deep-fix v5)
-==========================================================
-Constitutional Name: Pulse  (formerly SocialIntel)
-Mission: Read authentic social sentiment, flag manipulation, detect trends.
+Pulse - Social Intelligence  (Universe-oracle social-upgrade v6)
+================================================================
+Multi-category, region-aware institutional social intelligence desk.
 
-CRITICAL FIX in this version:
-  load_dotenv() is called as the ABSOLUTE FIRST ACTION before any other import.
-  Previously, PULSE_LLM_MODE / ORACLE_LLM_MODE were set in .env but never
-  loaded into os.environ before shared/llm/client.py read them at module import
-  time — so the essential gate was always reading an empty string and defaulting
-  to "full" mode regardless of what was in .env.
+New REPL commands vs v4/v5:
+    report [category] [topics...]   full report, optionally filtered by category
+                                    e.g. "report finance" or "report nigeria crypto"
+    regional                        Nigerian / regional trending topics
+    trends [topics...]              trending symbols + per-category breakdown
+    symbol <SYM>                    authenticity-weighted sentiment for a symbol
+    manipulation [SYM]              coordinated-manipulation check
+    status                          collector status + per-category post counts
+    quit
 
-  The fix: dotenv is loaded here, before any shared.* import, so client.py
-  reads the correct value when it is first imported.
+Category names (case-insensitive):
+    finance  tech  entertainment  sports  politics  regional  general
 
-Run:
-    python main.py
-
-Commands:
-    report [topics...]        full social report (auto path, mood, trends, manipulation)
-    symbol <SYM>              authenticity-weighted sentiment for a symbol
-    trends [topics...]        trending symbols with velocity
-    manipulation [SYM]        coordinated-manipulation check
-    status | quit
+Env vars:
+    PULSE_USER_REGION       ISO country code (default "NG" = Nigeria)
+    PULSE_LLM_MODE          "full" | "essential_only" (default "full")
+    ORACLE_LLM_MODE         fallback if PULSE_LLM_MODE not set
 """
 from __future__ import annotations
 
-# ============================================================
-# STEP 0: Load .env BEFORE any other import.
-# This is the root fix for PULSE_LLM_MODE not being read.
-# ============================================================
-import os as _os
-import sys as _sys
-from pathlib import Path as _Path
+import json
+import logging
+import os
+import sys
+from pathlib import Path
 
-_REPO_ROOT = _Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parent
+for p in (_REPO_ROOT, _REPO_ROOT.parent):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
-# Try python-dotenv; if not installed, fall back to a manual parser
-# so the fix works even without the package.
+
+# ── Load .env FIRST — before any other import that reads env vars ─────────────
 def _load_dotenv_early() -> None:
-    env_file = _REPO_ROOT / ".env"
-    if not env_file.exists():
-        # Also check parent directory (project root)
-        env_file = _REPO_ROOT.parent / ".env"
-    if not env_file.exists():
-        return
+    """
+    Load .env from the Pulse directory or any parent up to the repo root.
+    Must run before any module that reads os.getenv() at import time
+    (shared/config.py, shared/llm/client.py, collectors.py, etc.).
+    """
     try:
         from dotenv import load_dotenv  # type: ignore
-        load_dotenv(dotenv_path=str(env_file), override=False)
-        return
+        # Search: Pulse/.env → Universe-oracle-vN/.env → parent/.env
+        for candidate in [
+            _REPO_ROOT / ".env",
+            _REPO_ROOT.parent / ".env",
+            _REPO_ROOT.parent.parent / ".env",
+        ]:
+            if candidate.exists():
+                load_dotenv(candidate, override=False)
+                logging.getLogger("pulse.main").info(
+                    "Loaded .env from %s", candidate)
+                break
     except ImportError:
-        pass
-    # Manual fallback: parse KEY=VALUE lines
-    try:
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if key and key not in _os.environ:
-                _os.environ[key] = val
-    except Exception:
-        pass
+        pass  # python-dotenv not installed — env vars must be set externally
+
 
 _load_dotenv_early()
 
-# ============================================================
-# STEP 1: Now safe to import everything else
-# ============================================================
-import importlib.util
-import json
-import logging
+# ── Log LLM mode immediately so user can see it ───────────────────────────────
+_LLM_MODE = os.getenv("PULSE_LLM_MODE",
+                       os.getenv("ORACLE_LLM_MODE", "full")).lower()
+_REGION   = os.getenv("PULSE_USER_REGION", "NG").upper()
 
-# Add Pulse/ and project root to sys.path
-for _p in (_REPO_ROOT, _REPO_ROOT.parent):
-    if str(_p) not in _sys.path:
-        _sys.path.insert(0, str(_p))
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(name)s] %(message)s")
+logging.getLogger("pulse.main").info(
+    "LLM mode: %s | Region: %s", _LLM_MODE, _REGION)
 
-# These top-level directory names can cause import conflicts when loading
-# multiple agents in the same process.
+
+# ── Module conflict cleanup (same as v4) ──────────────────────────────────────
 CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models", "training",
-    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
-    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
-    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
+    "core", "agents", "intelligence", "memory", "research", "models",
+    "training", "optimization", "communication", "infrastructure",
+    "security", "api", "interfaces", "dashboard", "testing", "benchmarks",
+    "simulations", "datasets", "documentation", "configs", "logs",
+    "deployment", "plugins", "prompts", "tools", "constitutional",
     "execution", "registry",
 ]
 
 
 def _unload_conflicting_modules() -> None:
-    """Forcibly unload modules that cause namespace collisions between repositories."""
-    to_delete = []
-    for mod_name in CONFLICTING_MODULES:
-        for m in list(_sys.modules.keys()):
-            if m == mod_name or m.startswith(mod_name + "."):
-                to_delete.append(m)
-    for m in to_delete:
-        _sys.modules.pop(m, None)
+    to_del = []
+    for mod in CONFLICTING_MODULES:
+        for m in list(sys.modules):
+            if m == mod or m.startswith(mod + "."):
+                to_del.append(m)
+    for m in to_del:
+        sys.modules.pop(m, None)
 
 
-def _load(folder: str, rel: str, cls: str, **kw):
+def _load(folder, rel, cls, **kw):
+    import importlib.util
     root = _REPO_ROOT.parent / folder
     path_added = False
     try:
-        if str(root) not in _sys.path:
-            _sys.path.insert(0, str(root))
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
             path_added = True
-        spec = importlib.util.spec_from_file_location(f"{folder}_{cls}", root / rel)
+        spec = importlib.util.spec_from_file_location(
+            f"{folder}_{cls}", root / rel)
         if spec is None or spec.loader is None:
             return None
         m = importlib.util.module_from_spec(spec)
@@ -117,69 +111,73 @@ def _load(folder: str, rel: str, cls: str, **kw):
         inst.start()
         return inst
     except (ImportError, AttributeError, FileNotFoundError) as exc:
-        logging.getLogger("pulse.main").warning("load %s failed: %s", folder, exc)
+        logging.getLogger("pulse.main").warning(
+            "load %s failed: %s", folder, exc)
         return None
     finally:
-        if path_added and str(root) in _sys.path:
-            _sys.path.remove(str(root))
+        if path_added:
+            sys.path.pop(0)
 
 
-def _load_pulse_agent(chronicle_client):
+# ── REPL helpers ──────────────────────────────────────────────────────────────
+_VALID_CATEGORIES = {
+    "finance", "tech", "technology", "entertainment",
+    "sports", "politics", "regional", "general",
+}
+
+
+def _parse_report_args(parts: list) -> tuple:
     """
-    Path-explicit loader for PulseAgent — immune to sys.path ordering on any OS.
-    Uses a namespaced module key so it never collides with Chronicle's 'agents' package.
+    Parse `report [category] [topics...]` arguments.
+    Returns (category_filter, topics_list).
     """
-    pulse_agent_path = _REPO_ROOT / "agents" / "pulse_agent.py"
-
-    # Re-pin Pulse/ to sys.path[0 AFTER _load() has run
-    if str(_REPO_ROOT) in _sys.path:
-        _sys.path.remove(str(_REPO_ROOT))
-    _sys.path.insert(0, str(_REPO_ROOT))
-
-    ns_key = "Pulse_PulseAgent"
-    spec = importlib.util.spec_from_file_location(ns_key, pulse_agent_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot find {pulse_agent_path}")
-    module = importlib.util.module_from_spec(spec)
-    _sys.modules[ns_key] = module
-    spec.loader.exec_module(module)
-    return getattr(module, "PulseAgent")(chronicle_client=chronicle_client)
+    if not parts:
+        return None, None
+    cat    = None
+    topics = []
+    for i, p in enumerate(parts):
+        if p.lower() in _VALID_CATEGORIES:
+            cat    = p
+            topics = parts[i + 1:] or None
+            break
+        else:
+            topics.append(p)
+    return cat, topics or None
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(message)s",
-    )
-
-    # Log the active LLM mode so the user can confirm it was read
-    llm_mode = _os.getenv("PULSE_LLM_MODE") or _os.getenv("ORACLE_LLM_MODE") or "full"
-    logging.getLogger("pulse.main").info(
-        "LLM mode: %s  (set PULSE_LLM_MODE=essential_only in .env to disable advisory calls)",
-        llm_mode,
-    )
-
     chronicle = _load(
         "Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
         storage_dir=str(_REPO_ROOT.parent / "Chronicle" / "memory" / "store"),
     )
     _unload_conflicting_modules()
 
-    agent = _load_pulse_agent(chronicle)
+    from agents.pulse_agent import PulseAgent  # type: ignore
+
+    agent = PulseAgent(chronicle_client=chronicle)
     agent.start()
 
-    avail = [n for n, ok in agent.engine.stats()["collectors"].items() if ok]
-    print("=" * 64)
-    print("  PULSE - Institutional Social Intelligence Desk")
-    print("  Multi-platform. Authenticity-weighted. Manipulation-flagged.")
-    print("=" * 64)
-    print(f"  Platforms : {avail}")
-    print(f"  Chronicle : {chronicle is not None}")
-    print(f"  Brain     : {agent.has_brain}")
-    print(f"  LLM mode  : {llm_mode}")
-    print("  Commands  : report [topics] | symbol <SYM> | trends [topics]")
-    print("              manipulation [SYM] | status | quit")
+    stats = agent.engine.stats()
+    avail = [n for n, ok in stats["collectors"].items() if ok]
+
+    print("=" * 70)
+    print("  PULSE v6 — Multi-Category Social Intelligence Desk")
+    print(f"  Region: {_REGION} | LLM mode: {_LLM_MODE}")
+    print("=" * 70)
+    print(f"  Platforms: {avail}")
+    print(f"  Chronicle: {chronicle is not None} | Brain: {agent.has_brain}")
     print()
+    print("  Commands:")
+    print("    report [category] [topics...]  — full report")
+    print("    regional                       — Nigerian/regional trending")
+    print("    trends [topics...]             — trending + per-category")
+    print("    symbol <SYM>                   — symbol sentiment")
+    print("    manipulation [SYM]             — manipulation check")
+    print("    status                         — collector status")
+    print("    quit")
+    print()
+    print("  Categories: finance  tech  entertainment  sports  politics  regional")
+    print("=" * 70)
 
     while True:
         try:
@@ -188,42 +186,50 @@ def main() -> None:
                 continue
             if line.lower() in ("quit", "exit", "q"):
                 break
+
             parts = line.split()
-            cmd   = parts[0]
+            cmd   = parts[0].lower()
 
             if cmd == "report":
-                topics = parts[1:] or None
+                cat, topics = _parse_report_args(parts[1:])
+                ctx = {"topics": topics, "_sender": "user"}
+                if cat:
+                    ctx["category"] = cat
                 print(json.dumps(
-                    agent.act("social.report", {"topics": topics, "_sender": "user"}),
-                    indent=2,
-                ))
+                    agent.act("social.report", ctx), indent=2))
+
+            elif cmd == "regional":
+                print(json.dumps(
+                    agent.act("social.regional",
+                               {"_sender": "user"}), indent=2))
+
             elif cmd == "symbol" and len(parts) >= 2:
                 print(json.dumps(
-                    agent.act("social.sentiment", {"symbol": parts[1], "_sender": "user"}),
-                    indent=2,
-                ))
+                    agent.act("social.sentiment",
+                               {"symbol": parts[1], "_sender": "user"}),
+                    indent=2))
+
             elif cmd == "trends":
                 topics = parts[1:] or None
                 print(json.dumps(
-                    agent.act("social.trends", {"topics": topics, "_sender": "user"}),
-                    indent=2,
-                ))
+                    agent.act("social.trends",
+                               {"topics": topics, "_sender": "user"}),
+                    indent=2))
+
             elif cmd == "manipulation":
                 sym = parts[1] if len(parts) > 1 else None
                 print(json.dumps(
-                    agent.act("social.manipulation", {"symbol": sym, "_sender": "user"}),
-                    indent=2,
-                ))
+                    agent.act("social.manipulation",
+                               {"symbol": sym, "_sender": "user"}),
+                    indent=2))
+
             elif cmd == "status":
                 print(json.dumps(agent.get_status(), indent=2))
-            elif cmd == "llmstats":
-                # Convenience: show LLM gate counters
-                if agent.llm:
-                    print(json.dumps(agent.llm.stats(), indent=2))
-                else:
-                    print("No LLM configured.")
+
             else:
-                print("Unknown command. Try: report crypto stocks")
+                print("Unknown command.")
+                print("Try: report | report finance | report nigeria | "
+                      "regional | trends | symbol BTCUSD | status")
 
         except KeyboardInterrupt:
             break

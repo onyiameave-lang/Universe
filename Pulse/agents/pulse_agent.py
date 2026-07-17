@@ -1,16 +1,18 @@
 """
-Pulse.agents.pulse_agent  (v4 — fallback mode surfacing + LLM gate)
-====================================================================
-Changes vs v1:
-  1. PULSE_LLM_MODE env var gate — "full" (default) or "essential_only".
-     In essential_only mode, the reasoning/strategy-selection path (which
-     calls the LLM via solve()) is bypassed entirely; the engine falls
-     straight through to the broad_sweep rule-based path.
-  2. All execute() return values now carry "fallback_mode" from the engine
-     report so the caller (Oracle, user REPL) can see whether the result
-     came from Chronicle cache, rule-based scoring, or a full LLM run.
-  3. sentiment_for() surfaces fallback_mode from the engine result.
-  4. get_status() includes llm_mode and llm_stats for observability.
+Pulse.agents.pulse_agent  (Universe-oracle social-upgrade v6)
+=============================================================
+Multi-category, region-aware social intelligence agent.
+
+Changes vs deep-fix v5
+----------------------
+  1. `social.report` now accepts `category` in context to filter by category
+     (e.g. {"task": "social.report", "category": "Finance"}).
+  2. `social.trends` returns trends broken down by category.
+  3. `social.regional` new task — returns only Regional category posts
+     (Nigerian content when PULSE_USER_REGION=NG).
+  4. `get_status()` includes per-category post counts and region.
+  5. All LLM mode gate logic from v4/v5 preserved exactly.
+  6. REPL commands updated: `report [category] [topics...]`
 """
 from __future__ import annotations
 
@@ -59,14 +61,31 @@ except Exception:
 log = logging.getLogger("pulse")
 
 # ── LLM mode gate ─────────────────────────────────────────────────────────────
-_PULSE_LLM_MODE = os.getenv("PULSE_LLM_MODE",
-                             os.getenv("ORACLE_LLM_MODE", "full")).lower()
+_PULSE_LLM_MODE    = os.getenv("PULSE_LLM_MODE",
+                                os.getenv("ORACLE_LLM_MODE", "full")).lower()
 _USE_LLM_REASONING = (_PULSE_LLM_MODE != "essential_only")
 
 PATH_SOURCES = {
     "retail_pulse": ["reddit", "stocktwits"],
     "practitioner": ["hackernews", "reddit"],
-    "broad_sweep":  ["reddit", "hackernews", "stocktwits"],
+    "broad_sweep":  ["reddit", "hackernews", "stocktwits",
+                     "googletrends", "nairaland"],
+}
+
+# Valid category names (case-insensitive lookup)
+_VALID_CATEGORIES = {
+    "finance", "tech", "technology", "entertainment", "sports",
+    "politics", "regional", "general",
+}
+_CAT_NORMALISE = {
+    "technology": "Tech",
+    "finance":    "Finance",
+    "tech":       "Tech",
+    "entertainment": "Entertainment",
+    "sports":     "Sports",
+    "politics":   "Politics",
+    "regional":   "Regional",
+    "general":    "General",
 }
 
 
@@ -74,15 +93,24 @@ class PulseAgent(BaseAgent):
     name             = "pulse"
     repository       = "Pulse"
     domain           = "social"
-    description      = "The institutional social intelligence desk."
-    capabilities     = ["social.collect", "social.report", "social.sentiment",
-                        "social.for_symbol", "social.trends", "social.manipulation"]
+    description      = ("Multi-category, region-aware institutional social "
+                        "intelligence desk.")
+    capabilities     = [
+        "social.collect", "social.report", "social.sentiment",
+        "social.for_symbol", "social.trends", "social.manipulation",
+        "social.regional",   # NEW
+    ]
     channels         = ["ecosystem.social", "ecosystem.intelligence",
                         "ecosystem.broadcast"]
     memory_namespace = "pulse_memory"
     security_level   = "standard"
-    mission          = {"purpose": "Read authentic social sentiment; "
-                                   "flag manipulation; detect trends."}
+    mission          = {
+        "purpose": (
+            "Read authentic social sentiment across Finance, Tech, "
+            "Entertainment, Sports, Politics, and Regional (Nigerian) "
+            "categories; flag manipulation; detect trends."
+        )
+    }
 
     def __init__(self, chronicle_client=None, **kw):
         super().__init__(
@@ -104,13 +132,17 @@ class PulseAgent(BaseAgent):
             reasons_against=["smaller volume"])
         self.reasoning.register_strategy(
             "social_path", "broad_sweep", "_strat_broad",
-            reasons_for=["max coverage + manipulation cross-check"],
+            reasons_for=["max coverage + manipulation cross-check + regional"],
             reasons_against=["slower"])
 
     def on_start(self) -> None:
-        avail = [n for n, ok in self.engine.stats()["collectors"].items() if ok]
-        log.info("Pulse desk online. Platforms: %s | Brain: %s | LLM mode: %s",
-                 avail, self.has_brain, _PULSE_LLM_MODE)
+        stats = self.engine.stats()
+        avail = [n for n, ok in stats["collectors"].items() if ok]
+        log.info(
+            "Pulse desk online. Platforms: %s | Region: %s | "
+            "Brain: %s | LLM mode: %s",
+            avail, stats.get("region", "?"), self.has_brain, _PULSE_LLM_MODE,
+        )
 
     def _strat_retail(self, c): return self._report(c, "retail_pulse")
     def _strat_pract(self, c):  return self._report(c, "practitioner")
@@ -118,16 +150,19 @@ class PulseAgent(BaseAgent):
 
     def _report(self, context: Dict[str, Any],
                 path: str) -> Dict[str, Any]:
+        cat_filter = context.get("category")
         out = self.engine.report(
             topics=context.get("topics"),
-            sources=PATH_SOURCES[path])
+            sources=PATH_SOURCES[path],
+            category_filter=cat_filter,
+        )
         rep = out.get("report")
         ok  = rep is not None and rep.get("post_count", 0) > 0
         return {
-            "status":       "complete" if ok else "error",
-            "message":      "" if ok else "no social signal via this path",
-            "report":       rep,
-            "path":         path,
+            "status":        "complete" if ok else "error",
+            "message":       "" if ok else "no social signal via this path",
+            "report":        rep,
+            "path":          path,
             "source_status": out.get("source_status"),
             "fallback_mode": rep.get("fallback_mode") if rep else "no_data",
         }
@@ -135,54 +170,81 @@ class PulseAgent(BaseAgent):
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
 
-        if task in ("social.report", "social.collect", "social.trends"):
+        # ── social.report / social.collect ────────────────────────────────────
+        if task in ("social.report", "social.collect", "social.trends",
+                    "social.regional"):
+
+            # Normalise category filter
+            cat_filter: Optional[str] = None
+            raw_cat = ctx.get("category", "")
+            if raw_cat and raw_cat.lower() in _VALID_CATEGORIES:
+                cat_filter = _CAT_NORMALISE.get(raw_cat.lower(), raw_cat.title())
+            elif task == "social.regional":
+                cat_filter = "Regional"
+
             # ── LLM reasoning path (skipped in essential_only) ────────────────
             if _USE_LLM_REASONING and self.reasoning is not None:
-                solved = self.solve("social_path", {"topics": ctx.get("topics")})
+                solved = self.solve(
+                    "social_path",
+                    {"topics": ctx.get("topics"), "category": cat_filter},
+                )
                 if solved.get("status") == "complete":
                     rep = solved.get("report") or {}
                     if task == "social.trends":
-                        return {"status": "complete",
-                                "trends": rep.get("trending", []),
-                                "fallback_mode": solved.get("fallback_mode",
-                                                            "llm_reasoning")}
+                        return {
+                            "status":        "complete",
+                            "trends":        rep.get("trending", []),
+                            "by_category":   _trends_by_category(rep),
+                            "fallback_mode": solved.get("fallback_mode",
+                                                        "llm_reasoning"),
+                        }
                     return {
-                        "status":       "complete",
-                        "report":       rep,
-                        "social_path":  solved.get("path"),
+                        "status":        "complete",
+                        "report":        rep,
+                        "social_path":   solved.get("path"),
                         "fallback_mode": solved.get("fallback_mode",
                                                     "llm_reasoning"),
                     }
-                # LLM reasoning failed — fall through to broad sweep
-                log.info("Pulse: LLM reasoning failed (%s), "
-                         "falling back to broad_sweep rule-based path",
-                         solved.get("message", "unknown"))
+                log.info(
+                    "Pulse: LLM reasoning failed (%s), "
+                    "falling back to broad_sweep rule-based path",
+                    solved.get("message", "unknown"),
+                )
 
             # ── Rule-based broad sweep (always available) ─────────────────────
-            out = self.engine.report(topics=ctx.get("topics"))
+            out = self.engine.report(
+                topics=ctx.get("topics"),
+                category_filter=cat_filter,
+            )
             rep = out.get("report")
+
             if task == "social.trends":
                 return {
-                    "status":       "complete",
-                    "trends":       rep.get("trending", []) if rep else [],
-                    "fallback_mode": rep.get("fallback_mode", "rule_based")
-                                    if rep else "no_data",
-                    "note":         out.get("note", ""),
+                    "status":        "complete",
+                    "trends":        rep.get("trending", []) if rep else [],
+                    "by_category":   _trends_by_category(rep) if rep else {},
+                    "region":        rep.get("region") if rep else None,
+                    "fallback_mode": (rep.get("fallback_mode", "rule_based")
+                                     if rep else "no_data"),
+                    "note":          out.get("note", ""),
                 }
+
             return {
-                "status":       "complete",
-                "report":       rep,
-                "fallback_mode": rep.get("fallback_mode", "rule_based")
-                                 if rep else "no_data",
-                "note":         out.get("note", ""),
+                "status":        "complete",
+                "report":        rep,
+                "fallback_mode": (rep.get("fallback_mode", "rule_based")
+                                  if rep else "no_data"),
+                "note":          out.get("note", ""),
                 **{k: v for k, v in out.items()
                    if k not in ("status", "report", "note")},
             }
 
+        # ── social.sentiment / social.for_symbol ──────────────────────────────
         if task in ("social.sentiment", "social.for_symbol"):
             result = self.engine.sentiment_for(ctx.get("symbol", ""))
             return {"status": "complete", "sentiment": result}
 
+        # ── social.manipulation ───────────────────────────────────────────────
         if task == "social.manipulation":
             g = self.engine.gather(topics=ctx.get("topics"))
             from intelligence.authenticity import detect_manipulation  # type: ignore
@@ -204,3 +266,26 @@ class PulseAgent(BaseAgent):
     # ── in-process convenience for Oracle / Nexus ─────────────────────────────
     def sentiment_for(self, symbol: str) -> Dict[str, Any]:
         return self.engine.sentiment_for(symbol)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: extract per-category trends from a report dict
+# ─────────────────────────────────────────────────────────────────────────────
+def _trends_by_category(report: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Build a category → trending_topics map from a report's categories block.
+    Used by the `trends` command to show what's trending in each category.
+    """
+    if not report:
+        return {}
+    cats = report.get("categories", {})
+    result: Dict[str, Any] = {}
+    for cat, data in cats.items():
+        top = data.get("top_posts", [])
+        if top:
+            result[cat] = {
+                "mood":      data.get("mood", "neutral"),
+                "sentiment": data.get("overall_sentiment", 0.0),
+                "top":       [p["title"] for p in top[:3]],
+            }
+    return result
