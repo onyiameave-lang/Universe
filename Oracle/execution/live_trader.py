@@ -124,7 +124,8 @@ class LiveTrader:
 
         # boot Oracle + its evidence peers
         _unload_conflicting_modules()
-        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
+        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
+                               storage_dir=str(_ECO_ROOT / "Chronicle" / "memory" / "store"))
         _unload_conflicting_modules()
         self.sentinel = _load("Sentinel", "agents/sentinel_agent.py", "SentinelAgent",
                             chronicle_client=self.chronicle)
@@ -132,7 +133,8 @@ class LiveTrader:
         self.pulse = _load("Pulse", "agents/pulse_agent.py", "PulseAgent",
                           chronicle_client=self.chronicle)
         _unload_conflicting_modules()
-        self.atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent")
+        self.atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent",
+                           chronicle_client=self.chronicle)
         _unload_conflicting_modules()
         from agents.oracle_agent import OracleAgent  # type: ignore
         self.oracle = OracleAgent(chronicle_client=self.chronicle, sentinel_client=self.sentinel,
