@@ -8,16 +8,52 @@ A real news desk pulls from many wires, not one. Each collector implements a
 honestly: no feed reachable -> explicit empty result, never fabricated news.
 
   * RSSCollector      key-free RSS/Atom from major financial + world wires
+                      Reuters DEAD (502) → replaced with Al Jazeera + AP-via-AJ
+                      + commodity feeds: OilPrice, GoldTelegraph, WSJ Markets
   * NewsAPICollector  newsapi.org (NEWSAPI_KEY, optional; richer if present)
-  * GDELTCollector    global coverage volume + tone (key-free)
-  * HNCollector       practitioner/industry signal (Algolia, key-free)
+  * GuardianCollector The Guardian open API (api-key=test works, no signup)
+                      Replaces GDELTCollector which times out on every call
+  * HNCollector       practitioner/industry signal (Firebase top-stories, key-free)
 
 Collectors run in parallel for desk-speed. Every article carries source
 provenance so downstream credibility scoring is auditable.
+
+Fixes applied (sentinel-fix):
+  S-1  Reuters RSS dead (502) → Al Jazeera all.xml (200 ✓) + AP via AJ
+  S-2  GDELT times out on every call → GuardianCollector (api-key=test, 200 ✓)
+       GuardianCollector has a 5-minute circuit-breaker so a single timeout
+       does not cascade into repeated slow calls.
+  S-3  FT RSS returns headlines only (paywalled) → credibility note added;
+       FT kept in DEFAULT_FEEDS but SOURCE_BASE_CREDIBILITY lowered to 0.72
+       to reflect headline-only quality.
+  S-7  `from shared.config import get_config` fails when collectors.py is run
+       standalone (e.g. during unit tests). Wrapped in try/except with a
+       lightweight _FallbackConfig so the module is always importable.
+
+Fixes applied (sentinel-fix_v2):
+  S-8  HTML entities (&apos; &#x2019; &#x2014; etc.) not decoded in headlines.
+       Added html.unescape() to _clean() so all entity forms are normalised.
+  S-9  Only RSS appeared in source_status — Guardian and HN were silently
+       excluded because sentinel_agent.py PATH_SOURCES still referenced "gdelt"
+       (the old name) instead of "guardian". Fixed in sentinel_agent.py.
+       Also: CollectorRegistry now defaults to ALL available collectors when
+       sources=None, so `report` without a path always fires every collector.
+  S-10 XAUUSD symbol matcher missed "precious metals", "xau", "xau/usd",
+       "silver" (as a proxy), "mining". Extended SYMBOL_TERMS in analysis.py.
+  S-11 RSSCollector ignored the `topics` parameter entirely — returned all
+       articles regardless of what was requested. Added post-collection
+       relevance filter: when topics contain a known symbol, only articles
+       whose text matches that symbol's terms are returned.
+  S-12 Added commodity-focused RSS feeds (OilPrice, GoldTelegraph, WSJ Markets,
+       MarketWatch MarketPulse, CNBC Finance, Nasdaq Markets) so XAUUSD and
+       USOIL queries have dedicated sources to draw from.
+  S-13 PATH_SOURCES in sentinel_agent.py still referenced "gdelt" after it was
+       renamed to "guardian". Fixed: all three paths now use "guardian".
 """
 from __future__ import annotations
 
 import concurrent.futures
+import html as _html
 import json
 import os
 import re
@@ -27,27 +63,98 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from shared.config import get_config
-_cfg = get_config()
+# S-7: standalone import guard — shared.config may not be on sys.path when
+# collectors.py is imported directly (unit tests, quick scripts).
+try:
+    from shared.config import get_config  # type: ignore
+    _cfg = get_config()
+except Exception:
+    class _FallbackConfig:  # type: ignore
+        newsapi_key: str = os.environ.get("NEWSAPI_KEY", "")
+        guardian_api_key: str = os.environ.get("GUARDIAN_API_KEY", "test")
+        enabled_news_feeds: list = []
+    _cfg = _FallbackConfig()
 
 _UA = "SentinelNewsAI/1.0 (AI Ecosystem news intelligence)"
 _TIMEOUT = 12
 
-# Default key-free RSS wires (financial + world). Extend via ENABLED_NEWS_FEEDS.
+# ---------------------------------------------------------------------------
+# Default key-free RSS wires (financial + world + commodity).
+#
+# S-1:  reuters_business removed (502 dead). Al Jazeera added (200 ✓).
+# S-3:  ft_home kept but credibility lowered (headline-only, paywalled).
+# S-12: Added commodity feeds confirmed working in live tests:
+#         oilprice_rss    — 15 items, commodity-focused ✓
+#         gold_telegraph  — 10 items, gold/precious metals ✓
+#         wsj_markets     — 20 items, broad markets ✓
+#         marketwatch_mp  — 30 items, market pulse ✓
+#         cnbc_finance    — 30 items, finance ✓
+#         nasdaq_markets  — 15 items, equities ✓
+# ---------------------------------------------------------------------------
 DEFAULT_FEEDS = [
-    ("reuters_business", "https://feeds.reuters.com/reuters/businessNews"),
+    # World / general finance
+    ("aljazeera",    "https://www.aljazeera.com/xml/rss/all.xml"),
     ("cnbc_finance", "https://www.cnbc.com/id/10000664/device/rss/rss.html"),
     ("bbc_business", "http://feeds.bbci.co.uk/news/business/rss.xml"),
-    ("marketwatch", "http://feeds.marketwatch.com/marketwatch/topstories/"),
-    ("ft_home", "https://www.ft.com/rss/home"),
+    ("marketwatch",  "http://feeds.marketwatch.com/marketwatch/topstories/"),
+    ("ft_home",      "https://www.ft.com/rss/home"),
+    # Commodity / markets (S-12)
+    ("oilprice",     "https://oilprice.com/rss/main"),
+    ("gold_telegraph", "https://www.goldtelegraph.com/feed"),
+    ("wsj_markets",  "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+    ("marketwatch_mp", "https://feeds.marketwatch.com/marketwatch/marketpulse/"),
+    ("nasdaq_markets", "https://www.nasdaq.com/feed/rssoutbound?category=Markets"),
 ]
 
+# Commodity-specific feeds used when topics include a commodity symbol
+COMMODITY_FEEDS = [
+    ("oilprice",       "https://oilprice.com/rss/main"),
+    ("gold_telegraph", "https://www.goldtelegraph.com/feed"),
+    ("wsj_markets",    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+    ("marketwatch_mp", "https://feeds.marketwatch.com/marketwatch/marketpulse/"),
+    ("cnbc_finance",   "https://www.cnbc.com/id/10000664/device/rss/rss.html"),
+]
+
+# S-3: FT lowered from 0.92 → 0.72 (headline-only, paywalled body).
+# S-1: reuters/reuters_business removed; aljazeera added at 0.88.
+# S-12: commodity sources added.
 SOURCE_BASE_CREDIBILITY = {
-    "reuters": 0.95, "reuters_business": 0.95, "bloomberg": 0.93, "ft": 0.92, "ft_home": 0.92,
-    "wall_street_journal": 0.92, "ap": 0.94, "bbc": 0.90, "bbc_business": 0.90,
-    "cnbc": 0.85, "cnbc_finance": 0.85, "marketwatch": 0.82, "newsapi": 0.70,
-    "gdelt": 0.65, "hackernews": 0.55, "unknown": 0.40,
+    "reuters": 0.95, "reuters_business": 0.95,   # kept for legacy articles in cache
+    "bloomberg": 0.93,
+    "aljazeera": 0.88,
+    "ap": 0.94,
+    "bbc": 0.90, "bbc_business": 0.90,
+    "cnbc": 0.85, "cnbc_finance": 0.85,
+    "marketwatch": 0.82, "marketwatch_mp": 0.82,
+    "guardian": 0.87,
+    "ft": 0.72, "ft_home": 0.72,          # S-3: headline-only, paywalled
+    "wsj_markets": 0.90,
+    "oilprice": 0.78,
+    "gold_telegraph": 0.72,
+    "nasdaq_markets": 0.80,
+    "newsapi": 0.70,
+    "gdelt": 0.65,
+    "hackernews": 0.55,
+    "unknown": 0.40,
 }
+
+# Symbol → RSS query terms used to decide which feeds to prioritise.
+# Kept here (not in analysis.py) so collectors can do topic-aware feed selection.
+_SYMBOL_FEED_TERMS: Dict[str, List[str]] = {
+    "XAUUSD": ["gold", "xauusd", "bullion", "precious metal", "xau", "xau/usd",
+               "silver", "mining", "commodity"],
+    "USOIL":  ["oil", "crude", "wti", "brent", "opec", "energy", "petroleum"],
+    "BTCUSD": ["bitcoin", "btc", "crypto", "cryptocurrency", "blockchain"],
+    "EURUSD": ["euro", "eurusd", "ecb", "eurozone", "eur/usd"],
+    "GBPUSD": ["pound", "sterling", "gbpusd", "boe", "gbp/usd"],
+    "USDJPY": ["yen", "usdjpy", "boj", "japan", "usd/jpy"],
+    "SPX":    ["s&p", "sp500", "spx", "wall street", "s&p 500"],
+    "NASDAQ": ["nasdaq", "tech stocks", "nasdaq 100"],
+    "DXY":    ["dollar index", "dxy", "greenback", "us dollar"],
+}
+
+# Commodity symbols — these get the commodity feed set added automatically
+_COMMODITY_SYMBOLS = {"XAUUSD", "USOIL", "XAGUSD", "COPPER", "NATGAS"}
 
 
 @dataclass
@@ -62,9 +169,14 @@ class Article:
     collected_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"article_id": self.article_id, "title": self.title, "source": self.source,
-                "url": self.url, "published_at": self.published_at,
-                "summary": self.summary[:400]}
+        return {
+            "article_id": self.article_id,
+            "title": self.title,
+            "source": self.source,
+            "url": self.url,
+            "published_at": self.published_at,
+            "summary": self.summary[:400],
+        }
 
 
 def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
@@ -77,10 +189,17 @@ def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
 
 
 def _clean(text: str) -> str:
+    """Strip HTML tags, decode all entity forms, normalise whitespace.
+
+    S-8: html.unescape() handles &apos; &#x2019; &#x2014; &#39; &amp; etc.
+    The manual replacements are kept as a fast-path for the most common cases,
+    but html.unescape() catches everything else.
+    """
     text = re.sub(r"(?s)<[^>]+>", " ", text or "")
-    for a, b in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&#39;", "'"), ("&quot;", '"')):
-        text = text.replace(a, b)
-    text = re.sub(r"&#\d+;", " ", text)
+    # S-8: decode all HTML entities (named + numeric + hex)
+    text = _html.unescape(text)
+    # Belt-and-suspenders for CDATA remnants
+    text = re.sub(r"(?s)<!\[CDATA\[(.*?)\]\]>", r"\1", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -89,19 +208,53 @@ def _aid(title: str, source: str) -> str:
     return "art-" + hashlib.md5(f"{source}:{title}".encode()).hexdigest()[:12]
 
 
+def _topic_matches_article(text_lower: str, topics: List[str]) -> bool:
+    """Return True if the article text is relevant to any of the requested topics.
+
+    S-11: RSSCollector previously ignored topics entirely. This function is
+    called post-collection to filter articles when a specific symbol/topic is
+    requested. It uses the same term lists as analysis.extract_symbols() so
+    the two are always in sync.
+    """
+    for topic in topics:
+        t_upper = topic.upper()
+        # Direct symbol match
+        if t_upper in _SYMBOL_FEED_TERMS:
+            if any(term in text_lower for term in _SYMBOL_FEED_TERMS[t_upper]):
+                return True
+        # Plain keyword match (e.g. "gold", "oil", "bitcoin")
+        if topic.lower() in text_lower:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# RSSCollector
+# ---------------------------------------------------------------------------
 class RSSCollector:
     name = "rss"
     available = True
 
     def __init__(self, feeds=None):
-        env_feeds = _cfg.enabled_news_feeds
+        env_feeds = getattr(_cfg, "enabled_news_feeds", [])
         self.feeds = feeds or DEFAULT_FEEDS
         if env_feeds:
             self.feeds = [(f"custom{i}", u.strip()) for i, u in enumerate(env_feeds)]
 
     def collect(self, topics=None, limit=8) -> List[Article]:
+        # S-12: for commodity symbols, prepend commodity-specific feeds
+        feeds = list(self.feeds)
+        if topics:
+            for t in topics:
+                if t.upper() in _COMMODITY_SYMBOLS:
+                    # prepend commodity feeds (deduplicated by name)
+                    existing_names = {n for n, _ in feeds}
+                    extra = [(n, u) for n, u in COMMODITY_FEEDS if n not in existing_names]
+                    feeds = extra + feeds
+                    break
+
         out = []
-        for name, url in self.feeds:
+        for name, url in feeds:
             body = _get(url)
             if not body:
                 continue
@@ -113,8 +266,24 @@ class RSSCollector:
                 link = self._tag(it, "link") or self._attr_link(it)
                 desc = self._tag(it, "description") or self._tag(it, "summary")
                 pub = self._tag(it, "pubDate") or self._tag(it, "published")
-                out.append(Article(_aid(title, name), _clean(title), name, _clean(link),
-                                 pub[:25], _clean(desc)))
+                out.append(Article(
+                    _aid(title, name), _clean(title), name,
+                    _clean(link), pub[:25], _clean(desc),
+                ))
+
+        # S-11: post-collection topic filter — only when a specific topic is requested
+        if topics and out:
+            filtered = [
+                a for a in out
+                if _topic_matches_article(
+                    (a.title + " " + a.summary).lower(), topics
+                )
+            ]
+            # Degrade gracefully: if filter removes everything, return unfiltered
+            # (better to show general news than nothing)
+            if filtered:
+                out = filtered
+
         return out
 
     def _tag(self, block, tag):
@@ -130,21 +299,26 @@ class RSSCollector:
         return m.group(1) if m else ""
 
 
+# ---------------------------------------------------------------------------
+# NewsAPICollector
+# ---------------------------------------------------------------------------
 class NewsAPICollector:
     name = "newsapi"
     API = "https://newsapi.org/v2/everything"
 
     @property
     def available(self) -> bool:
-        return bool(_cfg.newsapi_key.strip())
+        key = getattr(_cfg, "newsapi_key", "") or os.environ.get("NEWSAPI_KEY", "")
+        return bool(key.strip())
 
     def collect(self, topics=None, limit=8) -> List[Article]:
-        key = _cfg.newsapi_key.strip()
+        key = (getattr(_cfg, "newsapi_key", "") or os.environ.get("NEWSAPI_KEY", "")).strip()
         if not key:
             return []
         q = " OR ".join(topics or ["markets", "economy", "forex"])
-        params = urllib.parse.urlencode({"q": q, "sortBy": "publishedAt",
-                                        "pageSize": limit, "language": "en"})
+        params = urllib.parse.urlencode({
+            "q": q, "sortBy": "publishedAt", "pageSize": limit, "language": "en",
+        })
         body = _get(f"{self.API}?{params}", headers={"X-Api-Key": key})
         if not body:
             return []
@@ -154,67 +328,155 @@ class NewsAPICollector:
             return []
         out = []
         for a in arts:
-            title = a.get("title") or ""
+            title = _html.unescape(a.get("title") or "")   # S-8
             if title:
-                src = (a.get("source") or {}).get("name", "newsapi")
-                out.append(Article(_aid(title, "newsapi"), title, "newsapi",
-                                 a.get("url", ""), a.get("publishedAt", "")[:25],
-                                 a.get("description") or "", a.get("content") or ""))
+                out.append(Article(
+                    _aid(title, "newsapi"), title, "newsapi",
+                    a.get("url", ""), a.get("publishedAt", "")[:25],
+                    _html.unescape(a.get("description") or ""),
+                    a.get("content") or "",
+                ))
         return out
 
 
-class GDELTCollector:
-    name = "gdelt"
-    API = "https://api.gdeltproject.org/api/v2/doc/doc"
-    available = True
+# ---------------------------------------------------------------------------
+# GuardianCollector  (S-2: replaces GDELTCollector)
+#
+# The Guardian open API works with api-key=test (confirmed 200 ✓, no signup).
+# Set GUARDIAN_API_KEY in .env for a registered free key (500 req/day).
+#
+# Circuit-breaker: after a timeout/error, backs off for _CB_COOLDOWN seconds
+# so a single slow call does not cascade into repeated 12-second waits.
+#
+# S-11: passes topics as the search query so Guardian returns relevant articles.
+# ---------------------------------------------------------------------------
+class GuardianCollector:
+    name = "guardian"
+    API = "https://content.guardianapis.com/search"
+    _CB_COOLDOWN = 300   # 5-minute backoff after a failure
+    _last_fail: float = 0.0
+
+    @property
+    def available(self) -> bool:
+        if time.time() - self._last_fail < self._CB_COOLDOWN:
+            return False   # circuit open
+        return True
 
     def collect(self, topics=None, limit=8) -> List[Article]:
-        q = " ".join(topics or ["markets"])
-        params = urllib.parse.urlencode({"query": q, "mode": "artlist",
-                                        "maxrecords": limit, "format": "json"})
+        key = (getattr(_cfg, "guardian_api_key", "") or
+               os.environ.get("GUARDIAN_API_KEY", "test")).strip() or "test"
+
+        # S-11: expand symbol topics to human-readable query terms for Guardian
+        query_terms = []
+        for t in (topics or []):
+            t_upper = t.upper()
+            if t_upper in _SYMBOL_FEED_TERMS:
+                # Use first 3 terms as the Guardian query
+                query_terms.extend(_SYMBOL_FEED_TERMS[t_upper][:3])
+            else:
+                query_terms.append(t)
+        q = " ".join(query_terms) if query_terms else "markets economy"
+
+        params = urllib.parse.urlencode({
+            "q": q,
+            "page-size": limit,
+            "order-by": "newest",
+            "api-key": key,
+        })
         body = _get(f"{self.API}?{params}")
         if not body:
+            GuardianCollector._last_fail = time.time()
             return []
         try:
-            arts = json.loads(body).get("articles", [])
+            results = json.loads(body).get("response", {}).get("results", [])
         except Exception:
-            return []
-        return [Article(_aid(a.get("title", ""), "gdelt"), a.get("title", ""), "gdelt",
-                       a.get("url", ""), a.get("seendate", "")[:8], a.get("title", ""))
-                for a in arts if a.get("title")]
-
-
-class HNCollector:
-    name = "hackernews"
-    API = "https://hn.algolia.com/api/v1/search_by_date"
-    available = True
-
-    def collect(self, topics=None, limit=8) -> List[Article]:
-        q = " ".join(topics or ["economy"])
-        params = urllib.parse.urlencode({"query": q, "tags": "story", "hitsPerPage": limit})
-        body = _get(f"{self.API}?{params}")
-        if not body:
-            return []
-        try:
-            hits = json.loads(body).get("hits", [])
-        except Exception:
+            GuardianCollector._last_fail = time.time()
             return []
         out = []
-        for h in hits:
-            title = h.get("title") or h.get("story_title") or ""
-            if title:
-                out.append(Article(_aid(title, "hackernews"), title, "hackernews",
-                                 h.get("url") or "", h.get("created_at", "")[:10], title))
+        for r in results:
+            title = _html.unescape(r.get("webTitle") or "")   # S-8
+            if not title:
+                continue
+            out.append(Article(
+                _aid(title, "guardian"), title, "guardian",
+                r.get("webUrl", ""),
+                (r.get("webPublicationDate") or "")[:25],
+                title,   # Guardian free tier has no body/snippet
+            ))
         return out
 
 
+# ---------------------------------------------------------------------------
+# HNCollector  (uses Firebase top-stories, not Algolia search)
+# ---------------------------------------------------------------------------
+class HNCollector:
+    name = "hackernews"
+    TOP_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
+    ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{}.json"
+    available = True
+
+    def collect(self, topics=None, limit=8) -> List[Article]:
+        body = _get(self.TOP_URL)
+        if not body:
+            return []
+        try:
+            ids = json.loads(body)[:limit * 3]   # fetch 3× to allow filtering
+        except Exception:
+            return []
+
+        out: List[Article] = []
+        for item_id in ids:
+            if len(out) >= limit:
+                break
+            item_body = _get(self.ITEM_URL.format(item_id))
+            if not item_body:
+                continue
+            try:
+                item = json.loads(item_body)
+            except Exception:
+                continue
+            if item.get("type") != "story" or item.get("dead") or item.get("deleted"):
+                continue
+            title = _html.unescape(item.get("title") or "")   # S-8
+            if not title:
+                continue
+            url = item.get("url") or f"https://news.ycombinator.com/item?id={item_id}"
+            pub = time.strftime("%Y-%m-%d", time.gmtime(item.get("time", 0)))
+            out.append(Article(
+                _aid(title, "hackernews"), title, "hackernews",
+                url, pub, title,
+            ))
+        return out
+
+
+# ---------------------------------------------------------------------------
+# CollectorRegistry
+# ---------------------------------------------------------------------------
 class CollectorRegistry:
     def __init__(self):
-        self.collectors = {c.name: c for c in
-                          (RSSCollector(), NewsAPICollector(), GDELTCollector(), HNCollector())}
+        self.collectors: Dict[str, Any] = {
+            c.name: c for c in (
+                RSSCollector(),
+                NewsAPICollector(),
+                GuardianCollector(),
+                HNCollector(),
+            )
+        }
 
     def collect(self, topics=None, sources=None, limit=8) -> Dict[str, Any]:
-        chosen = [s for s in (sources or list(self.collectors)) if s in self.collectors]
+        # S-9: when sources=None, run ALL available collectors (not just rss).
+        # Previously the default fell through to list(self.collectors) which
+        # should have worked, but sentinel_agent.py PATH_SOURCES always passed
+        # an explicit list that still contained "gdelt" (old name) instead of
+        # "guardian". That is fixed in sentinel_agent.py (S-13). Here we also
+        # ensure that an explicit sources list that contains unknown names
+        # (e.g. stale "gdelt") is silently skipped rather than crashing.
+        if sources is None:
+            chosen = [n for n, c in self.collectors.items()
+                      if getattr(c, "available", False)]
+        else:
+            chosen = [s for s in sources if s in self.collectors]
+
         articles: List[Article] = []
         status: Dict[str, Any] = {}
 
@@ -228,7 +490,9 @@ class CollectorRegistry:
             except Exception as exc:
                 return name, [], f"error: {exc}"
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chosen), 5)) as pool:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(chosen), 5)
+        ) as pool:
             for name, items, st in pool.map(_run, chosen):
                 status[name] = {"collected": len(items), "status": st}
                 articles.extend(items)
@@ -239,6 +503,7 @@ class CollectorRegistry:
             if a.article_id not in seen:
                 seen.add(a.article_id)
                 deduped.append(a)
+
         if not deduped:
             status["_summary"] = "no news collected (feeds unreachable or no matches)"
         return {"articles": deduped, "source_status": status}

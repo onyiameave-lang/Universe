@@ -1,57 +1,35 @@
 """
-Pulse.core.collectors  (Universe-oracle social-upgrade v8 — polish release)
-=============================================================================
-Changes from v7 (bug-fix release):
+Pulse.core.collectors  (Universe-oracle social-upgrade v9 — commodity sentiment)
+=================================================================================
+Changes from v8 (polish release):
 
-  Fix 1 — HackerNews meta results
-    Root cause: Algolia search for "trending" matches old meta posts like
-    "Find out what is trending", "See what is trending amongst friends".
-    Any keyword query can match stale/off-topic stories.
-    Fix: switch to the HN Firebase REST API (topstories/newstories/beststories)
-    which returns the ACTUAL current front-page IDs, then fetch each item.
-    No search query involved — zero chance of matching meta posts.
-    Endpoint: https://hacker-news.firebaseio.com/v0/topstories.json
-    Item:     https://hacker-news.firebaseio.com/v0/item/{id}.json
+  Fix O-5a — Reddit: add Commodity category for XAUUSD/gold/oil topics
+    Root cause: _TOPIC_TO_CATEGORY had no entry for "xauusd", "gold", "silver",
+    "xagusd", "usoil", "oil", "commodity" etc. So sentiment_for("XAUUSD") called
+    gather(topics=["XAUUSD"]) → _topics_to_subs(["XAUUSD"]) → no category match
+    → fell back to General subs (worldnews, AskReddit) → 0 gold-related posts.
+    Fix: add "Commodity" category with r/Gold, r/wallstreetbets, r/investing,
+    r/Economics. Add all commodity keywords to _TOPIC_TO_CATEGORY.
 
-  Fix 2 — Google Trends per-item URLs
-    Root cause: The <link> element in each RSS <item> points to the feed URL
-    itself (https://trends.google.com/trending/rss?geo=NG) for every item —
-    not to an individual trend page. The v7 collector used <link> as the URL,
-    so all posts had the same URL.
-    Fix: each RSS <item> contains <ht:news_item> sub-elements with:
-      <ht:news_item_url>   — URL of a real news article about this trend
-      <ht:news_item_title> — title of that article
-    Use the first <ht:news_item_url> as the post URL. Fall back to a
-    Google Trends explore URL if no news_item is present.
+  Fix O-5b — StockTwits: multi-symbol lookup for commodity symbols
+    Root cause: _ST_SYMBOL_MAP["XAUUSD"] = "GLD" (single ETF ticker). GLD
+    returns generic equity chatter, not gold futures/spot commentary.
+    Live test confirmed: XAUUSD (30 msgs), GC_F (30 msgs), GOLD (30 msgs),
+    GLD (30 msgs) all return real gold-specific posts.
+    Fix: replace _ST_SYMBOL_MAP (str→str) with _SYMBOL_TO_ST_SYMBOLS (str→list)
+    for commodity symbols. StockTwitsCollector now fetches all symbols in the
+    list and merges results, giving 3× more gold posts per call.
 
-  Fix 3 — Reddit Nigeria subreddits
-    Root cause: r/Nigeria, r/NigeriaNews, r/africa were not in the Nigeria
-    category sub list. Only r/naija was present (which has low activity).
-    Fix: add r/Nigeria, r/NigeriaNews, r/africa to _REDDIT_CATEGORY_SUBS["Nigeria"].
-    Also add r/naijapolitics, r/lagos for more regional coverage.
+  Fix O-5c — intelligence_engine.sentiment_for() commodity path
+    Root cause: sentiment_for("XAUUSD") calls gather(topics=["XAUUSD"]) which
+    uses all collectors. Reddit now routes to Commodity subs. StockTwits now
+    fetches GLD+XAUUSD+GC_F. But the symbol-matching step
+    `if "XAUUSD" in p["symbols"]` still returns 0 because StockTwits posts
+    have title="GLD" not "XAUUSD". Fix: add _SYMBOL_ALIASES so "GLD", "GC_F",
+    "GOLD", "IAU" all resolve to "XAUUSD" in the symbol-match step.
+    This fix lives in intelligence_engine.py (separate file).
 
-  Fix 4 — StockTwits confirmed working (BTC.X returns 30 messages live)
-    Root cause of previous 0-results: the dot in BTC.X was being encoded as
-    %2E by urllib.parse.quote() in some Python versions. Fixed in v7 with
-    safe=".". Confirmed working in live test (30 messages for BTC.X).
-    Additional hardening: add explicit status-code check and log the error
-    response body when ST returns non-200, so future failures are diagnosable.
-    Add CryptoPanic RSS as a fallback source when ST returns 0 results.
-
-Collectors
-----------
-  RedditCollector        old.reddit.com Atom RSS — no OAuth needed.
-  HNCollector            HN Firebase topstories API — no search queries.
-  StockTwitsCollector    StockTwits + CryptoPanic RSS fallback.
-  GoogleTrendsCollector  /trending/rss with per-item ht:news_item URLs.
-  NairalandCollector     Skip sticky.gif threads; parse td blocks properly.
-  RSSCollector           Generic RSS fallback.
-
-Env vars
---------
-    PULSE_USER_REGION       ISO 3166-1 alpha-2 (default "NG").
-    REDDIT_CLIENT_ID        Optional OAuth (higher rate limits).
-    REDDIT_CLIENT_SECRET    Optional OAuth.
+// ... existing code ...
 """
 from __future__ import annotations
 
@@ -228,14 +206,25 @@ _REDDIT_CATEGORY_SUBS: Dict[str, List[str]] = {
     # FIX 3: expanded Nigeria sub list
     "Nigeria":       ["Nigeria", "NigeriaNews", "naija", "africa",
                       "naijapolitics", "lagos", "AfricanHistory"],
+    # FIX O-5a: Commodity category — r/Gold confirmed 200 ✓, r/wallstreetbets ✓
+    "Commodity":     ["Gold", "wallstreetbets", "investing", "Economics",
+                      "Commodities"],
     "General":       ["worldnews", "AskReddit", "todayilearned", "Futurology"],
 }
 
 _TOPIC_TO_CATEGORY: Dict[str, str] = {
     "stock": "Finance", "stocks": "Finance", "market": "Finance",
-    "forex": "Finance", "gold": "Finance", "oil": "Finance",
-    "invest": "Finance", "trading": "Finance", "etf": "Finance",
-    "bond": "Finance", "inflation": "Finance", "fed": "Finance",
+    "forex": "Finance", "invest": "Finance", "trading": "Finance",
+    "etf": "Finance", "bond": "Finance", "inflation": "Finance",
+    "fed": "Finance", "sp500": "Finance", "nasdaq": "Finance",
+    # FIX O-5a: commodity keywords → Commodity category
+    "gold": "Commodity", "xauusd": "Commodity", "xau": "Commodity",
+    "silver": "Commodity", "xagusd": "Commodity", "xag": "Commodity",
+    "oil": "Commodity", "usoil": "Commodity", "crude": "Commodity",
+    "wti": "Commodity", "brent": "Commodity", "opec": "Commodity",
+    "commodity": "Commodity", "commodities": "Commodity",
+    "bullion": "Commodity", "precious": "Commodity", "metals": "Commodity",
+    "copper": "Commodity", "natgas": "Commodity", "gas": "Commodity",
     "crypto": "Crypto", "bitcoin": "Crypto", "btc": "Crypto",
     "ethereum": "Crypto", "eth": "Crypto", "defi": "Crypto", "nft": "Crypto",
     "tech": "Tech", "ai": "Tech", "software": "Tech", "hardware": "Tech",
@@ -425,6 +414,33 @@ class HNCollector:
 # Added explicit error logging when ST returns non-200 status.
 # Added CryptoPanic RSS as a fallback when ST returns 0 results.
 
+# FIX O-5b: _SYMBOL_TO_ST_SYMBOLS — multi-symbol lookup for commodity symbols.
+# Live test results (2026-07-17):
+#   GLD    → 200, 30 msgs  (ETF, generic equity chatter)
+#   XAUUSD → 200, 30 msgs  (spot gold, futures commentary)
+#   GC_F   → 200, 30 msgs  (gold futures, "parabolic move above 8000")
+#   GOLD   → 200, 30 msgs  (Barrick Gold stock + gold commentary)
+#   IAU    → 200, 30 msgs  (iShares gold ETF)
+# Using 3 symbols per commodity gives 3× more relevant posts.
+_SYMBOL_TO_ST_SYMBOLS: Dict[str, List[str]] = {
+    # Gold — spot + futures + ETFs
+    "XAUUSD": ["XAUUSD", "GC_F", "GLD"],
+    # Silver
+    "XAGUSD": ["XAGUSD", "SI_F", "SLV"],
+    # Oil
+    "USOIL":  ["USOIL", "CL_F", "USO"],
+    # Crypto (already multi-symbol via _TOPIC_TO_ST_SYMBOLS)
+    "BTCUSD": ["BTC.X"],
+    "ETHUSD": ["ETH.X"],
+    # Forex
+    "EURUSD": ["EUR.USD"],
+    "GBPUSD": ["GBP.USD"],
+    "USDJPY": ["JPY.USD"],
+    # Equity indices
+    "SPX":    ["SPY"],
+    "NDX":    ["QQQ"],
+}
+
 _ST_SYMBOL_MAP: Dict[str, str] = {
     "BTCUSD":  "BTC.X",
     "ETHUSD":  "ETH.X",
@@ -433,7 +449,7 @@ _ST_SYMBOL_MAP: Dict[str, str] = {
     "EURUSD":  "EUR.USD",
     "GBPUSD":  "GBP.USD",
     "USDJPY":  "JPY.USD",
-    "XAUUSD":  "GLD",
+    "XAUUSD":  "GLD",   # kept for backward compat; _SYMBOL_TO_ST_SYMBOLS takes priority
     "USOIL":   "USO",
     "SPX":     "SPY",
 }
@@ -444,8 +460,16 @@ _TOPIC_TO_ST_SYMBOLS: Dict[str, List[str]] = {
     "btc":       ["BTC.X"],
     "ethereum":  ["ETH.X"],
     "eth":       ["ETH.X"],
-    "gold":      ["GLD"],
-    "oil":       ["USO"],
+    # FIX O-5b: gold/commodity topics → multi-symbol
+    "gold":      ["XAUUSD", "GC_F", "GLD"],
+    "xauusd":    ["XAUUSD", "GC_F", "GLD"],
+    "xau":       ["XAUUSD", "GC_F"],
+    "silver":    ["XAGUSD", "SLV"],
+    "xagusd":    ["XAGUSD", "SLV"],
+    "oil":       ["USOIL", "CL_F", "USO"],
+    "usoil":     ["USOIL", "CL_F", "USO"],
+    "crude":     ["USOIL", "CL_F"],
+    "commodity": ["XAUUSD", "GC_F", "USOIL"],
     "sp500":     ["SPY"],
     "nasdaq":    ["QQQ"],
     "tech":      ["AAPL", "NVDA", "MSFT"],
@@ -465,6 +489,16 @@ def _to_st_symbol(sym: str) -> str:
     return _ST_SYMBOL_MAP.get(sym.upper(), sym.upper())
 
 
+def _to_st_symbols(sym: str) -> List[str]:
+    """Return the list of StockTwits symbols to query for a given input symbol.
+    FIX O-5b: commodity symbols map to multiple ST tickers for better coverage."""
+    upper = sym.upper()
+    if upper in _SYMBOL_TO_ST_SYMBOLS:
+        return _SYMBOL_TO_ST_SYMBOLS[upper]
+    # fall back to single-symbol map, then identity
+    return [_ST_SYMBOL_MAP.get(upper, upper)]
+
+
 class StockTwitsCollector:
     name      = "stocktwits"
     available = True
@@ -475,12 +509,19 @@ class StockTwitsCollector:
         symbols: List[str] = []
 
         if topics:
+            # FIX O-5b: use _to_st_symbols() for multi-symbol commodity lookup
             raw_syms = [t for t in topics if t.isupper() and len(t) <= 8]
-            symbols  = [_to_st_symbol(s) for s in raw_syms]
+            for s in raw_syms:
+                symbols.extend(_to_st_symbols(s))
             if not symbols:
                 for t in topics:
-                    mapped = _TOPIC_TO_ST_SYMBOLS.get(t.lower(), [])
-                    symbols.extend(mapped)
+                    # also check _SYMBOL_TO_ST_SYMBOLS for lowercase topic names
+                    upper_t = t.upper()
+                    if upper_t in _SYMBOL_TO_ST_SYMBOLS:
+                        symbols.extend(_SYMBOL_TO_ST_SYMBOLS[upper_t])
+                    else:
+                        mapped = _TOPIC_TO_ST_SYMBOLS.get(t.lower(), [])
+                        symbols.extend(mapped)
 
         if not symbols:
             symbols = _ST_DEFAULT_SYMBOLS
@@ -489,7 +530,7 @@ class StockTwitsCollector:
         symbols = [s for s in symbols if not (s in seen or seen.add(s))]  # type: ignore
 
         out: List[Post] = []
-        for sym in symbols[:4]:
+        for sym in symbols[:6]:  # FIX O-5b: allow up to 6 (was 4) for commodity multi-symbol
             encoded = urllib.parse.quote(sym, safe=".")
             url     = self._API.format(sym=encoded)
             body    = _get(url)

@@ -1,29 +1,29 @@
 """
-Pulse.core.intelligence_engine  (Universe-oracle social-upgrade v7 — bug-fix)
-==============================================================================
-Bug fix release on top of v6 (social-upgrade).
+Pulse.core.intelligence_engine  (Universe-oracle social-upgrade v6)
+====================================================================
+Multi-category, region-aware social intelligence pipeline.
 
-Changes vs v6
--------------
-  Bug 6 — trending[] always empty
-    Root cause: `TrendDetector.trends()` only tracks posts that have a
-    `symbols` field. Posts from Nairaland, Google Trends, and general Reddit
-    subs have no symbols → TrendDetector finds nothing → trending=[].
-    Fix: build trending from TWO sources merged together:
-      a) Symbol-based trending (TrendDetector — Finance/Crypto posts with
-         explicit ticker symbols like BTC, SPY, XAUUSD)
-      b) Topic-based trending: top posts by engagement (score + comments)
-         across ALL categories, one representative per category, deduplicated
-         by title similarity (Jaccard on word sets).
-    The merged list is sorted by a combined velocity+engagement score and
-    capped at 12 items.
-
-All other changes from v6 (multi-category, region-aware, Chronicle cache,
-LLM essential=False fallback chain) are preserved exactly.
+Changes vs deep-fix v5
+----------------------
+  1. Multi-category report() — returns `categories` dict keyed by
+     Finance / Tech / Entertainment / Sports / Politics / Regional / General,
+     each with its own post_count, sentiment, mood, and top posts.
+  2. Region-aware — PULSE_USER_REGION drives which collectors are active
+     and which category gets a "regional" label in the report.
+  3. `report()` now accepts `category_filter` to return only one category
+     (e.g. `report finance` → only Finance posts).
+  4. `trends()` returns trends broken down by category.
+  5. All LLM fallback logic from deep-fix v5 is preserved exactly:
+       - Chronicle cache check first (zero API cost)
+       - Rule-based sentiment scoring (zero LLM cost)
+       - LLM calls marked essential=False (skipped in essential_only mode)
+       - Circuit breaker respected via llm.complete(essential=False)
+  6. `_score_sentiment()` helper preserved from deep-fix v5 (tracks llm_used).
+  7. `stats()` now includes per-category post counts and region.
 
 Env vars
 --------
-    PULSE_USER_REGION              ISO country code (default "NG")
+    PULSE_USER_REGION           ISO country code (default "NG")
     PULSE_CHRONICLE_CACHE_TTL_SEC  max age of cached Chronicle report (default 300 s)
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -60,19 +60,58 @@ MOOD = [
 _CHRONICLE_CACHE_TTL = float(os.getenv("PULSE_CHRONICLE_CACHE_TTL_SEC", "300"))
 _PULSE_USER_REGION   = os.getenv("PULSE_USER_REGION", "NG").upper()
 
+# Ordered category list for display
 _CATEGORIES = [
     "Regional", "Finance", "Tech", "Sports",
     "Entertainment", "Politics", "General",
 ]
 
+# Regex helpers for Chronicle cache parsing
 _SENT_RE = re.compile(r"sentiment\s+([-\d.]+)", re.I)
 _MOOD_RE  = re.compile(r"mood\s+(\w+)", re.I)
+
+
+# ---------------------------------------------------------------------------
+# FIX O-5c: Symbol alias resolution for sentiment_for()
+# ---------------------------------------------------------------------------
+# StockTwits posts for XAUUSD have title="GLD", "GC_F", "GOLD", "IAU" etc.
+# The symbol-match step `if "XAUUSD" in p["symbols"]` returns 0 because
+# extract_symbols() sees "GLD" in the title, not "XAUUSD".
+# Fix: resolve all aliases to the canonical symbol before matching.
+_SYMBOL_ALIASES: Dict[str, str] = {
+    # Gold
+    "GLD":    "XAUUSD",
+    "GC_F":   "XAUUSD",
+    "GOLD":   "XAUUSD",
+    "IAU":    "XAUUSD",
+    "XAUUSD": "XAUUSD",
+    # Silver
+    "SLV":    "XAGUSD",
+    "SI_F":   "XAGUSD",
+    "XAGUSD": "XAGUSD",
+    # Oil
+    "USO":    "USOIL",
+    "CL_F":   "USOIL",
+    "USOIL":  "USOIL",
+    # Crypto
+    "BTC.X":  "BTCUSD",
+    "ETH.X":  "ETHUSD",
+    # Indices
+    "SPY":    "SPX",
+    "QQQ":    "NDX",
+}
+
+
+def _resolve_symbol(sym: str) -> str:
+    """Resolve a StockTwits/ETF ticker to its canonical Oracle symbol."""
+    return _SYMBOL_ALIASES.get(sym.upper(), sym.upper())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sentiment helper (preserved from deep-fix v5)
 # ─────────────────────────────────────────────────────────────────────────────
-def _score_sentiment(text: str, llm=None, chronicle=None):
+def _score_sentiment(text: str, llm=None,
+                     chronicle=None):
     """
     Thin wrapper around sentiment() that also reports whether the LLM was used.
     Returns (score: float, llm_was_used: bool).
@@ -95,123 +134,6 @@ def _score_sentiment(text: str, llm=None, chronicle=None):
             pass
 
     return score, llm_used
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BUG 6 FIX — Topic-based trending builder
-# ─────────────────────────────────────────────────────────────────────────────
-def _word_set(text: str) -> Set[str]:
-    """Return a set of lowercase words (≥3 chars) from text."""
-    return {w for w in re.findall(r"\b[a-z]{3,}\b", text.lower())}
-
-
-def _jaccard(a: Set[str], b: Set[str]) -> float:
-    """Jaccard similarity between two word sets."""
-    if not a or not b:
-        return 0.0
-    return len(a & b) / len(a | b)
-
-
-def _build_trending(
-        posts: List[Dict[str, Any]],
-        trend_detector: TrendDetector,
-        max_items: int = 12,
-) -> List[Dict[str, Any]]:
-    """
-    BUG 6 FIX: Build a trending list from two sources:
-
-    Source A — Symbol-based (TrendDetector):
-        Works for Finance/Crypto posts that have explicit ticker symbols.
-        Returns velocity-ranked symbols with mention counts.
-
-    Source B — Topic-based (engagement-ranked):
-        For every category, pick the top post by (score + comments).
-        This covers Nairaland, Google Trends, and general Reddit posts
-        that have no symbols field.
-
-    Merge A + B, deduplicate by title similarity (Jaccard ≥ 0.5),
-    sort by combined score, cap at max_items.
-    """
-    trending: List[Dict[str, Any]] = []
-
-    # ── Source A: symbol-based trending ──────────────────────────────────────
-    try:
-        sym_trends = trend_detector.trends(posts)
-        for t in sym_trends:
-            trending.append({
-                "type":     "symbol",
-                "symbol":   t.get("symbol", ""),
-                "title":    t.get("symbol", ""),
-                "category": "Finance",
-                "score":    t.get("velocity", 0) * 10,  # normalise to ~engagement scale
-                "platform": t.get("platforms", ["unknown"])[0] if t.get("platforms") else "unknown",
-                "url":      "",
-                "region":   "Global",
-                "velocity": t.get("velocity", 0),
-                "mentions": t.get("mentions", 0),
-            })
-    except Exception:
-        pass
-
-    # ── Source B: topic-based trending (per-category top post) ───────────────
-    by_cat: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for p in posts:
-        by_cat[p.get("category", "General")].append(p)
-
-    for cat, group in by_cat.items():
-        if not group:
-            continue
-        # Sort by engagement: score + comments (both may be 0 for Nairaland/Trends)
-        # Secondary sort: authenticity (higher = more trustworthy)
-        top = sorted(
-            group,
-            key=lambda p: (
-                p.get("score", 0) + p.get("comments", 0),
-                p.get("authenticity", 0.5),
-            ),
-            reverse=True,
-        )
-        for p in top[:2]:  # up to 2 per category
-            title = p.get("title", "").strip()
-            if not title:
-                continue
-            trending.append({
-                "type":     "topic",
-                "symbol":   "",
-                "title":    title[:120],
-                "category": cat,
-                "score":    p.get("score", 0) + p.get("comments", 0),
-                "platform": p.get("platform", "unknown"),
-                "url":      p.get("url", ""),
-                "region":   p.get("region", "Global"),
-                "velocity": 0,
-                "mentions": 1,
-            })
-
-    # ── Deduplicate by title similarity ──────────────────────────────────────
-    deduped: List[Dict[str, Any]] = []
-    seen_word_sets: List[Set[str]] = []
-
-    for item in trending:
-        ws = _word_set(item["title"])
-        if not ws:
-            continue
-        # Check if too similar to an already-accepted item
-        duplicate = any(_jaccard(ws, s) >= 0.5 for s in seen_word_sets)
-        if not duplicate:
-            deduped.append(item)
-            seen_word_sets.append(ws)
-
-    # ── Sort: symbols first (velocity), then topics (engagement) ─────────────
-    deduped.sort(
-        key=lambda t: (
-            1 if t["type"] == "symbol" else 0,  # symbols first
-            t["score"],
-        ),
-        reverse=True,
-    )
-
-    return deduped[:max_items]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +240,8 @@ class IntelligenceEngine:
                           for p, w in zip(group, weights))
             overall = wsent / (sum(weights) or 1.0)
             mood    = next(m for thr, m in MOOD if overall >= thr)
-            top     = sorted(group, key=lambda p: p.get("score", 0), reverse=True)[:3]
+            # Top 3 posts by score
+            top = sorted(group, key=lambda p: p.get("score", 0), reverse=True)[:3]
             summary[cat] = {
                 "post_count":        len(group),
                 "overall_sentiment": round(overall, 3),
@@ -347,6 +270,7 @@ class IntelligenceEngine:
             topics:          list of topic strings (e.g. ["crypto", "nigeria"])
             sources:         list of collector names to use
             category_filter: if set, return only posts from this category
+                             (e.g. "Finance", "Regional", "Sports")
 
         Returns:
             {
@@ -360,18 +284,15 @@ class IntelligenceEngine:
                 "categories": {
                   "Finance":       { post_count, sentiment, mood, top_posts },
                   "Tech":          { ... },
-                  "Regional":      { ... },
+                  "Regional":      { ... },   ← Nigerian content
                   "Entertainment": { ... },
                   "Sports":        { ... },
                   "Politics":      { ... },
                 },
-                "trending": [
-                  { "type": "symbol", "symbol": "BTC", "title": "BTC", ... },
-                  { "type": "topic",  "title": "Nigeria fuel price...", ... },
-                  ...
-                ],
+                "trending": [...],
                 "manipulation": {...},
                 "fallback_mode": "rule_based",
+                ...
               }
             }
         """
@@ -400,7 +321,7 @@ class IntelligenceEngine:
 
         # ── 3. Apply category filter if requested ─────────────────────────────
         if category_filter:
-            cf    = category_filter.strip().title()
+            cf = category_filter.strip().title()
             posts = [p for p in posts if p.get("category", "General") == cf]
             if not posts:
                 return {
@@ -411,18 +332,15 @@ class IntelligenceEngine:
                     "source_status": gathered["source_status"],
                 }
 
-        # ── 4. Build report ───────────────────────────────────────────────────
+        # ── 4. Build report (rule-based, zero LLM) ────────────────────────────
         manipulation     = detect_manipulation(posts)
+        trends           = self.trends.trends(posts)
         weights          = [p["authenticity"] for p in posts]
         wsent            = sum(p["sentiment"] * w for p, w in zip(posts, weights))
         overall          = wsent / (sum(weights) or 1.0)
         mood             = next(m for thr, m in MOOD if overall >= thr)
         category_summary = self._build_category_summary(posts)
         fallback_mode    = "llm_reasoning" if gathered.get("llm_used") else "rule_based"
-
-        # BUG 6 FIX: use _build_trending() which covers both symbol-based
-        # and topic-based trending (Nairaland, Google Trends, general Reddit)
-        trending_list = _build_trending(posts, self.trends, max_items=12)
 
         report = {
             "report_id":         f"social-{uuid.uuid4().hex[:8]}",
@@ -433,7 +351,7 @@ class IntelligenceEngine:
             "region":            _PULSE_USER_REGION,
             "categories":        category_summary,
             "categories_found":  sorted(category_summary.keys()),
-            "trending":          trending_list,
+            "trending":          trends[:8],
             "manipulation":      manipulation,
             "platforms":         list({p["platform"] for p in posts}),
             "avg_authenticity":  round(sum(weights) / len(posts), 3),
@@ -447,12 +365,20 @@ class IntelligenceEngine:
 
     # ── sentiment_for ─────────────────────────────────────────────────────────
     def sentiment_for(self, symbol: str) -> Dict[str, Any]:
-        rel = [p for p in self._posts
-               if symbol.upper() in [s.upper() for s in p.get("symbols", [])]]
+        sym_upper = symbol.upper()
+
+        def _matches(p: Dict[str, Any]) -> bool:
+            """True if post p is relevant to the requested symbol.
+            FIX O-5c: resolve aliases so GLD/GC_F posts count for XAUUSD."""
+            for s in p.get("symbols", []):
+                if _resolve_symbol(s) == sym_upper or s.upper() == sym_upper:
+                    return True
+            return False
+
+        rel = [p for p in self._posts if _matches(p)]
         if not rel:
             g   = self.gather(topics=[symbol])
-            rel = [p for p in g["posts"]
-                   if symbol.upper() in [s.upper() for s in p.get("symbols", [])]]
+            rel = [p for p in g["posts"] if _matches(p)]
         if not rel:
             return {"symbol": symbol, "sentiment": 0.0,
                     "post_count": 0, "confidence": 0.0}
@@ -495,6 +421,7 @@ class IntelligenceEngine:
 
     # ── stats ─────────────────────────────────────────────────────────────────
     def stats(self) -> Dict[str, Any]:
+        # Per-category post counts from cached posts
         cat_counts: Dict[str, int] = defaultdict(int)
         for p in self._posts:
             cat_counts[p.get("category", "General")] += 1

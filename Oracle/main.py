@@ -39,6 +39,32 @@ CONFLICTING_MODULES = [
 ]
 
 
+def _load_dotenv_early():
+    """Load .env before any agent/collector is constructed so NEWSAPI_KEY,
+    GUARDIAN_API_KEY, ORACLE_LLM_MODE etc. are available at import time.
+    Identical pattern to Pulse and Sentinel main.py."""
+    from pathlib import Path as _P
+    import os as _os
+    env_path = _P(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=False)
+        logging.getLogger("oracle.main").info("dotenv loaded from %s", env_path)
+    except ImportError:
+        # dotenv not installed — parse manually (key=value, skip comments)
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip(); v = v.strip().strip('"').strip("'")
+                if k and k not in _os.environ:
+                    _os.environ[k] = v
+
+
 def _unload_conflicting_modules():
     modules_to_delete = []
     for mod_name in CONFLICTING_MODULES:
@@ -181,6 +207,7 @@ def format_genome_dna(genome_dict: dict) -> str:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+    _load_dotenv_early()   # ← MUST be first: loads NEWSAPI_KEY, GUARDIAN_API_KEY, ORACLE_LLM_MODE
     chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
                       storage_dir=str(_REPO_ROOT.parent / "Chronicle" / "memory" / "store"))
     _unload_conflicting_modules()

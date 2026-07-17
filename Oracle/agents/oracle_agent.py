@@ -17,13 +17,22 @@ strategies. It:
 
 Nothing bypasses the risk gate. Evolved strategies are human-readable rule sets,
 not black boxes, so every decision remains explainable and constitutional.
+
+FIX O-3 (2026-07-17): Wire SignalFusion as the stream builder.
+  Root cause: signal_fusion.py was never imported. oracle_agent.py reimplemented
+  _news(), _social(), _memory() inline as inferior copies of SignalFusion's
+  methods (missing reasons, cross_source, articles fields). AdaptiveFusion.fuse()
+  received impoverished stream dicts, reducing fusion quality.
+  Fix: SignalFusion builds the streams (rich output with reasons/cross_source);
+  AdaptiveFusion.fuse() consumes them with learned per-symbol weights.
+  The two classes are COMPLEMENTARY, not duplicates:
+    SignalFusion  = stream builder  (calls sentinel/pulse/chronicle, returns rich dicts)
+    AdaptiveFusion = weight learner (fuses streams with learned weights, updates on outcomes)
 """
 from __future__ import annotations
 
 import logging
 import sys
-import time
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,26 +43,6 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-# ── LLM mode & stream-cache configuration ───────────────────────────────────
-import os as _os
-import time as _time
-
-# When ORACLE_LLM_MODE=essential_only, non-critical evidence streams (news,
-# social, memory) are skipped and return neutral {direction:0, confidence:0}.
-# This is the primary lever for free-tier Gemini keys where every LLM call
-# counts against a tight RPM quota.
-_LLM_MODE: str = _os.getenv("ORACLE_LLM_MODE", "full").lower()
-
-# Per-stream TTL caches — prevent repeated Sentinel/Pulse/Chronicle calls
-# within the same cycle window.  Each entry: {symbol: {result, ts}}.
-_news_cache:   Dict[str, Dict[str, Any]] = {}
-_social_cache: Dict[str, Dict[str, Any]] = {}
-_memory_cache: Dict[str, Dict[str, Any]] = {}
-
-_NEWS_TTL:   float = float(_os.getenv("ORACLE_NEWS_CACHE_TTL",   "300"))
-_SOCIAL_TTL: float = float(_os.getenv("ORACLE_SOCIAL_CACHE_TTL", "300"))
-_MEMORY_TTL: float = float(_os.getenv("ORACLE_MEMORY_CACHE_TTL", "600"))
-
 from core.market_data import MarketData  # type: ignore
 from core.risk import RiskManager  # type: ignore
 from core.backtester import Backtester  # type: ignore
@@ -62,6 +51,8 @@ from intelligence.evolution import EvolutionLab  # type: ignore
 from intelligence.strategy_genome import StrategyGenome  # type: ignore
 from intelligence.adaptive_fusion import AdaptiveFusion  # type: ignore
 from intelligence.scientific_lab import ScientificResearchLab  # type: ignore
+# FIX O-3: import SignalFusion — the stream builder (was never imported before)
+from intelligence.signal_fusion import SignalFusion  # type: ignore
 
 try:
     from shared.agent import BaseAgent
@@ -111,15 +102,33 @@ class OracleAgent(BaseAgent):
         self.sentinel = sentinel_client
         self.pulse = pulse_client
         self.chronicle = chronicle_client
+        # FIX O-3: instantiate SignalFusion with the same sub-agent clients.
+        # SignalFusion builds rich stream dicts; AdaptiveFusion fuses them with
+        # learned weights. They are complementary, not duplicates.
+        self._signal_fusion = SignalFusion(
+            sentinel=sentinel_client,
+            pulse=pulse_client,
+            chronicle=chronicle_client,
+        )
 
     def on_start(self) -> None:
         log.info("Oracle scientific research lab online. Paper: %s | champions: %s | Sentinel:%s Pulse:%s",
                  self.risk.paper, self.evolution.stats()["champion_keys"],
                  self.sentinel is not None, self.pulse is not None)
 
-    # ---- evidence streams (same sources, adaptive weights) ----
+    # ---- evidence streams (SignalFusion builds; AdaptiveFusion weights) ----
 
     def _streams(self, symbol: str, technicals: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Build evidence streams for fusion.
+
+        FIX O-3: Use SignalFusion to build the stream dicts. SignalFusion
+        produces richer output than the old inline _news()/_social()/_memory()
+        methods — it includes 'reasons', 'cross_source', 'articles' fields that
+        AdaptiveFusion can use for better confidence calibration.
+
+        Technical stream: still uses evolved champion if available (Oracle's
+        own domain), then falls back to SignalFusion._technical_signal().
+        """
         regime = (technicals.get("regime") or {}).get("regime", "ranging")
         champ = self.evolution.champion(symbol, regime)
         champion_source = "evolution_library"
@@ -127,6 +136,7 @@ class OracleAgent(BaseAgent):
             lab_champion = self.lab.champion_info(symbol, regime)
             champ = StrategyGenome.from_dict(lab_champion["genome"]) if lab_champion and lab_champion.get("genome") else None
             champion_source = "scientific_library" if lab_champion else "evolution_library"
+
         if champ:
             md = self.data.get(symbol)
             if md["status"] == "complete":
@@ -137,97 +147,23 @@ class OracleAgent(BaseAgent):
             else:
                 tech = {"direction": 0.0, "confidence": 0.0}
         else:
-            tech = self._technical_from_indicators(technicals)
-        return {"technical": tech,
-                "news": self._news(symbol), "social": self._social(symbol),
-                "memory": self._memory(symbol, (technicals.get("regime") or {}).get("regime", "ranging"))}
+            # FIX O-3: use SignalFusion._technical_signal() for richer output
+            # (includes 'reasons' list explaining the technical call)
+            tech = self._signal_fusion._technical_signal(technicals)
 
-    def _technical_from_indicators(self, t):
-        if "error" in t:
-            return {"direction": 0.0, "confidence": 0.0}
-        score = 0.0
-        rsi = t.get("rsi_14")
-        if rsi is not None:
-            score += 0.4 if rsi < 30 else -0.4 if rsi > 70 else 0
-        m = t.get("macd") or {}
-        score += 0.3 if m.get("histogram", 0) > 0 else -0.3 if m.get("histogram", 0) < 0 else 0
-        sma20, sma50 = t.get("sma_20"), t.get("sma_50")
-        if sma20 and sma50:
-            score += 0.3 if sma20 > sma50 else -0.3
-        regime = (t.get("regime") or {}).get("regime", "ranging")
-        conf = {"trending_up": 0.8, "trending_down": 0.8, "ranging": 0.5, "high_volatility": 0.4}.get(regime, 0.5)
-        return {"direction": max(-1, min(1, score)), "confidence": conf, "regime": regime}
+        # FIX O-3: use SignalFusion for news/social/memory streams.
+        # These methods call sentinel.sentiment_for(), pulse.sentiment_for(),
+        # chronicle.search() and return richer dicts than the old inline methods.
+        news_stream   = self._signal_fusion._news_signal(symbol)
+        social_stream = self._signal_fusion._social_signal(symbol)
+        memory_stream = self._signal_fusion._memory_signal(symbol, regime)
 
-    def _news(self, symbol):
-        # In essential_only mode, skip the Sentinel API call entirely.
-        if _LLM_MODE == "essential_only":
-            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
-        # TTL cache: reuse the last Sentinel result within the cache window.
-        _now = _time.time()
-        cached = _news_cache.get(symbol)
-        if cached and (_now - cached["ts"]) < _NEWS_TTL:
-            return cached["result"]
-        if self.sentinel is None:
-            return {"direction": 0.0, "confidence": 0.0}
-        try:
-            s = self.sentinel.sentiment_for(symbol)
-            result = {"direction": s.get("sentiment", 0.0), "confidence": s.get("confidence", 0.0)}
-            _news_cache[symbol] = {"result": result, "ts": _now}
-            return result
-        except Exception:
-            return {"direction": 0.0, "confidence": 0.0}
-
-    def _social(self, symbol):
-        # In essential_only mode, skip the Pulse API call entirely.
-        if _LLM_MODE == "essential_only":
-            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
-        # TTL cache: reuse the last Pulse result within the cache window.
-        _now = _time.time()
-        cached = _social_cache.get(symbol)
-        if cached and (_now - cached["ts"]) < _SOCIAL_TTL:
-            return cached["result"]
-        if self.pulse is None:
-            return {"direction": 0.0, "confidence": 0.0}
-        try:
-            s = self.pulse.sentiment_for(symbol)
-            conf = s.get("confidence", 0.0) * (0.3 if s.get("manipulation_warning") else 1.0)
-            result = {"direction": s.get("sentiment", 0.0), "confidence": conf,
-                      "manipulation_warning": s.get("manipulation_warning", False)}
-            _social_cache[symbol] = {"result": result, "ts": _now}
-            return result
-        except Exception:
-            return {"direction": 0.0, "confidence": 0.0}
-
-    def _memory(self, symbol, regime):
-        # In essential_only mode, skip the Chronicle search entirely.
-        if _LLM_MODE == "essential_only":
-            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
-        # TTL cache: reuse the last Chronicle result within the cache window.
-        _now = _time.time()
-        cache_key = f"{symbol}:{regime}"
-        cached = _memory_cache.get(cache_key)
-        if cached and (_now - cached["ts"]) < _MEMORY_TTL:
-            return cached["result"]
-        if self.chronicle is None:
-            return {"direction": 0.0, "confidence": 0.0}
-        try:
-            mems = self.chronicle.search(query=f"{symbol} {regime} outcome", domain="trading",
-                                         limit=4, requester="oracle")
-            if not mems:
-                return {"direction": 0.0, "confidence": 0.0}
-            score, n = 0.0, 0
-            for m in mems:
-                txt = (m.get("summary", "") if isinstance(m, dict) else str(m)).lower()
-                if any(w in txt for w in ("profit", "worked", "success")):
-                    score += 1; n += 1
-                elif any(w in txt for w in ("loss", "failed")):
-                    score -= 1; n += 1
-            result = {"direction": round(score / n, 3) if n else 0.0,
-                      "confidence": min(len(mems) / 4.0, 0.7)}
-            _memory_cache[cache_key] = {"result": result, "ts": _now}
-            return result
-        except Exception:
-            return {"direction": 0.0, "confidence": 0.0}
+        return {
+            "technical": tech,
+            "news":      news_stream,
+            "social":    social_stream,
+            "memory":    memory_stream,
+        }
 
     # ---- market view + signal ----
 
@@ -296,13 +232,13 @@ class OracleAgent(BaseAgent):
             regime = (analyze(series).get("regime") or {}).get("regime", "ranging")
             champ = self.evolution.champion(symbol, regime)
             if champ:
-                def decide(c, h, l, **kwargs):  # FIX: added **kwargs
+                def decide(c, h, l, **kwargs):
                     class _S:
                         pass
                     s = _S(); s.closes = c; s.highs = h; s.lows = l
                     return {"call": champ.call(s)}
             else:
-                decide = lambda c, h, l, **kwargs: {"call": self._indicator_call(c, h, l)}  # FIX: added **kwargs
+                decide = lambda c, h, l, **kwargs: {"call": self._indicator_call(c, h, l)}
             return {"status": "complete", "backtest": self.backtester.run(series, decide),
                     "used_champion": champ is not None}
         if task == "trade.propose":
@@ -344,7 +280,7 @@ class OracleAgent(BaseAgent):
         t = _an(s)
         if "error" in t:
             return "hold"
-        d = self._technical_from_indicators(t)["direction"]
+        d = self._signal_fusion._technical_signal(t)["direction"]
         return "buy" if d > 0.15 else "sell" if d < -0.15 else "hold"
 
     def _preserve(self, symbol, sig):
@@ -376,6 +312,12 @@ class OracleAgent(BaseAgent):
         base["evolution"] = self.evolution.stats()
         base["scientific_lab"] = self.lab.stats()
         base["adaptive_fusion"] = self.fusion.stats()
+        # FIX O-3: expose SignalFusion weights for observability
+        base["signal_fusion"] = {
+            "sentinel_wired": self.sentinel is not None,
+            "pulse_wired":    self.pulse is not None,
+            "chronicle_wired": self.chronicle is not None,
+        }
         return base
 
     def sentiment_for(self, symbol: str):
