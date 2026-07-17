@@ -1,94 +1,250 @@
 """
-shared.llm.client
-================
-The reasoning brain of the ecosystem: a real, multi-provider LLM client.
-(Book I Part IV Article I: an agent may be an LLM; Book II Part II Ch VI
-Confidence; Book VI Part II Ch III Honesty.)
+shared.llm.client  (Universe-oracle deep-fix v5)
+=================================================
+Multi-provider LLM client — now the SINGLE gatekeeper for ALL LLM calls.
 
-This is production-grade, not a stub. It talks to real LLM providers using
-their official SDKs and your API keys:
+New in this version (deep-fix):
+  1. ESSENTIAL GATE  — if PULSE_LLM_MODE or ORACLE_LLM_MODE == "essential_only",
+     any call with essential=False returns LLMResult(ok=False, reason="skipped_non_essential")
+     IMMEDIATELY, with zero HTTP traffic.  This is checked BEFORE the circuit breaker,
+     BEFORE the token bucket, BEFORE any provider is touched.
 
-  - Anthropic Claude   (ANTHROPIC_API_KEY)   -> primary reasoning
-  - OpenAI GPT         (OPENAI_API_KEY)       -> alternate / fallback
-  - Google Gemini      (GEMINI_API_KEY)       -> alternate / fallback
+  2. CIRCUIT BREAKER — after the first 429 / rate-limit error, ALL subsequent LLM calls
+     (essential or not) are blocked for CIRCUIT_BREAKER_COOLDOWN_SEC (default 60 s).
+     Returns LLMResult(ok=False, reason="circuit_open") instantly.  Resets automatically
+     after the cooldown.
 
-Design principles baked in:
-  * Provider-agnostic: one `complete()` / `complete_json()` interface.
-  * Automatic failover: if the primary provider errors or has no key, it
-    transparently tries the next available provider.
-  * Honest degradation: if NO provider is configured, calls return a clear
-    `llm_unavailable` result instead of fabricating an answer (constitutional
-    honesty). Callers decide whether to fall back to heuristics.
-  * Real usage accounting: token counts and latency are recorded per call.
-  * Retries with backoff on transient errors.
-  * No hidden prompts: every system prompt is passed explicitly (Book II Ch VII).
+  3. TOKEN-BUCKET RATE LIMITER — process-wide singleton, max LLM_RATE_LIMIT_RPM calls/min
+     (default 5).  Serialises all callers so bursts never reach the provider.
+
+  4. SDK RETRIES DISABLED — Anthropic, OpenAI, and google-genai all have aggressive built-in
+     retry logic that turns one 429 into 30+ rapid-fire requests.  All three are now
+     initialised with max_retries=0.  We own all retry/backoff logic.
+
+  5. EXPONENTIAL BACKOFF WITH FULL JITTER — on 429 / rate-limit errors, waits
+     uniform(0, min(cap, 2^attempt)) seconds before retrying.  This is the AWS-recommended
+     "full jitter" strategy that prevents synchronised retry waves.
+
+  6. PROMPT DEDUP CACHE — identical (system, prompt, temperature, max_tokens) tuples within
+     LLM_CACHE_TTL_SEC (default 120 s) return the cached result with zero API calls.
+
+  7. STATS — llm.stats() now includes circuit_breaker_trips, skipped_non_essential,
+     cache_hits, rate_limited_waits so you can observe the gate working.
+
+Environment variables (all optional, safe defaults):
+  PULSE_LLM_MODE or ORACLE_LLM_MODE   "essential_only" | "full"  (default "full")
+  LLM_RATE_LIMIT_RPM                  int   (default 5)
+  LLM_MAX_RETRIES                     int   (default 3)
+  LLM_MAX_BACKOFF_SEC                 float (default 60.0)
+  LLM_CACHE_TTL_SEC                   float (default 120.0)
+  CIRCUIT_BREAKER_COOLDOWN_SEC        float (default 60.0)
+  LLM_PROVIDER_ORDER                  comma-separated (default "anthropic,openai,gemini")
+  ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
+import random
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-# ---- optional SDKs, probed at import (no simulation) ----
+log = logging.getLogger("shared.llm.client")
+
+# ---------------------------------------------------------------------------
+# Read mode ONCE at import time.  main.py MUST call load_dotenv() before any
+# import of this module — see the patched main.py.
+# ---------------------------------------------------------------------------
+def _read_mode() -> str:
+    for var in ("PULSE_LLM_MODE", "ORACLE_LLM_MODE"):
+        v = os.getenv(var, "").strip().lower()
+        if v:
+            return v
+    return "full"
+
+_LLM_MODE: str = _read_mode()   # "essential_only" | "full"
+
+# ---------------------------------------------------------------------------
+# Optional SDKs — probed at import, never simulated
+# ---------------------------------------------------------------------------
 try:
-    import anthropic  # type: ignore
+    import anthropic as _anthropic   # type: ignore
     _HAS_ANTHROPIC = True
 except Exception:
     _HAS_ANTHROPIC = False
 
 try:
-    import openai  # type: ignore
+    import openai as _openai         # type: ignore
     _HAS_OPENAI = True
 except Exception:
     _HAS_OPENAI = False
 
 try:
-    from google import genai as _genai  # type: ignore
+    from google import genai as _genai   # type: ignore
     _HAS_GEMINI = True
 except Exception:
     _HAS_GEMINI = False
 
-
-# Default models per provider (override via env).
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 DEFAULT_MODELS = {
     "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
-    "openai": os.getenv("OPENAI_MODEL", "gpt-4o"),
-    "gemini": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    "openai":    os.getenv("OPENAI_MODEL",    "gpt-4o"),
+    "gemini":    os.getenv("GEMINI_MODEL",    "gemini-2.5-flash"),
 }
 
+_RATE_LIMIT_RPM      = max(1, int(os.getenv("LLM_RATE_LIMIT_RPM",          "5")))
+_MAX_RETRIES         = max(0, int(os.getenv("LLM_MAX_RETRIES",              "3")))
+_MAX_BACKOFF_SEC     = float(os.getenv("LLM_MAX_BACKOFF_SEC",               "60.0"))
+_CACHE_TTL_SEC       = float(os.getenv("LLM_CACHE_TTL_SEC",                "120.0"))
+_CB_COOLDOWN_SEC     = float(os.getenv("CIRCUIT_BREAKER_COOLDOWN_SEC",      "60.0"))
 
+
+# ---------------------------------------------------------------------------
+# Result dataclass
+# ---------------------------------------------------------------------------
 @dataclass
 class LLMResult:
-    """The outcome of an LLM call, with full provenance."""
     text: str = ""
     provider: str = ""
     model: str = ""
     ok: bool = False
-    reason: str = ""            # why it failed, if it did
+    reason: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_ms: float = 0.0
     raw: Any = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"text": self.text, "provider": self.provider, "model": self.model,
-                "ok": self.ok, "reason": self.reason,
-                "tokens": {"prompt": self.prompt_tokens, "completion": self.completion_tokens},
-                "latency_ms": self.latency_ms}
+        return {
+            "text": self.text, "provider": self.provider, "model": self.model,
+            "ok": self.ok, "reason": self.reason,
+            "tokens": {"prompt": self.prompt_tokens, "completion": self.completion_tokens},
+            "latency_ms": self.latency_ms,
+        }
 
 
+# ---------------------------------------------------------------------------
+# Token-bucket rate limiter (process-wide singleton)
+# ---------------------------------------------------------------------------
+class _TokenBucket:
+    def __init__(self, rate_per_minute: int):
+        self._rate     = rate_per_minute / 60.0
+        self._capacity = float(max(1, rate_per_minute))
+        self._tokens   = self._capacity
+        self._last     = time.monotonic()
+        self._lock     = threading.Lock()
+
+    def _refill(self) -> None:
+        now = time.monotonic()
+        self._tokens = min(self._capacity, self._tokens + (now - self._last) * self._rate)
+        self._last = now
+
+    def acquire(self, timeout: float = 120.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                self._refill()
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return True
+            wait = min(1.0 / max(self._rate, 0.001), deadline - time.monotonic())
+            if wait <= 0:
+                return False
+            time.sleep(wait)
+
+
+_bucket = _TokenBucket(_RATE_LIMIT_RPM)
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker (process-wide singleton)
+# ---------------------------------------------------------------------------
+class _CircuitBreaker:
+    def __init__(self, cooldown: float):
+        self._cooldown  = cooldown
+        self._open_until: float = 0.0
+        self._trips: int = 0
+        self._lock = threading.Lock()
+
+    def is_open(self) -> bool:
+        with self._lock:
+            return time.monotonic() < self._open_until
+
+    def trip(self) -> None:
+        with self._lock:
+            self._open_until = time.monotonic() + self._cooldown
+            self._trips += 1
+            log.warning(
+                "LLM circuit breaker TRIPPED — all calls blocked for %.0f s (trip #%d)",
+                self._cooldown, self._trips,
+            )
+
+    def trips(self) -> int:
+        with self._lock:
+            return self._trips
+
+
+_breaker = _CircuitBreaker(_CB_COOLDOWN_SEC)
+
+
+# ---------------------------------------------------------------------------
+# Prompt dedup cache (process-wide)
+# ---------------------------------------------------------------------------
+_cache: Dict[str, Dict[str, Any]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_key(system: str, prompt: str, temperature: float, max_tokens: int) -> str:
+    raw = f"{system}||{prompt}||{temperature}||{max_tokens}"
+    return hashlib.md5(raw.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _cache_get(key: str) -> Optional[LLMResult]:
+    with _cache_lock:
+        entry = _cache.get(key)
+    if entry and (time.time() - entry["ts"]) < _CACHE_TTL_SEC:
+        return entry["result"]
+    return None
+
+
+def _cache_put(key: str, result: LLMResult) -> None:
+    with _cache_lock:
+        _cache[key] = {"result": result, "ts": time.time()}
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit error detection
+# ---------------------------------------------------------------------------
+def _is_rate_limit(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(kw in msg for kw in (
+        "429", "rate_limit", "rate limit", "quota", "resource_exhausted",
+        "too many requests", "ratelimiterror", "resourceexhausted",
+        "toomanyrequests",
+    ))
+
+
+def _backoff(attempt: int) -> None:
+    ceiling = min(_MAX_BACKOFF_SEC, 2.0 ** attempt)
+    wait = random.uniform(0.0, ceiling)   # full jitter
+    log.debug("LLM backoff attempt %d: sleeping %.2f s", attempt, wait)
+    time.sleep(wait)
+
+
+# ---------------------------------------------------------------------------
+# Provider adapters  (SDK retries = 0 on all three)
+# ---------------------------------------------------------------------------
 class _Provider:
-    """Base provider adapter."""
     name = "base"
-
-    def available(self) -> bool:
-        raise NotImplementedError
-
+    def available(self) -> bool: raise NotImplementedError
     def complete(self, system: str, messages: List[Dict[str, str]],
-                 temperature: float, max_tokens: int) -> LLMResult:
-        raise NotImplementedError
+                 temperature: float, max_tokens: int) -> LLMResult: raise NotImplementedError
 
 
 class AnthropicProvider(_Provider):
@@ -99,9 +255,10 @@ class AnthropicProvider(_Provider):
         self._client = None
         if _HAS_ANTHROPIC and self._key:
             try:
-                self._client = anthropic.Anthropic(api_key=self._key)
+                # max_retries=0 — we own all retry logic
+                self._client = _anthropic.Anthropic(api_key=self._key, max_retries=0)
             except Exception:
-                self._client = None
+                pass
 
     def available(self) -> bool:
         return self._client is not None
@@ -112,12 +269,15 @@ class AnthropicProvider(_Provider):
         resp = self._client.messages.create(
             model=model, system=system or None,
             messages=[{"role": m["role"], "content": m["content"]} for m in messages],
-            temperature=temperature, max_tokens=max_tokens)
-        text = "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
-        return LLMResult(text=text, provider=self.name, model=model, ok=True,
-                        prompt_tokens=getattr(resp.usage, "input_tokens", 0),
-                        completion_tokens=getattr(resp.usage, "output_tokens", 0),
-                        latency_ms=round((time.time() - start) * 1000, 1), raw=resp)
+            temperature=temperature, max_tokens=max_tokens,
+        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        return LLMResult(
+            text=text, provider=self.name, model=model, ok=True,
+            prompt_tokens=getattr(resp.usage, "input_tokens", 0),
+            completion_tokens=getattr(resp.usage, "output_tokens", 0),
+            latency_ms=round((time.time() - start) * 1000, 1), raw=resp,
+        )
 
 
 class OpenAIProvider(_Provider):
@@ -128,9 +288,10 @@ class OpenAIProvider(_Provider):
         self._client = None
         if _HAS_OPENAI and self._key:
             try:
-                self._client = openai.OpenAI(api_key=self._key)
+                # max_retries=0 — we own all retry logic
+                self._client = _openai.OpenAI(api_key=self._key, max_retries=0)
             except Exception:
-                self._client = None
+                pass
 
     def available(self) -> bool:
         return self._client is not None
@@ -140,13 +301,16 @@ class OpenAIProvider(_Provider):
         model = DEFAULT_MODELS["openai"]
         full = ([{"role": "system", "content": system}] if system else []) + messages
         resp = self._client.chat.completions.create(
-            model=model, messages=full, temperature=temperature, max_tokens=max_tokens)
+            model=model, messages=full, temperature=temperature, max_tokens=max_tokens,
+        )
         text = resp.choices[0].message.content or ""
         usage = getattr(resp, "usage", None)
-        return LLMResult(text=text, provider=self.name, model=model, ok=True,
-                        prompt_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
-                        completion_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
-                        latency_ms=round((time.time() - start) * 1000, 1), raw=resp)
+        return LLMResult(
+            text=text, provider=self.name, model=model, ok=True,
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+            latency_ms=round((time.time() - start) * 1000, 1), raw=resp,
+        )
 
 
 class GeminiProvider(_Provider):
@@ -157,9 +321,17 @@ class GeminiProvider(_Provider):
         self._client = None
         if _HAS_GEMINI and self._key:
             try:
-                self._client = _genai.Client(api_key=self._key)
+                # Disable SDK retries — try HttpOptions first, fall back for older SDKs
+                try:
+                    from google.genai import types as _gt  # type: ignore
+                    http_opts = _gt.HttpOptions(
+                        retry_config=_gt.RetryConfig(max_retries=0)
+                    )
+                    self._client = _genai.Client(api_key=self._key, http_options=http_opts)
+                except Exception:
+                    self._client = _genai.Client(api_key=self._key)
             except Exception:
-                self._client = None
+                pass
 
     def available(self) -> bool:
         return self._client is not None
@@ -167,78 +339,114 @@ class GeminiProvider(_Provider):
     def complete(self, system, messages, temperature, max_tokens) -> LLMResult:
         start = time.time()
         model_name = DEFAULT_MODELS["gemini"]
-        
-        # New google-genai SDK usage
         config = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
-            "system_instruction": system or None
+            "system_instruction": system or None,
         }
-        
-        # Convert messages to Gemini format
-        # genai SDK expects contents=[{'role': 'user', 'parts': [{'text': '...'}]}, ...]
         contents = []
         for m in messages:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
-            
-        try:
-            resp = self._client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
-            text = resp.text or ""
-            return LLMResult(text=text, provider=self.name, model=model_name, ok=True,
-                            latency_ms=round((time.time() - start) * 1000, 1), raw=resp)
-        except Exception as e:
-            return LLMResult(ok=False, reason=str(e), provider=self.name, latency_ms=round((time.time() - start) * 1000, 1))
+        resp = self._client.models.generate_content(
+            model=model_name, contents=contents, config=config,
+        )
+        text = resp.text or ""
+        return LLMResult(
+            text=text, provider=self.name, model=model_name, ok=True,
+            latency_ms=round((time.time() - start) * 1000, 1), raw=resp,
+        )
 
 
+# ---------------------------------------------------------------------------
+# LLMClient — the single gatekeeper
+# ---------------------------------------------------------------------------
 class LLMClient:
     """
-    Multi-provider LLM client with failover and honest degradation.
-
-    Usage:
-        llm = get_llm()
-        result = llm.complete("You are Atlas.", "Summarize dark matter research.")
-        if result.ok:
-            print(result.text)
+    Multi-provider LLM client.  Every call passes through:
+      1. Essential gate  (instant None if non-essential + essential_only mode)
+      2. Circuit breaker (instant None if tripped)
+      3. Prompt cache    (instant hit if duplicate within TTL)
+      4. Token bucket    (rate-limits to LLM_RATE_LIMIT_RPM)
+      5. Provider loop   (tries providers in order with full-jitter backoff)
     """
 
     def __init__(self, preferred_order: Optional[List[str]] = None,
-                 max_retries: int = 2):
+                 max_retries: int = _MAX_RETRIES):
         self.max_retries = max_retries
         self._providers: Dict[str, _Provider] = {
             "anthropic": AnthropicProvider(),
-            "openai": OpenAIProvider(),
-            "gemini": GeminiProvider(),
+            "openai":    OpenAIProvider(),
+            "gemini":    GeminiProvider(),
         }
-        order = preferred_order or os.getenv("LLM_PROVIDER_ORDER", "anthropic,openai,gemini").split(",")
+        order = preferred_order or os.getenv(
+            "LLM_PROVIDER_ORDER", "anthropic,openai,gemini"
+        ).split(",")
         self._order = [p.strip() for p in order if p.strip() in self._providers]
-        self._calls = 0
-        self._tokens = 0
 
+        # stats counters
+        self._calls              = 0
+        self._tokens             = 0
+        self._cache_hits         = 0
+        self._skipped_non_ess    = 0
+        self._rate_limited_waits = 0
+        self._lock               = threading.Lock()
+
+    # ------------------------------------------------------------------
     def available_providers(self) -> List[str]:
-        return [name for name in self._order if self._providers[name].available()]
+        return [n for n in self._order if self._providers[n].available()]
 
     @property
     def has_any(self) -> bool:
-        return len(self.available_providers()) > 0
+        return bool(self.available_providers())
 
-    def complete(self, system: str, prompt: str, temperature: float = 0.3,
-                 max_tokens: int = 1024,
-                 messages: Optional[List[Dict[str, str]]] = None) -> LLMResult:
+    # ------------------------------------------------------------------
+    def complete(
+        self,
+        system: str,
+        prompt: str,
+        temperature: float = 0.3,
+        max_tokens: int = 1024,
+        messages: Optional[List[Dict[str, str]]] = None,
+        essential: bool = True,          # ← NEW: callers mark advisory calls False
+    ) -> LLMResult:
         """
-        Get a completion, trying providers in order with retries.
-        Returns an honest failure result if no provider is available.
+        Get a completion.  Passes through the 5-layer gate before any HTTP call.
+
+        essential=False  → skipped instantly in essential_only mode.
+        essential=True   → still subject to circuit breaker + rate limiter.
         """
+        # ── 1. ESSENTIAL GATE ──────────────────────────────────────────
+        if not essential and _LLM_MODE == "essential_only":
+            with self._lock:
+                self._skipped_non_ess += 1
+            return LLMResult(ok=False, reason="skipped_non_essential",
+                             provider="none", latency_ms=0.0)
+
+        # ── 2. CIRCUIT BREAKER ─────────────────────────────────────────
+        if _breaker.is_open():
+            return LLMResult(ok=False, reason="circuit_open",
+                             provider="none", latency_ms=0.0)
+
+        # ── 3. PROMPT DEDUP CACHE ──────────────────────────────────────
+        ck = _cache_key(system, prompt, temperature, max_tokens)
+        cached = _cache_get(ck)
+        if cached is not None:
+            with self._lock:
+                self._cache_hits += 1
+            return cached
+
+        # ── 4. TOKEN BUCKET ────────────────────────────────────────────
+        if not _bucket.acquire(timeout=120.0):
+            return LLMResult(ok=False, reason="rate_limiter_timeout",
+                             provider="none", latency_ms=0.0)
+
+        # ── 5. PROVIDER LOOP ───────────────────────────────────────────
         msgs = messages or [{"role": "user", "content": prompt}]
         available = self.available_providers()
         if not available:
             return LLMResult(ok=False, reason="llm_unavailable",
-                           text="", provider="none",
-                           latency_ms=0.0)
+                             provider="none", latency_ms=0.0)
 
         last_error = ""
         for name in available:
@@ -246,58 +454,95 @@ class LLMClient:
             for attempt in range(self.max_retries + 1):
                 try:
                     result = provider.complete(system, msgs, temperature, max_tokens)
-                    self._calls += 1
-                    self._tokens += result.prompt_tokens + result.completion_tokens
+                    with self._lock:
+                        self._calls  += 1
+                        self._tokens += result.prompt_tokens + result.completion_tokens
+                    _cache_put(ck, result)
                     return result
+
                 except Exception as exc:
                     last_error = f"{name}: {exc}"
-                    if attempt < self.max_retries:
-                        time.sleep(0.6 * (attempt + 1))  # linear backoff
-                    continue
-        return LLMResult(ok=False, reason=f"all_providers_failed: {last_error}",
-                        provider="none")
+                    if _is_rate_limit(exc):
+                        _breaker.trip()          # open the circuit breaker
+                        with self._lock:
+                            self._rate_limited_waits += 1
+                        if attempt < self.max_retries:
+                            _backoff(attempt)
+                        else:
+                            # exhausted retries on this provider — stop immediately
+                            return LLMResult(
+                                ok=False,
+                                reason=f"rate_limited_exhausted: {exc}",
+                                provider=name, latency_ms=0.0,
+                            )
+                    else:
+                        # non-rate-limit error: short linear wait, then try next provider
+                        if attempt < self.max_retries:
+                            time.sleep(0.5 * (attempt + 1))
+                        break   # move to next provider
 
-    def complete_json(self, system: str, prompt: str, temperature: float = 0.2,
-                      max_tokens: int = 1024) -> Tuple[Optional[Any], LLMResult]:
-        """
-        Ask for strict JSON and parse it. Returns (parsed_or_None, raw_result).
-        Robust to code-fenced JSON. Never fabricates: parse failure -> None.
-        """
-        json_system = (system + "\n\nRespond with ONLY valid JSON. No prose, no code fences.").strip()
-        result = self.complete(json_system, prompt, temperature, max_tokens)
+        return LLMResult(ok=False, reason=f"all_providers_failed: {last_error}",
+                         provider="none")
+
+    # ------------------------------------------------------------------
+    def complete_json(
+        self,
+        system: str,
+        prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+        essential: bool = True,          # ← NEW
+    ) -> Tuple[Optional[Any], LLMResult]:
+        json_system = (
+            system + "\n\nRespond with ONLY valid JSON. No prose, no code fences."
+        ).strip()
+        result = self.complete(json_system, prompt, temperature, max_tokens,
+                               essential=essential)
         if not result.ok:
             return None, result
         parsed = self._extract_json(result.text)
         return parsed, result
 
+    # ------------------------------------------------------------------
     @staticmethod
     def _extract_json(text: str) -> Optional[Any]:
         text = text.strip()
-        # strip code fences if present
         if text.startswith("```"):
             text = text.split("```", 2)[1] if "```" in text[3:] else text
             text = text.replace("json", "", 1).strip("`\n ")
         try:
             return json.loads(text)
         except Exception:
-            # try to locate the first {...} or [...] block
             for opener, closer in (("{", "}"), ("[", "]")):
-                start = text.find(opener)
-                end = text.rfind(closer)
-                if start != -1 and end != -1 and end > start:
+                s, e = text.find(opener), text.rfind(closer)
+                if s != -1 and e != -1 and e > s:
                     try:
-                        return json.loads(text[start:end + 1])
+                        return json.loads(text[s:e + 1])
                     except Exception:
                         continue
         return None
 
+    # ------------------------------------------------------------------
     def stats(self) -> Dict[str, Any]:
-        return {"available_providers": self.available_providers(),
-                "preferred_order": self._order, "total_calls": self._calls,
-                "total_tokens": self._tokens, "has_any": self.has_any}
+        with self._lock:
+            return {
+                "available_providers":    self.available_providers(),
+                "preferred_order":        self._order,
+                "llm_mode":               _LLM_MODE,
+                "total_calls":            self._calls,
+                "total_tokens":           self._tokens,
+                "cache_hits":             self._cache_hits,
+                "skipped_non_essential":  self._skipped_non_ess,
+                "rate_limited_waits":     self._rate_limited_waits,
+                "circuit_breaker_trips":  _breaker.trips(),
+                "circuit_breaker_open":   _breaker.is_open(),
+                "has_any":                self.has_any,
+            }
 
 
-# Process-wide singleton.
+# ---------------------------------------------------------------------------
+# Process-wide singleton
+# ---------------------------------------------------------------------------
 _llm: Optional[LLMClient] = None
 
 

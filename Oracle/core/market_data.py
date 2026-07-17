@@ -24,9 +24,17 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import os  # noqa: E402 (needed for env var above; placed after existing imports)
 
 _UA = "MarketOracleAI/1.0 (AI Ecosystem financial intelligence)"
 _TIMEOUT = 15
+
+# ---- In-memory TTL cache for market data ----
+# Prevents repeated yfinance/Stooq HTTP calls within the same trading cycle.
+# Default: 240 s (4 min) — safe for a 300 s interval loop.
+# Override: set MARKET_DATA_CACHE_TTL_SEC env var (e.g. "60" for 1-min bars).
+_MARKET_DATA_CACHE_TTL_SEC: float = float(os.getenv("MARKET_DATA_CACHE_TTL_SEC", "240"))
+_market_data_mem_cache: Dict[str, Dict[str, Any]] = {}   # key -> {result, ts}
 
 
 @dataclass
@@ -219,14 +227,26 @@ class MarketData:
 
     def get(self, symbol: str, period: str = "6mo", interval: str = "1d",
            allow_cache_fallback: bool = True) -> Dict[str, Any]:
+        # ---- in-memory TTL cache (prevents redundant HTTP calls per cycle) ----
+        _mem_key = f"{symbol.upper()}|{period}|{interval}"
+        _now = time.time()
+        _cached_mem = _market_data_mem_cache.get(_mem_key)
+        if _cached_mem and (_now - _cached_mem["ts"]) < _MARKET_DATA_CACHE_TTL_SEC:
+            logging.getLogger("oracle.market_data").debug(
+                "market_data mem-cache HIT for %s (%.0fs old)", symbol,
+                _now - _cached_mem["ts"])
+            return _cached_mem["result"]
+
         for src in self.sources:
             if not getattr(src, "available", False):
                 continue
             series = src.fetch(symbol, period, interval)
             if series and series.bars:
                 self._save_cache(symbol, series)
-                return {"status": "complete", "series": series,
-                       "source": series.source, "bars": len(series.bars)}
+                _result = {"status": "complete", "series": series,
+                           "source": series.source, "bars": len(series.bars)}
+                _market_data_mem_cache[_mem_key] = {"result": _result, "ts": _now}
+                return _result
 
         if allow_cache_fallback:
             cached = self._load_cache(symbol)
@@ -234,10 +254,12 @@ class MarketData:
                 logging.getLogger("oracle.market_data").warning(
                     "all live sources failed for %s; using cached data (%.1fh old)",
                     symbol, cached["age_hours"])
-                return {"status": "complete", "series": cached["series"],
-                       "source": cached["series"].source, "bars": len(cached["series"].bars),
-                       "cache_age_hours": round(cached["age_hours"], 1),
-                       "warning": f"live sources unreachable, using {cached['age_hours']:.1f}h-old cached data"}
+                _result = {"status": "complete", "series": cached["series"],
+                           "source": cached["series"].source, "bars": len(cached["series"].bars),
+                           "cache_age_hours": round(cached["age_hours"], 1),
+                           "warning": f"live sources unreachable, using {cached['age_hours']:.1f}h-old cached data"}
+                _market_data_mem_cache[_mem_key] = {"result": _result, "ts": _now}
+                return _result
 
         return {"status": "error", "series": None,
                "message": f"no live market data for {symbol} (sources unreachable, no cache available)"}

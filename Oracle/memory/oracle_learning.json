@@ -210,11 +210,52 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 15
+    },
+    {
+      "source": "heuristic",
+      "task": "trade.propose",
+      "root_cause": "risk gate rejected",
+      "lesson": "Task 'trade.propose' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 16
+    },
+    {
+      "source": "heuristic",
+      "task": "trade.propose",
+      "root_cause": "risk gate rejected",
+      "lesson": "Task 'trade.propose' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 17
+    },
+    {
+      "source": "heuristic",
+      "task": "trade.propose",
+      "root_cause": "risk gate rejected",
+      "lesson": "Task 'trade.propose' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 18
+    },
+    {
+      "source": "heuristic",
+      "task": "trade.propose",
+      "root_cause": "signal is hold",
+      "lesson": "Task 'trade.propose' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
     }
   ],
   "failure_signatures": {
     "strategy.evolve::EvolutionLab._fitness.<locals>.decide() got an unexpected keyword argument 'curr": 3,
     "strategy.evolve::list index out of range": 3,
-    "trade.propose::risk gate rejected": 15
+    "trade.propose::risk gate rejected": 18,
+    "trade.propose::signal is hold": 1
   }
 }

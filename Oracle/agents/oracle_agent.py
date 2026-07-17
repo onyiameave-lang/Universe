@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +33,26 @@ if str(_REPO_ROOT) not in sys.path:
 _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
+
+# ── LLM mode & stream-cache configuration ───────────────────────────────────
+import os as _os
+import time as _time
+
+# When ORACLE_LLM_MODE=essential_only, non-critical evidence streams (news,
+# social, memory) are skipped and return neutral {direction:0, confidence:0}.
+# This is the primary lever for free-tier Gemini keys where every LLM call
+# counts against a tight RPM quota.
+_LLM_MODE: str = _os.getenv("ORACLE_LLM_MODE", "full").lower()
+
+# Per-stream TTL caches — prevent repeated Sentinel/Pulse/Chronicle calls
+# within the same cycle window.  Each entry: {symbol: {result, ts}}.
+_news_cache:   Dict[str, Dict[str, Any]] = {}
+_social_cache: Dict[str, Dict[str, Any]] = {}
+_memory_cache: Dict[str, Dict[str, Any]] = {}
+
+_NEWS_TTL:   float = float(_os.getenv("ORACLE_NEWS_CACHE_TTL",   "300"))
+_SOCIAL_TTL: float = float(_os.getenv("ORACLE_SOCIAL_CACHE_TTL", "300"))
+_MEMORY_TTL: float = float(_os.getenv("ORACLE_MEMORY_CACHE_TTL", "600"))
 
 from core.market_data import MarketData  # type: ignore
 from core.risk import RiskManager  # type: ignore
@@ -137,26 +159,55 @@ class OracleAgent(BaseAgent):
         return {"direction": max(-1, min(1, score)), "confidence": conf, "regime": regime}
 
     def _news(self, symbol):
+        # In essential_only mode, skip the Sentinel API call entirely.
+        if _LLM_MODE == "essential_only":
+            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
+        # TTL cache: reuse the last Sentinel result within the cache window.
+        _now = _time.time()
+        cached = _news_cache.get(symbol)
+        if cached and (_now - cached["ts"]) < _NEWS_TTL:
+            return cached["result"]
         if self.sentinel is None:
             return {"direction": 0.0, "confidence": 0.0}
         try:
             s = self.sentinel.sentiment_for(symbol)
-            return {"direction": s.get("sentiment", 0.0), "confidence": s.get("confidence", 0.0)}
+            result = {"direction": s.get("sentiment", 0.0), "confidence": s.get("confidence", 0.0)}
+            _news_cache[symbol] = {"result": result, "ts": _now}
+            return result
         except Exception:
             return {"direction": 0.0, "confidence": 0.0}
 
     def _social(self, symbol):
+        # In essential_only mode, skip the Pulse API call entirely.
+        if _LLM_MODE == "essential_only":
+            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
+        # TTL cache: reuse the last Pulse result within the cache window.
+        _now = _time.time()
+        cached = _social_cache.get(symbol)
+        if cached and (_now - cached["ts"]) < _SOCIAL_TTL:
+            return cached["result"]
         if self.pulse is None:
             return {"direction": 0.0, "confidence": 0.0}
         try:
             s = self.pulse.sentiment_for(symbol)
             conf = s.get("confidence", 0.0) * (0.3 if s.get("manipulation_warning") else 1.0)
-            return {"direction": s.get("sentiment", 0.0), "confidence": conf,
-                    "manipulation_warning": s.get("manipulation_warning", False)}
+            result = {"direction": s.get("sentiment", 0.0), "confidence": conf,
+                      "manipulation_warning": s.get("manipulation_warning", False)}
+            _social_cache[symbol] = {"result": result, "ts": _now}
+            return result
         except Exception:
             return {"direction": 0.0, "confidence": 0.0}
 
     def _memory(self, symbol, regime):
+        # In essential_only mode, skip the Chronicle search entirely.
+        if _LLM_MODE == "essential_only":
+            return {"direction": 0.0, "confidence": 0.0, "note": "skipped_essential_only"}
+        # TTL cache: reuse the last Chronicle result within the cache window.
+        _now = _time.time()
+        cache_key = f"{symbol}:{regime}"
+        cached = _memory_cache.get(cache_key)
+        if cached and (_now - cached["ts"]) < _MEMORY_TTL:
+            return cached["result"]
         if self.chronicle is None:
             return {"direction": 0.0, "confidence": 0.0}
         try:
@@ -171,7 +222,10 @@ class OracleAgent(BaseAgent):
                     score += 1; n += 1
                 elif any(w in txt for w in ("loss", "failed")):
                     score -= 1; n += 1
-            return {"direction": round(score / n, 3) if n else 0.0, "confidence": min(len(mems) / 4.0, 0.7)}
+            result = {"direction": round(score / n, 3) if n else 0.0,
+                      "confidence": min(len(mems) / 4.0, 0.7)}
+            _memory_cache[cache_key] = {"result": result, "ts": _now}
+            return result
         except Exception:
             return {"direction": 0.0, "confidence": 0.0}
 

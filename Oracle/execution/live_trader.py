@@ -103,6 +103,25 @@ class LiveTrader:
         self._start_equity = None
         self._open_context: Dict[str, Dict] = {}   # symbol -> streams at entry (for learning)
 
+        # ---- kill-switch equity cache ----
+        # broker.account() is an MT5 RPC call; calling it once per symbol per cycle
+        # is wasteful. Cache the result for KILL_SWITCH_EQUITY_CACHE_SEC seconds.
+        _ks_ttl = float(os.getenv("KILL_SWITCH_EQUITY_CACHE_SEC", "60"))
+        self._ks_equity_ttl: float = _ks_ttl
+        self._ks_equity_cache: Optional[float] = None   # last known equity
+        self._ks_equity_ts: float = 0.0                 # when it was fetched
+
+        # ---- inter-symbol delay ----
+        # When multiple symbols are traded in one cycle, all their _tick() calls
+        # fan out into LLM calls simultaneously — this is the burst that causes
+        # the 429 storm.  Inserting a delay between symbols spreads the calls
+        # over time so the token-bucket rate limiter in LLMClient can absorb them
+        # without hitting the provider wall.
+        # Default: 12s between symbols (5 RPM / 5 symbols = 1 call per 12s).
+        # Set ORACLE_INTER_SYMBOL_DELAY_SEC=0 to disable (single-symbol setups).
+        self._inter_symbol_delay: float = float(
+            os.getenv("ORACLE_INTER_SYMBOL_DELAY_SEC", "12"))
+
         # boot Oracle + its evidence peers
         _unload_conflicting_modules()
         self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
@@ -166,7 +185,14 @@ class LiveTrader:
 
     def _tick(self) -> bool:
         """Returns True if the kill switch fired mid-cycle (caller should stop)."""
-        for symbol in self.symbols:
+        for idx, symbol in enumerate(self.symbols):
+            # ---- inter-symbol delay ----
+            # Skip the delay before the first symbol; insert it between symbols
+            # so LLM calls are spread over time rather than fired all at once.
+            if idx > 0 and self._inter_symbol_delay > 0:
+                log.debug("inter-symbol delay %.1fs before %s", self._inter_symbol_delay, symbol)
+                time.sleep(self._inter_symbol_delay)
+
             if self._kill_switch_check():
                 return True
             # 1. signal
@@ -198,8 +224,12 @@ class LiveTrader:
     def _kill_switch_check(self) -> bool:
         if self._start_equity is None or not self.broker.status.connected:
             return False
-        acct = self.broker.account()
-        equity = acct.get("equity", self._start_equity)
+        _now = time.time()
+        if self._ks_equity_cache is None or (_now - self._ks_equity_ts) >= self._ks_equity_ttl:
+            acct = self.broker.account()
+            self._ks_equity_cache = acct.get("equity", self._start_equity)
+            self._ks_equity_ts = _now
+        equity = self._ks_equity_cache
         loss = (self._start_equity - equity) / self._start_equity if self._start_equity else 0
         return loss >= self.session_max_loss_pct
 
