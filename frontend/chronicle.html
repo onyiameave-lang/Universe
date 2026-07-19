@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronicle — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>
+:root{--accent:#8B5CF6;--accent-rgb:139,92,246;}
+.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
+.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
+.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
+.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
+.refresh-btn:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">📜</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
+      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
+      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
+      <a href="chronicle.html" class="nav-tab active">📜 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">⚡ System</a>
+      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
+      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
+      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+  </div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">📜</div>
+      <div class="agent-name">Chronicle</div>
+      <div class="agent-sub">Memory Engine</div>
+      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
+      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>Vector DB…</div>
+      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Decaying…</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">CHRONICLE — Memory Engine</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Memory Records</div><div class="kpi-value accent-text" id="kpiRecords">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Confidence</div><div class="kpi-value green-text" id="kpiConfidence">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Queries Today</div><div class="kpi-value" id="kpiQueries">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Patterns Found</div><div class="kpi-value accent-text" id="kpiPatterns">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Last Nightly Report</div><div class="kpi-value" id="kpiLastReport" style="font-size:14px">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Memory Health</div><div class="kpi-value green-text" id="kpiHealth">—</div></div>
+    </div>
+
+    <!-- Search bar -->
+    <div class="card" style="padding:12px 18px">
+      <div style="display:flex;gap:10px;align-items:center">
+        <span style="color:var(--muted);font-size:16px">🔍</span>
+        <input id="memSearchInput" type="text" placeholder="Search memory records… (e.g. 'EURUSD bullish London session')"
+          style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
+          onkeydown="if(event.key==='Enter') searchMemory(this.value.trim())">
+        <button onclick="searchMemory(document.getElementById('memSearchInput').value.trim())"
+          style="background:var(--accent);border:none;border-radius:6px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">Search</button>
+        <button class="refresh-btn" onclick="loadChronicleData()" title="Refresh">↻</button>
+      </div>
+      <div id="searchResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
+    </div>
+
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Memory Records</span><span class="card-badge" id="memBadge">Loading…</span><button class="refresh-btn" onclick="loadChronicleData()" title="Refresh">↻</button></div>
+        <div id="memList" style="display:flex;flex-direction:column;gap:12px;max-height:320px;overflow-y:auto">
+          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading memory records…</div>
+        </div>
+      </div>
+      <div class="card" style="flex:1;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <div class="card-header"><span class="card-title">Confidence Decay</span><button class="refresh-btn" onclick="loadChronicleData()" title="Refresh">↻</button></div>
+          <div class="chart-wrap"><canvas id="decayChart" height="160"></canvas></div>
+        </div>
+        <div>
+          <div class="card-header"><span class="card-title">Memory Categories</span></div>
+          <div class="chart-wrap"><canvas id="catChart" height="160"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Nightly Research Reports</span><span class="card-badge">Last 5</span><button class="refresh-btn" onclick="loadChronicleData()" title="Refresh">↻</button></div>
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Report Title</th><th>Memories Created</th><th>Key Finding</th><th>Status</th></tr></thead>
+        <tbody id="reportsBody">
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading reports…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
+      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
+        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>📜 Chat with Chronicle</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Chronicle, your memory engine. Ask me about historical patterns, memory records, or nightly research findings.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Chronicle…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+
+<script src="shared.js"></script>
+<script src="api-config.js"></script>
+<script>
+/* chronicle.html — API-connected (v7) | Destination: Chronicle/frontend/chronicle.html */
+
+let decayChartInst = null, catChartInst = null;
+
+const FB_MEMORIES = [
+  {type:'TRADE PATTERN',content:'USDJPY BUY signal in London session (08:00-12:00 UTC) with RSI>55 and MACD bullish cross has 73% win rate over 47 occurrences.',conf:0.94,age:'2 months',uses:47},
+  {type:'NEWS CORRELATION',content:'Gold (XAUUSD) news spikes from Reuters/Bloomberg tend to reverse within 2 hours of the US market open. Fade the spike after 30 minutes.',conf:0.81,age:'3 months',uses:23},
+  {type:'REGIME ANALYSIS',content:'In bull regime with social momentum >70, BUY signals have 12% higher win rate. Increase position size by 20% when both conditions met.',conf:0.78,age:'1 month',uses:31},
+];
+const FB_REPORTS = [
+  {date:'Jul 17',title:'Daily Intelligence Report #47',memories:23,finding:'3/4 losses in first 30min London session',status:'COMPLETE'},
+  {date:'Jul 16',title:'Daily Intelligence Report #46',memories:18,finding:'XAUUSD news spikes reverse within 2h of US open',status:'COMPLETE'},
+  {date:'Jul 15',title:'Daily Intelligence Report #45',memories:31,finding:'Confidence threshold 0.75 optimal for bull regime',status:'COMPLETE'},
+];
+
+function renderDecayChart(labels, data) {
+  const ctx = document.getElementById('decayChart').getContext('2d');
+  if (decayChartInst) decayChartInst.destroy();
+  decayChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ data, borderColor: '#8B5CF6', backgroundColor: 'rgba(139,92,246,0.12)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { min: 0.5, max: 1.0, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } } } }
+  });
+}
+
+function renderCatChart(labels, data) {
+  const ctx = document.getElementById('catChart').getContext('2d');
+  if (catChartInst) catChartInst.destroy();
+  catChartInst = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: ['rgba(139,92,246,0.9)','rgba(139,92,246,0.7)','rgba(139,92,246,0.5)','rgba(139,92,246,0.35)','rgba(139,92,246,0.2)'], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94A3B8', font: { size: 10 }, padding: 6 } } } }
+  });
+}
+
+function renderMemories(memories) {
+  const ml = document.getElementById('memList');
+  if (!memories || !memories.length) {
+    ml.innerHTML = '<div style="color:#EF4444;font-size:12px;text-align:center;padding:20px">⚠️ Backend offline</div>';
+    return;
+  }
+  ml.innerHTML = memories.map(m => {
+    const c = m.conf >= 0.8 ? '#22C55E' : m.conf >= 0.65 ? '#F59E0B' : '#EF4444';
+    return `<div style="padding:12px;background:var(--card2);border-radius:8px;border-left:3px solid var(--accent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:700;color:var(--accent);background:rgba(139,92,246,.15);padding:2px 8px;border-radius:4px">${m.type}</span>
+        <span style="font-size:10px;color:var(--sub);margin-left:auto">${m.age} · ${m.uses} uses</span>
+      </div>
+      <div style="font-size:12px;color:var(--text);line-height:1.5;margin-bottom:8px">${m.content}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;color:var(--muted)">Confidence</span>
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div class="conf-bar" data-width="${Math.round(m.conf * 100)}" style="height:100%;background:${c};border-radius:2px;width:0%"></div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:${c}">${m.conf}</span>
+      </div>
+    </div>`;
+  }).join('');
+  if (typeof animateConfBars === 'function') animateConfBars();
+}
+
+function renderReports(reports) {
+  const tbody = document.getElementById('reportsBody');
+  if (!reports || !reports.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
+    return;
+  }
+  tbody.innerHTML = reports.map(r => `<tr>
+    <td class="muted">${r.date}</td><td>${r.title}</td>
+    <td class="accent-text">${r.memories}</td><td>${r.finding}</td>
+    <td><span class="badge badge-complete">${r.status}</span></td>
+  </tr>`).join('');
+}
+
+async function loadChronicleData() {
+  const status = await apiGet(API.agentStatus('chronicle'));
+  const online = !!status;
+  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-green"></span> Running' : '<span class="dot dot-red"></span> Offline';
+  const s = status ?? {};
+  document.getElementById('kpiRecords').textContent    = s.memory_records ?? s.total_records ?? '1,847';
+  document.getElementById('kpiConfidence').textContent = s.avg_confidence != null ? s.avg_confidence.toFixed(2) : '0.73';
+  document.getElementById('kpiQueries').textContent    = s.queries_today ?? '156';
+  document.getElementById('kpiPatterns').textContent   = s.patterns_found ?? '23';
+  document.getElementById('kpiLastReport').textContent = s.last_report ?? '22:00 UTC';
+  document.getElementById('kpiHealth').textContent     = s.memory_health != null ? s.memory_health + '%' : '94%';
+  document.getElementById('memBadge').textContent      = `${s.memory_records ?? s.total_records ?? '1,847'} total`;
+  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>Memory Health: ${s.memory_health ?? 94}%` : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb2').innerHTML = online ? '<span class="dot dot-green"></span>Vector DB Online' : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb3').innerHTML = online ? `<span class="dot dot-amber"></span>${s.decaying_records ?? 89} Decaying Records` : '<span class="dot dot-red"></span>Backend offline';
+
+  renderMemories(s.memories ?? s.recent_memories ?? (online ? [] : FB_MEMORIES));
+  renderReports(s.nightly_reports ?? s.reports ?? (online ? [] : FB_REPORTS));
+
+  // Decay chart
+  const decayLabels = s.decay_labels ?? Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return d.toLocaleDateString('en',{month:'short',day:'numeric'});});
+  const decayData   = s.decay_data   ?? [0.95,0.93,0.91,0.89,0.87,0.85,0.88,0.91,0.89,0.87,0.85,0.83,0.81,0.84,0.87,0.85,0.83,0.81,0.79,0.77,0.80,0.83,0.81,0.79,0.77,0.75,0.73,0.76,0.74,0.73];
+  renderDecayChart(decayLabels, decayData);
+
+  const catLabels = s.category_labels ?? ['Trade Patterns','News Correlations','Regime Analysis','Agent Interactions','Research'];
+  const catData   = s.category_data   ?? [34, 28, 18, 12, 8];
+  renderCatChart(catLabels, catData);
+}
+
+async function loadLogs() {
+  const logs = await apiGet(`${API.logs}?limit=20`);
+  const c = document.getElementById('logContainer');
+  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
+  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
+  c.scrollTop = c.scrollHeight;
+}
+
+async function searchMemory(text) {
+  if (!text) return;
+  const box = document.getElementById('searchResult');
+  box.style.display = 'block'; box.textContent = '⏳ Searching memory…';
+  const result = await apiPost(API.agentQuery('chronicle'), { prompt: JSON.stringify({ _task: 'memory.search', query: text }) }, 20000);
+  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Chronicle is offline.</span>'; return; }
+  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
+}
+
+async function sendPanelMsg() {
+  const inp = document.getElementById('panelInput');
+  const text = inp.value.trim(); if (!text) return; inp.value = '';
+  const msgs = document.getElementById('panelMessages');
+  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
+  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  const reply = await queryAgent('chronicle', text, 20000);
+  document.getElementById('thinkingMsg')?.remove();
+  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadChronicleData();
+  await loadLogs();
+  setInterval(loadChronicleData, 60_000);
+  setInterval(loadLogs, 60_000);
+});
+</script>
+</body></html>

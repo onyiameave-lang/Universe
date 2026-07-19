@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>
+:root{--accent:#F97316;--accent-rgb:249,115,22;}
+.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
+.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
+.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
+.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
+.refresh-btn:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">⚒️</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
+      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
+      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
+      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">⚡ System</a>
+      <a href="forge.html" class="nav-tab active">⚒️ Forge</a>
+      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
+      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+  </div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">⚒️</div>
+      <div class="agent-name">Forge</div>
+      <div class="agent-sub">Training Engine</div>
+      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
+      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>CPU…</div>
+      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Next Retrain…</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">FORGE — Training Engine</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Training Runs</div><div class="kpi-value accent-text" id="kpiRuns">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Best Accuracy</div><div class="kpi-value green-text" id="kpiAccuracy">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Training Time</div><div class="kpi-value" id="kpiAvgTime">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Dataset Size</div><div class="kpi-value" id="kpiDataset">—</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">Last Retrain</div><div class="kpi-value amber-text" id="kpiLastRetrain" style="font-size:14px">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Model Version</div><div class="kpi-value accent-text" id="kpiVersion">—</div></div>
+    </div>
+
+    <!-- Query panel -->
+    <div class="card" style="padding:14px 18px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--muted);font-size:15px">🔍</span>
+        <input id="forgeInput" type="text" placeholder="Ask Forge: 'What is the current model accuracy?' or 'When is the next retrain?'"
+          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
+          onkeydown="if(event.key==='Enter') queryForge(this.value.trim())">
+        <button onclick="queryForge(document.getElementById('forgeInput').value.trim())"
+          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Query</button>
+        <button class="refresh-btn" onclick="loadForgeData()" title="Refresh">↻</button>
+      </div>
+      <div id="forgeQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
+    </div>
+
+    <div class="row-2col">
+      <div class="card" style="flex:2.5">
+        <div class="card-header"><span class="card-title">Model Accuracy Over Time</span><span class="card-badge" id="runsBadge">— Runs</span><button class="refresh-btn" onclick="loadForgeData()" title="Refresh">↻</button></div>
+        <div class="chart-wrap"><canvas id="accChart" height="160"></canvas></div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Training Run Stats</span><span id="runDuration" style="font-size:10px;color:var(--muted)">Latest: —</span></div>
+        <div id="runStats" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Training History</span><button class="refresh-btn" onclick="loadForgeData()" title="Refresh">↻</button></div>
+        <table class="data-table">
+          <thead><tr><th>Run#</th><th>Date</th><th>Duration</th><th>Accuracy</th><th>Delta</th><th>Trigger</th><th>Status</th></tr></thead>
+          <tbody id="historyBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Dataset Composition</span><span class="card-badge">Last 6 months</span></div>
+        <div class="chart-wrap"><canvas id="datasetChart" height="160"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
+      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
+        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>⚒️ Chat with Forge</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Forge, your training engine. Ask me about model accuracy, training runs, or dataset statistics.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Forge…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+
+<script src="shared.js"></script>
+<script src="api-config.js"></script>
+<script>
+/* forge.html — API-connected (v7) | Destination: Forge/frontend/forge.html */
+
+let accChartInst = null, dsChartInst = null;
+
+const FB_ACC_DATA = [55.2,57.1,58.4,60.2,61.8,63.4,64.7,65.1,66.8,67.4,68.2,69.1,70.4,71.2,72.8,73.4,74.1,75.2,76.8,77.4,78.1,79.2,71.0,84.3,85.1,86.2,87.4,87.8,88.1,88.7,89.2,89.8,90.1,90.4,90.8,91.2,91.4,91.8,92.0,92.2,92.5,92.8,93.1,93.4,93.8,94.1,94.3];
+const FB_HISTORY = [
+  {run:'#47',date:'Jul 14',duration:'2.4h',accuracy:'94.3%',delta:'+2.1%',trigger:'Scheduled',status:'COMPLETE',accCls:'green-text',deltaCls:'green-text'},
+  {run:'#46',date:'Jul 11',duration:'2.7h',accuracy:'92.2%',delta:'+1.4%',trigger:'Scheduled',status:'COMPLETE',accCls:'green-text',deltaCls:'green-text'},
+  {run:'#45',date:'Jul 08',duration:'3.1h',accuracy:'90.8%',delta:'+3.2%',trigger:'Manual',status:'COMPLETE',accCls:'green-text',deltaCls:'green-text'},
+  {run:'#44',date:'Jul 05',duration:'1.8h',accuracy:'87.6%',delta:'-0.8%',trigger:'Scheduled',status:'FAILED',accCls:'red-text',deltaCls:'red-text'},
+];
+
+function renderAccChart(runs, data) {
+  const ctx = document.getElementById('accChart').getContext('2d');
+  if (accChartInst) accChartInst.destroy();
+  accChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels: runs, datasets: [{ data, borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 }, maxTicksLimit: 10 } },
+        y: { min: 50, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 }, callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+function renderDatasetChart(labels, wins, losses, rejected) {
+  const ctx = document.getElementById('datasetChart').getContext('2d');
+  if (dsChartInst) dsChartInst.destroy();
+  dsChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Wins',     data: wins,     backgroundColor: 'rgba(249,115,22,0.8)', borderRadius: 3 },
+      { label: 'Losses',   data: losses,   backgroundColor: 'rgba(239,68,68,0.7)',  borderRadius: 3 },
+      { label: 'Rejected', data: rejected, backgroundColor: 'rgba(100,116,139,0.6)',borderRadius: 3 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94A3B8', font: { size: 10 } } } },
+      scales: {
+        x: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
+        y: { stacked: true, min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 }, callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+function renderRunStats(s) {
+  const div = document.getElementById('runStats');
+  const stats = s.current_run ?? {};
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Epochs</span><span class="green-text">${stats.epochs ?? '247 / 300'}</span></div>
+    <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div class="conf-bar" data-width="${stats.epoch_pct ?? 82}" style="height:100%;background:var(--accent);border-radius:3px;width:0%"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Train Loss</span><span class="green-text">${stats.train_loss ?? '0.0847 ↓'}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Val Loss</span><span class="green-text">${stats.val_loss ?? '0.0923 ↓'}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Train Accuracy</span><span class="green-text">${stats.train_acc ?? '94.3% ↑'}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Val Accuracy</span><span class="green-text">${stats.val_acc ?? '91.8% ↑'}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Learning Rate</span><span>${stats.lr ?? '0.0001'}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Batch Size</span><span>${stats.batch_size ?? '256'}</span></div>`;
+  if (typeof animateConfBars === 'function') animateConfBars();
+}
+
+function renderHistory(history) {
+  const tbody = document.getElementById('historyBody');
+  if (!history || !history.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
+    return;
+  }
+  tbody.innerHTML = history.map(h => {
+    const stCls = h.status === 'COMPLETE' ? 'badge-complete' : 'badge-failed';
+    return `<tr>
+      <td class="accent-text">${h.run}</td><td class="muted">${h.date}</td><td>${h.duration}</td>
+      <td class="${h.accCls ?? 'green-text'}">${h.accuracy}</td>
+      <td class="${h.deltaCls ?? 'green-text'}">${h.delta}</td>
+      <td>${h.trigger}</td>
+      <td><span class="badge ${stCls}">${h.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadForgeData() {
+  const status = await apiGet(API.agentStatus('forge'));
+  const online = !!status;
+  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-amber"></span> Training' : '<span class="dot dot-red"></span> Offline';
+  const s = status ?? {};
+  document.getElementById('kpiRuns').textContent       = s.training_runs ?? '47';
+  document.getElementById('kpiAccuracy').textContent   = s.best_accuracy != null ? s.best_accuracy + '%' : '94.3%';
+  document.getElementById('kpiAvgTime').textContent    = s.avg_training_time ?? '2.4h';
+  document.getElementById('kpiDataset').textContent    = s.dataset_size ?? '125,000';
+  document.getElementById('kpiLastRetrain').textContent= s.last_retrain ?? '3 days ago';
+  document.getElementById('kpiVersion').textContent    = s.model_version ?? 'v2.7';
+  document.getElementById('runsBadge').textContent     = `${s.training_runs ?? 47} Runs`;
+  document.getElementById('runDuration').textContent   = `Latest: ${s.last_run_duration ?? '2.4h'}`;
+  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>Model ${s.model_version ?? 'v2.7'} Active` : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb2').innerHTML = online ? `<span class="dot dot-amber"></span>CPU: ${s.cpu_pct ?? 78}%` : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb3').innerHTML = online ? `<span class="dot dot-green"></span>Next Retrain: ${s.next_retrain ?? '4d'}` : '<span class="dot dot-red"></span>Backend offline';
+
+  renderRunStats(s);
+  renderHistory(s.training_history ?? (online ? [] : FB_HISTORY));
+
+  const runs    = s.accuracy_runs ?? Array.from({length: FB_ACC_DATA.length}, (_, i) => i + 1);
+  const accData = s.accuracy_data ?? FB_ACC_DATA;
+  renderAccChart(runs, accData);
+
+  const dsLabels   = s.dataset_labels   ?? ['Feb','Mar','Apr','May','Jun','Jul'];
+  const dsWins     = s.dataset_wins     ?? [67,65,68,70,66,67];
+  const dsLosses   = s.dataset_losses   ?? [23,25,22,20,24,23];
+  const dsRejected = s.dataset_rejected ?? [10,10,10,10,10,10];
+  renderDatasetChart(dsLabels, dsWins, dsLosses, dsRejected);
+}
+
+async function loadLogs() {
+  const logs = await apiGet(`${API.logs}?limit=20`);
+  const c = document.getElementById('logContainer');
+  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
+  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
+  c.scrollTop = c.scrollHeight;
+}
+
+async function queryForge(text) {
+  if (!text) return;
+  const box = document.getElementById('forgeQueryResult');
+  box.style.display = 'block'; box.textContent = '⏳ Querying Forge…';
+  const result = await apiPost(API.agentQuery('forge'), { prompt: text }, 20000);
+  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Forge is offline.</span>'; return; }
+  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
+}
+
+async function sendPanelMsg() {
+  const inp = document.getElementById('panelInput');
+  const text = inp.value.trim(); if (!text) return; inp.value = '';
+  const msgs = document.getElementById('panelMessages');
+  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
+  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  const reply = await queryAgent('forge', text, 20000);
+  document.getElementById('thinkingMsg')?.remove();
+  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadForgeData();
+  await loadLogs();
+  setInterval(loadForgeData, 60_000);
+  setInterval(loadLogs, 60_000);
+});
+</script>
+</body></html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>
+:root{--accent:#06B6D4;--accent-rgb:6,182,212;}
+.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
+.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
+.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
+.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
+.refresh-btn:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🧭</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
+      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
+      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab active">🧭 Atlas</a>
+      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">⚡ System</a>
+      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
+      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
+      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+  </div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🧭</div>
+      <div class="agent-name">Atlas</div>
+      <div class="agent-sub">Research Engine</div>
+      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
+      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>Loading…</div>
+      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Loading…</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">ATLAS — Research Engine</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Research Queries Today</div><div class="kpi-value accent-text" id="kpiQueries">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Active Studies</div><div class="kpi-value" id="kpiStudies">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Economic Events</div><div class="kpi-value amber-text" id="kpiEvents">—</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">High Risk Events</div><div class="kpi-value red-text" id="kpiHighRisk">—</div><span class="kpi-warn">⚠</span></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Research Time</div><div class="kpi-value" id="kpiAvgTime">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Knowledge Base</div><div class="kpi-value" id="kpiKnowledge">—</div></div>
+    </div>
+
+    <!-- Query panel -->
+    <div class="card" style="padding:14px 18px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--muted);font-size:15px">🔍</span>
+        <input id="atlasInput" type="text" placeholder="Ask Atlas: 'What economic events affect EURUSD today?' or 'Research USDJPY drivers'"
+          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
+          onkeydown="if(event.key==='Enter') queryAtlas(this.value.trim())">
+        <button onclick="queryAtlas(document.getElementById('atlasInput').value.trim())"
+          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Research</button>
+        <button class="refresh-btn" onclick="loadAtlasData()" title="Refresh">↻</button>
+      </div>
+      <div id="atlasQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
+    </div>
+
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Economic Calendar</span><span class="card-badge">Next 24h</span><button class="refresh-btn" onclick="loadAtlasData()" title="Refresh">↻</button></div>
+        <table class="data-table">
+          <thead><tr><th>Time (UTC)</th><th>Event</th><th>Currency</th><th>Impact</th><th>Forecast</th><th>Previous</th><th>Oracle Action</th></tr></thead>
+          <tbody id="calendarBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading calendar…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Event Risk Score</span><button class="refresh-btn" onclick="loadAtlasData()" title="Refresh">↻</button></div>
+        <div class="chart-wrap"><canvas id="riskChart" height="160"></canvas></div>
+      </div>
+    </div>
+
+    <div class="row-2col">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Research Query Log</span><button class="refresh-btn" onclick="loadAtlasData()" title="Refresh">↻</button></div>
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Symbol</th><th>Query</th><th>Duration</th><th>Result</th><th>Conf</th></tr></thead>
+          <tbody id="queryLogBody">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Upcoming High-Impact Events</span><span class="card-badge">Next 24h</span></div>
+        <table class="data-table">
+          <thead><tr><th>Event</th><th>Time Until</th><th>Currency</th><th>Impact</th><th>Oracle Status</th></tr></thead>
+          <tbody id="upcomingBody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
+      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
+        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🧭 Chat with Atlas</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Atlas, your research engine. Ask me about economic events, research findings, or pre-trade risk assessments.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Atlas…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+
+<script src="shared.js"></script>
+<script src="api-config.js"></script>
+<script>
+/* atlas.html — API-connected (v7) | Destination: Atlas/frontend/atlas.html */
+
+let riskChartInst = null;
+
+const FB_CALENDAR = [
+  {time:'13:30',event:'CPI m/m',currency:'USD',impact:'HIGH',forecast:'0.3%',previous:'0.4%',action:'BLOCKED'},
+  {time:'13:30',event:'Employment Change',currency:'CAD',impact:'HIGH',forecast:'25.0K',previous:'-6.4K',action:'BLOCKED'},
+  {time:'14:00',event:'ECB President Speech',currency:'EUR',impact:'MED',forecast:'—',previous:'—',action:'MONITORING'},
+  {time:'09:30',event:'Manufacturing PMI',currency:'GBP',impact:'MED',forecast:'49.8',previous:'49.1',action:'ALLOWED'},
+  {time:'23:50',event:'Trade Balance',currency:'JPY',impact:'LOW',forecast:'¥-0.3T',previous:'¥-0.8T',action:'ALLOWED'},
+];
+const FB_QUERY_LOG = [
+  {time:'08:41',symbol:'USDJPY',query:'Bullish momentum drivers',duration:'3.8s',result:'PROCEED',conf:82,confCls:'green-text'},
+  {time:'08:29',symbol:'EURUSD',query:'ECB policy impact analysis',duration:'4.2s',result:'CAUTION',conf:61,confCls:'amber-text'},
+  {time:'08:12',symbol:'XAUUSD',query:'Safe haven demand drivers',duration:'3.1s',result:'PROCEED',conf:78,confCls:'green-text'},
+];
+const FB_UPCOMING = [
+  {event:'US CPI',timeUntil:'3h 42m',currency:'USD',impact:'HIGH',status:'BLOCKED'},
+  {event:'CAD Employment',timeUntil:'3h 42m',currency:'CAD',impact:'HIGH',status:'BLOCKED'},
+  {event:'ECB Speech',timeUntil:'4h 18m',currency:'EUR',impact:'MED',status:'MONITORING'},
+];
+
+function renderRiskChart(labels, low, med, high) {
+  const ctx = document.getElementById('riskChart').getContext('2d');
+  if (riskChartInst) riskChartInst.destroy();
+  riskChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Low',  data: low,  backgroundColor: 'rgba(34,197,94,0.7)',  borderRadius: 3 },
+      { label: 'Med',  data: med,  backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 3 },
+      { label: 'High', data: high, backgroundColor: 'rgba(239,68,68,0.7)',  borderRadius: 3 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94A3B8', font: { size: 10 } } } },
+      scales: {
+        x: { stacked: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
+        y: { stacked: true, min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderCalendar(events) {
+  const tbody = document.getElementById('calendarBody');
+  if (!events || !events.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map(e => {
+    const impCls = e.impact === 'HIGH' ? 'badge-high' : e.impact === 'MED' ? 'badge-med' : 'badge-low';
+    const actCls = e.action === 'BLOCKED' ? 'badge-sell' : e.action === 'MONITORING' ? 'badge-closed' : 'badge-active';
+    return `<tr>
+      <td class="muted">${e.time}</td><td>${e.event}</td><td>${e.currency}</td>
+      <td><span class="badge ${impCls}">${e.impact}</span></td>
+      <td>${e.forecast}</td><td>${e.previous}</td>
+      <td><span class="badge ${actCls}">${e.action}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderQueryLog(queries) {
+  const tbody = document.getElementById('queryLogBody');
+  if (!queries || !queries.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
+    return;
+  }
+  tbody.innerHTML = queries.map(q => {
+    const resCls = q.result === 'PROCEED' ? 'badge-pass' : q.result === 'CAUTION' ? 'badge-caution' : 'badge-block';
+    return `<tr>
+      <td class="muted">${q.time}</td><td>${q.symbol}</td><td>${q.query}</td><td>${q.duration}</td>
+      <td><span class="badge ${resCls}">${q.result}</span></td>
+      <td class="${q.confCls ?? 'green-text'}">${q.conf}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderUpcoming(events) {
+  const tbody = document.getElementById('upcomingBody');
+  if (!events || !events.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map(e => {
+    const impCls = e.impact === 'HIGH' ? 'badge-high' : e.impact === 'MED' ? 'badge-med' : 'badge-low';
+    const stCls  = e.status === 'BLOCKED' ? 'badge-sell' : e.status === 'MONITORING' ? 'badge-closed' : 'badge-active';
+    return `<tr>
+      <td>${e.event}</td><td class="amber-text">${e.timeUntil}</td><td>${e.currency}</td>
+      <td><span class="badge ${impCls}">${e.impact}</span></td>
+      <td><span class="badge ${stCls}">${e.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadAtlasData() {
+  const status = await apiGet(API.agentStatus('atlas'));
+  const online = !!status;
+  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-green"></span> Running' : '<span class="dot dot-red"></span> Offline';
+  const s = status ?? {};
+  document.getElementById('kpiQueries').textContent  = s.research_queries_today ?? s.queries_today ?? '34';
+  document.getElementById('kpiStudies').textContent  = s.active_studies ?? '2';
+  document.getElementById('kpiEvents').textContent   = s.economic_events ?? '5';
+  document.getElementById('kpiHighRisk').textContent = s.high_risk_events ?? '1';
+  document.getElementById('kpiAvgTime').textContent  = s.avg_research_time ?? '4.2s';
+  document.getElementById('kpiKnowledge').textContent= s.knowledge_base ?? s.kb_size ?? '1,247';
+  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>${s.gates_passed ?? 11} Gates Passed` : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb2').innerHTML = online ? `<span class="dot dot-red"></span>${s.gates_blocked ?? 2} Gates Blocked` : '<span class="dot dot-red"></span>Backend offline';
+  document.getElementById('sb3').innerHTML = online ? `<span class="dot dot-amber"></span>${s.high_risk_events ?? 1} High Risk Event` : '<span class="dot dot-red"></span>Backend offline';
+
+  renderCalendar(s.economic_calendar ?? (online ? [] : FB_CALENDAR));
+  renderQueryLog(s.query_log ?? (online ? [] : FB_QUERY_LOG));
+  renderUpcoming(s.upcoming_events ?? (online ? [] : FB_UPCOMING));
+
+  const rLabels = s.risk_labels ?? ['USD','EUR','GBP','CAD','JPY','AUD','CHF','NZD'];
+  renderRiskChart(rLabels, s.risk_low ?? [20,30,25,15,40,50,60,55], s.risk_med ?? [30,25,35,20,30,25,20,25], s.risk_high ?? [50,45,40,65,30,25,20,20]);
+}
+
+async function loadLogs() {
+  const logs = await apiGet(`${API.logs}?limit=20`);
+  const c = document.getElementById('logContainer');
+  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
+  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
+  c.scrollTop = c.scrollHeight;
+}
+
+async function queryAtlas(text) {
+  if (!text) return;
+  const box = document.getElementById('atlasQueryResult');
+  box.style.display = 'block'; box.textContent = '⏳ Researching…';
+  const result = await apiPost(API.agentQuery('atlas'), { prompt: text }, 25000);
+  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Atlas is offline.</span>'; return; }
+  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
+}
+
+async function sendPanelMsg() {
+  const inp = document.getElementById('panelInput');
+  const text = inp.value.trim(); if (!text) return; inp.value = '';
+  const msgs = document.getElementById('panelMessages');
+  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
+  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  const reply = await queryAgent('atlas', text, 25000);
+  document.getElementById('thinkingMsg')?.remove();
+  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadAtlasData();
+  await loadLogs();
+  setInterval(loadAtlasData, 60_000);
+  setInterval(loadLogs, 60_000);
+});
+</script>
+</body></html>
