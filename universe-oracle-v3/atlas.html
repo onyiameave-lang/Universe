@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>:root{--accent:#06B6D4;--accent-rgb:6,182,212;}</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🌐</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab active">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">📡 System</a><a href="forge.html" class="nav-tab">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab">🧬 Genesis</a><a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right"><button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button></div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🌐</div>
+      <div class="agent-name">Atlas</div>
+      <div class="agent-sub">Research Engine</div>
+      <div class="agent-status"><span class="dot dot-green"></span> Running</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>11 Gates Passed</div>
+      <div class="sys-item"><span class="dot dot-red"></span>2 Gates Blocked</div>
+      <div class="sys-item"><span class="dot dot-amber"></span>1 High Risk Event</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">ATLAS — Research Engine</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Research Queries Today</div><div class="kpi-value accent-text" data-target="34">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Active Studies</div><div class="kpi-value" data-target="2">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Economic Events</div><div class="kpi-value amber-text" data-target="5">0</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">High Risk Events</div><div class="kpi-value red-text" data-target="1">0</div><span class="kpi-warn">⚠</span></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Research Time</div><div class="kpi-value">4.2s</div></div>
+      <div class="kpi-card"><div class="kpi-label">Knowledge Base</div><div class="kpi-value" data-target="1247">0</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Economic Calendar</span><span class="card-badge">Next 24h</span></div>
+        <table class="data-table">
+          <thead><tr><th>Time (UTC)</th><th>Event</th><th>Currency</th><th>Impact</th><th>Forecast</th><th>Previous</th><th>Oracle Action</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">13:30</td><td>CPI m/m</td><td>USD</td><td><span class="badge badge-high">HIGH</span></td><td>0.3%</td><td>0.4%</td><td><span class="badge badge-sell">BLOCKED</span></td></tr>
+            <tr><td class="muted">13:30</td><td>Employment Change</td><td>CAD</td><td><span class="badge badge-high">HIGH</span></td><td>25.0K</td><td>-6.4K</td><td><span class="badge badge-sell">BLOCKED</span></td></tr>
+            <tr><td class="muted">14:00</td><td>ECB President Speech</td><td>EUR</td><td><span class="badge badge-med">MED</span></td><td>—</td><td>—</td><td><span class="badge badge-closed">MONITORING</span></td></tr>
+            <tr><td class="muted">09:30</td><td>Manufacturing PMI</td><td>GBP</td><td><span class="badge badge-med">MED</span></td><td>49.8</td><td>49.1</td><td><span class="badge badge-active">ALLOWED</span></td></tr>
+            <tr><td class="muted">23:50</td><td>Trade Balance</td><td>JPY</td><td><span class="badge badge-low">LOW</span></td><td>¥-0.3T</td><td>¥-0.8T</td><td><span class="badge badge-active">ALLOWED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Event Risk Score</span></div>
+        <canvas id="riskChart" height="200"></canvas>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Research Query Log</span></div>
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Symbol</th><th>Query</th><th>Duration</th><th>Result</th><th>Conf</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">08:41</td><td>USDJPY</td><td>Bullish momentum drivers</td><td>3.8s</td><td><span class="badge badge-pass">PROCEED</span></td><td class="green-text">82</td></tr>
+            <tr><td class="muted">08:29</td><td>EURUSD</td><td>ECB policy impact analysis</td><td>4.2s</td><td><span class="badge badge-caution">CAUTION</span></td><td class="amber-text">61</td></tr>
+            <tr><td class="muted">08:12</td><td>XAUUSD</td><td>Safe haven demand drivers</td><td>3.1s</td><td><span class="badge badge-pass">PROCEED</span></td><td class="green-text">78</td></tr>
+            <tr><td class="muted">07:55</td><td>GBPUSD</td><td>UK inflation impact on GBP</td><td>5.7s</td><td><span class="badge badge-block">BLOCK</span></td><td class="red-text">40</td></tr>
+            <tr><td class="muted">07:38</td><td>BTCUSD</td><td>Crypto regulatory risk</td><td>4.9s</td><td><span class="badge badge-caution">CAUTION</span></td><td class="amber-text">55</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Upcoming High-Impact Events</span><span class="card-badge">Next 24h</span></div>
+        <table class="data-table">
+          <thead><tr><th>Event</th><th>Time Until</th><th>Currency</th><th>Impact</th><th>Oracle Status</th></tr></thead>
+          <tbody>
+            <tr><td>US CPI</td><td class="amber-text">3h 42m</td><td>USD</td><td><span class="badge badge-high">HIGH</span></td><td><span class="badge badge-sell">BLOCKED</span></td></tr>
+            <tr><td>CAD Employment</td><td class="amber-text">3h 42m</td><td>CAD</td><td><span class="badge badge-high">HIGH</span></td><td><span class="badge badge-sell">BLOCKED</span></td></tr>
+            <tr><td>ECB Speech</td><td class="muted">4h 18m</td><td>EUR</td><td><span class="badge badge-med">MED</span></td><td><span class="badge badge-closed">MONITORING</span></td></tr>
+            <tr><td>GBP PMI</td><td class="muted">1h 08m</td><td>GBP</td><td><span class="badge badge-med">MED</span></td><td><span class="badge badge-active">ALLOWED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🌐 Chat with Atlas</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Atlas, your research engine. Ask me about economic events, research findings, or pre-trade risk assessments.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Atlas..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "34 research queries completed today. One pre-trade gate blocked: EURUSD blocked 2h ago due to ECB speech in 90 minutes. 11 gates passed, 2 blocked. Knowledge base: 1,247 records.",
+  "High-risk event: US CPI in 3h 42m. Historical volatility during CPI averages 47 pips on EURUSD. Atlas recommends reducing position size 50% or waiting for post-release consolidation.",
+  "Economic calendar: USD CPI (HIGH, 13:30), CAD Employment (HIGH, 13:30), ECB Speech (MED, 14:00), GBP PMI (MED, 09:30), JPY Trade Balance (LOW, 23:50). Three events overlap — 'news cluster' risk flagged.",
+  "Research query: 'USDJPY bullish momentum drivers' — BOJ yield curve control unchanged, USD strength from Fed hawkishness, technical breakout above 149.50. Confidence: 82. Result: PROCEED.",
+  "Atlas pre-trade gate: current event risk score 67/100. Recommendation: trade only high-confidence signals (>85%) until after 15:00 UTC. Oracle adjusted threshold accordingly.",
+  "Knowledge base has 1,247 research records. Most referenced: 'Fed rate decision impact on USD pairs' (47 queries), 'Gold safe-haven demand patterns' (38 queries), 'BOJ policy analysis' (31 queries).",
+  "Research time average: 4.2 seconds per query. Fastest query today: 2.1s (USDJPY momentum). Slowest: 7.3s (complex multi-asset correlation study). All within the 10s SLA.",
+  "Atlas blocked 2 trades today: EURUSD (ECB speech risk) and GBPUSD (UK inflation data uncertainty). Both blocks were confirmed correct — EURUSD dropped 34 pips after the ECB speech.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+
+// Risk chart
+const riskCtx=document.getElementById('riskChart').getContext('2d');
+new Chart(riskCtx,{type:'bar',data:{
+  labels:['USD','EUR','GBP','CAD','JPY','AUD','CHF','NZD'],
+  datasets:[
+    {label:'Low',data:[20,30,25,15,40,50,60,55],backgroundColor:'rgba(34,197,94,0.7)',borderRadius:3},
+    {label:'Med',data:[30,25,35,20,30,25,20,25],backgroundColor:'rgba(245,158,11,0.7)',borderRadius:3},
+    {label:'High',data:[50,45,40,65,30,25,20,20],backgroundColor:'rgba(239,68,68,0.7)',borderRadius:3},
+  ]
+},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94A3B8',font:{size:10}}}},scales:{x:{stacked:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}},y:{stacked:true,min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}}}}});
+</script>
+</body></html>

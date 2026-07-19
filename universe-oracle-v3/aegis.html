@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aegis — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>:root{--accent:#EAB308;--accent-rgb:234,179,8;}</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🛡️</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">📡 System</a><a href="forge.html" class="nav-tab">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab">🧬 Genesis</a><a href="aegis.html" class="nav-tab active">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right"><button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button></div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🛡️</div>
+      <div class="agent-name">Aegis</div>
+      <div class="agent-sub">Governance & Security</div>
+      <div class="agent-status"><span class="dot dot-green"></span> Running</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>0 Violations Today</div>
+      <div class="sys-item"><span class="dot dot-amber"></span>1 Active Alert</div>
+      <div class="sys-item"><span class="dot dot-green"></span>Kill Switch: ARMED</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">AEGIS — Governance & Security</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Constitutional Violations</div><div class="kpi-value green-text">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Audit Events Today</div><div class="kpi-value" data-target="847">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Compliance Score</div><div class="kpi-value green-text">98.7%</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">Active Alerts</div><div class="kpi-value amber-text" data-target="1">0</div><span class="kpi-warn">⚠</span></div>
+      <div class="kpi-card"><div class="kpi-label">Kill Switch Status</div><div class="kpi-value green-text" style="font-size:14px">ARMED</div></div>
+      <div class="kpi-card"><div class="kpi-label">Agents Monitored</div><div class="kpi-value" data-target="9">0</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Agent Compliance Scores</span><span class="card-badge">Score 0–100%</span></div>
+        <canvas id="compChart" height="220"></canvas>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Anomaly Alerts</span></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:12px;background:rgba(245,158,11,.05)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-med">HIGH</span><span style="font-size:12px;font-weight:700;color:var(--text)">Genesis</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Unusual agent spawn rate — 3 agents in 24 hours (avg: 0.3/day)</div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span class="muted">00:04 hours ago</span><span class="amber-text">INVESTIGATING</span></div>
+          </div>
+          <div style="border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:12px;background:rgba(34,197,94,.04)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-low">LOW</span><span style="font-size:12px;font-weight:700;color:var(--text)">Forge</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Training triggered outside scheduled window</div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span class="muted">2 days ago</span><span class="green-text">RESOLVED</span></div>
+          </div>
+          <div style="border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:12px;background:rgba(34,197,94,.04)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="badge badge-low">LOW</span><span style="font-size:12px;font-weight:700;color:var(--text)">Oracle</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Confidence score spike >0.95 on 4 consecutive trades</div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span class="muted">3 days ago</span><span class="green-text">RESOLVED</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Constitutional Audit Trail</span><span class="card-badge">Last 10 events</span></div>
+        <table class="data-table">
+          <thead><tr><th>Timestamp</th><th>Agent</th><th>Action</th><th>Principle</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">08:42:17</td><td>Oracle</td><td>Signal generation</td><td>Risk gate approval</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:41:03</td><td>Oracle</td><td>Position sizing</td><td>2% equity limit</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:39:44</td><td>Sentinel</td><td>Source access</td><td>Approved sources only</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:38:12</td><td>Genesis</td><td>Agent spawn</td><td>Max spawn rate</td><td><span class="badge badge-caution">FLAGGED</span></td></tr>
+            <tr><td class="muted">08:35:29</td><td>Chronicle</td><td>Memory write</td><td>Data integrity</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:33:07</td><td>Atlas</td><td>Trade gate</td><td>Event risk check</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:31:44</td><td>Forge</td><td>Model update</td><td>Accuracy threshold</td><td><span class="badge badge-pass">PASS</span></td></tr>
+            <tr><td class="muted">08:29:18</td><td>Nexus</td><td>Agent routing</td><td>Authorization check</td><td><span class="badge badge-pass">PASS</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Kill Switch History</span></div>
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Trigger Reason</th><th>By</th><th>Duration</th><th>Resolution</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">Jun 17</td><td>Flash crash — all signals below 0.3</td><td>Aegis</td><td>4m 23s</td><td class="green-text">RESOLVED</td></tr>
+            <tr><td class="muted">May 02</td><td>Broker connection lost</td><td>Oracle</td><td>12m 07s</td><td class="green-text">RESOLVED</td></tr>
+            <tr><td class="muted">Mar 28</td><td>Drawdown exceeded 5% limit</td><td>Aegis</td><td>1h 14m</td><td class="green-text">RESOLVED</td></tr>
+            <tr><td class="muted">Feb 14</td><td>Manual override — maintenance</td><td>Admin</td><td>2h 00m</td><td class="green-text">RESOLVED</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🛡️ Chat with Aegis</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Aegis, the governance and security agent. Ask me about compliance, audit findings, or constitutional health.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Aegis..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "Zero constitutional violations in 30 days. 847 audit events today. All 9 agents compliant. One active anomaly: Genesis spawned 3 agents in 24 hours — flagged LOW severity, INVESTIGATING. Kill switch ARMED.",
+  "Compliance scores: Oracle 99.2%, Sentinel 98.7%, Pulse 97.4%, Atlas 99.1%, Chronicle 98.9%, Nexus 99.8%, Forge 96.3%, Genesis 94.1%, Risk Gate 100%. All above 90% threshold.",
+  "Constitutional audit trail: last 10 events all PASS except one FLAGGED (Genesis spawn rate). Most recent: Oracle signal generation — checked 'risk gate approval', '2% equity limit', 'stop loss mandatory'. All passed.",
+  "Kill switch history: last activation June 17 during flash crash. Duration: 4 minutes 23 seconds. Triggered by Oracle confidence dropping below 0.3 on all signals. Resolution: automatic — market stabilized. No capital lost.",
+  "Aegis monitors 9 agents across 47 constitutional principles. Today: 0 violations, 1 anomaly (Genesis spawn rate), 3 informational events. Constitutional health score: 98.7% — excellent.",
+  "Genesis anomaly investigation: 3 agents spawned in 24 hours vs average 0.3/day. Root cause: Hermes certification triggered 2 additional sandbox test agents that were not properly cleaned up. Not a constitutional violation — RESOLVED.",
+  "Forge anomaly (resolved): training triggered outside scheduled window on May 2. Root cause: Chronicle sent an urgent 'retrain needed' signal after detecting model drift. Aegis approved the out-of-schedule retrain as constitutional.",
+  "Oracle anomaly (resolved): confidence spike >0.95 on 4 consecutive trades on March 28. Aegis investigated — all 4 trades were legitimate high-confidence setups during a strong trend. No manipulation detected. RESOLVED.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+
+// Compliance chart
+const compCtx=document.getElementById('compChart').getContext('2d');
+new Chart(compCtx,{type:'bar',data:{
+  labels:['Nexus','Oracle','Atlas','Chronicle','Sentinel','Pulse','Forge','Genesis','Risk Gate'],
+  datasets:[{data:[99.8,99.2,99.1,98.9,98.7,97.4,96.3,94.1,100],backgroundColor:d=>d.raw>=95?'rgba(34,197,94,0.7)':'rgba(245,158,11,0.7)',borderRadius:4}]
+},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:80,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10},callback:v=>v+'%'}},y:{grid:{display:false},ticks:{color:'#94A3B8',font:{size:11}}}}}});
+</script>
+</body></html>

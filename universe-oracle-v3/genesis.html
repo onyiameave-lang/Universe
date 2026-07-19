@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genesis — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>
+:root{--accent:#10B981;--accent-rgb:16,185,129;}
+.pipeline{display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0;}
+.pipe-stage{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:100px;}
+.pipe-box{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card2);font-size:11px;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap;}
+.pipe-box.active{border-color:var(--accent);color:var(--accent);background:rgba(16,185,129,.1);box-shadow:0 0 12px rgba(16,185,129,.2);}
+.pipe-box.done{border-color:rgba(16,185,129,.4);color:#22C55E;background:rgba(34,197,94,.08);}
+.pipe-count{font-size:10px;color:var(--sub);}
+.pipe-arrow{color:var(--border);font-size:18px;margin:0 4px;flex-shrink:0;margin-top:-18px;}
+.cert-check{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.cert-check:last-child{border-bottom:none;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🧬</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">📡 System</a><a href="forge.html" class="nav-tab">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab active">🧬 Genesis</a><a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right"><button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button></div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🧬</div>
+      <div class="agent-name">Genesis</div>
+      <div class="agent-sub">Agent Creation Lab</div>
+      <div class="agent-status"><span class="dot dot-green"></span> Running</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>8 Agents Deployed</div>
+      <div class="sys-item"><span class="dot dot-amber"></span>1 In Certification</div>
+      <div class="sys-item"><span class="dot dot-green"></span>Compliance: 98.7%</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">GENESIS — Agent Creation Lab</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Agents Created</div><div class="kpi-value accent-text" data-target="9">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Certified Agents</div><div class="kpi-value green-text" data-target="8">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Sandbox Tests Run</div><div class="kpi-value" data-target="247">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Cert Time</div><div class="kpi-value">4.2h</div></div>
+      <div class="kpi-card"><div class="kpi-label">Constitutional Compliance</div><div class="kpi-value green-text">98.7%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Active Blueprints</div><div class="kpi-value accent-text" data-target="3">0</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Agent Creation Pipeline</span></div>
+        <div class="pipeline">
+          <div class="pipe-stage"><div class="pipe-box done">DESIGN</div><div class="pipe-count">16 blueprints</div></div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-stage"><div class="pipe-box done">SYNTHESIS</div><div class="pipe-count">2 in progress</div></div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-stage"><div class="pipe-box done">SANDBOX</div><div class="pipe-count">8 completed</div></div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-stage"><div class="pipe-box active">CERTIFICATION</div><div class="pipe-count">1 active — Hermes</div></div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-stage"><div class="pipe-box">AEGIS REVIEW</div><div class="pipe-count">1 pending</div></div>
+          <div class="pipe-arrow">→</div>
+          <div class="pipe-stage"><div class="pipe-box done">DEPLOYED</div><div class="pipe-count">8 active</div></div>
+        </div>
+        <div style="margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-size:13px;font-weight:700;color:var(--accent)">🧬 Hermes v0.1 — In Certification</span>
+            <span style="font-size:11px;color:var(--muted)">67% complete</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:67%;height:100%;background:var(--accent);border-radius:3px"></div></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Execution Optimizer · Expected deployment: tomorrow 06:00 UTC</div>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Certification Tests — Hermes v0.1</span></div>
+        <div class="cert-check"><span>Constitutional compliance</span><span class="badge badge-pass">PASS</span></div>
+        <div class="cert-check"><span>Sandbox isolation</span><span class="badge badge-pass">PASS</span></div>
+        <div class="cert-check"><span>Performance benchmarks</span><span class="badge badge-pass">PASS</span></div>
+        <div class="cert-check"><span>Memory access controls</span><span class="badge badge-pass">PASS</span></div>
+        <div class="cert-check"><span>Aegis review</span><span class="badge badge-inprog">IN PROGRESS</span></div>
+        <div class="cert-check"><span>Integration tests</span><span class="badge badge-inprog">IN PROGRESS</span></div>
+        <div class="cert-check"><span>Live trading simulation</span><span class="badge badge-closed">PENDING</span></div>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.5">
+        <div class="card-header"><span class="card-title">Agent Creation Log</span></div>
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Agent</th><th>Version</th><th>Status</th><th>Compliance</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">Jul 17</td><td>Hermes</td><td>v0.1</td><td><span class="badge badge-inprog">IN CERT</span></td><td class="green-text">98.7%</td></tr>
+            <tr><td class="muted">Jun 12</td><td>Aegis</td><td>v1.0</td><td><span class="badge badge-deployed">DEPLOYED</span></td><td class="green-text">100%</td></tr>
+            <tr><td class="muted">May 28</td><td>Forge</td><td>v1.0</td><td><span class="badge badge-deployed">DEPLOYED</span></td><td class="green-text">96.3%</td></tr>
+            <tr><td class="muted">May 14</td><td>Genesis</td><td>v1.0</td><td><span class="badge badge-deployed">DEPLOYED</span></td><td class="green-text">98.7%</td></tr>
+            <tr><td class="muted">Apr 30</td><td>Prototype v0.3</td><td>v0.3</td><td><span class="badge badge-rejected2">REJECTED</span></td><td class="red-text">71.2%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Sandbox Test History</span></div>
+        <table class="data-table">
+          <thead><tr><th>Test Suite</th><th>Pass Rate</th><th>Failures</th></tr></thead>
+          <tbody>
+            <tr><td>Constitutional</td><td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px"><div style="width:100%;height:100%;background:#22C55E;border-radius:2px"></div></div></td><td class="green-text">0</td></tr>
+            <tr><td>Isolation</td><td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px"><div style="width:100%;height:100%;background:#22C55E;border-radius:2px"></div></div></td><td class="green-text">0</td></tr>
+            <tr><td>Performance</td><td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px"><div style="width:94%;height:100%;background:#22C55E;border-radius:2px"></div></div></td><td class="green-text">0</td></tr>
+            <tr><td>Integration</td><td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px"><div style="width:87%;height:100%;background:#F59E0B;border-radius:2px"></div></div></td><td class="amber-text">2</td></tr>
+            <tr><td>Live Sim</td><td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px"><div style="width:0%;height:100%;background:#94A3B8;border-radius:2px"></div></div></td><td class="muted">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🧬 Chat with Genesis</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Genesis, the agent creation lab. Ask me about agent certification, blueprints, or the creation pipeline.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Genesis..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "9 agents created, 8 certified and deployed. Hermes v0.1 is in certification (67% complete) — expected deployment tomorrow 06:00 UTC. Constitutional compliance: 98.7%.",
+  "Agent creation pipeline: DESIGN (16 blueprints), SYNTHESIS (2 in progress), SANDBOX (8 completed), CERTIFICATION (1 active — Hermes), AEGIS REVIEW (1 pending), DEPLOYED (8 active).",
+  "Hermes v0.1 certification: Constitutional compliance ✅, Sandbox isolation ✅, Performance benchmarks ✅, Memory access controls ✅, Aegis review ⏳, Integration tests ⏳, Live simulation ⏳.",
+  "Genesis has 3 active blueprints: Hermes (Execution Optimizer), Cassandra (Risk Scenario Modeler), Iris (Notification Agent). These are the v2 expansion agents. Hermes is furthest along.",
+  "Constitutional compliance check: all 8 deployed agents scored 95%+ on last Aegis audit. Genesis enforces 47 constitutional principles during SYNTHESIS phase.",
+  "Prototype v0.3 was rejected on April 30 — constitutional compliance score was only 71.2%, below the 90% threshold. The agent attempted to bypass the risk gate, which is a constitutional violation.",
+  "Sandbox test history: Constitutional (100% pass, 0 failures), Isolation (100%, 0), Performance (94%, 0), Integration (87%, 2 failures — being investigated), Live Sim (pending).",
+  "Active blueprints: Hermes blueprint is 95% complete (in certification), Cassandra blueprint is 80% complete (in synthesis), Iris blueprint is 60% complete (in design). All three are v2 expansion agents.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+</script>
+</body></html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Health — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>
+:root{--accent:#6366F1;--accent-rgb:99,102,241;}
+.agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.agent-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;}
+.agent-card.online{border-color:rgba(34,197,94,.3);}
+.agent-card.standby{border-color:rgba(245,158,11,.3);}
+.agent-card.idle{border-color:rgba(100,116,139,.3);}
+.agent-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.agent-card-name{font-size:13px;font-weight:700;color:var(--text);}
+.status-pill{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;}
+.status-pill.online{background:rgba(34,197,94,.15);color:#22C55E;}
+.status-pill.standby{background:rgba(245,158,11,.15);color:#F59E0B;}
+.status-pill.idle{background:rgba(100,116,139,.15);color:#94A3B8;}
+.agent-card-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;}
+.agent-card-row span:last-child{color:var(--text);}
+.timeline-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+.timeline-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:3px;}
+.timeline-content{flex:1;}
+.timeline-title{font-size:12px;color:var(--text);}
+.timeline-time{font-size:10px;color:var(--sub);margin-top:2px;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">📡</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab active">📡 System</a><a href="forge.html" class="nav-tab">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab">🧬 Genesis</a><a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <a href="index.html" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px">🕸️ Open Command Center</a>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+  </div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🕸️</div>
+      <div class="agent-name">Nexus</div>
+      <div class="agent-sub">Coordination Hub</div>
+      <div class="agent-status"><span class="dot dot-green"></span> Running</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>9/9 Agents Online</div>
+      <div class="sys-item"><span class="dot dot-green"></span>0 Failed Events</div>
+      <div class="sys-item"><span class="dot dot-green"></span>Uptime: 99.97%</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">NEXUS — System Health Dashboard</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Active Agents</div><div class="kpi-value green-text">9/9</div></div>
+      <div class="kpi-card"><div class="kpi-label">Messages Today</div><div class="kpi-value accent-text" data-target="4721">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Latency</div><div class="kpi-value green-text">12ms</div></div>
+      <div class="kpi-card"><div class="kpi-label">Event Bus Load</div><div class="kpi-value">34%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Failed Events</div><div class="kpi-value green-text">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Uptime</div><div class="kpi-value green-text">99.97%</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.5">
+        <div class="card-header"><span class="card-title">Agent Health Grid</span><span class="card-badge">Live</span></div>
+        <div class="agent-grid">
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🔮 Oracle</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>2s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>847</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>23% / 41%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🗼 Sentinel</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>1s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>1,204</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>31% / 38%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">💓 Pulse</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>3s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>934</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>18% / 29%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🌐 Atlas</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>4s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>412</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>14% / 22%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">📖 Chronicle</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>2s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>623</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>27% / 54%</span></div></div>
+          <div class="agent-card standby"><div class="agent-card-top"><span class="agent-card-name">🔥 Forge</span><span class="status-pill standby"><span class="dot dot-amber"></span>TRAINING</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>8s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>89</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>78% / 67%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🧬 Genesis</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>5s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>134</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>9% / 18%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🛡️ Aegis</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>1s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>478</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>12% / 24%</span></div></div>
+          <div class="agent-card online"><div class="agent-card-top"><span class="agent-card-name">🕸️ Nexus</span><span class="status-pill online"><span class="dot dot-green"></span>ONLINE</span></div><div class="agent-card-row"><span>Last heartbeat</span><span>0s ago</span></div><div class="agent-card-row"><span>Messages today</span><span>4,721</span></div><div class="agent-card-row"><span>CPU / Memory</span><span>8% / 31%</span></div></div>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Event Bus Activity</span><span class="card-badge">msg/min</span></div>
+        <canvas id="busChart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Message Throughput</span><span class="card-badge">Last 60 min</span></div>
+        <canvas id="throughputChart" height="140"></canvas>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Coordination Timeline</span></div>
+        <div id="timeline"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🕸️ Chat with Nexus</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Nexus, the coordination hub. Ask me about system health, agent status, or event routing. Or visit the <a href="index.html" style="color:var(--accent)">Command Center</a> for full orchestrator chat.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Nexus..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "All 9 agents online. Event bus processing 847 messages/minute across 7 channels. Avg latency 12ms — well within 50ms SLA. Zero failed deliveries in 24 hours. Uptime: 99.97%.",
+  "Nexus routed 4,721 messages today. Busiest channel: ecosystem.trading (Oracle↔Sentinel↔Pulse). Chronicle stored 156 memory records from agent interactions.",
+  "Orchestration stats: 34 multi-agent queries today. Avg query involved 3.2 agents. Parallel execution reduced latency 67% vs sequential. One conflict resolved: Oracle BUY vs Pulse SELL — Oracle won by 0.32 weighted margin.",
+  "System health: Oracle ✅, Sentinel ✅, Pulse ✅, Atlas ✅, Chronicle ✅, Forge ⚠️ Training (elevated CPU 78%), Genesis ✅, Aegis ✅. No kill switch activations in 30 days.",
+  "Collaboration graph learned: Atlas should be consulted before Oracle on high-impact news days. Pattern reinforced 12 times this week. Nexus now auto-routes 'pre-trade' queries through Atlas first — blocked trades reduced 23%.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+
+// Event bus chart
+const busCtx=document.getElementById('busChart').getContext('2d');
+new Chart(busCtx,{type:'bar',data:{
+  labels:['ecosystem.trading','ecosystem.news','ecosystem.social','ecosystem.health','ecosystem.audit','ecosystem.research','ecosystem.memory'],
+  datasets:[{data:[847,623,412,234,178,134,89],backgroundColor:'rgba(99,102,241,0.7)',borderRadius:4}]
+},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}},y:{grid:{display:false},ticks:{color:'#94A3B8',font:{size:10}}}}}});
+
+// Throughput chart (live)
+const tpLabels=Array.from({length:60},(_,i)=>i%10===0?`${i}m`:'');
+let tpData=Array.from({length:60},()=>Math.floor(600+Math.random()*400));
+const tpCtx=document.getElementById('throughputChart').getContext('2d');
+const tpChart=new Chart(tpCtx,{type:'line',data:{labels:tpLabels,datasets:[{data:tpData,borderColor:'#6366F1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}},y:{min:0,max:1200,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}}}}});
+setInterval(()=>{tpData.push(Math.floor(600+Math.random()*400));tpData.shift();tpChart.data.datasets[0].data=tpData;tpChart.update('none');},2000);
+
+// Timeline
+const events=[
+  {title:'Oracle requested Sentinel sentiment for EURUSD',time:'00:00:04 ago'},
+  {title:'Pulse delivered social score for BTCUSD',time:'00:00:07 ago'},
+  {title:'Chronicle stored 3 new memory records',time:'00:00:23 ago'},
+  {title:'Atlas blocked EURUSD trade — ECB speech risk',time:'00:01:12 ago'},
+  {title:'Nexus resolved Oracle vs Pulse conflict on GBPUSD',time:'00:02:34 ago'},
+  {title:'Aegis audit: Oracle signal generation — PASS',time:'00:03:47 ago'},
+  {title:'Forge heartbeat — training run 47 in progress',time:'00:04:12 ago'},
+  {title:'Genesis: Hermes certification 67% complete',time:'00:05:31 ago'},
+];
+const tl=document.getElementById('timeline');
+events.forEach(e=>{tl.innerHTML+=`<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><div class="timeline-title">${e.title}</div><div class="timeline-time">${e.time}</div></div></div>`;});
+</script>
+</body></html>

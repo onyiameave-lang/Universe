@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>:root{--accent:#F97316;--accent-rgb:249,115,22;}</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🔥</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">📡 System</a><a href="forge.html" class="nav-tab active">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab">🧬 Genesis</a><a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right"><button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button></div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🔥</div>
+      <div class="agent-name">Forge</div>
+      <div class="agent-sub">Training Engine</div>
+      <div class="agent-status"><span class="dot dot-amber"></span> Training</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>Model v2.7 Active</div>
+      <div class="sys-item"><span class="dot dot-amber"></span>CPU: 78%</div>
+      <div class="sys-item"><span class="dot dot-green"></span>Next Retrain: 4d</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">FORGE — Training Engine</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">Training Runs</div><div class="kpi-value accent-text" data-target="47">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Best Accuracy</div><div class="kpi-value green-text">94.3%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Training Time</div><div class="kpi-value">2.4h</div></div>
+      <div class="kpi-card"><div class="kpi-label">Dataset Size</div><div class="kpi-value" data-target="125000">0</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">Last Retrain</div><div class="kpi-value amber-text" style="font-size:14px">3 days ago</div></div>
+      <div class="kpi-card"><div class="kpi-label">Model Version</div><div class="kpi-value accent-text">v2.7</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:2.5">
+        <div class="card-header"><span class="card-title">Model Accuracy Over Time</span><span class="card-badge">47 Runs</span></div>
+        <canvas id="accChart" height="160"></canvas>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Training Run Stats</span><span style="font-size:10px;color:var(--muted)">Latest: 4h 23m</span></div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Epochs</span><span class="green-text">247 / 300</span></div>
+          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:82%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Train Loss</span><span class="green-text">0.0847 ↓</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Val Loss</span><span class="green-text">0.0923 ↓</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Train Accuracy</span><span class="green-text">94.3% ↑</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Val Accuracy</span><span class="green-text">91.8% ↑</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Learning Rate</span><span>0.0001</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span class="muted">Batch Size</span><span>256</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Training History</span></div>
+        <table class="data-table">
+          <thead><tr><th>Run#</th><th>Date</th><th>Duration</th><th>Accuracy</th><th>Delta</th><th>Trigger</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="accent-text">#47</td><td class="muted">Jul 14</td><td>2.4h</td><td class="green-text">94.3%</td><td class="green-text">+2.1%</td><td>Scheduled</td><td><span class="badge badge-complete">COMPLETE</span></td></tr>
+            <tr><td class="accent-text">#46</td><td class="muted">Jul 11</td><td>2.7h</td><td class="green-text">92.2%</td><td class="green-text">+1.4%</td><td>Scheduled</td><td><span class="badge badge-complete">COMPLETE</span></td></tr>
+            <tr><td class="accent-text">#45</td><td class="muted">Jul 08</td><td>3.1h</td><td class="green-text">90.8%</td><td class="green-text">+3.2%</td><td>Manual</td><td><span class="badge badge-complete">COMPLETE</span></td></tr>
+            <tr><td class="accent-text">#44</td><td class="muted">Jul 05</td><td>1.8h</td><td class="red-text">87.6%</td><td class="red-text">-0.8%</td><td>Scheduled</td><td><span class="badge badge-failed">FAILED</span></td></tr>
+            <tr><td class="accent-text">#43</td><td class="muted">Jul 02</td><td>2.2h</td><td class="green-text">88.4%</td><td class="green-text">+1.1%</td><td>Scheduled</td><td><span class="badge badge-complete">COMPLETE</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Dataset Composition</span><span class="card-badge">Last 6 months</span></div>
+        <canvas id="datasetChart" height="180"></canvas>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🔥 Chat with Forge</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Forge, your training engine. Ask me about model accuracy, training runs, or dataset statistics.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Forge..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "47 training runs completed. Current model v2.7 at 94.3% accuracy — up from 86.1% at v1.0. Last retrain 3 days ago using 125,000 historical trades. Next retrain in 4 days.",
+  "Training run #47 completed in 2.4 hours. Key improvements: EURUSD signal accuracy 71%→78%, XAUUSD false positive rate reduced 34%, sideways regime detection 71%→89%.",
+  "Forge is currently idle. Next training run scheduled Sunday 02:00 UTC using week's accumulated trade data. Chronicle will provide annotated trade outcomes as training labels. Expected: 2-3 hours.",
+  "Model performance trend: accuracy improved consistently from run #1 (55.2%) to run #47 (94.3%). Biggest jump: runs #23→#24 when Chronicle memory patterns added as features — accuracy jumped 71%→84% in one run.",
+  "Dataset stats: 125,000 trades in training set. 14,847 new trades since last retrain. Win trades: 83,750 (67%), Loss trades: 28,750 (23%), Rejected signals: 12,500 (10%). Retrain threshold approaching.",
+  "Current training stats: 247/300 epochs complete, train loss 0.0847 (↓), val loss 0.0923 (↓), train accuracy 94.3% (↑), val accuracy 91.8% (↑). No overfitting detected.",
+  "Run #44 failed due to data corruption in the BTCUSD training subset — 847 records had incorrect labels. Issue resolved, records re-labeled by Chronicle. Run #45 succeeded with corrected data.",
+  "Forge uses a gradient boosted ensemble model with 3 sub-models: technical indicators model (45% weight), sentiment fusion model (35% weight), and regime classifier (20% weight). All three improved in run #47.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+
+// Accuracy chart
+const runs=Array.from({length:47},(_,i)=>i+1);
+const accData=[55.2,57.1,58.4,60.2,61.8,63.4,64.7,65.1,66.8,67.4,68.2,69.1,70.4,71.2,72.8,73.4,74.1,75.2,76.8,77.4,78.1,79.2,71.0,84.3,85.1,86.2,87.4,87.8,88.1,88.7,89.2,89.8,90.1,90.4,90.8,91.2,91.4,91.8,92.0,92.2,92.5,92.8,93.1,93.4,93.8,94.1,94.3];
+const accCtx=document.getElementById('accChart').getContext('2d');
+new Chart(accCtx,{type:'line',data:{labels:runs,datasets:[{data:accData,borderColor:'#F97316',backgroundColor:'rgba(249,115,22,0.1)',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10},maxTicksLimit:10}},y:{min:50,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10},callback:v=>v+'%'}}}}});
+
+// Dataset chart
+const dsCtx=document.getElementById('datasetChart').getContext('2d');
+new Chart(dsCtx,{type:'bar',data:{
+  labels:['Feb','Mar','Apr','May','Jun','Jul'],
+  datasets:[
+    {label:'Wins',data:[67,65,68,70,66,67],backgroundColor:'rgba(249,115,22,0.8)',borderRadius:3},
+    {label:'Losses',data:[23,25,22,20,24,23],backgroundColor:'rgba(239,68,68,0.7)',borderRadius:3},
+    {label:'Rejected',data:[10,10,10,10,10,10],backgroundColor:'rgba(100,116,139,0.6)',borderRadius:3},
+  ]
+},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94A3B8',font:{size:10}}}},scales:{x:{stacked:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}},y:{stacked:true,min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10},callback:v=>v+'%'}}}}});
+</script>
+</body></html>

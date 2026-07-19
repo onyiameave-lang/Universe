@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel — Universe Oracle</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="shared.css">
+<style>:root{--accent:#F59E0B;--accent-rgb:245,158,11;}</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-left">
+    <span class="nav-logo">🗼</span><span class="nav-brand">UNIVERSE ORACLE</span>
+    <div class="nav-tabs">
+      <a href="index.html" class="nav-tab">🕸️ Nexus</a><a href="oracle.html" class="nav-tab">🔮 Oracle</a>
+      <a href="sentinel.html" class="nav-tab active">🗼 Sentinel</a><a href="pulse.html" class="nav-tab">💓 Pulse</a>
+      <a href="atlas.html" class="nav-tab">🌐 Atlas</a><a href="chronicle.html" class="nav-tab">📖 Chronicle</a>
+      <a href="nexus.html" class="nav-tab">📡 System</a><a href="forge.html" class="nav-tab">🔥 Forge</a>
+      <a href="genesis.html" class="nav-tab">🧬 Genesis</a><a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
+    </div>
+  </div>
+  <div class="nav-right"><button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button></div>
+</nav>
+<div class="page-wrap">
+  <aside class="sidebar">
+    <div class="agent-header">
+      <div class="agent-icon-big">🗼</div>
+      <div class="agent-name">Sentinel</div>
+      <div class="agent-sub">News Intelligence</div>
+      <div class="agent-status"><span class="dot dot-green"></span> Running</div>
+    </div>
+    <div class="sys-footer">
+      <div class="sys-item"><span class="dot dot-green"></span>18 Sources Active</div>
+      <div class="sys-item"><span class="dot dot-green"></span>NLP Engine Online</div>
+      <div class="sys-item"><span class="dot dot-amber"></span>2 Spike Alerts</div>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-title">SENTINEL — News Intelligence</div>
+    <div class="kpi-grid">
+      <div class="kpi-card accent-card"><div class="kpi-label">News Items Today</div><div class="kpi-value accent-text" data-target="247">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">High Impact Events</div><div class="kpi-value red-text" data-target="3">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Sentiment</div><div class="kpi-value green-text">+0.34</div></div>
+      <div class="kpi-card amber-card"><div class="kpi-label">Spike Alerts</div><div class="kpi-value amber-text" data-target="2">0</div><span class="kpi-warn">⚠</span></div>
+      <div class="kpi-card"><div class="kpi-label">Sources Monitored</div><div class="kpi-value" data-target="18">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Last Update</div><div class="kpi-value" id="sentTimer" style="font-size:16px">00:00:00</div></div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">Live News Feed</span><span class="card-badge">Live</span></div>
+        <div id="newsFeed" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto"></div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Sentiment by Asset</span></div>
+        <canvas id="sentChart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="row-2col">
+      <div class="card" style="flex:1.8">
+        <div class="card-header"><span class="card-title">News Spike Alerts</span></div>
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Headline</th><th>Asset</th><th>Impact</th><th>Credibility</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">08:03</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Fed Powell signals rates higher for longer</td><td>USD</td><td><span class="badge badge-high">HIGH</span></td><td>94%</td><td><span class="badge badge-sell">TRIGGERED</span></td></tr>
+            <tr><td class="muted">07:41</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Geopolitical tensions push oil above $85</td><td>WTI</td><td><span class="badge badge-med">MED</span></td><td>87%</td><td><span class="badge badge-closed">MONITORED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header"><span class="card-title">Source Credibility</span></div>
+        <table class="data-table">
+          <thead><tr><th>Source</th><th>Articles</th><th>Credibility</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Reuters</td><td>47</td><td><div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:94%;height:100%;background:#F59E0B;border-radius:3px"></div></div></td><td><span class="badge badge-active">ACTIVE</span></td></tr>
+            <tr><td>Bloomberg</td><td>38</td><td><div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:91%;height:100%;background:#F59E0B;border-radius:3px"></div></div></td><td><span class="badge badge-active">ACTIVE</span></td></tr>
+            <tr><td>FT</td><td>22</td><td><div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:88%;height:100%;background:#F59E0B;border-radius:3px"></div></div></td><td><span class="badge badge-active">ACTIVE</span></td></tr>
+            <tr><td>CNBC</td><td>31</td><td><div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:76%;height:100%;background:#F59E0B;border-radius:3px"></div></div></td><td><span class="badge badge-inprog">DEGRADED</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<button class="chat-toggle" onclick="toggleChat()" id="chatToggle">💬 Chat</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-panel-header"><span>🗼 Chat with Sentinel</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
+  <div class="chat-panel-messages" id="panelMessages">
+    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Sentinel, your news intelligence agent. Ask me about breaking news, sentiment shifts, or market-moving events.</div></div>
+  </div>
+  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Sentinel..." rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+</div>
+<script src="shared.js"></script>
+<script>
+const AGENT_RESPONSES = [
+  "247 news items processed today. Two spike alerts active: Fed hawkish comment (HIGH, 94% credibility) and oil geopolitical tension (MED, 87%). Avg sentiment is +0.34 — mildly bullish.",
+  "Top headline: 'Fed Powell signals rates higher for longer' — pushing USD strength. EURUSD sentiment dropped to -0.42 in the last 15 minutes. Sentinel flagged this as a potential signal reversal trigger.",
+  "18 sources monitored. Reuters and Bloomberg at 94%+ credibility. CNBC flagged as 'degraded' due to unusual sentiment bias. News cycle dominated by USD and gold stories.",
+  "News spike detected on XAUUSD 8 minutes ago — 3 high-credibility sources published bullish gold stories within 90 seconds. Oracle's gold signal confidence jumped from 68% to 81%.",
+  "Economic calendar: US CPI in 3h 42m (HIGH), ECB Speech in 4h (MED), CAD Employment in 3h 42m (HIGH). Three events overlap — Atlas flagged a 'news cluster' risk.",
+  "Sentiment breakdown: EURUSD -0.42 (bearish), USDJPY +0.61 (bullish), XAUUSD +0.73 (bullish), GBPUSD -0.18 (slightly bearish), BTCUSD +0.34 (mildly bullish).",
+  "Source credibility update: Reuters 94%, Bloomberg 91%, FT 88%, CNBC 76% (degraded). Sentinel automatically reduces weight of degraded sources in sentiment calculations.",
+  "Last scan was 47 seconds ago. Sentinel scans all 18 sources every 60 seconds. Next scan in 13 seconds. No new high-impact events detected since the last alert.",
+];
+let respIdx=0; function getAgentResponse(){return AGENT_RESPONSES[respIdx++%AGENT_RESPONSES.length];}
+
+// Timer
+let secs=47; setInterval(()=>{secs++;const h=String(Math.floor(secs/3600)).padStart(2,'0'),m=String(Math.floor((secs%3600)/60)).padStart(2,'0'),s=String(secs%60).padStart(2,'0');document.getElementById('sentTimer').textContent=`${h}:${m}:${s}`;},1000);
+
+// News feed
+const news=[
+  {time:'08:42',src:'Reuters',headline:'Fed Powell signals rates to stay higher for longer',asset:'USD',sent:'BEARISH',cred:94},
+  {time:'08:31',src:'Bloomberg',headline:'Gold surges as safe-haven demand increases',asset:'XAUUSD',sent:'BULLISH',cred:91},
+  {time:'08:15',src:'FT',headline:'ECB officials divided on next rate decision',asset:'EURUSD',sent:'NEUTRAL',cred:88},
+  {time:'07:58',src:'Reuters',headline:'BOJ maintains yield curve control policy unchanged',asset:'USDJPY',sent:'BULLISH',cred:94},
+  {time:'07:41',src:'CNBC',headline:'Oil prices rise on Middle East supply concerns',asset:'WTI',sent:'BULLISH',cred:76},
+  {time:'07:22',src:'Bloomberg',headline:'UK inflation data beats expectations',asset:'GBPUSD',sent:'BULLISH',cred:91},
+  {time:'07:05',src:'Reuters',headline:'Bitcoin ETF inflows hit weekly record',asset:'BTCUSD',sent:'BULLISH',cred:94},
+  {time:'06:48',src:'FT',headline:'Canadian employment data disappoints',asset:'USDCAD',sent:'BEARISH',cred:88},
+];
+const feed=document.getElementById('newsFeed');
+news.forEach(n=>{
+  const sc=n.sent==='BULLISH'?'badge-active':n.sent==='BEARISH'?'badge-sell':'badge-closed';
+  feed.innerHTML+=`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+    <span style="font-size:10px;color:var(--sub);white-space:nowrap;margin-top:2px">${n.time}</span>
+    <div style="flex:1">
+      <div style="font-size:12px;color:var(--text);margin-bottom:4px">${n.headline}</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:10px;color:var(--muted)">${n.src}</span>
+        <span style="font-size:10px;color:var(--muted)">— ${n.asset}</span>
+        <span class="badge ${sc}" style="font-size:9px">${n.sent}</span>
+        <span style="font-size:10px;color:var(--sub)">${n.cred}% cred</span>
+      </div>
+    </div>
+  </div>`;
+});
+
+// Sentiment chart
+const sentCtx=document.getElementById('sentChart').getContext('2d');
+new Chart(sentCtx,{type:'bar',data:{
+  labels:['EURUSD','GBPUSD','USDJPY','XAUUSD','BTCUSD','USDCAD','ETHUSD','AUDUSD'],
+  datasets:[{data:[-0.42,-0.18,0.61,0.73,0.34,-0.22,0.47,0.28],backgroundColor:d=>d.raw>=0?'rgba(34,197,94,0.7)':'rgba(239,68,68,0.7)',borderRadius:4}]
+},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:-1,max:1,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#64748B',font:{size:10}}},y:{grid:{display:false},ticks:{color:'#94A3B8',font:{size:11}}}}}});
+</script>
+</body></html>
