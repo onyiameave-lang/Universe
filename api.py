@@ -97,8 +97,21 @@ async def lifespan(app: FastAPI):
             add_log(name, "error", f"Initialization failed: {str(e)}")
             
     yield
-    # Shutdown logic
+    # Shutdown logic — B-8 fix: call stop() on every agent so heartbeat threads
+    # are joined and Chronicle's vector store is flushed to disk consistently.
     logger.info("Shutting down AI Ecosystem...")
+    # Stop in reverse boot order so dependents shut down before their dependencies
+    SHUTDOWN_ORDER = ["oracle", "genesis", "forge", "pulse", "sentinel", "aegis", "nexus", "atlas", "chronicle"]
+    for name in SHUTDOWN_ORDER:
+        agent = AGENTS.get(name)
+        if agent is None:
+            continue
+        try:
+            if hasattr(agent, "stop"):
+                agent.stop()
+                logger.info("Agent %s stopped cleanly", name)
+        except Exception as exc:
+            logger.warning("Error stopping agent %s: %s", name, exc)
     AGENTS.clear()
 
 app = FastAPI(title="Universal AI API", lifespan=lifespan)
@@ -194,9 +207,10 @@ async def query_agent(name: str, request: Request):
     agent = AGENTS[name]
     try:
         if hasattr(agent, "act"):
-            response = agent.act(prompt)
+            # B-6 fix: act() takes (task: str, context: dict) — never a bare string
+            response = agent.act("user.query", {"query": prompt, "_sender": "api"})
         elif hasattr(agent, "execute"):
-            response = agent.execute(prompt, {})
+            response = agent.execute("user.query", {"query": prompt})
         else:
             response = f"Awaiting instructions. {name} is listening."
             

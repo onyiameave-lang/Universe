@@ -41,6 +41,13 @@ for p in (_REPO_ROOT, _ECO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
+
+# Keep local aliases so the rest of this file's call-sites are unchanged
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
+
 from agents.creator_agent import GenesisAgent  # type: ignore
 
 

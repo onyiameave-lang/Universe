@@ -17,7 +17,8 @@ openai>=1.0.0
 google-genai>=0.1.0
 # --- market data + trading (Oracle) ---
 yfinance>=0.2.25
-MetaTrader5>=5.0.45
+# MetaTrader5 is Windows-only; install manually on Windows: pip install MetaTrader5>=5.0.45
+# MetaTrader5>=5.0.45
 # --- optional PDF research (Atlas) ---
 pypdf>=3.0.0
 # --- config + tests ---
@@ -26,5 +27,5 @@ pytest>=7.4.0
 fastapi>=0.100.0
 uvicorn>=0.22.0
 python-multipart>=0.0.6
-
-pytrends
+# --- social / trend data (Pulse) ---
+pytrends>=4.9.0

@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atlas Research | Universal AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --neon-green: #39FF14;
+            --bg-dark: #010B13;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-dark);
+            color: #fff;
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+
+        .font-mono {
+            font-family: 'Inconsolata', monospace;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(57, 255, 20, 0.1);
+        }
+
+        main::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.12;
+        }
+
+        .dc {
+            background: #111;
+            border: 1px solid rgba(57, 255, 20, 0.15);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .dc:hover {
+            border-color: rgba(57, 255, 20, 0.4);
+            box-shadow: 0 0 25px rgba(57, 255, 20, 0.08);
+        }
+
+        .badge-validated {
+            background: rgba(57, 255, 20, 0.08);
+            border: 1px solid rgba(57, 255, 20, 0.3);
+            color: #39FF14;
+        }
+
+        .badge-pending {
+            background: rgba(251, 191, 36, 0.08);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: #fbbf24;
+        }
+
+        .badge-contested {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #39FF14, #39FF14);
+            box-shadow: 0 0 12px rgba(57, 255, 20, 0.4);
+            transition: width 1.5s ease;
+        }
+
+        .source-dot-market {
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+            background: #3b82f6;
+        }
+
+        .source-dot-academic {
+            box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+            background: #a855f7;
+        }
+
+        .source-dot-intelligence {
+            box-shadow: 0 0 8px rgba(236, 72, 153, 0.6);
+            background: #ec4899;
+        }
+    </style>
+</head>
+
+<body class="overflow-hidden">
+    <div class="flex h-screen w-full bg-[#010B13]">
+        <!-- Sidebar -->
+        <aside class="w-20 bg-[#111] border-r border-[#39FF14]/20 flex flex-col items-center py-8 z-50">
+            <a href="../../index.html" class="mb-12 group cursor-pointer"><i
+                    class="ti ti-cpu text-[#39FF14] text-3xl drop-shadow-[0_0_8px_#39FF14]"></i></a>
+            <nav class="flex-1 flex flex-col gap-6">
+                <a href="../../Chronicle/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Chronicle"><i class="ti ti-brain text-2xl"></i></a>
+                <a href="../../Oracle/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Oracle"><i class="ti ti-trending-up text-2xl"></i></a>
+                <a href="../../Nexus/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Nexus"><i class="ti ti-share-2 text-2xl"></i></a>
+                <a href="../../Pulse/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Pulse"><i class="ti ti-activity text-2xl"></i></a>
+                <a href="index.html" class="group p-3 text-[#39FF14] flex justify-center relative" title="Atlas">
+                    <div class="absolute inset-y-2 left-0 w-[2px] bg-[#39FF14] shadow-[0_0_15px_#39FF14]"></div><i
+                        class="ti ti-search text-2xl drop-shadow-[0_0_8px_#39FF14]"></i>
+                </a>
+                <a href="../../Forge/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Forge"><i class="ti ti-hammer text-2xl"></i></a>
+                <a href="../../Genesis/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Genesis"><i class="ti ti-zap text-2xl"></i></a>
+                <a href="../../Aegis/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Aegis"><i class="ti ti-shield text-2xl"></i></a>
+                <a href="../../Sentinel/dashboard/index.html"
+                    class="group p-3 text-white/40 hover:text-[#39FF14] transition-colors flex justify-center"
+                    title="Sentinel"><i class="ti ti-news text-2xl"></i></a>
+            </nav>
+            <div class="mt-auto flex flex-col gap-6">
+                <div id="api-indicator"
+                    class="w-10 h-10 rounded bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 font-mono text-[8px] font-bold">
+                    OFF</div>
+                <div
+                    class="w-10 h-10 rounded bg-[#39FF14]/10 border border-[#39FF14]/20 flex items-center justify-center text-[#39FF14] font-mono text-xs font-bold">
+                    U.AI</div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto p-8 space-y-8 relative">
+            <!-- Header -->
+            <header class="flex items-center justify-between border-b border-[#39FF14]/10 pb-8">
+                <div>
+                    <h1 class="font-mono text-3xl font-bold text-[#39FF14] tracking-tighter uppercase">Atlas Research</h1>
+                    <div class="flex items-center gap-3 mt-1"><span
+                            class="w-2 h-2 bg-[#39FF14] rounded-full animate-pulse"></span>
+                        <p class="text-white/40 text-[10px] font-mono uppercase tracking-[0.2em]" id="conn-label">
+                            DEEP SOURCE CORROBORATION ENGINE</p>
+                    </div>
+                </div>
+                <div
+                    class="flex items-center gap-10 bg-[#111]/50 border border-[#39FF14]/10 px-6 py-3 rounded-sm conn-sensitive">
+                    <div><span class="text-[9px] text-white/30 uppercase font-mono">Sources Active</span>
+                        <div class="text-[#39FF14] font-mono text-xl font-bold" id="val-sources">1,247</div>
+                    </div>
+                    <div><span class="text-[9px] text-white/30 uppercase font-mono">Corroboration Rate</span>
+                        <div class="text-[#39FF14] font-mono text-xl font-bold" id="val-corroboration">94.7%</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Row 1: Research Corroboration Matrix + Deep Scan Status -->
+            <div class="grid grid-cols-12 gap-8">
+                <!-- Research Corroboration Matrix -->
+                <div class="col-span-8 dc rounded-sm p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="font-mono text-xs text-[#39FF14] font-bold uppercase tracking-widest flex items-center gap-2">
+                            <i class="ti ti-file-search"></i> Research Corroboration Matrix
+                        </h3>
+                        <span class="text-[9px] text-white/20 font-mono uppercase tracking-widest">4 topics tracked</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left font-mono">
+                            <thead>
+                                <tr class="border-b border-[#39FF14]/10 text-white/30 text-[9px] uppercase tracking-[0.2em]">
+                                    <th class="pb-3 pr-4">Topic</th>
+                                    <th class="pb-3 pr-4">Primary Source</th>
+                                    <th class="pb-3 pr-4">Corroborating</th>
+                                    <th class="pb-3 pr-4">Confidence</th>
+                                    <th class="pb-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-[11px]">
+                                <tr class="border-b border-white/5 hover:bg-[#39FF14]/[0.02] transition-colors">
+                                    <td class="py-4 pr-4 text-white font-bold">AI Governance Frameworks</td>
+                                    <td class="py-4 pr-4 text-white/50">EU AI Act Registry</td>
+                                    <td class="py-4 pr-4 text-[#39FF14]">3 sources</td>
+                                    <td class="py-4 pr-4">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-16 h-1 bg-[#39FF14]/10 rounded-full overflow-hidden">
+                                                <div class="h-full bg-[#39FF14] shadow-[0_0_6px_#39FF14]" style="width:97%"></div>
+                                            </div>
+                                            <span class="text-[#39FF14] text-[10px]">97%</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4"><span class="px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-wider badge-validated">VALIDATED</span></td>
+                                </tr>
+                                <tr class="border-b border-white/5 hover:bg-[#39FF14]/[0.02] transition-colors">
+                                    <td class="py-4 pr-4 text-white font-bold">Quantum Supremacy Claims</td>
+                                    <td class="py-4 pr-4 text-white/50">Nature Journal</td>
+                                    <td class="py-4 pr-4 text-[#39FF14]">5 sources</td>
+                                    <td class="py-4 pr-4">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-16 h-1 bg-[#39FF14]/10 rounded-full overflow-hidden">
+                                                <div class="h-full bg-[#39FF14] shadow-[0_0_6px_#39FF14]" style="width:91%"></div>
+                                            </div>
+                                            <span class="text-[#39FF14] text-[10px]">91%</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4"><span class="px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-wider badge-validated">VALIDATED</span></td>
+                                </tr>
+                                <tr class="border-b border-white/5 hover:bg-[#39FF14]/[0.02] transition-colors">
+                                    <td class="py-4 pr-4 text-white font-bold">Neural Interface Patents</td>
+                                    <td class="py-4 pr-4 text-white/50">USPTO Database</td>
+                                    <td class="py-4 pr-4 text-amber-400">1 source</td>
+                                    <td class="py-4 pr-4">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-16 h-1 bg-amber-500/10 rounded-full overflow-hidden">
+                                                <div class="h-full bg-amber-500 shadow-[0_0_6px_rgba(251,191,36,0.4)]" style="width:68%"></div>
+                                            </div>
+                                            <span class="text-amber-400 text-[10px]">68%</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4"><span class="px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-wider badge-pending">PENDING</span></td>
+                                </tr>
+                                <tr class="hover:bg-[#39FF14]/[0.02] transition-colors">
+                                    <td class="py-4 pr-4 text-white font-bold">Climate Tech Investments</td>
+                                    <td class="py-4 pr-4 text-white/50">Bloomberg Terminal</td>
+                                    <td class="py-4 pr-4 text-[#39FF14]">6 sources</td>
+                                    <td class="py-4 pr-4">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-16 h-1 bg-[#39FF14]/10 rounded-full overflow-hidden">
+                                                <div class="h-full bg-[#39FF14] shadow-[0_0_6px_#39FF14]" style="width:99%"></div>
+                                            </div>
+                                            <span class="text-[#39FF14] text-[10px]">99%</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4"><span class="px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-wider badge-validated">VALIDATED</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Deep Scan Status -->
+                <div class="col-span-4 dc rounded-sm p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-mono text-xs text-[#39FF14] font-bold uppercase tracking-widest flex items-center gap-2">
+                                <i class="ti ti-radar-2"></i> Deep Scan
+                            </h3>
+                            <span class="text-[9px] text-white/20 font-mono uppercase tracking-widest">Active</span>
+                        </div>
+                        <!-- Progress bar -->
+                        <div class="mb-6">
+                            <div class="flex justify-between text-[9px] font-mono mb-2">
+                                <span class="text-white/30">Scan Progress</span>
+                                <span class="text-[#39FF14] font-bold" id="scan-pct">78%</span>
+                            </div>
+                            <div class="w-full h-2 bg-[#39FF14]/5 rounded-full overflow-hidden">
+                                <div class="progress-fill h-full rounded-full" id="scan-bar" style="width:78%"></div>
+                            </div>
+                            <p class="text-[8px] text-white/20 font-mono mt-1.5 uppercase tracking-wider">3 of 4 source clusters scanned</p>
+                        </div>
+                        <!-- Source type statuses -->
+                        <div class="space-y-3 pt-2">
+                            <div class="flex items-center justify-between p-3 bg-[#010B13]/50 border border-[#39FF14]/5 rounded-sm">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2.5 h-2.5 rounded-full source-dot-market"></span>
+                                    <span class="font-mono text-[11px] text-white/70">Market</span>
+                                </div>
+                                <span class="font-mono text-[10px] text-[#39FF14] font-bold flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 bg-[#39FF14] rounded-full"></span> ONLINE
+                                </span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-[#010B13]/50 border border-[#39FF14]/5 rounded-sm">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2.5 h-2.5 rounded-full source-dot-academic"></span>
+                                    <span class="font-mono text-[11px] text-white/70">Academic</span>
+                                </div>
+                                <span class="font-mono text-[10px] text-[#39FF14] font-bold flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 bg-[#39FF14] rounded-full"></span> ONLINE
+                                </span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-[#010B13]/50 border border-[#39FF14]/5 rounded-sm">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2.5 h-2.5 rounded-full source-dot-intelligence"></span>
+                                    <span class="font-mono text-[11px] text-white/70">Intelligence</span>
+                                </div>
+                                <span class="font-mono text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></span> SYNCING
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Scan metadata -->
+                    <div class="mt-6 pt-4 border-t border-white/5 flex justify-between text-[9px] font-mono">
+                        <span class="text-white/30">Last Scan</span>
+                        <span class="text-[#39FF14] font-bold" id="last-scan">00:03:42 AGO</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Source Feed (Terminal Log) -->
+            <div class="dc rounded-sm flex flex-col overflow-hidden h-[340px]">
+                <div class="p-3 border-b border-[#39FF14]/10 bg-[#010B13]/50 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="flex gap-1">
+                            <div class="w-2 h-2 rounded-full bg-red-500/40"></div>
+                            <div class="w-2 h-2 rounded-full bg-amber-500/40"></div>
+                            <div class="w-2 h-2 rounded-full bg-[#39FF14]/40"></div>
+                        </div>
+                        <span class="font-mono text-[9px] text-[#39FF14]/80 uppercase tracking-[0.2em] font-bold">Source Feed</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-[8px] font-mono text-white/20 uppercase tracking-widest">Live Stream</span>
+                        <span class="text-[8px] font-mono text-white/20" id="feed-count">0 entries</span>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-hidden relative bg-[#010B13]/20">
+                    <div class="absolute inset-0 pointer-events-none z-20 bg-gradient-to-b from-[#111] via-transparent to-[#111]"></div>
+                    <div id="source-feed" class="p-5 space-y-4 font-mono text-[10px] relative z-10"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="../../shared/dashboard-core.js"></script>
+    <script>
+        const UAI = window.UniversalAI;
+        UAI.state.activeAgent = 'atlas';
+        const AGENTS = ['chronicle', 'oracle', 'nexus', 'pulse', 'atlas', 'forge', 'genesis', 'aegis', 'sentinel'];
+        UAI.initKeyboardNav(AGENTS);
+
+        // ── Source Feed ──────────────────────────────────────────
+        const MOCK_LOGS = [
+            { type: 'OK', agent: 'ATLAS', msg: 'Source corroborated: EU AI Act §14.2 — 3-way match' },
+            { type: 'INFO', agent: 'ATLAS', msg: 'New academic paper ingested: arxiv.org/abs/2503.14' },
+            { type: 'SYNC', agent: 'ATLAS', msg: 'Market data stream reconnected: Bloomberg API' },
+            { type: 'WARN', agent: 'ATLAS', msg: 'Intelligence source rate-limited, retrying in 30s' },
+            { type: 'OK', agent: 'ATLAS', msg: 'Cross-reference complete: Climate Tech (6/6 sources)' },
+            { type: 'INFO', agent: 'ATLAS', msg: 'Patent scan initiated: Neural Interface cluster' },
+            { type: 'ERR', agent: 'ATLAS', msg: 'Source timeout: academic-03.node — marked stale' },
+            { type: 'OK', agent: 'ATLAS', msg: 'Corroboration threshold met: Quantum Claims (91%)' },
+            { type: 'SYNC', agent: 'PULSE', msg: 'Trend data ingested for cross-reference' },
+            { type: 'INFO', agent: 'SENTINEL', msg: 'News alert correlated with Atlas topic #4' },
+        ];
+
+        const feedEl = document.getElementById('source-feed');
+        const feedCountEl = document.getElementById('feed-count');
+        let feedEntryCount = 0;
+
+        function pushFeedEntry(log) {
+            const el = document.createElement('div');
+            const time = new Date().toLocaleTimeString([], { hour12: false });
+            let c = 'text-[#39FF14]';
+            if (log.type === 'WARN') c = 'text-amber-400 font-bold';
+            if (log.type === 'ERR' || log.type === 'ERROR') c = 'text-red-500 font-bold';
+            if (log.type === 'INFO') c = 'text-white/60';
+            if (log.type === 'SYNC') c = 'text-cyan-400';
+            if (log.type === 'OK') c = 'text-emerald-400';
+            el.className = `opacity-0 translate-y-2 transition-all duration-300 ${c}`;
+            el.innerHTML = `<span class="opacity-20 mr-2">[${time}]</span>[${log.agent}-${log.type}] ${log.msg}`;
+            feedEl.prepend(el);
+            requestAnimationFrame(() => el.classList.remove('opacity-0', 'translate-y-2'));
+            while (feedEl.children.length > 20) feedEl.lastElementChild.remove();
+            feedEntryCount++;
+            feedCountEl.textContent = feedEntryCount + ' entries';
+        }
+
+        async function pollSourceFeed() {
+            if (UAI.state.connected) {
+                const data = await UAI.apiGet('/logs?limit=10');
+                if (data && data.length > 0) {
+                    const atlasLogs = data.filter(l => {
+                        const agent = (l.agent || '').toUpperCase();
+                        return agent === 'ATLAS' || agent === 'PULSE' || agent === 'SENTINEL';
+                    });
+                    if (atlasLogs.length > 0) {
+                        atlasLogs.reverse().forEach(l => pushFeedEntry({ type: l.type, agent: l.agent, msg: l.msg }));
+                    }
+                }
+            } else {
+                // Mock fallback
+                const log = MOCK_LOGS[Math.floor(Math.random() * MOCK_LOGS.length)];
+                pushFeedEntry(log);
+            }
+        }
+
+        // Seed initial entries
+        for (let i = 0; i < 10; i++) {
+            pushFeedEntry(MOCK_LOGS[Math.floor(Math.random() * MOCK_LOGS.length)]);
+        }
+
+        setInterval(pollSourceFeed, 3000);
+
+        // ── Live Stats Simulation ────────────────────────────────
+        function updateStats() {
+            const sources = 1247 + Math.floor(Math.random() * 30 - 15);
+            document.getElementById('val-sources').textContent = sources.toLocaleString();
+            const corr = (94.0 + Math.random() * 2.0).toFixed(1);
+            document.getElementById('val-corroboration').textContent = corr + '%';
+
+            // Update scan progress
+            const scan = 75 + Math.floor(Math.random() * 10);
+            document.getElementById('scan-pct').textContent = scan + '%';
+            document.getElementById('scan-bar').style.width = scan + '%';
+
+            // Update last scan timer
+            const seconds = Math.floor(Math.random() * 30 + 5);
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            document.getElementById('last-scan').textContent =
+                '00:' + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + ' AGO';
+        }
+        setInterval(updateStats, 5000);
+
+        // ── Toast on Connection Change ───────────────────────────
+        const origUpdateConn = UAI.updateConnectionUI;
+        UAI.updateConnectionUI = function (connected) {
+            origUpdateConn(connected);
+            if (connected) {
+                UAI.showToast('ATLAS CONNECTED — SOURCES STREAMING', 'success');
+            } else {
+                UAI.showToast('CONNECTION LOST — MOCK FEED ACTIVE', 'warn');
+            }
+        };
+
+        // ── GSAP Entrance Animation ──────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            const tl = gsap.timeline({ defaults: { ease: 'power2.out' } });
+
+            tl.from('aside', { x: -80, opacity: 0, duration: 0.6 })
+              .from('header', { y: -30, opacity: 0, duration: 0.5 }, '-=0.3')
+              .from('.dc', {
+                  y: 40,
+                  opacity: 0,
+                  duration: 0.6,
+                  stagger: 0.1,
+              }, '-=0.2')
+              .from('#source-feed > div', {
+                  opacity: 0,
+                  y: 10,
+                  duration: 0.4,
+                  stagger: 0.02,
+              }, '-=0.3');
+
+            // Pulse the scan progress bar
+            gsap.to('#scan-bar', {
+                boxShadow: '0 0 20px rgba(57,255,20,0.6)',
+                repeat: -1,
+                yoyo: true,
+                duration: 2,
+                ease: 'sine.inOut',
+            });
+
+            // Subtle particle-like float on status dots
+            gsap.to('.source-dot-market, .source-dot-academic, .source-dot-intelligence', {
+                scale: 1.3,
+                repeat: -1,
+                yoyo: true,
+                duration: 1.5 + Math.random(),
+                ease: 'sine.inOut',
+                stagger: 0.3,
+            });
+        });
+
+        // ── Connection Label Update ──────────────────────────────
+        setInterval(() => {
+            const label = document.getElementById('conn-label');
+            if (UAI.state.connected) {
+                label.textContent = 'DEEP SOURCE CORROBORATION ENGINE';
+            } else {
+                label.textContent = 'OFFLINE — SIMULATED RESEARCH MODE';
+            }
+        }, 3000);
+    </script>
+</body>
+
+</html>

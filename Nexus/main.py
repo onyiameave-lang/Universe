@@ -40,30 +40,14 @@ for p in (_REPO_ROOT, _ECO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models", "training",
-    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
-    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
-    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
-    "execution", "registry"
-]
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
 
-def _unload_conflicting_modules():
-    """Forcibly unload modules that cause namespace collisions between repositories.
-    Every repo (Chronicle, Atlas, Aegis, Nexus itself) ships its own core/agents/
-    etc packages with identical names, so without clearing them from sys.modules
-    between loads, a peer's "from core.X import Y" silently resolves against
-    whichever repo's core/ happened to be imported first -- which is why every
-    single peer load (Chronicle, Atlas, Aegis) was failing with 'No module
-    named core.embeddings' / 'core.research_engine' / 'core.audit_log'."""
-    modules_to_delete = []
-    for mod_name in CONFLICTING_MODULES:
-        for m in list(sys.modules.keys()):
-            if m == mod_name or m.startswith(mod_name + '.'):
-                modules_to_delete.append(m)
-    for m in modules_to_delete:
-        if m in sys.modules:
-            del sys.modules[m]
+# Keep local aliases so the rest of this file's call-sites are unchanged
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
+
+
 
 from agents.coordinator_agent import NexusAgent  # type: ignore
 

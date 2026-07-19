@@ -68,67 +68,15 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-# These are the common top-level directory names in agent repos that can cause
-# import conflicts when loading multiple agents in the same process.
-CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models", "training",
-    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
-    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
-    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
-    "execution", "registry",
-]
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
+
+# Keep local aliases so the rest of this file's call-sites are unchanged
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
 
 
-def _unload_conflicting_modules() -> None:
-    """Remove any stale top-level module entries that a sub-agent load may have
-    registered, so the next bare `from agents.xxx import ...` resolves against
-    the correct repo root (this agent's own directory)."""
-    for mod in list(sys.modules.keys()):
-        if mod in CONFLICTING_MODULES or any(
-            mod.startswith(f"{m}.") for m in CONFLICTING_MODULES
-        ):
-            del sys.modules[mod]
 
-
-def _load_dotenv_early() -> None:
-    """
-    S-4 fix: load .env BEFORE any agent/engine is constructed.
-
-    shared.config reads env vars at import time. If dotenv has not been called
-    yet, NEWSAPI_KEY / GUARDIAN_API_KEY are empty strings and the collectors
-    that depend on them report available=False for the entire process lifetime
-    (the singleton is never re-read).
-
-    We try python-dotenv first; fall back to a manual parser so this works
-    even if python-dotenv is not installed.
-    """
-    env_file = _REPO_ROOT.parent / ".env"
-    if not env_file.exists():
-        env_file = _REPO_ROOT / ".env"
-    if not env_file.exists():
-        return
-
-    try:
-        from dotenv import load_dotenv  # type: ignore
-        load_dotenv(dotenv_path=str(env_file), override=False)
-        return
-    except ImportError:
-        pass
-
-    # Manual fallback parser (no external dependency)
-    try:
-        with open(env_file, encoding="utf-8") as fh:
-            for raw in fh:
-                line = raw.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, val = line.partition("=")
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                if key and key not in os.environ:
-                    os.environ[key] = val
-    except Exception:
-        pass
 
 
 def _load(folder: str, rel: str, cls: str, **kw):

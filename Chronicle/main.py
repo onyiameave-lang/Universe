@@ -44,27 +44,14 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-# These are the common top-level directory names in agent repos that can cause import conflicts
-# when loading multiple agents in the same process.
-CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models", "training",
-    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
-    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
-    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
-    "execution", "registry"
-]
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
 
-def _unload_conflicting_modules():
-    """Forcibly unload modules that cause namespace collisions between repositories."""
-    modules_to_delete = []
-    for mod_name in CONFLICTING_MODULES:
-        # Find the module and all its submodules
-        for m in list(sys.modules.keys()):
-            if m == mod_name or m.startswith(mod_name + '.'):
-                modules_to_delete.append(m)
-    for m in modules_to_delete:
-        if m in sys.modules:
-            del sys.modules[m]
+# Keep local aliases so the rest of this file's call-sites are unchanged
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
+
+
 
 def _load(folder, rel, cls, **kw):
     root = _REPO_ROOT.parent / folder

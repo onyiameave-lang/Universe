@@ -30,50 +30,14 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models", "training",
-    "optimization", "communication", "infrastructure", "security", "api", "interfaces",
-    "dashboard", "testing", "benchmarks", "simulations", "datasets", "documentation",
-    "configs", "logs", "deployment", "plugins", "prompts", "tools", "constitutional",
-    "execution", "registry"
-]
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
 
-
-def _load_dotenv_early():
-    """Load .env before any agent/collector is constructed so NEWSAPI_KEY,
-    GUARDIAN_API_KEY, ORACLE_LLM_MODE etc. are available at import time.
-    Identical pattern to Pulse and Sentinel main.py."""
-    from pathlib import Path as _P
-    import os as _os
-    env_path = _P(__file__).resolve().parent.parent / ".env"
-    if not env_path.exists():
-        return
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(env_path, override=False)
-        logging.getLogger("oracle.main").info("dotenv loaded from %s", env_path)
-    except ImportError:
-        # dotenv not installed — parse manually (key=value, skip comments)
-        with open(env_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                k = k.strip(); v = v.strip().strip('"').strip("'")
-                if k and k not in _os.environ:
-                    _os.environ[k] = v
-
-
-def _unload_conflicting_modules():
-    modules_to_delete = []
-    for mod_name in CONFLICTING_MODULES:
-        for m in list(sys.modules.keys()):
-            if m == mod_name or m.startswith(mod_name + '.'):
-                modules_to_delete.append(m)
-    for m in modules_to_delete:
-        if m in sys.modules:
-            del sys.modules[m]
+# ---------------------------------------------------------------------------
+# Keep local aliases so the rest of this file's call-sites are unchanged
+# ---------------------------------------------------------------------------
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
 
 
 def _load(folder, rel, cls, **kw):

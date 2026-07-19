@@ -77,7 +77,8 @@ class EcosystemConfig:
     # llm defaults
     anthropic_model: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"))
     openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
-    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-pro"))
+    # B-13 fix: gemini-1.5-pro is deprecated; use gemini-2.0-flash as the default
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
     llm_provider_order: List[str] = field(default_factory=lambda: _list("LLM_PROVIDER_ORDER", ["anthropic", "openai", "gemini"]))
 
 

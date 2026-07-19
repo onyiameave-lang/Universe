@@ -39,7 +39,9 @@ class ProtocolError(EcosystemError):
 
 
 class RepositoryError(EcosystemError): pass
-class MemoryError(EcosystemError): pass
+class OracleMemoryError(EcosystemError): pass
+# Backward-compatible alias — do NOT use MemoryError directly; it shadows the Python built-in.
+MemoryError = OracleMemoryError  # type: ignore[assignment,misc]
 class AgentError(EcosystemError): pass
 class TrainingError(EcosystemError): pass
 class ResearchError(EcosystemError): pass

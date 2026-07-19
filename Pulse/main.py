@@ -34,30 +34,15 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+# B-11/12 fix: import shared utilities instead of duplicating them here
+from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
+
+# Keep local aliases so the rest of this file's call-sites are unchanged
+_load_dotenv_early = load_dotenv_early
+_unload_conflicting_modules = unload_conflicting_modules
+
 
 # ── Load .env FIRST — before any other import that reads env vars ─────────────
-def _load_dotenv_early() -> None:
-    """
-    Load .env from the Pulse directory or any parent up to the repo root.
-    Must run before any module that reads os.getenv() at import time
-    (shared/config.py, shared/llm/client.py, collectors.py, etc.).
-    """
-    try:
-        from dotenv import load_dotenv  # type: ignore
-        # Search: Pulse/.env → Universe-oracle-vN/.env → parent/.env
-        for candidate in [
-            _REPO_ROOT / ".env",
-            _REPO_ROOT.parent / ".env",
-            _REPO_ROOT.parent.parent / ".env",
-        ]:
-            if candidate.exists():
-                load_dotenv(candidate, override=False)
-                logging.getLogger("pulse.main").info(
-                    "Loaded .env from %s", candidate)
-                break
-    except ImportError:
-        pass  # python-dotenv not installed — env vars must be set externally
-
 
 _load_dotenv_early()
 
@@ -73,24 +58,7 @@ logging.getLogger("pulse.main").info(
 
 
 # ── Module conflict cleanup (same as v4) ──────────────────────────────────────
-CONFLICTING_MODULES = [
-    "core", "agents", "intelligence", "memory", "research", "models",
-    "training", "optimization", "communication", "infrastructure",
-    "security", "api", "interfaces", "dashboard", "testing", "benchmarks",
-    "simulations", "datasets", "documentation", "configs", "logs",
-    "deployment", "plugins", "prompts", "tools", "constitutional",
-    "execution", "registry",
-]
 
-
-def _unload_conflicting_modules() -> None:
-    to_del = []
-    for mod in CONFLICTING_MODULES:
-        for m in list(sys.modules):
-            if m == mod or m.startswith(mod + "."):
-                to_del.append(m)
-    for m in to_del:
-        sys.modules.pop(m, None)
 
 
 def _load(folder, rel, cls, **kw):
