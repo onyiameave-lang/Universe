@@ -16,8 +16,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,
-                                      returns_stats)
+try:
+    from intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,
+                                          returns_stats)
+except ImportError:
+    from Oracle.intelligence.technicals import (sma, ema, ema_series, rsi, macd, bollinger, atr,  # type: ignore
+                                                 returns_stats)
 
 log = logging.getLogger("oracle.genome")
 

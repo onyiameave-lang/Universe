@@ -1,284 +1,114 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pulse — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root{--accent:#EC4899;--accent-rgb:236,72,153;}
-.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
-.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
-.refresh-btn:hover{color:var(--accent);}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulse — Social Sentiment</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#EC4899; --accent-rgb:236,72,153; }</style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">💓</span><span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
-      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
-      <a href="pulse.html" class="nav-tab active">💓 Pulse</a>
-      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html" class="nav-tab">⚡ System</a>
-      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
-      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">💓</span>
+    <span class="topbar-brand">PULSE</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">Social Sentiment</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
-<div class="page-wrap">
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">💓</div>
-      <div class="agent-name">Pulse</div>
-      <div class="agent-sub">Social Intelligence</div>
-      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">💓</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Pulse</div>
+        <div class="chat-session-agent-role">Social Sentiment</div>
+      </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>NLP Engine…</div>
-      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Momentum…</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
-  <main class="main-content">
-    <div class="page-title">PULSE — Social Intelligence</div>
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card"><div class="kpi-label">Social Mentions</div><div class="kpi-value accent-text" id="kpiMentions">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Bullish Ratio</div><div class="kpi-value green-text" id="kpiBullish">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Trending Assets</div><div class="kpi-value accent-text" id="kpiTrending">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Sentiment Score</div><div class="kpi-value green-text" id="kpiScore">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Platform Sources</div><div class="kpi-value" id="kpiPlatforms">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Momentum Index</div><div class="kpi-value green-text" id="kpiMomentum">—</div></div>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#EC4899"></div>
+      <span class="chat-main-agent-name">Pulse</span>
+      <span class="chat-main-agent-role">Social Sentiment</span>
+      <span class="chat-main-hint">POST /agents/pulse/chat</span>
     </div>
 
-    <!-- Query panel -->
-    <div class="card" style="padding:14px 18px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="color:var(--muted);font-size:15px">🔍</span>
-        <input id="pulseInput" type="text" placeholder="Ask Pulse: 'What is social sentiment on BTCUSD?' or 'Top trending topics?'"
-          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
-          onkeydown="if(event.key==='Enter') queryPulse(this.value.trim())">
-        <button onclick="queryPulse(document.getElementById('pulseInput').value.trim())"
-          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Query</button>
-        <button class="refresh-btn" onclick="loadPulseData()" title="Refresh">↻</button>
-      </div>
-      <div id="pulseQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
-    </div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:2">
-        <div class="card-header"><span class="card-title">Social Sentiment by Asset</span><span class="card-badge">Reddit · Twitter · StockTwits · Telegram</span><button class="refresh-btn" onclick="loadPulseData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="socialChart" height="160"></canvas></div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Trending Topics</span><button class="refresh-btn" onclick="loadPulseData()" title="Refresh">↻</button></div>
-        <div id="trendList" style="display:flex;flex-direction:column;gap:10px">
-          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading…</div>
-        </div>
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">💓</div>
+      <div class="chat-empty-title">Chat with Pulse</div>
+      <div class="chat-empty-desc">e.g. 'query social sentiment on Bitcoin'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query Bitcoin sentiment')">query Bitcoin sentiment</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query trending topics')">query trending topics</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query social feed')">query social feed</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query viral alerts')">query viral alerts</span>
       </div>
     </div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.5">
-        <div class="card-header"><span class="card-title">Platform Breakdown</span><button class="refresh-btn" onclick="loadPulseData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Platform</th><th>Posts/hr</th><th>Bullish%</th><th>Bearish%</th><th>Neutral%</th><th>Momentum</th></tr></thead>
-          <tbody id="platformBody">
-            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Platform Distribution</span><button class="refresh-btn" onclick="loadPulseData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="platformChart" height="160"></canvas></div>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query social sentiment on Bitcoin'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
-      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
-        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header"><span>💓 Chat with Pulse</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Pulse, your social intelligence agent. Ask me about social sentiment, trending topics, or community mood.</div></div>
   </div>
-  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Pulse…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+
 </div>
 
-<script src="shared.js"></script>
-<script src="api-config.js"></script>
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* pulse.html — API-connected (v7) | Destination: Pulse/frontend/pulse.html */
-
-let socialChartInst = null, platChartInst = null;
-
-const FB_ASSETS = ['EURUSD','GBPUSD','USDJPY','XAUUSD','BTCUSD','ETHUSD'];
-const FB_SOCIAL = {
-  reddit:    [58,42,67,74,71,65],
-  twitter:   [62,45,71,69,78,68],
-  stocktwits:[55,48,63,72,74,61],
-  telegram:  [64,38,74,81,82,71],
-};
-const FB_TRENDS = [
-  {tag:'#GoldRally',mentions:'4,821',sent:'BULLISH',color:'#22C55E'},
-  {tag:'#USDStrength',mentions:'3,204',sent:'BULLISH',color:'#22C55E'},
-  {tag:'#BTCBreakout',mentions:'2,891',sent:'BULLISH',color:'#22C55E'},
-  {tag:'#EURWeakness',mentions:'1,847',sent:'BEARISH',color:'#EF4444'},
-  {tag:'#OilRally',mentions:'1,203',sent:'NEUTRAL',color:'#94A3B8'},
-];
-const FB_PLATFORMS = [
-  {icon:'🟠',name:'Reddit',posts:133,bull:61.3,bear:28.4,neutral:10.3,mom:'↑',momCls:'accent-text'},
-  {icon:'🐦',name:'Twitter',posts:538,bull:63.1,bear:20.6,neutral:16.3,mom:'↑',momCls:'green-text'},
-  {icon:'📈',name:'StockTwits',posts:247,bull:58.7,bear:31.2,neutral:10.1,mom:'→',momCls:'amber-text'},
-  {icon:'✈️',name:'Telegram',posts:89,bull:71.4,bear:18.3,neutral:10.3,mom:'↑',momCls:'green-text'},
-];
-
-function renderSocialChart(assets, datasets) {
-  const ctx = document.getElementById('socialChart').getContext('2d');
-  if (socialChartInst) socialChartInst.destroy();
-  socialChartInst = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: assets, datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#94A3B8', font: { size: 11 } } } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 11 } } },
-        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 11 }, callback: v => v + '%' } }
-      }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('pulse', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
   });
-}
-
-function renderPlatformChart(labels, data) {
-  const ctx = document.getElementById('platformChart').getContext('2d');
-  if (platChartInst) platChartInst.destroy();
-  platChartInst = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: ['rgba(29,161,242,0.8)','rgba(255,87,34,0.8)','rgba(0,122,255,0.8)','rgba(0,136,204,0.8)'], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 11 }, padding: 8 } } } }
-  });
-}
-
-function renderTrends(trends) {
-  const tl = document.getElementById('trendList');
-  if (!trends || !trends.length) {
-    tl.innerHTML = '<div style="color:#EF4444;font-size:12px;text-align:center;padding:20px">⚠️ Backend offline</div>';
-    return;
-  }
-  tl.innerHTML = trends.map((t, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-    <span style="font-size:12px;color:var(--sub);width:16px">${i + 1}</span>
-    <span style="font-size:13px;color:${t.color};flex:1;font-weight:600">${t.tag}</span>
-    <span style="font-size:11px;color:var(--muted)">${t.mentions}</span>
-    <span class="badge" style="background:${t.color}22;color:${t.color};font-size:9px">${t.sent}</span>
-  </div>`).join('');
-}
-
-function renderPlatformTable(platforms) {
-  const tbody = document.getElementById('platformBody');
-  if (!platforms || !platforms.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = platforms.map(p => `<tr>
-    <td>${p.icon ?? ''} ${p.name}</td>
-    <td>${p.posts}</td>
-    <td class="green-text">${p.bull}%</td>
-    <td class="red-text">${p.bear}%</td>
-    <td class="muted">${p.neutral}%</td>
-    <td class="${p.momCls ?? 'green-text'}">${p.mom}</td>
-  </tr>`).join('');
-}
-
-async function loadPulseData() {
-  const status = await apiGet(API.agentStatus('pulse'));
-  const online = !!status;
-  document.getElementById('agentStatusDot').innerHTML = online
-    ? '<span class="dot dot-green"></span> Running'
-    : '<span class="dot dot-red"></span> Offline';
-  document.getElementById('sb1').innerHTML = online ? '<span class="dot dot-green"></span>4 Platforms Active' : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb2').innerHTML = online ? '<span class="dot dot-green"></span>NLP Engine Online' : '<span class="dot dot-red"></span>Backend offline';
-
-  const s = status ?? {};
-  document.getElementById('kpiMentions').textContent  = s.social_mentions ?? s.mentions ?? '12,847';
-  document.getElementById('kpiBullish').textContent   = s.bullish_ratio != null ? s.bullish_ratio + '% ↑' : '61% ↑';
-  document.getElementById('kpiTrending').textContent  = s.trending_assets ?? '5';
-  document.getElementById('kpiScore').textContent     = s.sentiment_score != null ? (s.sentiment_score >= 0 ? '+' : '') + s.sentiment_score.toFixed(2) : '+0.47';
-  document.getElementById('kpiPlatforms').textContent = s.platform_sources ?? '4';
-  const mom = s.momentum_index ?? 73;
-  document.getElementById('kpiMomentum').textContent  = mom;
-  document.getElementById('sb3').innerHTML = `<span class="dot dot-green"></span>Momentum: ${mom}`;
-
-  // Charts
-  const assets = s.sentiment_assets ?? FB_ASSETS;
-  const datasets = s.sentiment_datasets ?? [
-    { label: 'Reddit',     data: FB_SOCIAL.reddit,     backgroundColor: 'rgba(255,87,34,0.7)',  borderRadius: 3 },
-    { label: 'Twitter',    data: FB_SOCIAL.twitter,    backgroundColor: 'rgba(29,161,242,0.7)', borderRadius: 3 },
-    { label: 'StockTwits', data: FB_SOCIAL.stocktwits, backgroundColor: 'rgba(0,122,255,0.7)',  borderRadius: 3 },
-    { label: 'Telegram',   data: FB_SOCIAL.telegram,   backgroundColor: 'rgba(0,136,204,0.7)',  borderRadius: 3 },
-  ];
-  renderSocialChart(assets, datasets);
-
-  const platLabels = s.platform_labels ?? ['Twitter','Reddit','StockTwits','Telegram'];
-  const platData   = s.platform_data   ?? [538, 133, 247, 89];
-  renderPlatformChart(platLabels, platData);
-
-  renderTrends(s.trending_topics ?? (online ? [] : FB_TRENDS));
-  renderPlatformTable(s.platforms ?? (online ? [] : FB_PLATFORMS));
-}
-
-async function loadLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const c = document.getElementById('logContainer');
-  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
-  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
-  c.scrollTop = c.scrollHeight;
-}
-
-async function queryPulse(text) {
-  if (!text) return;
-  const box = document.getElementById('pulseQueryResult');
-  box.style.display = 'block'; box.textContent = '⏳ Querying Pulse…';
-  const result = await apiPost(API.agentQuery('pulse'), { prompt: text }, 20000);
-  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Pulse is offline.</span>'; return; }
-  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
-}
-
-async function sendPanelMsg() {
-  const inp = document.getElementById('panelInput');
-  const text = inp.value.trim(); if (!text) return; inp.value = '';
-  const msgs = document.getElementById('panelMessages');
-  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-  const reply = await queryAgent('pulse', text, 20000);
-  document.getElementById('thinkingMsg')?.remove();
-  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadPulseData();
-  await loadLogs();
-  setInterval(loadPulseData, 60_000);
-  setInterval(loadLogs, 60_000);
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

@@ -1,279 +1,114 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root{--accent:#EAB308;--accent-rgb:234,179,8;}
-.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
-.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
-.refresh-btn:hover{color:var(--accent);}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aegis — Governance & Security</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#F97316; --accent-rgb:249,115,22; }</style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">🛡️</span><span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
-      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
-      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
-      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html" class="nav-tab">⚡ System</a>
-      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
-      <a href="aegis.html" class="nav-tab active">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">🛡️</span>
+    <span class="topbar-brand">AEGIS</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">Governance & Security</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
-<div class="page-wrap">
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">🛡️</div>
-      <div class="agent-name">Aegis</div>
-      <div class="agent-sub">Governance & Security</div>
-      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">🛡️</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Aegis</div>
+        <div class="chat-session-agent-role">Governance & Security</div>
+      </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Kill Switch…</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
-  <main class="main-content">
-    <div class="page-title">AEGIS — Governance & Security</div>
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card"><div class="kpi-label">Constitutional Violations</div><div class="kpi-value green-text" id="kpiViolations">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Audit Events Today</div><div class="kpi-value" id="kpiAuditEvents">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Compliance Score</div><div class="kpi-value green-text" id="kpiCompliance">—</div></div>
-      <div class="kpi-card amber-card"><div class="kpi-label">Active Alerts</div><div class="kpi-value amber-text" id="kpiAlerts">—</div><span class="kpi-warn">⚠</span></div>
-      <div class="kpi-card"><div class="kpi-label">Kill Switch Status</div><div class="kpi-value green-text" id="kpiKillSwitch" style="font-size:14px">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Agents Monitored</div><div class="kpi-value" id="kpiMonitored">—</div></div>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#F97316"></div>
+      <span class="chat-main-agent-name">Aegis</span>
+      <span class="chat-main-agent-role">Governance & Security</span>
+      <span class="chat-main-hint">POST /agents/aegis/chat</span>
     </div>
 
-    <!-- Query panel -->
-    <div class="card" style="padding:14px 18px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="color:var(--muted);font-size:15px">🔍</span>
-        <input id="aegisInput" type="text" placeholder="Ask Aegis: 'What is Oracle compliance score?' or 'Any constitutional violations today?'"
-          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
-          onkeydown="if(event.key==='Enter') queryAegis(this.value.trim())">
-        <button onclick="queryAegis(document.getElementById('aegisInput').value.trim())"
-          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Audit</button>
-        <button class="refresh-btn" onclick="loadAegisData()" title="Refresh">↻</button>
-      </div>
-      <div id="aegisQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
-    </div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.8">
-        <div class="card-header"><span class="card-title">Agent Compliance Scores</span><span class="card-badge">Score 0–100%</span><button class="refresh-btn" onclick="loadAegisData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="compChart" height="160"></canvas></div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Anomaly Alerts</span><button class="refresh-btn" onclick="loadAegisData()" title="Refresh">↻</button></div>
-        <div id="alertsContainer" style="display:flex;flex-direction:column;gap:10px">
-          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading alerts…</div>
-        </div>
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">🛡️</div>
+      <div class="chat-empty-title">Chat with Aegis</div>
+      <div class="chat-empty-desc">e.g. 'query what are the current risk levels'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query risk level')">query risk level</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query active alerts')">query active alerts</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query blocked actions')">query blocked actions</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query security rules')">query security rules</span>
       </div>
     </div>
 
-    <div class="row-2col">
-      <div class="card">
-        <div class="card-header"><span class="card-title">Constitutional Audit Trail</span><span class="card-badge">Last 10 events</span><button class="refresh-btn" onclick="loadAegisData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Timestamp</th><th>Agent</th><th>Action</th><th>Principle</th><th>Result</th></tr></thead>
-          <tbody id="auditTrailBody">
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading audit trail…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Kill Switch History</span><button class="refresh-btn" onclick="loadAegisData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Date</th><th>Trigger Reason</th><th>By</th><th>Duration</th><th>Resolution</th></tr></thead>
-          <tbody id="killSwitchBody">
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
-          </tbody>
-        </table>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query what are the current risk levels'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
-      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
-        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header"><span>🛡️ Chat with Aegis</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Aegis, the governance and security agent. Ask me about compliance, audit findings, or constitutional health.</div></div>
   </div>
-  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Aegis…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+
 </div>
 
-<script src="shared.js"></script>
-<script src="api-config.js"></script>
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* aegis.html — API-connected (v7) | Destination: Aegis/frontend/aegis.html */
-
-let compChartInst = null;
-
-const FB_COMPLIANCE = {
-  labels: ['Nexus','Oracle','Atlas','Chronicle','Sentinel','Pulse','Forge','Genesis','Risk Gate'],
-  data:   [99.8,   99.2,   99.1,   98.9,      98.7,     97.4,  96.3,  94.1,    100],
-};
-const FB_ALERTS = [
-  {severity:'HIGH',agent:'Genesis',msg:'Unusual agent spawn rate — 3 agents in 24 hours (avg: 0.3/day)',time:'00:04 hours ago',status:'INVESTIGATING',statusCls:'amber-text',borderColor:'rgba(245,158,11,.4)',bg:'rgba(245,158,11,.05)',badgeCls:'badge-med'},
-  {severity:'LOW',agent:'Forge',msg:'Training triggered outside scheduled window',time:'2 days ago',status:'RESOLVED',statusCls:'green-text',borderColor:'rgba(34,197,94,.3)',bg:'rgba(34,197,94,.04)',badgeCls:'badge-low'},
-];
-const FB_AUDIT_TRAIL = [
-  {ts:'08:42:17',agent:'Oracle',action:'Signal generation',principle:'Risk gate approval',result:'PASS',resCls:'badge-pass'},
-  {ts:'08:41:03',agent:'Oracle',action:'Position sizing',principle:'2% equity limit',result:'PASS',resCls:'badge-pass'},
-  {ts:'08:39:44',agent:'Sentinel',action:'Source access',principle:'Approved sources only',result:'PASS',resCls:'badge-pass'},
-  {ts:'08:38:12',agent:'Genesis',action:'Agent spawn',principle:'Max spawn rate',result:'FLAGGED',resCls:'badge-caution'},
-  {ts:'08:35:29',agent:'Chronicle',action:'Memory write',principle:'Data integrity',result:'PASS',resCls:'badge-pass'},
-  {ts:'08:33:07',agent:'Atlas',action:'Trade gate',principle:'Event risk check',result:'PASS',resCls:'badge-pass'},
-];
-const FB_KILL_SWITCH = [
-  {date:'Jun 17',reason:'Flash crash — all signals below 0.3',by:'Aegis',duration:'4m 23s',resolution:'RESOLVED'},
-  {date:'May 02',reason:'Broker connection lost',by:'Oracle',duration:'12m 07s',resolution:'RESOLVED'},
-  {date:'Mar 28',reason:'Drawdown exceeded 5% limit',by:'Aegis',duration:'1h 14m',resolution:'RESOLVED'},
-];
-
-function renderComplianceChart(labels, data) {
-  const ctx = document.getElementById('compChart').getContext('2d');
-  if (compChartInst) compChartInst.destroy();
-  compChartInst = new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: data.map(v => v >= 95 ? 'rgba(34,197,94,0.7)' : 'rgba(245,158,11,0.7)'), borderRadius: 4 }] },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { min: 80, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 }, callback: v => v + '%' } },
-        y: { grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 11 } } }
-      }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('aegis', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
   });
-}
-
-function renderAlerts(alerts) {
-  const div = document.getElementById('alertsContainer');
-  if (!alerts || !alerts.length) {
-    div.innerHTML = '<div style="color:#EF4444;font-size:12px;text-align:center;padding:20px">⚠️ Backend offline</div>';
-    return;
-  }
-  div.innerHTML = alerts.map(a => `<div style="border:1px solid ${a.borderColor};border-radius:8px;padding:12px;background:${a.bg}">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <span class="badge ${a.badgeCls}">${a.severity}</span>
-      <span style="font-size:12px;font-weight:700;color:var(--text)">${a.agent}</span>
-    </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${a.msg}</div>
-    <div style="display:flex;justify-content:space-between;font-size:10px">
-      <span class="muted">${a.time}</span>
-      <span class="${a.statusCls}">${a.status}</span>
-    </div>
-  </div>`).join('');
-}
-
-function renderAuditTrail(events) {
-  const tbody = document.getElementById('auditTrailBody');
-  if (!events || !events.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = events.map(e => `<tr>
-    <td class="muted">${e.ts}</td><td>${e.agent}</td><td>${e.action}</td><td>${e.principle}</td>
-    <td><span class="badge ${e.resCls}">${e.result}</span></td>
-  </tr>`).join('');
-}
-
-function renderKillSwitch(history) {
-  const tbody = document.getElementById('killSwitchBody');
-  if (!history || !history.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = history.map(h => `<tr>
-    <td class="muted">${h.date}</td><td>${h.reason}</td><td>${h.by}</td><td>${h.duration}</td>
-    <td class="green-text">${h.resolution}</td>
-  </tr>`).join('');
-}
-
-async function loadAegisData() {
-  const status = await apiGet(API.agentStatus('aegis'));
-  const online = !!status;
-  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-green"></span> Running' : '<span class="dot dot-red"></span> Offline';
-  const s = status ?? {};
-  document.getElementById('kpiViolations').textContent  = s.violations ?? '0';
-  document.getElementById('kpiAuditEvents').textContent = s.audit_events_today ?? s.audit_events ?? '847';
-  document.getElementById('kpiCompliance').textContent  = s.compliance_score != null ? s.compliance_score + '%' : '98.7%';
-  document.getElementById('kpiAlerts').textContent      = s.active_alerts ?? '1';
-  document.getElementById('kpiKillSwitch').textContent  = s.kill_switch_status ?? 'ARMED';
-  document.getElementById('kpiMonitored').textContent   = s.agents_monitored ?? '9';
-  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>${s.violations ?? 0} Violations Today` : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb2').innerHTML = online ? `<span class="dot dot-amber"></span>${s.active_alerts ?? 1} Active Alert` : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb3').innerHTML = online ? `<span class="dot dot-green"></span>Kill Switch: ${s.kill_switch_status ?? 'ARMED'}` : '<span class="dot dot-red"></span>Backend offline';
-
-  const compLabels = s.compliance_labels ?? FB_COMPLIANCE.labels;
-  const compData   = s.compliance_data   ?? FB_COMPLIANCE.data;
-  renderComplianceChart(compLabels, compData);
-  renderAlerts(s.anomaly_alerts ?? (online ? [] : FB_ALERTS));
-  renderAuditTrail(s.audit_trail ?? (online ? [] : FB_AUDIT_TRAIL));
-  renderKillSwitch(s.kill_switch_history ?? (online ? [] : FB_KILL_SWITCH));
-}
-
-async function loadLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const c = document.getElementById('logContainer');
-  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
-  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
-  c.scrollTop = c.scrollHeight;
-}
-
-async function queryAegis(text) {
-  if (!text) return;
-  const box = document.getElementById('aegisQueryResult');
-  box.style.display = 'block'; box.textContent = '⏳ Auditing…';
-  const result = await apiPost(API.agentQuery('aegis'), { prompt: text }, 20000);
-  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Aegis is offline.</span>'; return; }
-  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
-}
-
-async function sendPanelMsg() {
-  const inp = document.getElementById('panelInput');
-  const text = inp.value.trim(); if (!text) return; inp.value = '';
-  const msgs = document.getElementById('panelMessages');
-  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-  const reply = await queryAgent('aegis', text, 20000);
-  document.getElementById('thinkingMsg')?.remove();
-  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadAegisData();
-  await loadLogs();
-  setInterval(loadAegisData, 60_000);
-  setInterval(loadLogs, 60_000);
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

@@ -24,7 +24,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-from intelligence.collaboration_graph import CollaborationGraph  # type: ignore
+from Nexus.intelligence.collaboration_graph import CollaborationGraph  # type: ignore
 
 CONTEXT_KEY = {"news": "news_context", "social": "social_context", "research": "research_context",
                "memory": "memory_context", "trading": "market_context",
@@ -70,7 +70,7 @@ class Orchestrator:
             seen.add(whole["domain"])
         for extra in self.graph.suggest_collaborators(list(seen)):
             if extra not in seen:
-                from intelligence.domain_classifier import DOMAIN_TO_REPO  # type: ignore
+                from Nexus.intelligence.domain_classifier import DOMAIN_TO_REPO  # type: ignore
                 subtasks.append({"clause": query, "domain": extra,
                                "repository": DOMAIN_TO_REPO.get(extra, "nexus"),
                                "confidence": 0.4, "via": "learned_affinity"})

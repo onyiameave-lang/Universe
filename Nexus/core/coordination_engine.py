@@ -18,8 +18,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from intelligence.domain_classifier import DomainClassifier  # type: ignore
-from core.agent_registry import AgentRegistry                # type: ignore
+from Nexus.intelligence.domain_classifier import DomainClassifier  # type: ignore
+from Nexus.core.agent_registry import AgentRegistry                # type: ignore
 
 
 class CoordinationEngine:

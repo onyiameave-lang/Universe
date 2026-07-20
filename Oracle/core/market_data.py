@@ -113,30 +113,114 @@ class YFinanceSource:
                 "yfinance fetch failed for %s: %s", symbol, exc)
             return None
 
+    # ── FIX-YF: comprehensive Oracle→yfinance ticker map ──────────────────────
+    # Env-var override: YFINANCE_TICKER_MAP=USOIL:CL=F,NATGAS:NG=F
+    # Entries here take precedence over the built-in table below.
+    # ──────────────────────────────────────────────────────────────────────────
+    _YFINANCE_MAP: Dict[str, str] = {
+        # ── FX majors ─────────────────────────────────────────────────────────
+        "EURUSD": "EURUSD=X",  "GBPUSD": "GBPUSD=X",  "USDJPY": "JPY=X",
+        "AUDUSD": "AUDUSD=X",  "USDCAD": "USDCAD=X",  "USDCHF": "USDCHF=X",
+        "NZDUSD": "NZDUSD=X",  "EURGBP": "EURGBP=X",  "EURJPY": "EURJPY=X",
+        "GBPJPY": "GBPJPY=X",
+        # ── FX crosses (all need =X suffix on Yahoo) ──────────────────────────
+        "AUDJPY":  "AUDJPY=X",  "CADJPY":  "CADJPY=X",  "CHFJPY":  "CHFJPY=X",
+        "EURAUD":  "EURAUD=X",  "EURCAD":  "EURCAD=X",  "EURCHF":  "EURCHF=X",
+        "EURNZD":  "EURNZD=X",  "GBPAUD":  "GBPAUD=X",  "GBPCAD":  "GBPCAD=X",
+        "GBPCHF":  "GBPCHF=X",  "GBPNZD":  "GBPNZD=X",  "AUDCAD":  "AUDCAD=X",
+        "AUDCHF":  "AUDCHF=X",  "AUDNZD":  "AUDNZD=X",  "NZDCAD":  "NZDCAD=X",
+        "NZDCHF":  "NZDCHF=X",  "NZDJPY":  "NZDJPY=X",  "CADCHF":  "CADCHF=X",
+        "USDNOK":  "USDNOK=X",  "USDSEK":  "USDSEK=X",  "USDDKK":  "USDDKK=X",
+        "USDSGD":  "USDSGD=X",  "USDHKD":  "USDHKD=X",  "USDMXN":  "USDMXN=X",
+        "USDZAR":  "USDZAR=X",  "USDTRY":  "USDTRY=X",  "USDPLN":  "USDPLN=X",
+        "USDCZK":  "USDCZK=X",  "USDHUF":  "USDHUF=X",
+        # ── Metals ────────────────────────────────────────────────────────────
+        "XAUUSD":  "GC=F",      # Gold futures
+        "XAGUSD":  "SI=F",      # Silver futures
+        "XPTUSD":  "PL=F",      # Platinum futures
+        "XPDUSD":  "PA=F",      # Palladium futures
+        # ── Energy ────────────────────────────────────────────────────────────
+        "USOIL":   "CL=F",      # WTI Crude Oil futures
+        "UKOIL":   "BZ=F",      # Brent Crude Oil futures
+        "NATGAS":  "NG=F",      # Natural Gas futures
+        # ── Crypto ────────────────────────────────────────────────────────────
+        "BTCUSD":  "BTC-USD",   "ETHUSD":  "ETH-USD",   "SOLUSD":  "SOL-USD",
+        "XRPUSD":  "XRP-USD",   "BNBUSD":  "BNB-USD",   "ADAUSD":  "ADA-USD",
+        "LTCUSD":  "LTC-USD",   "DOTUSD":  "DOT-USD",   "LINKUSD": "LINK-USD",
+        "AVAXUSD": "AVAX-USD",  "MATICUSD":"MATIC-USD", "DOGEUSD": "DOGE-USD",
+        # ── Indices ───────────────────────────────────────────────────────────
+        "US30":    "^DJI",      # Dow Jones Industrial Average
+        "US500":   "^GSPC",     # S&P 500
+        "NAS100":  "^IXIC",     # Nasdaq Composite (closest to NAS100)
+        "GER40":   "^GDAXI",    # DAX 40
+        "UK100":   "^FTSE",     # FTSE 100
+        "JPN225":  "^N225",     # Nikkei 225
+        "AUS200":  "^AXJO",     # ASX 200
+        "HK50":    "^HSI",      # Hang Seng
+        "FRA40":   "^FCHI",     # CAC 40
+        "ESP35":   "^IBEX",     # IBEX 35
+        "ITA40":   "FTSEMIB.MI",# FTSE MIB
+        "VIX":     "^VIX",      # Volatility Index
+        "DXY":     "DX-Y.NYB",  # US Dollar Index
+        # legacy / alternate index names
+        "SPX":     "^GSPC",     "NASDAQ":  "^IXIC",     "DJI":     "^DJI",
+        "RUT":     "^RUT",      "FTSE":    "^FTSE",     "DAX":     "^GDAXI",
+        "CAC40":   "^FCHI",     "NIKKEI":  "^N225",     "HSI":     "^HSI",
+        "SENSEX":  "^BSESN",    "ASX200":  "^AXJO",
+        # ── US mega-cap stocks (pass-through — already Yahoo format) ──────────
+        "AAPL": "AAPL", "MSFT": "MSFT", "NVDA": "NVDA", "GOOGL": "GOOGL",
+        "AMZN": "AMZN", "META": "META", "TSLA": "TSLA", "BRKB":  "BRK-B",
+        "LLY":  "LLY",  "V":    "V",    "JPM":  "JPM",  "NFLX":  "NFLX",
+        "AMD":  "AMD",  "INTC": "INTC", "CRM":  "CRM",  "ORCL":  "ORCL",
+    }
+
+    @classmethod
+    def _load_env_overrides(cls) -> Dict[str, str]:
+        """Parse YFINANCE_TICKER_MAP=USOIL:CL=F,NATGAS:NG=F from environment."""
+        raw = os.getenv("YFINANCE_TICKER_MAP", "").strip()
+        overrides: Dict[str, str] = {}
+        if not raw:
+            return overrides
+        for pair in raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                logging.getLogger("oracle.market_data").warning(
+                    "YFINANCE_TICKER_MAP: ignoring malformed entry %r (expected KEY:VALUE)", pair)
+                continue
+            k, v = pair.split(":", 1)
+            k, v = k.strip().upper(), v.strip()
+            if k and v:
+                overrides[k] = v
+                logging.getLogger("oracle.market_data").info(
+                    "YFINANCE_TICKER_MAP override: %s → %s", k, v)
+        return overrides
+
     def _map(self, symbol: str) -> str:
-        # map common FX/crypto notations to yfinance tickers
-        m = {
-            # FX majors and crosses (Yahoo requires =X on 6-char pairs; USDJPY is the one exception)
-            "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X",
-            "AUDUSD": "AUDUSD=X", "USDCAD": "USDCAD=X", "USDCHF": "USDCHF=X",
-            "NZDUSD": "NZDUSD=X", "EURGBP": "EURGBP=X", "EURJPY": "EURJPY=X",
-            "GBPJPY": "GBPJPY=X",
-            # metals / commodities
-            "XAUUSD": "GC=F", "USOIL": "CL=F",
-            # crypto (Yahoo requires -USD)
-            "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "SOLUSD": "SOL-USD",
-            "XRPUSD": "XRP-USD", "BNBUSD": "BNB-USD", "ADAUSD": "ADA-USD",
-            # indices (Yahoo requires ^ prefix)
-            "SPX": "^GSPC", "NASDAQ": "^IXIC", "DJI": "^DJI", "RUT": "^RUT",
-            "VIX": "^VIX", "FTSE": "^FTSE", "DAX": "^GDAXI", "CAC40": "^FCHI",
-            "NIKKEI": "^N225", "HSI": "^HSI", "SENSEX": "^BSESN", "ASX200": "^AXJO",
-            "DXY": "DX-Y.NYB",
-            # major US mega-cap stocks (already in Yahoo's native format, pass through)
-            "AAPL": "AAPL", "MSFT": "MSFT", "NVDA": "NVDA", "GOOGL": "GOOGL",
-            "AMZN": "AMZN", "META": "META", "TSLA": "TSLA", "BRKB": "BRK-B",
-            "LLY": "LLY", "V": "V", "JPM": "JPM",
-        }
-        return m.get(symbol.upper(), symbol)
+        """Translate Oracle canonical symbol name to yfinance ticker.
+
+        Resolution order:
+          1. YFINANCE_TICKER_MAP env-var overrides (user-configurable)
+          2. Built-in _YFINANCE_MAP table (covers all 41 DEFAULT_SYMBOLS)
+          3. Auto-detect: 6-char all-alpha → append =X (FX pair heuristic)
+          4. Pass-through unchanged (stocks, already-correct tickers)
+        """
+        sym = symbol.upper()
+        # 1. env-var overrides
+        overrides = self._load_env_overrides()
+        if sym in overrides:
+            return overrides[sym]
+        # 2. built-in map
+        if sym in self._YFINANCE_MAP:
+            return self._YFINANCE_MAP[sym]
+        # 3. auto-detect FX pair: 6 uppercase letters → append =X
+        if len(sym) == 6 and sym.isalpha():
+            logging.getLogger("oracle.market_data").debug(
+                "yfinance auto-map: %s → %s=X (6-char FX heuristic)", sym, sym)
+            return f"{sym}=X"
+        # 4. pass-through
+        logging.getLogger("oracle.market_data").debug(
+            "yfinance pass-through: %s (no map entry; may fail if not a valid Yahoo ticker)", sym)
+        return sym
 
 
 class StooqSource:
@@ -164,20 +248,57 @@ class StooqSource:
         n = _PERIOD_BARS.get(period, 504)
         return Series(symbol, bars[-n:] if n else bars, "stooq")
 
+    # ── FIX-YF: comprehensive Oracle→Stooq ticker map ─────────────────────────
+    _STOOQ_MAP: Dict[str, str] = {
+        # ── FX majors ─────────────────────────────────────────────────────────
+        "EURUSD": "eurusd",  "GBPUSD": "gbpusd",  "USDJPY": "usdjpy",
+        "AUDUSD": "audusd",  "USDCAD": "usdcad",  "USDCHF": "usdchf",
+        "NZDUSD": "nzdusd",  "EURGBP": "eurgbp",  "EURJPY": "eurjpy",
+        "GBPJPY": "gbpjpy",
+        # ── FX crosses ────────────────────────────────────────────────────────
+        "AUDJPY":  "audjpy",  "CADJPY":  "cadjpy",  "CHFJPY":  "chfjpy",
+        "EURAUD":  "euraud",  "EURCAD":  "eurcad",  "EURCHF":  "eurchf",
+        "EURNZD":  "eurnzd",  "GBPAUD":  "gbpaud",  "GBPCAD":  "gbpcad",
+        "GBPCHF":  "gbpchf",  "GBPNZD":  "gbpnzd",  "AUDCAD":  "audcad",
+        "AUDCHF":  "audchf",  "AUDNZD":  "audnzd",  "NZDCAD":  "nzdcad",
+        "NZDCHF":  "nzdchf",  "NZDJPY":  "nzdjpy",  "CADCHF":  "cadchf",
+        # ── Metals ────────────────────────────────────────────────────────────
+        "XAUUSD":  "xauusd",  "XAGUSD":  "xagusd",
+        # ── Energy ────────────────────────────────────────────────────────────
+        "USOIL":   "cl.f",    # WTI Crude Oil (Stooq futures format)
+        "UKOIL":   "lco.f",   # Brent Crude Oil
+        "NATGAS":  "ng.f",    # Natural Gas
+        # ── Crypto ────────────────────────────────────────────────────────────
+        "BTCUSD":  "btcusd",  "ETHUSD":  "ethusd",  "SOLUSD":  "solusd",
+        "XRPUSD":  "xrpusd",  "BNBUSD":  "bnbusd",  "ADAUSD":  "adausd",
+        "LTCUSD":  "ltcusd",  "DOGEUSD": "dogeusd",
+        # ── Indices ───────────────────────────────────────────────────────────
+        "US30":    "^dji",    "US500":   "^spx",    "NAS100":  "^ndq",
+        "GER40":   "^dax",    "UK100":   "^ftm",    "JPN225":  "^nkx",
+        "AUS200":  "^asx",    "HK50":    "^hsi",    "FRA40":   "^cac",
+        "VIX":     "^vix",
+        # legacy names
+        "SPX":     "^spx",    "NASDAQ":  "^ndq",    "DJI":     "^dji",
+        "RUT":     "^rut",    "FTSE":    "^ftm",    "DAX":     "^dax",
+        "CAC40":   "^cac",    "NIKKEI":  "^nkx",    "HSI":     "^hsi",
+        "SENSEX":  "^sensex", "ASX200":  "^asx",
+    }
+
     def _map(self, symbol: str) -> str:
-        m = {
-            "EURUSD": "eurusd", "GBPUSD": "gbpusd", "USDJPY": "usdjpy",
-            "AUDUSD": "audusd", "USDCAD": "usdcad", "USDCHF": "usdchf",
-            "NZDUSD": "nzdusd", "EURGBP": "eurgbp", "EURJPY": "eurjpy",
-            "GBPJPY": "gbpjpy",
-            "XAUUSD": "xauusd", "USOIL": "cl.f",
-            "BTCUSD": "btcusd", "ETHUSD": "ethusd", "SOLUSD": "solusd",
-            "XRPUSD": "xrpusd", "BNBUSD": "bnbusd", "ADAUSD": "adausd",
-            "SPX": "^spx", "NASDAQ": "^ndq", "DJI": "^dji", "RUT": "^rut",
-            "VIX": "^vix", "FTSE": "^ftm", "DAX": "^dax", "CAC40": "^cac",
-            "NIKKEI": "^nkx", "HSI": "^hsi", "SENSEX": "^sensex", "ASX200": "^asx",
-        }
-        return m.get(symbol.upper(), symbol.lower())
+        """Translate Oracle canonical symbol to Stooq ticker.
+
+        Resolution order:
+          1. Built-in _STOOQ_MAP table
+          2. 6-char all-alpha → lowercase (Stooq FX pair heuristic)
+          3. Pass-through as lowercase
+        """
+        sym = symbol.upper()
+        if sym in self._STOOQ_MAP:
+            return self._STOOQ_MAP[sym]
+        # auto-detect FX pair
+        if len(sym) == 6 and sym.isalpha():
+            return sym.lower()
+        return sym.lower()
 
 
 class MarketData:

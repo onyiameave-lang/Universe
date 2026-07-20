@@ -2,9 +2,12 @@ name: Oracle Evolution Soak
 
 on:
   schedule:
-    # every 6 hours, regardless of whether any local machine is on
-    - cron: "0 */6 * * *"
-  workflow_dispatch: {}   # lets you trigger it manually from the GitHub Actions tab too
+    # Every 8 hours: 00:00, 08:00, 16:00 UTC
+    # Changed from every 6h to every 8h to stay within GitHub free tier
+    # when combined with oracle-demo-trader.yml (every 12h, offset by 4h)
+    # Budget: 3 runs/day × 12 min × 30.44 days = ~1,096 min/month
+    - cron: "0 0,8,16 * * *"
+  workflow_dispatch: {}   # trigger manually from the GitHub Actions tab
 
 permissions:
   contents: write   # required so the final step can commit/push results back
@@ -33,7 +36,7 @@ jobs:
         working-directory: Oracle
         run: python tools/evolution_soak.py --generations 15 --delay-sec 3
         env:
-          # add any API keys you use (Gemini, etc.) as GitHub repo secrets,
+          # Add any API keys you use (Gemini, etc.) as GitHub repo secrets,
           # then reference them here, e.g.:
           # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ORACLE_PAPER_TRADING: "true"

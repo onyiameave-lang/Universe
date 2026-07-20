@@ -79,7 +79,10 @@ class CertificationAuditor:
         Run a genome through a series with FULL signal tracing.
         Records every bar's decision and why.
         """
-        from intelligence.technicals import analyze, sma, ema, rsi, macd, atr
+        try:
+            from intelligence.technicals import analyze, sma, ema, rsi, macd, atr
+        except ImportError:
+            from Oracle.intelligence.technicals import analyze, sma, ema, rsi, macd, atr  # type: ignore
 
         closes = series.closes
         highs = series.highs
@@ -136,7 +139,10 @@ class CertificationAuditor:
             bar_lows = lows[:i + 1]
 
             # Build series view
-            from intelligence.evolution import make_series
+            try:
+                from intelligence.evolution import make_series
+            except ImportError:
+                from Oracle.intelligence.evolution import make_series  # type: ignore
             s = make_series(bar_closes, bar_highs, bar_lows, symbol)
 
             # 1. Compute vote

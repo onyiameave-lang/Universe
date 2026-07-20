@@ -3,668 +3,111 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oracle — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root { --accent:#3B82F6; --accent-rgb:59,130,246; }
-
-/* ── API status badge ─────────────────────────────────────────────────── */
-.api-badge {
-  font-size: 11px; font-weight: 600; padding: 3px 10px;
-  border-radius: 20px; letter-spacing: 0.03em;
-}
-.api-online  { background: rgba(34,197,94,0.15); color: #22C55E; border: 1px solid rgba(34,197,94,0.3); }
-.api-offline { background: rgba(239,68,68,0.15);  color: #EF4444; border: 1px solid rgba(239,68,68,0.3); }
-
-/* ── Loading / error states ───────────────────────────────────────────── */
-.loading-row td { color: #64748B; font-style: italic; text-align: center; }
-.error-row   td { color: #EF4444; font-style: italic; text-align: center; }
-.skeleton {
-  background: linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.09) 50%,rgba(255,255,255,0.04) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
-  border-radius: 4px; height: 1em; display: inline-block; min-width: 60px;
-}
-@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-
-/* ── Refresh button ───────────────────────────────────────────────────── */
-.refresh-btn {
-  background: none; border: 1px solid rgba(255,255,255,0.12);
-  color: #94A3B8; border-radius: 6px; padding: 3px 10px;
-  font-size: 11px; cursor: pointer; transition: all 0.2s;
-}
-.refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
-.refresh-btn.spinning { animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Portfolio mode badge ─────────────────────────────────────────────── */
-.mode-badge {
-  font-size: 10px; font-weight: 700; padding: 2px 8px;
-  border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em;
-}
-.mode-paper { background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); }
-.mode-live  { background: rgba(34,197,94,0.15);  color: #22C55E; border: 1px solid rgba(34,197,94,0.3); }
-
-/* ── Signal confidence section ────────────────────────────────────────── */
-.conf-list-empty { color: #64748B; font-size: 13px; padding: 16px 0; text-align: center; }
-
-/* ── Regime chip ──────────────────────────────────────────────────────── */
-.regime-chip {
-  display: inline-block; font-size: 10px; font-weight: 700;
-  padding: 2px 8px; border-radius: 10px; text-transform: uppercase;
-  letter-spacing: 0.05em; margin-left: 6px;
-}
-.regime-bull    { background: rgba(34,197,94,0.15);  color: #22C55E; }
-.regime-bear    { background: rgba(239,68,68,0.15);  color: #EF4444; }
-.regime-ranging { background: rgba(100,116,139,0.2); color: #94A3B8; }
-</style>
+<title>Oracle — Prediction Engine</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#10B981; --accent-rgb:16,185,129; }</style>
 </head>
 <body>
-<!-- NAV -->
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">📈</span>
-    <span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html"     class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html"    class="nav-tab active">📈 Oracle</a>
-      <a href="sentinel.html"  class="nav-tab">📡 Sentinel</a>
-      <a href="pulse.html"     class="nav-tab">💓 Pulse</a>
-      <a href="atlas.html"     class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html"     class="nav-tab">⚡ System</a>
-      <a href="forge.html"     class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html"   class="nav-tab">⚗️ Genesis</a>
-      <a href="aegis.html"     class="nav-tab">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">📈</span>
+    <span class="topbar-brand">ORACLE</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">Prediction Engine</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
 
-<div class="page-wrap">
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">📈</div>
-      <div class="agent-name">Oracle</div>
-      <div class="agent-sub">Prediction Engine</div>
-      <div class="agent-status" id="agentStatusDot">
-        <span class="dot dot-amber"></span> Connecting…
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">📈</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Oracle</div>
+        <div class="chat-session-agent-role">Prediction Engine</div>
       </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sysPortfolioMode"><span class="dot dot-amber"></span>Portfolio: —</div>
-      <div class="sys-item" id="sysChampions"><span class="dot dot-amber"></span>Champions: —</div>
-      <div class="sys-item" id="sysFusion"><span class="dot dot-amber"></span>Fusion: —</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
 
-  <!-- MAIN -->
-  <main class="main-content">
-    <div class="page-title">
-      ORACLE — Prediction Engine
-      <span id="regimeChip" class="regime-chip" style="display:none"></span>
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#10B981"></div>
+      <span class="chat-main-agent-name">Oracle</span>
+      <span class="chat-main-agent-role">Prediction Engine</span>
+      <span class="chat-main-hint">POST /agents/oracle/chat</span>
     </div>
 
-    <!-- KPI CARDS -->
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card">
-        <div class="kpi-label">Total Equity</div>
-        <div class="kpi-value" id="kpiEquity" data-target="0" data-prefix="$" data-decimals="2">$—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Open Positions</div>
-        <div class="kpi-value accent-text" id="kpiPositions">—</div>
-        <span class="dot dot-green kpi-dot"></span>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Exposure</div>
-        <div class="kpi-value accent-text" id="kpiExposure">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Risk / Trade</div>
-        <div class="kpi-value" id="kpiRisk">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Max Drawdown</div>
-        <div class="kpi-value amber-text" id="kpiDrawdown">—</div>
-        <span class="kpi-warn">⚠</span>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Mode</div>
-        <div class="kpi-value" id="kpiMode">—</div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
+
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">📈</div>
+      <div class="chat-empty-title">Chat with Oracle</div>
+      <div class="chat-empty-desc">e.g. 'query what are the current trading signals'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query current signals')">query current signals</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query open positions')">query open positions</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query account balance')">query account balance</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query win rate')">query win rate</span>
       </div>
     </div>
 
-    <!-- ROW 2: Equity Curve + Signal Confidence -->
-    <div class="row-2col">
-      <div class="card" style="flex:2">
-        <div class="card-header">
-          <span class="card-title">Portfolio Equity</span>
-          <span class="card-badge" id="equityBadge">Live</span>
-          <button class="refresh-btn" id="refreshEquityBtn" onclick="refreshPortfolio()" title="Refresh">↻</button>
-        </div>
-        <div class="chart-wrap"><canvas id="equityChart" height="160"></canvas></div>
-        <div id="equityNote" style="font-size:11px;color:#64748B;margin-top:6px;padding:0 4px">
-          Equity history is built from live portfolio snapshots. Refresh to update.
-        </div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header">
-          <span class="card-title">Signal Confidence</span>
-          <button class="refresh-btn" id="refreshSignalBtn" onclick="refreshSignals()" title="Refresh signals">↻</button>
-        </div>
-        <div id="signalSymbolRow" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-          <!-- Symbol quick-pick buttons injected here -->
-        </div>
-        <div class="conf-list" id="confList">
-          <div class="conf-list-empty">Enter a symbol above to fetch a live signal.</div>
-        </div>
-        <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
-          <input id="symbolInput" type="text" placeholder="e.g. EURUSD"
-            style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
-                   border-radius:6px;padding:5px 10px;color:inherit;font-size:12px;outline:none"
-            onkeydown="if(event.key==='Enter') fetchSignal(this.value.trim().toUpperCase())">
-          <button onclick="fetchSignal(document.getElementById('symbolInput').value.trim().toUpperCase())"
-            style="background:var(--accent);border:none;border-radius:6px;padding:5px 12px;
-                   color:#fff;font-size:12px;cursor:pointer;font-weight:600">
-            Signal
-          </button>
-        </div>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query what are the current trading signals'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
+  </div>
 
-    <!-- ROW 3: Portfolio Positions + Recent Signals -->
-    <div class="row-2col">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Portfolio Status</span>
-          <button class="refresh-btn" onclick="refreshPortfolio()">↻ Refresh</button>
-        </div>
-        <table class="data-table">
-          <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-          <tbody id="portfolioTable">
-            <tr class="loading-row"><td colspan="2">Loading portfolio…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Signal History</span>
-          <span class="card-badge" id="signalCount">0 fetched</span>
-        </div>
-        <table class="data-table">
-          <thead><tr><th>Symbol</th><th>Call</th><th>Conf</th><th>Regime</th><th>Source</th></tr></thead>
-          <tbody id="signalHistoryTable">
-            <tr class="loading-row"><td colspan="5">No signals fetched yet. Use the Signal panel above.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ROW 4: Evolution Stats + System Logs -->
-    <div class="row-2col">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Evolution Lab</span>
-          <button class="refresh-btn" onclick="refreshEvolution()">↻</button>
-        </div>
-        <table class="data-table">
-          <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-          <tbody id="evolutionTable">
-            <tr class="loading-row"><td colspan="2">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">System Logs</span>
-          <button class="refresh-btn" onclick="refreshLogs()">↻</button>
-        </div>
-        <div id="logsContainer" style="font-size:11px;font-family:monospace;max-height:180px;overflow-y:auto;color:#94A3B8">
-          <div style="color:#64748B;font-style:italic">Loading logs…</div>
-        </div>
-      </div>
-    </div>
-
-  </main>
 </div>
 
-<!-- CHAT PANEL -->
-<button class="chat-toggle" onclick="toggleChat()" id="chatToggle">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header">
-    <span>📈 Chat with Oracle</span>
-    <button onclick="toggleChat()" class="chat-close">✕</button>
-  </div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg">
-      <div class="panel-bubble">
-        👋 Hi! I'm Oracle, your prediction engine. I'm connected to the live backend.<br><br>
-        Try asking: <em>"signal EURUSD"</em>, <em>"portfolio status"</em>, <em>"propose USDJPY"</em>, or any market question.
-      </div>
-    </div>
-  </div>
-  <div class="chat-panel-input">
-    <textarea id="panelInput" placeholder="Ask Oracle…" rows="1"></textarea>
-    <button onclick="sendPanelMsg()" class="panel-send">➤</button>
-  </div>
-</div>
+<div id="toast-container"></div>
 
-<!-- SCRIPTS -->
-<script src="api-config.js"></script>
-<script src="shared.js"></script>
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* ═══════════════════════════════════════════════════════════════════════════
-   ORACLE PAGE — Live API Integration
-   All data comes from the FastAPI backend at API_BASE (defined in api-config.js).
-   Fallback values are shown while loading or when the backend is offline.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-// ── State ─────────────────────────────────────────────────────────────────────
-const QUICK_SYMBOLS = ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD', 'BTCUSD'];
-const signalHistory  = [];   // { symbol, call, confidence, regime, source, ts }
-const equityHistory  = [];   // { ts, equity } — built from portfolio snapshots
-
-// ── Equity Chart ──────────────────────────────────────────────────────────────
-const eqCtx = document.getElementById('equityChart').getContext('2d');
-const eqChart = new Chart(eqCtx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      data: [],
-      borderColor: '#3B82F6',
-      backgroundColor: 'rgba(59,130,246,0.12)',
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      borderWidth: 2,
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', maxTicksLimit: 6, font: { size: 11 } } },
-      y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 11 }, callback: v => '$' + v.toLocaleString() } }
-    }
-  }
-});
-
-function pushEquityPoint(equity) {
-  const now = new Date();
-  const label = now.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
-  equityHistory.push({ ts: label, equity });
-  // Keep last 60 points
-  if (equityHistory.length > 60) equityHistory.shift();
-  eqChart.data.labels   = equityHistory.map(p => p.ts);
-  eqChart.data.datasets[0].data = equityHistory.map(p => p.equity);
-  eqChart.update('none');
-}
-
-// ── KPI helpers ───────────────────────────────────────────────────────────────
-function setKPI(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
-
-function fmtMoney(v) {
-  return '$' + Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtPct(v) {
-  return (Number(v) * 100).toFixed(2) + '%';
-}
-
-// ── Portfolio / Status ────────────────────────────────────────────────────────
-async function refreshPortfolio() {
-  const btn = document.getElementById('refreshEquityBtn');
-  if (btn) btn.classList.add('spinning');
-
-  // 1. Try GET /agents/oracle/status (returns get_status() dict)
-  const status = await apiGet(API.agentStatus('oracle'));
-
-  if (status && status.portfolio) {
-    const p = status.portfolio;
-
-    // KPI cards
-    setKPI('kpiEquity',    fmtMoney(p.equity));
-    setKPI('kpiPositions', p.open_positions ?? '—');
-    setKPI('kpiExposure',  (p.exposure != null ? (p.exposure * 100).toFixed(1) + '%' : '—'));
-    setKPI('kpiRisk',      (p.risk_per_trade != null ? (p.risk_per_trade * 100).toFixed(1) + '%' : '—'));
-    setKPI('kpiDrawdown',  (p.drawdown != null ? '-' + (p.drawdown * 100).toFixed(2) + '%' : '—'));
-    setKPI('kpiMode',      p.mode ?? '—');
-
-    // Mode badge
-    const modeEl = document.getElementById('kpiMode');
-    if (modeEl) {
-      modeEl.innerHTML = `<span class="mode-badge ${p.paper_trading ? 'mode-paper' : 'mode-live'}">${p.mode ?? '—'}</span>`;
-    }
-
-    // Sidebar
-    const modeItem = document.getElementById('sysPortfolioMode');
-    if (modeItem) modeItem.innerHTML = `<span class="dot ${p.paper_trading ? 'dot-amber' : 'dot-green'}"></span>Mode: ${p.mode ?? '—'}`;
-
-    // Push equity snapshot to chart
-    if (p.equity != null) pushEquityPoint(p.equity);
-
-    // Portfolio table
-    const rows = [
-      ['Equity',          fmtMoney(p.equity)],
-      ['Open Positions',  p.open_positions ?? '—'],
-      ['Exposure',        p.exposure != null ? (p.exposure * 100).toFixed(2) + '%' : '—'],
-      ['Drawdown',        p.drawdown != null ? (p.drawdown * 100).toFixed(4) + '%' : '—'],
-      ['Risk / Trade',    p.risk_per_trade != null ? (p.risk_per_trade * 100).toFixed(1) + '%' : '—'],
-      ['Max Drawdown',    p.max_drawdown != null ? (p.max_drawdown * 100).toFixed(0) + '%' : '—'],
-      ['Max Positions',   p.max_positions ?? '—'],
-      ['Confidence Floor',p.confidence_floor ?? '—'],
-      ['Daily Loss Limit',p.daily_loss_limit != null ? (p.daily_loss_limit * 100).toFixed(0) + '%' : '—'],
-      ['Mode',            p.mode ?? '—'],
-    ];
-    document.getElementById('portfolioTable').innerHTML = rows.map(([k, v]) =>
-      `<tr><td class="muted">${k}</td><td>${v}</td></tr>`
-    ).join('');
-
-    // Agent status dot
-    const dot = document.getElementById('agentStatusDot');
-    if (dot) dot.innerHTML = `<span class="dot dot-green"></span> Running`;
-  } else {
-    // Backend offline — show offline state
-    document.getElementById('portfolioTable').innerHTML =
-      `<tr class="error-row"><td colspan="2">⚠️ Backend offline — start the FastAPI server</td></tr>`;
-    const dot = document.getElementById('agentStatusDot');
-    if (dot) dot.innerHTML = `<span class="dot dot-red"></span> Offline`;
-  }
-
-  // 2. Evolution stats
-  if (status && status.evolution) {
-    const e = status.evolution;
-    const champKeys = Array.isArray(e.champion_keys) ? e.champion_keys.join(', ') || 'none' : '—';
-    const rows = [
-      ['Champion Keys',   champKeys],
-      ['Generations Run', e.generations_run ?? '—'],
-      ['Best Fitness',    e.best_fitness != null ? Number(e.best_fitness).toFixed(4) : '—'],
-      ['Population Size', e.population_size ?? '—'],
-    ];
-    document.getElementById('evolutionTable').innerHTML = rows.map(([k, v]) =>
-      `<tr><td class="muted">${k}</td><td>${v}</td></tr>`
-    ).join('');
-
-    const champItem = document.getElementById('sysChampions');
-    if (champItem) champItem.innerHTML = `<span class="dot dot-green"></span>Champions: ${Array.isArray(e.champion_keys) ? e.champion_keys.length : '—'}`;
-  }
-
-  // 3. Signal fusion wiring
-  if (status && status.signal_fusion) {
-    const sf = status.signal_fusion;
-    const wired = [
-      sf.sentinel_wired  ? 'Sentinel' : null,
-      sf.pulse_wired     ? 'Pulse'    : null,
-      sf.chronicle_wired ? 'Chronicle': null,
-    ].filter(Boolean);
-    const fusionItem = document.getElementById('sysFusion');
-    if (fusionItem) fusionItem.innerHTML = `<span class="dot ${wired.length > 0 ? 'dot-green' : 'dot-amber'}"></span>Fusion: ${wired.length > 0 ? wired.join('+') : 'standalone'}`;
-  }
-
-  if (btn) btn.classList.remove('spinning');
-}
-
-// ── Signal fetch ──────────────────────────────────────────────────────────────
-async function fetchSignal(symbol) {
-  if (!symbol) return;
-  document.getElementById('symbolInput').value = symbol;
-
-  const confList = document.getElementById('confList');
-  confList.innerHTML = `<div class="conf-list-empty">⏳ Fetching signal for ${symbol}…</div>`;
-
-  // POST /agents/oracle/query with prompt that triggers trade.signal
-  const result = await apiPost(API.agentQuery('oracle'), {
-    prompt: JSON.stringify({ _task: 'trade.signal', symbol })
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('oracle', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
   });
-
-  if (!result) {
-    confList.innerHTML = `<div class="conf-list-empty" style="color:#EF4444">⚠️ Backend offline. Start the FastAPI server.</div>`;
-    return;
-  }
-
-  // The backend wraps the agent's return in { response: ... }
-  // agent.act("user.query", {query: prompt}) → execute() → returns dict
-  // But since we're sending a JSON prompt, the backend passes it as context.query
-  // and execute() falls through to "Unknown task: user.query" → returns error.
-  // We handle both: structured response dict AND plain text response.
-  let sig = null;
-  if (result.response && typeof result.response === 'object') {
-    sig = result.response;
-  } else if (result.response && typeof result.response === 'string') {
-    // Try to parse if it's JSON-encoded
-    try { sig = JSON.parse(result.response); } catch (_) { sig = null; }
-  }
-
-  // If we got a proper signal object
-  if (sig && sig.signal) {
-    const s = sig.signal;
-    const call       = s.call ?? 'hold';
-    const confidence = s.confidence != null ? Math.round(s.confidence * 100) : 0;
-    const regime     = sig.regime ?? 'unknown';
-    const source     = sig.using_evolved_champion ? 'evolved' : 'indicator';
-
-    // Regime chip
-    const chip = document.getElementById('regimeChip');
-    if (chip) {
-      chip.textContent = regime;
-      chip.className = `regime-chip regime-${regime}`;
-      chip.style.display = 'inline-block';
-    }
-
-    // Colour by call
-    const color = call === 'buy' ? '#22C55E' : call === 'sell' ? '#EF4444' : '#64748B';
-    const dirClass = call === 'buy' ? 'badge-buy' : call === 'sell' ? 'badge-sell' : '';
-
-    confList.innerHTML = `
-      <div class="conf-row" style="margin-bottom:10px">
-        <span class="conf-sym" style="font-size:15px;font-weight:700">${symbol}</span>
-        <span class="conf-dir ${dirClass}" style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;text-transform:uppercase">${call}</span>
-        <span style="font-size:11px;color:#64748B;margin-left:auto">${source}</span>
-      </div>
-      <div style="margin-bottom:6px;font-size:12px;color:#94A3B8">Confidence</div>
-      <div class="conf-bar-wrap" style="margin-bottom:12px">
-        <div class="conf-bar" data-width="${confidence}" style="background:${color};width:0%"></div>
-      </div>
-      <div style="font-size:22px;font-weight:800;color:${color};text-align:center;margin:8px 0">${confidence}%</div>
-      <div style="font-size:11px;color:#64748B;text-align:center">Regime: ${regime} · Last: ${sig.last != null ? sig.last.toFixed(5) : '—'}</div>
-    `;
-
-    // Animate the bar
-    if (typeof animateConfBars === 'function') animateConfBars();
-
-    // Add to history
-    signalHistory.unshift({ symbol, call, confidence, regime, source, ts: new Date().toLocaleTimeString() });
-    if (signalHistory.length > 20) signalHistory.pop();
-    renderSignalHistory();
-
-  } else if (result.response && typeof result.response === 'string') {
-    // Plain text response from the agent
-    confList.innerHTML = `<div style="font-size:12px;color:#94A3B8;padding:8px 0">${result.response}</div>`;
-  } else {
-    confList.innerHTML = `<div class="conf-list-empty" style="color:#EF4444">
-      ⚠️ Unexpected response. The agent may need a symbol in its context.<br>
-      <span style="font-size:10px;color:#64748B">Raw: ${JSON.stringify(result).slice(0,120)}</span>
-    </div>`;
-  }
-}
-
-function renderSignalHistory() {
-  const tbody = document.getElementById('signalHistoryTable');
-  const badge = document.getElementById('signalCount');
-  if (badge) badge.textContent = `${signalHistory.length} fetched`;
-
-  if (!signalHistory.length) {
-    tbody.innerHTML = `<tr class="loading-row"><td colspan="5">No signals fetched yet.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = signalHistory.map(s => {
-    const color = s.call === 'buy' ? '#22C55E' : s.call === 'sell' ? '#EF4444' : '#64748B';
-    const cls   = s.call === 'buy' ? 'badge-buy' : s.call === 'sell' ? 'badge-sell' : '';
-    return `<tr>
-      <td>${s.symbol}</td>
-      <td><span class="badge ${cls}">${s.call.toUpperCase()}</span></td>
-      <td style="color:${color}">${s.confidence}%</td>
-      <td><span class="regime-chip regime-${s.regime}" style="font-size:9px">${s.regime}</span></td>
-      <td class="muted">${s.source}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ── Quick symbol buttons ──────────────────────────────────────────────────────
-function renderQuickSymbols() {
-  const row = document.getElementById('signalSymbolRow');
-  if (!row) return;
-  row.innerHTML = QUICK_SYMBOLS.map(sym =>
-    `<button onclick="fetchSignal('${sym}')"
-      style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
-             border-radius:6px;padding:3px 10px;color:#94A3B8;font-size:11px;
-             cursor:pointer;transition:all 0.2s;font-weight:600"
-      onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-      onmouseout="this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='#94A3B8'"
-    >${sym}</button>`
-  ).join('');
-}
-
-// ── Refresh signals (re-fetch last symbol) ────────────────────────────────────
-function refreshSignals() {
-  const last = signalHistory[0]?.symbol || QUICK_SYMBOLS[0];
-  fetchSignal(last);
-}
-
-// ── Evolution stats ───────────────────────────────────────────────────────────
-async function refreshEvolution() {
-  const status = await apiGet(API.agentStatus('oracle'));
-  if (!status || !status.evolution) {
-    document.getElementById('evolutionTable').innerHTML =
-      `<tr class="error-row"><td colspan="2">Backend offline</td></tr>`;
-    return;
-  }
-  const e = status.evolution;
-  const champKeys = Array.isArray(e.champion_keys) ? e.champion_keys.join(', ') || 'none' : '—';
-  const rows = [
-    ['Champion Keys',   champKeys],
-    ['Generations Run', e.generations_run ?? '—'],
-    ['Best Fitness',    e.best_fitness != null ? Number(e.best_fitness).toFixed(4) : '—'],
-    ['Population Size', e.population_size ?? '—'],
-  ];
-  document.getElementById('evolutionTable').innerHTML = rows.map(([k, v]) =>
-    `<tr><td class="muted">${k}</td><td>${v}</td></tr>`
-  ).join('');
-}
-
-// ── System Logs ───────────────────────────────────────────────────────────────
-async function refreshLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const container = document.getElementById('logsContainer');
-  if (!logs || !Array.isArray(logs)) {
-    container.innerHTML = `<div style="color:#EF4444">⚠️ Backend offline</div>`;
-    return;
-  }
-  if (!logs.length) {
-    container.innerHTML = `<div style="color:#64748B;font-style:italic">No logs yet.</div>`;
-    return;
-  }
-  container.innerHTML = logs.slice().reverse().map(l => {
-    const typeColor = l.type === 'ERROR' ? '#EF4444' : l.type === 'BOOT' ? '#22C55E' : '#94A3B8';
-    return `<div style="margin-bottom:3px">
-      <span style="color:#64748B">${l.time}</span>
-      <span style="color:${typeColor};margin:0 4px">[${l.agent}/${l.type}]</span>
-      <span>${l.msg}</span>
-    </div>`;
-  }).join('');
-  container.scrollTop = container.scrollHeight;
-}
-
-// ── Chat panel — live backend ─────────────────────────────────────────────────
-async function getAgentResponse(userText) {
-  // Send the raw user text to the backend
-  const result = await apiPost(API.agentQuery('oracle'), { prompt: userText }, 25000);
-  if (!result) return '⚠️ Oracle is offline. Start the FastAPI server at localhost:8000.';
-
-  const resp = result.response;
-  if (typeof resp === 'string') return resp;
-  if (typeof resp === 'object' && resp !== null) {
-    // Format structured responses nicely
-    if (resp.status === 'complete') {
-      if (resp.portfolio) {
-        const p = resp.portfolio;
-        return `📊 Portfolio: Equity ${fmtMoney(p.equity)} · ${p.open_positions} positions · Drawdown ${(p.drawdown*100).toFixed(2)}% · Mode: ${p.mode}`;
-      }
-      if (resp.signal) {
-        const s = resp.signal;
-        return `📈 Signal: ${resp.symbol} → ${s.call.toUpperCase()} at ${(s.confidence*100).toFixed(0)}% confidence · Regime: ${resp.regime ?? '?'} · Source: ${resp.using_evolved_champion ? 'evolved champion' : 'indicator fusion'}`;
-      }
-      if (resp.plan) {
-        const pl = resp.plan;
-        return `📋 Trade Plan: ${pl.symbol ?? ''} ${pl.direction ?? ''} · Entry: ${pl.entry ?? '—'} · Stop: ${pl.stop ?? '—'} · Target: ${pl.target ?? '—'} · Lot: ${pl.lot_size ?? '—'} · Approved: ${pl.approved ? '✅' : '❌'}`;
-      }
-      return JSON.stringify(resp, null, 2);
-    }
-    if (resp.status === 'error') return `⚠️ ${resp.message ?? 'Unknown error'}`;
-    return JSON.stringify(resp, null, 2);
-  }
-  return String(resp);
-}
-
-// Override sendPanelMsg from shared.js to use live backend
-async function sendPanelMsg() {
-  const input    = document.getElementById('panelInput');
-  const messages = document.getElementById('panelMessages');
-  if (!input || !messages || !input.value.trim()) return;
-
-  const text = input.value.trim();
-  input.value = '';
-
-  // User bubble
-  messages.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-
-  // Typing indicator
-  const typingId = 'typing-' + Date.now();
-  messages.innerHTML += `<div class="panel-msg agent-msg" id="${typingId}"><div class="panel-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
-  messages.scrollTop = messages.scrollHeight;
-
-  // Fetch live response
-  const response = await getAgentResponse(text);
-
-  const typing = document.getElementById(typingId);
-  if (typing) {
-    typing.querySelector('.panel-bubble').textContent = response;
-    messages.scrollTop = messages.scrollHeight;
-  }
-}
-
-// ── Auto-refresh loop ─────────────────────────────────────────────────────────
-// Portfolio + logs refresh every 60 seconds automatically
-let _autoRefreshTimer = null;
-function startAutoRefresh() {
-  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
-  _autoRefreshTimer = setInterval(() => {
-    refreshPortfolio();
-    refreshLogs();
-  }, 60_000);
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  renderQuickSymbols();
-
-  // Initial data load (parallel)
-  await Promise.all([
-    refreshPortfolio(),
-    refreshLogs(),
-  ]);
-
-  startAutoRefresh();
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
 </body>

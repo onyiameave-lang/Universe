@@ -29,12 +29,12 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-from intelligence.domain_classifier import DomainClassifier       # type: ignore
-from intelligence.collaboration_graph import CollaborationGraph    # type: ignore
-from core.agent_registry import AgentRegistry                      # type: ignore
-from core.coordination_engine import CoordinationEngine            # type: ignore
-from core.execution import Executor, PRIORITY_BUDGET               # type: ignore
-from core.orchestration import Orchestrator                        # type: ignore
+from Nexus.intelligence.domain_classifier import DomainClassifier       # type: ignore
+from Nexus.intelligence.collaboration_graph import CollaborationGraph    # type: ignore
+from Nexus.core.agent_registry import AgentRegistry                      # type: ignore
+from Nexus.core.coordination_engine import CoordinationEngine            # type: ignore
+from Nexus.core.execution import Executor, PRIORITY_BUDGET               # type: ignore
+from Nexus.core.orchestration import Orchestrator                        # type: ignore
 
 try:
     from shared.agent import BaseAgent
@@ -116,7 +116,7 @@ class NexusAgent(BaseAgent):
         agent = self.registry.get(cls["repository"]) or self.registry.find_by_domain(cls["domain"])
         if agent is None:
             return {"status": "error", "message": f"no agent for {cls['domain']} (repository={cls['repository']})"}
-        from core.orchestration import PRIMARY_TASK
+        from Nexus.core.orchestration import PRIMARY_TASK
         out = self.executor.call(agent.name, PRIMARY_TASK.get(agent.name, ""),
                                {"query": c.get("query", ""), "symbol": c.get("query", "").upper()},
                                priority=c.get("priority", 4))

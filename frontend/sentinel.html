@@ -1,302 +1,114 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sentinel — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root{--accent:#F59E0B;--accent-rgb:245,158,11;}
-.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
-.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;transition:color .2s;}
-.refresh-btn:hover{color:var(--accent);}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel — News Intelligence</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#F59E0B; --accent-rgb:245,158,11; }</style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">📡</span><span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
-      <a href="sentinel.html" class="nav-tab active">📡 Sentinel</a>
-      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
-      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html" class="nav-tab">⚡ System</a>
-      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
-      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">📡</span>
+    <span class="topbar-brand">SENTINEL</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">News Intelligence</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
-<div class="page-wrap">
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">📡</div>
-      <div class="agent-name">Sentinel</div>
-      <div class="agent-sub">News Intelligence</div>
-      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">📡</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Sentinel</div>
+        <div class="chat-session-agent-role">News Intelligence</div>
+      </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sidebarSources"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sidebarNlp"><span class="dot dot-amber"></span>NLP Engine…</div>
-      <div class="sys-item" id="sidebarAlerts"><span class="dot dot-amber"></span>Alerts…</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
-  <main class="main-content">
-    <div class="page-title">SENTINEL — News Intelligence</div>
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card"><div class="kpi-label">News Items Today</div><div class="kpi-value accent-text" id="kpiNewsItems">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">High Impact Events</div><div class="kpi-value red-text" id="kpiHighImpact">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Avg Sentiment</div><div class="kpi-value green-text" id="kpiSentiment">—</div></div>
-      <div class="kpi-card amber-card"><div class="kpi-label">Spike Alerts</div><div class="kpi-value amber-text" id="kpiAlerts">—</div><span class="kpi-warn">⚠</span></div>
-      <div class="kpi-card"><div class="kpi-label">Sources Monitored</div><div class="kpi-value" id="kpiSources">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Last Update</div><div class="kpi-value" id="kpiLastUpdate" style="font-size:16px">—</div></div>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#F59E0B"></div>
+      <span class="chat-main-agent-name">Sentinel</span>
+      <span class="chat-main-agent-role">News Intelligence</span>
+      <span class="chat-main-hint">POST /agents/sentinel/chat</span>
     </div>
 
-    <div class="card" style="padding:14px 18px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="color:var(--muted);font-size:15px">🔍</span>
-        <input id="sentinelInput" type="text" placeholder="Ask Sentinel: 'What news is moving EURUSD?' or 'Latest USD sentiment?'"
-          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
-          onkeydown="if(event.key==='Enter') querySentinel(this.value.trim())">
-        <button onclick="querySentinel(document.getElementById('sentinelInput').value.trim())"
-          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Query</button>
-        <button class="refresh-btn" onclick="loadSentinelData()" title="Refresh">↻</button>
-      </div>
-      <div id="sentinelQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
-    </div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.8">
-        <div class="card-header"><span class="card-title">Live News Feed</span><span class="card-badge" id="feedBadge">Live</span><button class="refresh-btn" onclick="loadSentinelData()" title="Refresh">↻</button></div>
-        <div id="newsFeed" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto">
-          <div style="color:var(--muted);font-size:12px;padding:20px;text-align:center">⏳ Loading news feed…</div>
-        </div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Sentiment by Asset</span><button class="refresh-btn" onclick="loadSentinelData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="sentChart" height="160"></canvas></div>
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">📡</div>
+      <div class="chat-empty-title">Chat with Sentinel</div>
+      <div class="chat-empty-desc">e.g. 'report latest market news'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('report latest news')">report latest news</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query market events')">query market events</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query news sentiment')">query news sentiment</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query breaking news')">query breaking news</span>
       </div>
     </div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.8">
-        <div class="card-header"><span class="card-title">News Spike Alerts</span><button class="refresh-btn" onclick="loadSentinelData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Time</th><th>Headline</th><th>Asset</th><th>Impact</th><th>Credibility</th><th>Action</th></tr></thead>
-          <tbody id="spikeAlertsBody">
-            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading alerts…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Source Credibility</span><button class="refresh-btn" onclick="loadSentinelData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Source</th><th>Articles</th><th>Credibility</th><th>Status</th></tr></thead>
-          <tbody id="sourceCredBody">
-            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
-          </tbody>
-        </table>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'report latest market news'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
-      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
-        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header"><span>📡 Chat with Sentinel</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Sentinel, your news intelligence agent. Ask me about breaking news, sentiment, or spike alerts.</div></div>
   </div>
-  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Sentinel…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+
 </div>
 
-<script src="shared.js"></script>
-<script src="api-config.js"></script>
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* sentinel.html — API-connected (v7) | Destination: Sentinel/frontend/sentinel.html */
-
-let sentChartInst = null;
-
-const FB_SENT = {
-  labels: ['EURUSD','GBPUSD','USDJPY','XAUUSD','BTCUSD','USDCAD','ETHUSD','AUDUSD'],
-  data:   [-0.42,  -0.18,   0.61,   0.73,   0.34,  -0.22,   0.47,   0.28],
-};
-const FB_NEWS = [
-  {time:'08:41',src:'Reuters',headline:'Fed Powell signals rates higher for longer',asset:'USD',sent:'BEARISH',cred:94},
-  {time:'08:23',src:'Bloomberg',headline:'Gold surges on safe-haven demand',asset:'XAUUSD',sent:'BULLISH',cred:91},
-  {time:'07:58',src:'CNBC',headline:'Oil prices rise on Middle East supply concerns',asset:'WTI',sent:'BULLISH',cred:76},
-  {time:'07:22',src:'Bloomberg',headline:'UK inflation data beats expectations',asset:'GBPUSD',sent:'BULLISH',cred:91},
-  {time:'07:05',src:'Reuters',headline:'Bitcoin ETF inflows hit weekly record',asset:'BTCUSD',sent:'BULLISH',cred:94},
-];
-const FB_ALERTS = [
-  {time:'08:03',headline:'Fed Powell signals rates higher for longer',asset:'USD',impact:'HIGH',cred:'94%',action:'TRIGGERED'},
-  {time:'07:41',headline:'Geopolitical tensions push oil above $85',asset:'WTI',impact:'MED',cred:'87%',action:'MONITORED'},
-];
-const FB_SOURCES = [
-  {name:'Reuters',articles:47,cred:94},{name:'Bloomberg',articles:38,cred:91},
-  {name:'CNBC',articles:29,cred:76},{name:'FT',articles:22,cred:88},{name:'WSJ',articles:18,cred:85},
-];
-
-function renderSentimentChart(labels, data) {
-  const ctx = document.getElementById('sentChart').getContext('2d');
-  if (sentChartInst) sentChartInst.destroy();
-  sentChartInst = new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: data.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { min: -1, max: 1, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
-        y: { grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 11 } } }
-      }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('sentinel', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
   });
-}
-
-function renderNewsFeed(items) {
-  const feed = document.getElementById('newsFeed');
-  if (!items || !items.length) {
-    feed.innerHTML = '<div style="color:#EF4444;font-size:12px;padding:20px;text-align:center">⚠️ Backend offline — start the FastAPI server</div>';
-    return;
-  }
-  feed.innerHTML = items.map(n => {
-    const sc = n.sent === 'BULLISH' ? 'badge-active' : n.sent === 'BEARISH' ? 'badge-sell' : 'badge-closed';
-    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:10px;color:var(--sub);white-space:nowrap;margin-top:2px">${n.time}</span>
-      <div style="flex:1">
-        <div style="font-size:12px;color:var(--text);margin-bottom:4px">${n.headline}</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:10px;color:var(--muted)">${n.src}</span>
-          <span style="font-size:10px;color:var(--muted)">— ${n.asset}</span>
-          <span class="badge ${sc}" style="font-size:9px">${n.sent}</span>
-          <span style="font-size:10px;color:var(--sub)">${n.cred}% cred</span>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderSpikeAlerts(alerts) {
-  const tbody = document.getElementById('spikeAlertsBody');
-  if (!alerts || !alerts.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = alerts.map(a => {
-    const impCls = a.impact === 'HIGH' ? 'badge-high' : a.impact === 'MED' ? 'badge-med' : 'badge-low';
-    const actCls = a.action === 'TRIGGERED' ? 'badge-sell' : 'badge-closed';
-    return `<tr>
-      <td class="muted">${a.time}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.headline}</td>
-      <td>${a.asset}</td>
-      <td><span class="badge ${impCls}">${a.impact}</span></td>
-      <td>${a.cred}</td>
-      <td><span class="badge ${actCls}">${a.action}</span></td>
-    </tr>`;
-  }).join('');
-}
-
-function renderSourceCredibility(sources) {
-  const tbody = document.getElementById('sourceCredBody');
-  if (!sources || !sources.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = sources.map(s => `<tr>
-    <td>${s.name}</td><td>${s.articles}</td>
-    <td><div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-      <div class="conf-bar" data-width="${s.cred}" style="height:100%;background:var(--accent);border-radius:3px;width:0%"></div>
-    </div></td>
-    <td><span class="badge badge-active">ACTIVE</span></td>
-  </tr>`).join('');
-  if (typeof animateConfBars === 'function') animateConfBars();
-}
-
-async function loadSentinelData() {
-  const status = await apiGet(API.agentStatus('sentinel'));
-  const online = !!status;
-  document.getElementById('agentStatusDot').innerHTML = online
-    ? '<span class="dot dot-green"></span> Running'
-    : '<span class="dot dot-red"></span> Offline';
-  document.getElementById('sidebarSources').innerHTML = online
-    ? `<span class="dot dot-green"></span>${status.sources_monitored ?? 18} Sources Active`
-    : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sidebarNlp').innerHTML = online
-    ? '<span class="dot dot-green"></span>NLP Engine Online'
-    : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sidebarAlerts').innerHTML = online
-    ? `<span class="dot ${(status.spike_alerts ?? 0) > 0 ? 'dot-amber' : 'dot-green'}"></span>${status.spike_alerts ?? 0} Spike Alerts`
-    : '<span class="dot dot-red"></span>Backend offline';
-
-  const s = status ?? {};
-  document.getElementById('kpiNewsItems').textContent  = s.news_items_today ?? s.news_count ?? '247';
-  document.getElementById('kpiHighImpact').textContent = s.high_impact_events ?? s.high_impact ?? '3';
-  document.getElementById('kpiSentiment').textContent  = s.avg_sentiment != null ? (s.avg_sentiment >= 0 ? '+' : '') + s.avg_sentiment.toFixed(2) : '+0.34';
-  document.getElementById('kpiAlerts').textContent     = s.spike_alerts ?? '2';
-  document.getElementById('kpiSources').textContent    = s.sources_monitored ?? '18';
-  document.getElementById('kpiLastUpdate').textContent = s.last_update ?? new Date().toLocaleTimeString();
-
-  renderNewsFeed(s.news_feed ?? s.recent_news ?? (online ? [] : FB_NEWS));
-  renderSpikeAlerts(s.spike_alerts_list ?? s.alerts_list ?? (online ? [] : FB_ALERTS));
-  renderSourceCredibility(s.sources_list ?? (online ? [] : FB_SOURCES));
-  renderSentimentChart(s.sentiment_labels ?? FB_SENT.labels, s.sentiment_data ?? FB_SENT.data);
-}
-
-async function loadLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const c = document.getElementById('logContainer');
-  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
-  c.innerHTML = logs.map(l =>
-    `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`
-  ).join('');
-  c.scrollTop = c.scrollHeight;
-}
-
-async function querySentinel(text) {
-  if (!text) return;
-  const box = document.getElementById('sentinelQueryResult');
-  box.style.display = 'block';
-  box.textContent = '⏳ Querying Sentinel…';
-  const result = await apiPost(API.agentQuery('sentinel'), { prompt: text }, 20000);
-  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Sentinel is offline. Start the FastAPI server.</span>'; return; }
-  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
-}
-
-async function sendPanelMsg() {
-  const inp = document.getElementById('panelInput');
-  const text = inp.value.trim(); if (!text) return; inp.value = '';
-  const msgs = document.getElementById('panelMessages');
-  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-  const reply = await queryAgent('sentinel', text, 20000);
-  document.getElementById('thinkingMsg')?.remove();
-  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadSentinelData();
-  await loadLogs();
-  setInterval(loadSentinelData, 60_000);
-  setInterval(loadLogs, 60_000);
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

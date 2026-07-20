@@ -43,16 +43,45 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-from core.market_data import MarketData  # type: ignore
-from core.risk import RiskManager  # type: ignore
-from core.backtester import Backtester  # type: ignore
-from intelligence.technicals import analyze  # type: ignore
-from intelligence.evolution import EvolutionLab  # type: ignore
-from intelligence.strategy_genome import StrategyGenome  # type: ignore
-from intelligence.adaptive_fusion import AdaptiveFusion  # type: ignore
-from intelligence.scientific_lab import ScientificResearchLab  # type: ignore
+# FIX: dual-import fallbacks — works whether Oracle/ is on sys.path (standalone)
+# or Oracle is loaded as a sub-package via api.py ecosystem.
+try:
+    from core.market_data import MarketData  # type: ignore
+except ImportError:
+    from Oracle.core.market_data import MarketData  # type: ignore
+try:
+    from core.risk import RiskManager  # type: ignore
+except ImportError:
+    from Oracle.core.risk import RiskManager  # type: ignore
+try:
+    from core.backtester import Backtester  # type: ignore
+except ImportError:
+    from Oracle.core.backtester import Backtester  # type: ignore
+try:
+    from intelligence.technicals import analyze  # type: ignore
+except ImportError:
+    from Oracle.intelligence.technicals import analyze  # type: ignore
+try:
+    from intelligence.evolution import EvolutionLab  # type: ignore
+except ImportError:
+    from Oracle.intelligence.evolution import EvolutionLab  # type: ignore
+try:
+    from intelligence.strategy_genome import StrategyGenome  # type: ignore
+except ImportError:
+    from Oracle.intelligence.strategy_genome import StrategyGenome  # type: ignore
+try:
+    from intelligence.adaptive_fusion import AdaptiveFusion  # type: ignore
+except ImportError:
+    from Oracle.intelligence.adaptive_fusion import AdaptiveFusion  # type: ignore
+try:
+    from intelligence.scientific_lab import ScientificResearchLab  # type: ignore
+except ImportError:
+    from Oracle.intelligence.scientific_lab import ScientificResearchLab  # type: ignore
 # FIX O-3: import SignalFusion — the stream builder (was never imported before)
-from intelligence.signal_fusion import SignalFusion  # type: ignore
+try:
+    from intelligence.signal_fusion import SignalFusion  # type: ignore
+except ImportError:
+    from Oracle.intelligence.signal_fusion import SignalFusion  # type: ignore
 
 try:
     from shared.agent import BaseAgent

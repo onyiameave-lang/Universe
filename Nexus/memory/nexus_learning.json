@@ -67280,11 +67280,143 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 9
+    },
+    {
+      "source": "heuristic",
+      "task": "user.query",
+      "root_cause": "Unknown task: user.query",
+      "lesson": "Task 'user.query' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "user.query",
+      "root_cause": "Unknown task: user.query",
+      "lesson": "Task 'user.query' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "user.query",
+      "root_cause": "Unknown task: user.query",
+      "lesson": "Task 'user.query' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 10
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 10
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 11
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 11
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 12
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 12
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.status",
+      "root_cause": "Unknown task: ecosystem.status",
+      "lesson": "Task 'ecosystem.status' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.status",
+      "root_cause": "Unknown task: ecosystem.status",
+      "lesson": "Task 'ecosystem.status' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.status",
+      "root_cause": "Unknown task: ecosystem.status",
+      "lesson": "Task 'ecosystem.status' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.status",
+      "root_cause": "Unknown task: ecosystem.status",
+      "lesson": "Task 'ecosystem.status' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
     }
   ],
   "failure_signatures": {
     "heartbeat::Unknown task: heartbeat": 6710,
-    "routing::all attempts failed": 9,
-    "ecosystem.route::no approach succeeded in 3 attempts": 9
+    "routing::all attempts failed": 12,
+    "ecosystem.route::no approach succeeded in 3 attempts": 12,
+    "user.query::Unknown task: user.query": 3,
+    "ecosystem.status::Unknown task: ecosystem.status": 4
   }
 }

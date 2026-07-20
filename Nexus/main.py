@@ -6,12 +6,6 @@ Mission: Route, orchestrate in parallel under SLAs, resolve conflicts by
          confidence, and learn how the whole civilization cooperates.
 (Book II Part I; Book II Part II Ch VIII.)
 
-The institutional coordinator. Boots the live agents (Chronicle first for shared
-memory), then routes/orchestrates with: SLA budgets + priority lanes, per-agent
-circuit breakers, TTL result caching, PARALLEL execution of independent
-sub-tasks, confidence-weighted conflict resolution, and a learned collaboration
-graph.
-
 Run:
     python main.py
 
@@ -24,6 +18,18 @@ Commands:
     execution                     cache + breaker stats
     monitor                       full coordination + learning stats
     quit
+
+FIX LOG (nexus-full-fix-v1):
+  FIX-1  _extract_summary(): result.get("result", {}) -> result.get("result")
+         Removes {} default so absent key returns None, not {}.
+         isinstance(None, dict) is False -> recursion stops. This was the
+         root cause of "RecursionError: maximum recursion depth exceeded"
+         for EVERY query including "hello".
+  FIX-2  _extract_summary(): same fix for result.get("session", {}) -> result.get("session")
+  FIX-3  except block: bare print(f"Error: {exc}") -> traceback.print_exc()
+         Full stack trace now visible on errors.
+  FIX-4  Added _print_result() helper for human-readable output (non-JSON mode).
+  FIX-5  Added ' --json' suffix support to any query for raw JSON output.
 """
 from __future__ import annotations
 
@@ -31,6 +37,7 @@ import importlib.util
 import json
 import logging
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Optional
 
@@ -40,14 +47,10 @@ for p in (_REPO_ROOT, _ECO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-# B-11/12 fix: import shared utilities instead of duplicating them here
 from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
 
-# Keep local aliases so the rest of this file's call-sites are unchanged
 _load_dotenv_early = load_dotenv_early
 _unload_conflicting_modules = unload_conflicting_modules
-
-
 
 from agents.coordinator_agent import NexusAgent  # type: ignore
 
@@ -75,9 +78,6 @@ def _load_class(folder, rel, cls):
         logging.getLogger("nexus").warning("load %s failed: %s", folder, exc)
         return None
     finally:
-        # Don't leave this peer's root sitting at the front of sys.path --
-        # it would shadow Nexus's own same-named core/agents/etc packages
-        # for any lazy import that happens later, well after boot.
         if path_added and str(root) in sys.path:
             sys.path.remove(str(root))
 
@@ -128,6 +128,91 @@ def boot():
     return nexus
 
 
+# ---------------------------------------------------------------------------
+# FIX-1 / FIX-2: _extract_summary — remove {} defaults to break infinite recursion
+# ---------------------------------------------------------------------------
+
+def _extract_summary(result: dict) -> Optional[str]:
+    """
+    Walk a result dict looking for a human-readable summary string.
+
+    ROOT CAUSE OF RECURSION BUG:
+      result.get("result", {}) returns {} when the key is absent.
+      isinstance({}, dict) is True -> _extract_summary({}) called forever.
+
+    FIX: result.get("result") returns None when absent.
+      isinstance(None, dict) is False -> recursion stops immediately.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    # 1. Prefer a structured "report" dict
+    report = result.get("report")
+    if isinstance(report, dict):
+        parts = []
+        if report.get("summary"):
+            parts.append(str(report["summary"]))
+        findings = report.get("findings") or []
+        if isinstance(findings, list):
+            parts.extend(str(f) for f in findings[:3] if f)
+        if parts:
+            return "\n".join(parts)
+
+    # 2. Recurse into a nested "result" dict
+    # FIX-1: was result.get("result", {}) — the {} default caused infinite recursion
+    inner = result.get("result")
+    if isinstance(inner, dict):
+        return _extract_summary(inner)
+
+    # 3. Check a "session" synthesis
+    # FIX-2: was result.get("session", {}) — same pattern, fixed for consistency
+    session = result.get("session")
+    if isinstance(session, dict) and session.get("synthesis"):
+        return str(session["synthesis"])
+    if isinstance(session, dict) and session.get("summary"):
+        return str(session["summary"])
+
+    # 4. Plain text fields (only for non-error results)
+    for key in ("text", "answer", "message", "summary"):
+        val = result.get(key)
+        if val and isinstance(val, str) and result.get("status") != "error":
+            return val
+
+    return None
+
+
+def _print_result(result: dict, use_json: bool) -> None:
+    """Pretty-print a routing result to the terminal."""
+    if use_json:
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    status = result.get("status", "unknown")
+    strategy = result.get("_strategy") or result.get("_reasoning", {}).get("chosen", "")
+    routed = result.get("routed_to", "")
+    priority = result.get("priority", "")
+
+    header_parts = [f"[{status.upper()}]"]
+    if strategy:
+        header_parts.append(f"via {strategy}")
+    if routed:
+        header_parts.append(f"-> {routed}")
+    if priority:
+        header_parts.append(f"(priority {priority})")
+    print(" ".join(header_parts))
+
+    summary = _extract_summary(result)
+    if summary:
+        print(summary)
+    elif status == "error":
+        msg = result.get("message", "")
+        if msg:
+            print(f"  Error: {msg}")
+    else:
+        compact = json.dumps(result, default=str)
+        print(compact[:500] + ("..." if len(compact) > 500 else ""))
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     nexus = boot()
@@ -138,6 +223,7 @@ def main():
     print("=" * 64)
     print(f"  Live agents: {list(nexus.registry.all().keys())}")
     print("  Commands: <query> | urgent <query> | classify <q> | agents | breakers | execution | monitor | quit")
+    print("  Tip: append ' --json' to any query for raw JSON output")
 
     while True:
         try:
@@ -146,25 +232,37 @@ def main():
                 continue
             if line.lower() in ("quit", "exit", "q"):
                 break
+
+            use_json = line.endswith(" --json")
+            if use_json:
+                line = line[:-7].strip()
+
             if line.startswith("classify "):
-                print(json.dumps(nexus.act("domain.classify", {"query": line[9:], "_sender": "user"}), indent=2))
+                result = nexus.act("domain.classify", {"query": line[9:], "_sender": "user"})
+                print(json.dumps(result, indent=2, default=str))
             elif line.startswith("urgent "):
-                print(json.dumps(nexus.act("ecosystem.route",
-                    {"query": line[7:], "priority": 2, "_sender": "user"}), indent=2))
+                result = nexus.act("ecosystem.route",
+                    {"query": line[7:], "priority": 2, "_sender": "user"})
+                _print_result(result, use_json)
             elif line == "agents":
-                print(json.dumps(nexus.registry.health_summary(), indent=2))
+                print(json.dumps(nexus.registry.health_summary(), indent=2, default=str))
             elif line == "breakers":
-                print(json.dumps(nexus.executor.breaker_states(), indent=2))
+                print(json.dumps(nexus.executor.breaker_states(), indent=2, default=str))
             elif line == "execution":
-                print(json.dumps(nexus.act("execution.stats", {"_sender": "user"}), indent=2))
+                result = nexus.act("execution.stats", {"_sender": "user"})
+                print(json.dumps(result, indent=2, default=str))
             elif line == "monitor":
-                print(json.dumps(nexus.act("ecosystem.monitor", {"_sender": "user"}), indent=2))
+                result = nexus.act("ecosystem.monitor", {"_sender": "user"})
+                print(json.dumps(result, indent=2, default=str))
             else:
-                print(json.dumps(nexus.act("ecosystem.route", {"query": line, "_sender": "user"}), indent=2))
+                result = nexus.act("ecosystem.route", {"query": line, "_sender": "user"})
+                _print_result(result, use_json)
+
         except KeyboardInterrupt:
             break
         except Exception as exc:
-            print(f"Error: {exc}")
+            # FIX-3: was print(f"Error: {exc}") — now shows full traceback
+            traceback.print_exc()
 
     nexus.stop()
     print("Nexus shutdown complete.")

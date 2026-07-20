@@ -24,9 +24,18 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from intelligence.technicals import analyze  # type: ignore
-from intelligence.strategy_planner import StrategyPlanner  # type: ignore
-from benchmarks.benchmark_engine import BenchmarkEngine  # type: ignore
+try:
+    from intelligence.technicals import analyze  # type: ignore
+except ImportError:
+    from Oracle.intelligence.technicals import analyze  # type: ignore
+try:
+    from intelligence.strategy_planner import StrategyPlanner  # type: ignore
+except ImportError:
+    from Oracle.intelligence.strategy_planner import StrategyPlanner  # type: ignore
+try:
+    from benchmarks.benchmark_engine import BenchmarkEngine  # type: ignore
+except ImportError:
+    from Oracle.benchmarks.benchmark_engine import BenchmarkEngine  # type: ignore
 
 log = logging.getLogger("oracle.lab")
 

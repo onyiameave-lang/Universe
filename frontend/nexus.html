@@ -1,299 +1,114 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>System Health — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root{--accent:#6366F1;--accent-rgb:99,102,241;}
-.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
-.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
-.refresh-btn:hover{color:var(--accent);}
-.agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.agent-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;}
-.agent-card.online{border-color:rgba(34,197,94,.3);}
-.agent-card.standby{border-color:rgba(245,158,11,.3);}
-.agent-card.offline{border-color:rgba(239,68,68,.3);}
-.agent-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-.agent-card-name{font-size:13px;font-weight:700;color:var(--text);}
-.status-pill{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;}
-.status-pill.online{background:rgba(34,197,94,.15);color:#22C55E;}
-.status-pill.standby{background:rgba(245,158,11,.15);color:#F59E0B;}
-.status-pill.offline{background:rgba(239,68,68,.15);color:#EF4444;}
-.agent-card-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;}
-.agent-card-row span:last-child{color:var(--text);}
-.timeline-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
-.timeline-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:3px;}
-.timeline-content{flex:1;}
-.timeline-title{font-size:12px;color:var(--text);}
-.timeline-time{font-size:10px;color:var(--sub);margin-top:2px;}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus — Coordinator Hub</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#6366F1; --accent-rgb:99,102,241; }</style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">⚡</span><span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
-      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
-      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
-      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html" class="nav-tab active">⚡ System</a>
-      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html" class="nav-tab">⚗️ Genesis</a>
-      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">⚡</span>
+    <span class="topbar-brand">NEXUS</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">Coordinator Hub</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
-    <a href="index.html" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:6px">🕸️ Command Center</a>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
-<div class="page-wrap">
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">⚡</div>
-      <div class="agent-name">Nexus</div>
-      <div class="agent-sub">Coordination Hub</div>
-      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">⚡</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Nexus</div>
+        <div class="chat-session-agent-role">Coordinator Hub</div>
+      </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Loading…</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
-  <main class="main-content">
-    <div class="page-title">NEXUS — System Health Dashboard</div>
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card"><div class="kpi-label">Active Agents</div><div class="kpi-value green-text" id="kpiAgents">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Messages Today</div><div class="kpi-value accent-text" id="kpiMessages">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Avg Latency</div><div class="kpi-value green-text" id="kpiLatency">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Event Bus Load</div><div class="kpi-value" id="kpiBusLoad">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Failed Events</div><div class="kpi-value green-text" id="kpiFailed">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Uptime</div><div class="kpi-value green-text" id="kpiUptime">—</div></div>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#6366F1"></div>
+      <span class="chat-main-agent-name">Nexus</span>
+      <span class="chat-main-agent-role">Coordinator Hub</span>
+      <span class="chat-main-hint">POST /agents/nexus/chat</span>
     </div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.5">
-        <div class="card-header"><span class="card-title">Agent Health Grid</span><span class="card-badge" id="agentGridBadge">Live</span><button class="refresh-btn" onclick="loadNexusData()" title="Refresh">↻</button></div>
-        <div class="agent-grid" id="agentGrid">
-          <div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:20px">⏳ Loading agent grid…</div>
-        </div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Event Bus Activity</span><span class="card-badge">msg/min</span><button class="refresh-btn" onclick="loadNexusData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="busChart" height="160"></canvas></div>
-      </div>
-    </div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.8">
-        <div class="card-header"><span class="card-title">Message Throughput</span><span class="card-badge">Last 60 min</span><button class="refresh-btn" onclick="loadNexusData()" title="Refresh">↻</button></div>
-        <div class="chart-wrap"><canvas id="throughputChart" height="160"></canvas></div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Coordination Timeline</span><button class="refresh-btn" onclick="loadNexusData()" title="Refresh">↻</button></div>
-        <div id="timeline">
-          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading…</div>
-        </div>
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">⚡</div>
+      <div class="chat-empty-title">Chat with Nexus</div>
+      <div class="chat-empty-desc">e.g. 'query system health status'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query system health')">query system health</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query agent status')">query agent status</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query routing log')">query routing log</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query ecosystem overview')">query ecosystem overview</span>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
-      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
-        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query system health status'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
-  </main>
-</div>
-
-<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header"><span>⚡ Chat with Nexus</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Nexus, the coordination hub. Ask me about system health, agent status, or event routing. Or visit the <a href="index.html" style="color:var(--accent)">Command Center</a> for full orchestrator chat.</div></div>
   </div>
-  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Nexus…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+
 </div>
 
-<script src="shared.js"></script>
-<script src="api-config.js"></script>
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* nexus.html — API-connected (v7) | Destination: Nexus/frontend/nexus.html */
-
-let busChartInst = null, tpChartInst = null;
-
-const AGENT_META = {
-  oracle:   { icon: '📈', label: 'Oracle' },
-  sentinel: { icon: '📡', label: 'Sentinel' },
-  pulse:    { icon: '💓', label: 'Pulse' },
-  atlas:    { icon: '🧭', label: 'Atlas' },
-  chronicle:{ icon: '📜', label: 'Chronicle' },
-  forge:    { icon: '⚒️', label: 'Forge' },
-  genesis:  { icon: '⚗️', label: 'Genesis' },
-  aegis:    { icon: '🛡️', label: 'Aegis' },
-  nexus:    { icon: '⚡', label: 'Nexus' },
-};
-
-const FB_BUS = {
-  labels: ['ecosystem.trading','ecosystem.news','ecosystem.social','ecosystem.health','ecosystem.audit','ecosystem.research','ecosystem.memory'],
-  data:   [847, 623, 412, 234, 178, 134, 89],
-};
-const FB_TIMELINE = [
-  {title:'Oracle requested Sentinel sentiment for EURUSD',time:'4s ago'},
-  {title:'Pulse delivered social score for BTCUSD',time:'7s ago'},
-  {title:'Chronicle stored 3 new memory records',time:'23s ago'},
-  {title:'Atlas blocked EURUSD trade — ECB speech risk',time:'1m 12s ago'},
-  {title:'Nexus resolved Oracle vs Pulse conflict on GBPUSD',time:'2m 34s ago'},
-  {title:'Aegis audit: Oracle signal generation — PASS',time:'3m 47s ago'},
-];
-
-function renderBusChart(labels, data) {
-  const ctx = document.getElementById('busChart').getContext('2d');
-  if (busChartInst) busChartInst.destroy();
-  busChartInst = new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }] },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
-        y: { grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 10 } } }
-      }
-    }
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('nexus', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
   });
-}
-
-function renderThroughputChart(labels, data) {
-  const ctx = document.getElementById('throughputChart').getContext('2d');
-  if (tpChartInst) tpChartInst.destroy();
-  tpChartInst = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets: [{ data, borderColor: '#6366F1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
-        y: { min: 0, max: 1200, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } }
-      }
-    }
-  });
-}
-
-function renderAgentGrid(agents) {
-  const grid = document.getElementById('agentGrid');
-  if (!agents || !agents.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#EF4444;padding:20px">⚠️ Backend offline — start the FastAPI server</div>';
-    return;
-  }
-  grid.innerHTML = agents.map(a => {
-    const meta = AGENT_META[a.id] ?? { icon: '🤖', label: a.name ?? a.id };
-    const statusCls = a.status === 'active' || a.status === 'online' ? 'online' : a.status === 'training' ? 'standby' : 'offline';
-    const dotCls    = statusCls === 'online' ? 'dot-green' : statusCls === 'standby' ? 'dot-amber' : 'dot-red';
-    const label     = statusCls === 'online' ? 'ONLINE' : statusCls === 'standby' ? 'TRAINING' : 'OFFLINE';
-    return `<div class="agent-card ${statusCls}">
-      <div class="agent-card-top">
-        <span class="agent-card-name">${meta.icon} ${meta.label}</span>
-        <span class="status-pill ${statusCls}"><span class="dot ${dotCls}"></span>${label}</span>
-      </div>
-      <div class="agent-card-row"><span>Status</span><span>${a.lifecycle_status ?? a.status ?? 'active'}</span></div>
-      <div class="agent-card-row"><span>Capabilities</span><span>${(a.capabilities ?? []).length}</span></div>
-    </div>`;
-  }).join('');
-}
-
-function renderTimeline(events) {
-  const tl = document.getElementById('timeline');
-  if (!events || !events.length) {
-    tl.innerHTML = '<div style="color:#EF4444;font-size:12px;text-align:center;padding:20px">⚠️ Backend offline</div>';
-    return;
-  }
-  tl.innerHTML = events.map(e => `<div class="timeline-item">
-    <div class="timeline-dot"></div>
-    <div class="timeline-content">
-      <div class="timeline-title">${e.title}</div>
-      <div class="timeline-time">${e.time}</div>
-    </div>
-  </div>`).join('');
-}
-
-async function loadNexusData() {
-  // Fetch all agents list from /agents
-  const agents = await apiGet(API.agents);
-  const online = !!agents;
-  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-green"></span> Running' : '<span class="dot dot-red"></span> Offline';
-
-  const count = agents ? agents.length : 0;
-  document.getElementById('kpiAgents').textContent  = online ? `${count}/${count}` : '—';
-  document.getElementById('kpiMessages').textContent = '—';
-  document.getElementById('kpiLatency').textContent  = '—';
-  document.getElementById('kpiBusLoad').textContent  = '—';
-  document.getElementById('kpiFailed').textContent   = '0';
-  document.getElementById('kpiUptime').textContent   = '—';
-  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>${count}/${count} Agents Online` : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb2').innerHTML = online ? '<span class="dot dot-green"></span>0 Failed Events' : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb3').innerHTML = online ? '<span class="dot dot-green"></span>Uptime: —' : '<span class="dot dot-red"></span>Backend offline';
-
-  renderAgentGrid(agents ?? []);
-
-  // Also fetch nexus-specific status
-  const status = await apiGet(API.agentStatus('nexus'));
-  if (status) {
-    document.getElementById('kpiMessages').textContent = status.messages_today ?? '—';
-    document.getElementById('kpiLatency').textContent  = status.avg_latency ?? '—';
-    document.getElementById('kpiBusLoad').textContent  = status.bus_load ?? '—';
-    document.getElementById('kpiUptime').textContent   = status.uptime ?? '—';
-    document.getElementById('sb3').innerHTML = `<span class="dot dot-green"></span>Uptime: ${status.uptime ?? '—'}`;
-    renderTimeline(status.timeline ?? FB_TIMELINE);
-    renderBusChart(status.bus_labels ?? FB_BUS.labels, status.bus_data ?? FB_BUS.data);
-    const tpLabels = status.throughput_labels ?? Array.from({length:60},(_,i)=>i%10===0?`${i}m`:'');
-    const tpData   = status.throughput_data   ?? Array.from({length:60},()=>Math.floor(600+Math.random()*400));
-    renderThroughputChart(tpLabels, tpData);
-  } else {
-    renderTimeline(online ? [] : FB_TIMELINE);
-    renderBusChart(FB_BUS.labels, FB_BUS.data);
-    const tpLabels = Array.from({length:60},(_,i)=>i%10===0?`${i}m`:'');
-    const tpData   = Array.from({length:60},()=>Math.floor(600+Math.random()*400));
-    renderThroughputChart(tpLabels, tpData);
-  }
-}
-
-async function loadLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const c = document.getElementById('logContainer');
-  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
-  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
-  c.scrollTop = c.scrollHeight;
-}
-
-async function sendPanelMsg() {
-  const inp = document.getElementById('panelInput');
-  const text = inp.value.trim(); if (!text) return; inp.value = '';
-  const msgs = document.getElementById('panelMessages');
-  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-  const reply = await queryAgent('nexus', text, 20000);
-  document.getElementById('thinkingMsg')?.remove();
-  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadNexusData();
-  await loadLogs();
-  setInterval(loadNexusData, 60_000);
-  setInterval(loadLogs, 60_000);
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

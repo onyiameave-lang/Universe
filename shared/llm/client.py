@@ -96,7 +96,11 @@ DEFAULT_MODELS = {
     "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
     "openai":    os.getenv("OPENAI_MODEL",    "gpt-4o"),
     "gemini":    os.getenv("GEMINI_MODEL",    "gemini-2.5-flash"),
+    "ollama":    os.getenv("OLLAMA_MODEL",    ""),   # e.g. "llama3", "mistral", "phi3"
 }
+
+_OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://localhost:11434").rstrip("/")
+_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "").strip()
 
 _RATE_LIMIT_RPM      = max(1, int(os.getenv("LLM_RATE_LIMIT_RPM",          "5")))
 _MAX_RETRIES         = max(0, int(os.getenv("LLM_MAX_RETRIES",              "3")))
@@ -358,6 +362,81 @@ class GeminiProvider(_Provider):
         )
 
 
+class OllamaProvider(_Provider):
+    """
+    Local Ollama provider — uses raw urllib HTTP, no 'ollama' package needed.
+    Enabled when OLLAMA_MODEL is set in .env (e.g. OLLAMA_MODEL=llama3).
+    Ollama must be running: `ollama serve` (default port 11434).
+    """
+    name = "ollama"
+
+    def __init__(self):
+        self._url   = _OLLAMA_URL
+        self._model = _OLLAMA_MODEL
+        self._ok    = False
+        if not self._model:
+            return
+        # Quick reachability probe at init time (non-fatal)
+        try:
+            import urllib.request as _ur
+            req = _ur.Request(f"{self._url}/api/tags",
+                              headers={"Accept": "application/json"})
+            with _ur.urlopen(req, timeout=3.0) as resp:
+                self._ok = resp.status == 200
+        except Exception:
+            self._ok = False  # Ollama not running yet — will retry at call time
+
+    def available(self) -> bool:
+        return bool(self._model)  # available if configured; actual reachability checked at call time
+
+    def complete(self, system, messages, temperature, max_tokens) -> LLMResult:
+        import urllib.request as _ur
+        import urllib.error as _ue
+        import json as _json
+
+        start = time.time()
+        # Build a single prompt string from messages
+        parts = []
+        if system:
+            parts.append(f"System: {system}")
+        for m in messages:
+            role = m.get("role", "user").capitalize()
+            parts.append(f"{role}: {m.get('content', '')}")
+        parts.append("Assistant:")
+        prompt = "\n\n".join(parts)
+
+        payload = _json.dumps({
+            "model":  self._model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }).encode("utf-8")
+
+        req = _ur.Request(
+            f"{self._url}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with _ur.urlopen(req, timeout=120.0) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+        except _ue.URLError as exc:
+            raise RuntimeError(f"Ollama unreachable at {self._url}: {exc}") from exc
+
+        text = data.get("response", "").strip()
+        if not text:
+            raise RuntimeError(f"Ollama returned empty response (model={self._model})")
+
+        return LLMResult(
+            text=text, provider=self.name, model=self._model, ok=True,
+            latency_ms=round((time.time() - start) * 1000, 1), raw=data,
+        )
+
+
 # ---------------------------------------------------------------------------
 # LLMClient — the single gatekeeper
 # ---------------------------------------------------------------------------
@@ -378,10 +457,25 @@ class LLMClient:
             "anthropic": AnthropicProvider(),
             "openai":    OpenAIProvider(),
             "gemini":    GeminiProvider(),
+            "ollama":    OllamaProvider(),   # local LLM — first when OLLAMA_MODEL is set
         }
-        order = preferred_order or os.getenv(
-            "LLM_PROVIDER_ORDER", "anthropic,openai,gemini"
-        ).split(",")
+        # Default order: Ollama first (free, local, no rate limits) when configured,
+        # then cloud providers as fallback.
+        if preferred_order:
+            order = preferred_order
+        else:
+            env_order = os.getenv("LLM_PROVIDER_ORDER", "").strip()
+            if env_order:
+                order = env_order.split(",")
+            elif _OLLAMA_MODEL:
+                # Ollama configured → use it first, cloud providers as fallback
+                order = ["ollama", "anthropic", "openai", "gemini"]
+                log.info(
+                    "LLM provider order: ollama (primary) → anthropic → openai → gemini "
+                    "(set LLM_PROVIDER_ORDER to override)"
+                )
+            else:
+                order = ["anthropic", "openai", "gemini"]
         self._order = [p.strip() for p in order if p.strip() in self._providers]
 
         # stats counters
@@ -529,6 +623,8 @@ class LLMClient:
                 "available_providers":    self.available_providers(),
                 "preferred_order":        self._order,
                 "llm_mode":               _LLM_MODE,
+                "ollama_model":           _OLLAMA_MODEL or "(not configured)",
+                "ollama_url":             _OLLAMA_URL,
                 "total_calls":            self._calls,
                 "total_tokens":           self._tokens,
                 "cache_hits":             self._cache_hits,

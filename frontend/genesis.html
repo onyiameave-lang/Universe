@@ -1,297 +1,114 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Genesis — Universe Oracle</title>
-<link rel="stylesheet" href="shared.css">
-<style>
-:root{--accent:#10B981;--accent-rgb:16,185,129;}
-.api-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:12px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
-.refresh-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;}
-.refresh-btn:hover{color:var(--accent);}
-.pipeline{display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0;}
-.pipe-stage{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:100px;}
-.pipe-box{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card2);font-size:11px;font-weight:700;color:var(--muted);text-align:center;white-space:nowrap;}
-.pipe-box.active{border-color:var(--accent);color:var(--accent);background:rgba(16,185,129,.1);box-shadow:0 0 12px rgba(16,185,129,.2);}
-.pipe-box.done{border-color:rgba(16,185,129,.4);color:#22C55E;background:rgba(34,197,94,.08);}
-.pipe-count{font-size:10px;color:var(--sub);}
-.pipe-arrow{color:var(--border);font-size:18px;margin:0 4px;flex-shrink:0;margin-top:-18px;}
-.cert-check{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;}
-.cert-check:last-child{border-bottom:none;}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genesis — Strategy Engine</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
+<style>:root { --accent:#14B8A6; --accent-rgb:20,184,166; }</style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="nav-left">
-    <span class="nav-logo">⚗️</span><span class="nav-brand">UNIVERSE ORACLE</span>
-    <div class="nav-tabs">
-      <a href="index.html" class="nav-tab">🕸️ Nexus</a>
-      <a href="oracle.html" class="nav-tab">📈 Oracle</a>
-      <a href="sentinel.html" class="nav-tab">📡 Sentinel</a>
-      <a href="pulse.html" class="nav-tab">💓 Pulse</a>
-      <a href="atlas.html" class="nav-tab">🧭 Atlas</a>
-      <a href="chronicle.html" class="nav-tab">📜 Chronicle</a>
-      <a href="nexus.html" class="nav-tab">⚡ System</a>
-      <a href="forge.html" class="nav-tab">⚒️ Forge</a>
-      <a href="genesis.html" class="nav-tab active">⚗️ Genesis</a>
-      <a href="aegis.html" class="nav-tab">🛡️ Aegis</a>
-    </div>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">🌱</span>
+    <span class="topbar-brand">GENESIS</span>
+    <span class="topbar-divider"></span>
+    <span class="topbar-page-name">Strategy Engine</span>
   </div>
-  <div class="nav-right">
-    <span id="apiStatusBadge" class="api-badge api-offline">⏳ Connecting…</span>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
   </div>
 </nav>
-<div class="page-wrap">
-  <aside class="sidebar">
-    <div class="agent-header">
-      <div class="agent-icon-big">⚗️</div>
-      <div class="agent-name">Genesis</div>
-      <div class="agent-sub">Agent Creation Lab</div>
-      <div class="agent-status" id="agentStatusDot"><span class="dot dot-amber"></span> Connecting…</div>
+
+<!-- CHAT LAYOUT -->
+<div class="agent-chat-layout">
+
+  <!-- SESSION SIDEBAR -->
+  <aside class="chat-session-sidebar">
+    <div class="chat-session-header">
+      <div class="chat-session-agent-icon">🌱</div>
+      <div class="chat-session-agent-info">
+        <div class="chat-session-agent-name">Genesis</div>
+        <div class="chat-session-agent-role">Strategy Engine</div>
+      </div>
     </div>
-    <div class="sys-footer">
-      <div class="sys-item" id="sb1"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb2"><span class="dot dot-amber"></span>Loading…</div>
-      <div class="sys-item" id="sb3"><span class="dot dot-amber"></span>Loading…</div>
+    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
+    <div class="chat-session-list-wrap">
+      <ul class="chat-session-list" id="chatSessionList"></ul>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
+        ← Back to Hub
+      </a>
     </div>
   </aside>
-  <main class="main-content">
-    <div class="page-title">GENESIS — Agent Creation Lab</div>
-    <div class="kpi-grid">
-      <div class="kpi-card accent-card"><div class="kpi-label">Agents Created</div><div class="kpi-value accent-text" id="kpiCreated">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Certified Agents</div><div class="kpi-value green-text" id="kpiCertified">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Sandbox Tests Run</div><div class="kpi-value" id="kpiTests">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Avg Cert Time</div><div class="kpi-value" id="kpiCertTime">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Constitutional Compliance</div><div class="kpi-value green-text" id="kpiCompliance">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Active Blueprints</div><div class="kpi-value accent-text" id="kpiBlueprints">—</div></div>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main-area">
+    <div class="chat-main-header">
+      <div class="chat-main-agent-dot" style="background:#14B8A6"></div>
+      <span class="chat-main-agent-name">Genesis</span>
+      <span class="chat-main-agent-role">Strategy Engine</span>
+      <span class="chat-main-hint">POST /agents/genesis/chat</span>
     </div>
 
-    <!-- Query panel -->
-    <div class="card" style="padding:14px 18px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="color:var(--muted);font-size:15px">🔍</span>
-        <input id="genesisInput" type="text" placeholder="Ask Genesis: 'What is Hermes certification status?' or 'List active blueprints'"
-          style="flex:1;min-width:200px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit"
-          onkeydown="if(event.key==='Enter') queryGenesis(this.value.trim())">
-        <button onclick="queryGenesis(document.getElementById('genesisInput').value.trim())"
-          style="background:var(--accent);border:none;border-radius:6px;padding:6px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Query</button>
-        <button class="refresh-btn" onclick="loadGenesisData()" title="Refresh">↻</button>
-      </div>
-      <div id="genesisQueryResult" style="margin-top:10px;font-size:13px;color:var(--text);display:none;padding:10px;background:var(--card2);border-radius:6px;line-height:1.6"></div>
-    </div>
+    <!-- Messages -->
+    <div class="chat-messages-wrap" id="chatMessages"></div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.8">
-        <div class="card-header"><span class="card-title">Agent Creation Pipeline</span><button class="refresh-btn" onclick="loadGenesisData()" title="Refresh">↻</button></div>
-        <div id="pipelineContainer">
-          <div class="pipeline">
-            <div class="pipe-stage"><div class="pipe-box done">DESIGN</div><div class="pipe-count" id="pipeDesign">16 blueprints</div></div>
-            <div class="pipe-arrow">→</div>
-            <div class="pipe-stage"><div class="pipe-box done">SYNTHESIS</div><div class="pipe-count" id="pipeSynth">2 in progress</div></div>
-            <div class="pipe-arrow">→</div>
-            <div class="pipe-stage"><div class="pipe-box done">SANDBOX</div><div class="pipe-count" id="pipeSandbox">8 completed</div></div>
-            <div class="pipe-arrow">→</div>
-            <div class="pipe-stage"><div class="pipe-box active">CERTIFICATION</div><div class="pipe-count" id="pipeCert">1 active</div></div>
-            <div class="pipe-arrow">→</div>
-            <div class="pipe-stage"><div class="pipe-box">AEGIS REVIEW</div><div class="pipe-count" id="pipeAegis">1 pending</div></div>
-            <div class="pipe-arrow">→</div>
-            <div class="pipe-stage"><div class="pipe-box done">DEPLOYED</div><div class="pipe-count" id="pipeDeployed">8 active</div></div>
-          </div>
-        </div>
-        <div id="activeCertCard" style="margin-top:16px;padding:14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <span style="font-size:13px;font-weight:700;color:var(--accent)" id="certAgentName">🧬 Loading…</span>
-            <span style="font-size:11px;color:var(--muted)" id="certPct">—% complete</span>
-          </div>
-          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-            <div class="conf-bar" id="certBar" data-width="67" style="height:100%;background:var(--accent);border-radius:3px;width:0%"></div>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px" id="certDesc">Loading certification details…</div>
-        </div>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Certification Tests</span><span class="card-badge" id="certAgentBadge">—</span></div>
-        <div id="certChecks">
-          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">⏳ Loading…</div>
-        </div>
+    <!-- Empty state -->
+    <div class="chat-empty-state" id="chatEmptyState">
+      <div class="chat-empty-icon">🌱</div>
+      <div class="chat-empty-title">Chat with Genesis</div>
+      <div class="chat-empty-desc">e.g. 'query what is the current strategy'</div>
+      <div class="chat-hint-chips">
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query current strategy')">query current strategy</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query active goals')">query active goals</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query recommendations')">query recommendations</span>
+        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query market outlook')">query market outlook</span>
       </div>
     </div>
 
-    <div class="row-2col">
-      <div class="card" style="flex:1.5">
-        <div class="card-header"><span class="card-title">Agent Creation Log</span><button class="refresh-btn" onclick="loadGenesisData()" title="Refresh">↻</button></div>
-        <table class="data-table">
-          <thead><tr><th>Date</th><th>Agent</th><th>Version</th><th>Status</th><th>Compliance</th></tr></thead>
-          <tbody id="creationLogBody">
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card" style="flex:1">
-        <div class="card-header"><span class="card-title">Sandbox Test History</span></div>
-        <table class="data-table">
-          <thead><tr><th>Test Suite</th><th>Pass Rate</th><th>Failures</th></tr></thead>
-          <tbody id="sandboxBody">
-            <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">⏳ Loading…</td></tr>
-          </tbody>
-        </table>
+    <!-- Input -->
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query what is the current strategy'" rows="1"></textarea>
+        <button class="chat-send-v5" id="chatSend">➤</button>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-title">System Log</span><button class="refresh-btn" onclick="loadLogs()" title="Refresh">↻</button></div>
-      <div id="logContainer" style="font-family:monospace;font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.7">
-        <div style="text-align:center;padding:12px">⏳ Loading logs…</div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<button class="chat-toggle" onclick="toggleChat()">💬 Chat</button>
-<div class="chat-panel" id="chatPanel">
-  <div class="chat-panel-header"><span>⚗️ Chat with Genesis</span><button onclick="toggleChat()" class="chat-close">✕</button></div>
-  <div class="chat-panel-messages" id="panelMessages">
-    <div class="panel-msg agent-msg"><div class="panel-bubble">👋 I'm Genesis, the agent creation lab. Ask me about agent certification, blueprints, or the creation pipeline.</div></div>
   </div>
-  <div class="chat-panel-input"><textarea id="panelInput" placeholder="Ask Genesis…" rows="1"></textarea><button onclick="sendPanelMsg()" class="panel-send">➤</button></div>
+
 </div>
 
-<script src="shared.js"></script>
-<script src="api-config.js"></script>
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* genesis.html — API-connected (v7) | Destination: Genesis/frontend/genesis.html */
-
-const FB_CERT_CHECKS = [
-  {name:'Constitutional compliance',status:'PASS',cls:'badge-pass'},
-  {name:'Sandbox isolation',status:'PASS',cls:'badge-pass'},
-  {name:'Performance benchmarks',status:'PASS',cls:'badge-pass'},
-  {name:'Memory access controls',status:'PASS',cls:'badge-pass'},
-  {name:'Aegis review',status:'IN PROGRESS',cls:'badge-inprog'},
-  {name:'Integration tests',status:'IN PROGRESS',cls:'badge-inprog'},
-  {name:'Live trading simulation',status:'PENDING',cls:'badge-closed'},
-];
-const FB_CREATION_LOG = [
-  {date:'Jul 17',agent:'Hermes',version:'v0.1',status:'IN CERT',stCls:'badge-inprog',compliance:'98.7%',compCls:'green-text'},
-  {date:'Jun 12',agent:'Aegis',version:'v1.0',status:'DEPLOYED',stCls:'badge-deployed',compliance:'100%',compCls:'green-text'},
-  {date:'May 28',agent:'Forge',version:'v1.0',status:'DEPLOYED',stCls:'badge-deployed',compliance:'96.3%',compCls:'green-text'},
-  {date:'May 14',agent:'Genesis',version:'v1.0',status:'DEPLOYED',stCls:'badge-deployed',compliance:'98.7%',compCls:'green-text'},
-  {date:'Apr 30',agent:'Prototype v0.3',version:'v0.3',status:'REJECTED',stCls:'badge-rejected2',compliance:'71.2%',compCls:'red-text'},
-];
-const FB_SANDBOX = [
-  {suite:'Constitutional',pct:100,color:'#22C55E',failures:0,failCls:'green-text'},
-  {suite:'Isolation',pct:100,color:'#22C55E',failures:0,failCls:'green-text'},
-  {suite:'Performance',pct:94,color:'#22C55E',failures:0,failCls:'green-text'},
-  {suite:'Integration',pct:87,color:'#F59E0B',failures:2,failCls:'amber-text'},
-  {suite:'Live Sim',pct:0,color:'#94A3B8',failures:null,failCls:'muted'},
-];
-
-function renderCertChecks(checks) {
-  const div = document.getElementById('certChecks');
-  if (!checks || !checks.length) {
-    div.innerHTML = '<div style="color:#EF4444;font-size:12px;text-align:center;padding:20px">⚠️ Backend offline</div>';
-    return;
-  }
-  div.innerHTML = checks.map(c => `<div class="cert-check"><span>${c.name}</span><span class="badge ${c.cls}">${c.status}</span></div>`).join('');
-}
-
-function renderCreationLog(log) {
-  const tbody = document.getElementById('creationLogBody');
-  if (!log || !log.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = log.map(l => `<tr>
-    <td class="muted">${l.date}</td><td>${l.agent}</td><td>${l.version}</td>
-    <td><span class="badge ${l.stCls}">${l.status}</span></td>
-    <td class="${l.compCls ?? 'green-text'}">${l.compliance}</td>
-  </tr>`).join('');
-}
-
-function renderSandbox(tests) {
-  const tbody = document.getElementById('sandboxBody');
-  if (!tests || !tests.length) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#EF4444;padding:16px">⚠️ Backend offline</td></tr>';
-    return;
-  }
-  tbody.innerHTML = tests.map(t => `<tr>
-    <td>${t.suite}</td>
-    <td><div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px">
-      <div class="conf-bar" data-width="${t.pct}" style="height:100%;background:${t.color};border-radius:3px;width:0%"></div>
-    </div></td>
-    <td class="${t.failCls ?? 'green-text'}">${t.failures ?? '—'}</td>
-  </tr>`).join('');
-  if (typeof animateConfBars === 'function') animateConfBars();
-}
-
-async function loadGenesisData() {
-  const status = await apiGet(API.agentStatus('genesis'));
-  const online = !!status;
-  document.getElementById('agentStatusDot').innerHTML = online ? '<span class="dot dot-green"></span> Running' : '<span class="dot dot-red"></span> Offline';
-  const s = status ?? {};
-  document.getElementById('kpiCreated').textContent   = s.agents_created ?? '9';
-  document.getElementById('kpiCertified').textContent = s.certified_agents ?? '8';
-  document.getElementById('kpiTests').textContent     = s.sandbox_tests ?? '247';
-  document.getElementById('kpiCertTime').textContent  = s.avg_cert_time ?? '4.2h';
-  document.getElementById('kpiCompliance').textContent= s.compliance != null ? s.compliance + '%' : '98.7%';
-  document.getElementById('kpiBlueprints').textContent= s.active_blueprints ?? '3';
-  document.getElementById('sb1').innerHTML = online ? `<span class="dot dot-green"></span>${s.agents_deployed ?? 8} Agents Deployed` : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb2').innerHTML = online ? `<span class="dot dot-amber"></span>${s.in_certification ?? 1} In Certification` : '<span class="dot dot-red"></span>Backend offline';
-  document.getElementById('sb3').innerHTML = online ? `<span class="dot dot-green"></span>Compliance: ${s.compliance ?? 98.7}%` : '<span class="dot dot-red"></span>Backend offline';
-
-  // Active cert agent
-  const certAgent = s.active_cert_agent ?? { name: 'Hermes v0.1', pct: 67, desc: 'Execution Optimizer · Expected deployment: tomorrow 06:00 UTC' };
-  document.getElementById('certAgentName').textContent = `🧬 ${certAgent.name} — In Certification`;
-  document.getElementById('certPct').textContent = `${certAgent.pct}% complete`;
-  document.getElementById('certDesc').textContent = certAgent.desc;
-  document.getElementById('certAgentBadge').textContent = certAgent.name;
-  const certBar = document.getElementById('certBar');
-  certBar.dataset.width = certAgent.pct;
-  certBar.style.width = '0%';
-  if (typeof animateConfBars === 'function') animateConfBars();
-
-  renderCertChecks(s.cert_checks ?? (online ? [] : FB_CERT_CHECKS));
-  renderCreationLog(s.creation_log ?? (online ? [] : FB_CREATION_LOG));
-  renderSandbox(s.sandbox_tests_list ?? (online ? [] : FB_SANDBOX));
-}
-
-async function loadLogs() {
-  const logs = await apiGet(`${API.logs}?limit=20`);
-  const c = document.getElementById('logContainer');
-  if (!logs) { c.innerHTML = '<div style="color:#EF4444">⚠️ Backend offline</div>'; return; }
-  c.innerHTML = logs.map(l => `<div><span style="color:var(--sub)">[${l.time}]</span> <span style="color:var(--accent)">[${l.agent}]</span> ${l.msg}</div>`).join('');
-  c.scrollTop = c.scrollHeight;
-}
-
-async function queryGenesis(text) {
-  if (!text) return;
-  const box = document.getElementById('genesisQueryResult');
-  box.style.display = 'block'; box.textContent = '⏳ Querying Genesis…';
-  const result = await apiPost(API.agentQuery('genesis'), { prompt: text }, 20000);
-  if (!result) { box.innerHTML = '<span style="color:#EF4444">⚠️ Genesis is offline.</span>'; return; }
-  box.textContent = result.response ?? result.message ?? JSON.stringify(result);
-}
-
-async function sendPanelMsg() {
-  const inp = document.getElementById('panelInput');
-  const text = inp.value.trim(); if (!text) return; inp.value = '';
-  const msgs = document.getElementById('panelMessages');
-  msgs.innerHTML += `<div class="panel-msg user-msg"><div class="panel-bubble">${text}</div></div>`;
-  msgs.innerHTML += `<div class="panel-msg agent-msg" id="thinkingMsg"><div class="panel-bubble" style="color:var(--muted)">⏳ Thinking…</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-  const reply = await queryAgent('genesis', text, 20000);
-  document.getElementById('thinkingMsg')?.remove();
-  msgs.innerHTML += `<div class="panel-msg agent-msg"><div class="panel-bubble">${reply}</div></div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadGenesisData();
-  await loadLogs();
-  setInterval(loadGenesisData, 60_000);
-  setInterval(loadLogs, 60_000);
+document.addEventListener('DOMContentLoaded', () => {
+  const chat = new AgentChat('genesis', {
+    messagesId: 'chatMessages',
+    inputId:    'chatInput',
+    sendId:     'chatSend',
+    newBtnId:   'chatNewBtn',
+    listId:     'chatSessionList',
+    emptyId:    'chatEmptyState',
+  });
+  // Helper for hint chips
+  chat._fillInput = function(text) {
+    const inp = document.getElementById(this.inputId);
+    if (inp) { inp.value = text; inp.focus(); }
+  };
+  window._chat = chat;
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

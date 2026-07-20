@@ -102,8 +102,13 @@ for p in (_REPO_ROOT, _ECO_ROOT):
         sys.path.insert(0, str(p))
 
 from execution.mt5_broker import MT5Broker  # type: ignore
+from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
 
 log = logging.getLogger("oracle.live")
+
+# ── TRADER_ID: tags every Chronicle event so cross-script conflicts are visible ──
+# Set TRADER_ID=live_trader_1 in .env (or leave as default "live_trader")
+_TRADER_ID: str = os.getenv("TRADER_ID", "live_trader")
 
 # ── FIX-1: expanded default watchlist ────────────────────────────────────────
 DEFAULT_SYMBOLS: List[str] = [
@@ -111,6 +116,9 @@ DEFAULT_SYMBOLS: List[str] = [
     "XAUUSD", "USOIL",                          # commodities
     "BTCUSD", "ETHUSD",                         # crypto
 ]
+
+# ── ONE position per symbol cap ───────────────────────────────────────────────
+MAX_POSITIONS_PER_SYMBOL: int = 1   # never stack more than this many positions per symbol
 
 # ── FIX-2: per-symbol oracle call timeout ────────────────────────────────────
 _DEFAULT_SYMBOL_TIMEOUT = 60   # seconds; override with ORACLE_SYMBOL_TIMEOUT_SEC
@@ -432,6 +440,13 @@ class LiveTrader:
                                  pulse_client=self.pulse, atlas_client=self.atlas)
         self.oracle.start()
 
+        # FIX-DEDUP: Chronicle position log — cross-script duplicate prevention
+        self._pos_log = ChroniclePositionLog(
+            chronicle_agent=self.chronicle,
+            trader_id=_TRADER_ID,
+        )
+        log.info("LiveTrader: TRADER_ID=%r", _TRADER_ID)
+
     # ── connection ────────────────────────────────────────────────────────────
 
     def connect(self) -> Dict[str, Any]:
@@ -472,6 +487,185 @@ class LiveTrader:
         self._sym_mapper.build(broker_symbols, self.symbols)
         self._sym_mapper.log_map(self.symbols)
 
+    # ── position helpers ──────────────────────────────────────────────────────
+
+    def _get_open_position(self, broker_sym: str) -> Optional[Dict]:
+        """
+        Return the first open position for *broker_sym*, or None.
+
+        FIX-DEDUP: Now uses broker.get_positions_by_symbol() which ALWAYS
+        queries MT5 directly — this catches positions opened by the OTHER
+        script (mt5_demo_trader) that aren't in our internal tracking dict.
+
+        If a position is found that isn't in our _open_context, we adopt it
+        (add it to broker's paper state if in paper mode) so it gets managed
+        rather than duplicated.
+        """
+        try:
+            # FIX-DEDUP: query MT5 directly, not just internal paper state
+            positions = self.broker.get_positions_by_symbol(broker_sym)
+        except Exception as exc:
+            log.warning("Could not fetch positions for %s: %s", broker_sym, exc)
+            # Fallback to old method
+            try:
+                positions = self.broker.positions()
+                prefix = broker_sym[:6].upper()
+                positions = [p for p in positions
+                             if p.get("symbol", "").upper().startswith(prefix)]
+            except Exception:
+                return None
+
+        if not positions:
+            return None
+
+        pos = positions[0]
+
+        # FIX-DEDUP: adopt orphaned positions (opened by the other script)
+        ticket = pos.get("ticket")
+        if ticket is not None:
+            self.broker.adopt_position(pos)   # no-op in live mode; updates paper dict
+
+        return pos
+
+    def _manage_existing_position(self, symbol: str, broker_sym: str,
+                                  pos: Dict) -> str:
+        """
+        Re-analyse an existing position and decide: HOLD, MODIFY SL/TP, or CLOSE.
+
+        Returns one of: "hold", "modified", "closed", "error"
+        """
+        pos_id    = pos.get("ticket") or pos.get("id") or "?"
+        pos_dir   = pos.get("type", "").lower()   # "buy" or "sell"
+        pos_profit = pos.get("profit", 0.0)
+
+        log.info("[%s] existing %s position #%s (P&L %.2f) — re-analysing…",
+                 symbol, pos_dir.upper(), pos_id, pos_profit)
+        print(f"[{symbol}→{broker_sym}] EXISTING {pos_dir.upper()} position "
+              f"#{pos_id}  P&L={pos_profit:+.2f}  — re-analysing…")
+
+        # Ask Oracle for a fresh signal
+        try:
+            sig, timed_out = _call_with_timeout(
+                lambda sym=symbol: self.oracle.act(
+                    "trade.propose", {"symbol": sym, "_sender": "live_trader"}
+                ),
+                self._symbol_timeout,
+            )
+        except Exception as exc:
+            log.warning("[%s] ERROR re-analysing existing position: %s", symbol, exc)
+            print(f"[{symbol}] ERROR re-analysing: {exc}  — keeping position")
+            return "error"
+
+        if timed_out:
+            log.warning("[%s] TIMEOUT re-analysing existing position — keeping", symbol)
+            print(f"[{symbol}] TIMEOUT re-analysing — keeping position")
+            return "hold"
+
+        new_status = (sig or {}).get("status")
+
+        # Defensive: oracle may return a non-dict for "signal" (float, str, None)
+        _raw_signal = (sig or {}).get("signal")
+        if not isinstance(_raw_signal, dict):
+            if _raw_signal is not None:
+                log.warning(
+                    "[%s] unexpected type for 'signal' key: %s (%r) — treating as no signal",
+                    symbol, type(_raw_signal).__name__, _raw_signal,
+                )
+                print(f"[{symbol}] WARNING: oracle returned signal={_raw_signal!r} "
+                      f"(type={type(_raw_signal).__name__}) — expected dict; treating as HOLD")
+            _raw_signal = {}
+        new_signal = _raw_signal
+
+        # Safely coerce direction to str — oracle may put a float/int/None there
+        _raw_dir = new_signal.get("direction", "hold")
+        if not isinstance(_raw_dir, str):
+            log.warning(
+                "[%s] 'direction' is %s (%r) — coercing to str",
+                symbol, type(_raw_dir).__name__, _raw_dir,
+            )
+            print(f"[{symbol}] WARNING: oracle direction={_raw_dir!r} "
+                  f"(type={type(_raw_dir).__name__}) — coercing to str")
+        new_dir  = str(_raw_dir).strip().lower() if _raw_dir is not None else "hold"
+        new_conf = new_signal.get("confidence", 0.0)
+        if not isinstance(new_conf, (int, float)):
+            new_conf = 0.0
+
+        # Map "long"/"short" to "buy"/"sell" for comparison
+        _dir_map = {"long": "buy", "short": "sell", "buy": "buy", "sell": "sell"}
+        new_dir_norm = _dir_map.get(new_dir, new_dir)
+        pos_dir_norm = _dir_map.get(pos_dir, pos_dir)
+
+        # Signal reversed or went neutral → close the position
+        if new_status != "complete" or new_dir_norm in ("hold", "") or \
+                (new_dir_norm and new_dir_norm != pos_dir_norm):
+            reason = (
+                f"signal reversed to {new_dir.upper()}" if new_dir_norm and new_dir_norm != pos_dir_norm
+                else f"signal is now {new_dir.upper() or 'HOLD'}"
+            )
+            log.info("[%s] CLOSE position #%s — %s (conf=%.3f)",
+                     symbol, pos_id, reason, new_conf)
+            print(f"[{symbol}→{broker_sym}] CLOSE position #{pos_id} — {reason}  conf={new_conf:.3f}")
+            try:
+                close_result = self.broker.close_position(pos_id)
+                log.info("[%s] close result: %s", symbol, close_result)
+                print(f"[{symbol}→{broker_sym}] close → {close_result.get('status', close_result)}")
+                # FIX-DEDUP: log close event to Chronicle
+                if close_result.get("status") == "closed":
+                    self._pos_log.log_closed(symbol, broker_sym, pos_id, reason=reason)
+                return "closed"
+            except AttributeError:
+                log.warning("[%s] broker.close_position() not available; "
+                            "position kept (add it to MT5Broker)", symbol)
+                print(f"[{symbol}] WARNING: broker.close_position() not implemented — "
+                      f"position kept. Add close_position(ticket) to MT5Broker.")
+                return "hold"
+            except Exception as exc:
+                log.warning("[%s] ERROR closing position #%s: %s", symbol, pos_id, exc)
+                print(f"[{symbol}] ERROR closing #{pos_id}: {exc}")
+                return "error"
+
+        # Signal agrees with position direction → optionally update SL/TP
+        new_plan = (sig or {}).get("plan") or {}
+        new_sl   = new_plan.get("stop_loss")
+        new_tp   = new_plan.get("take_profit")
+        old_sl   = pos.get("sl")
+        old_tp   = pos.get("tp")
+
+        sl_changed = new_sl is not None and new_sl != old_sl
+        tp_changed = new_tp is not None and new_tp != old_tp
+
+        if (sl_changed or tp_changed) and self.broker.status.connected:
+            log.info("[%s] MODIFY position #%s — SL %s→%s  TP %s→%s  conf=%.3f",
+                     symbol, pos_id, old_sl, new_sl, old_tp, new_tp, new_conf)
+            print(f"[{symbol}→{broker_sym}] MODIFY #{pos_id}  "
+                  f"SL {old_sl}→{new_sl}  TP {old_tp}→{new_tp}  conf={new_conf:.3f}")
+            try:
+                mod_result = self.broker.modify_position(pos_id,
+                                                         stop_loss=new_sl,
+                                                         take_profit=new_tp)
+                print(f"[{symbol}→{broker_sym}] modify → {mod_result.get('status', mod_result)}")
+                # FIX-DEDUP: log modify event to Chronicle
+                if mod_result.get("status") == "modified":
+                    self._pos_log.log_modified(symbol, broker_sym, pos_id,
+                                               sl=new_sl or 0.0, tp=new_tp or 0.0)
+                return "modified"
+            except AttributeError:
+                log.warning("[%s] broker.modify_position() not available; "
+                            "SL/TP not updated (add it to MT5Broker)", symbol)
+                print(f"[{symbol}] WARNING: broker.modify_position() not implemented — "
+                      f"SL/TP not updated. Add modify_position(ticket, sl, tp) to MT5Broker.")
+                return "hold"
+            except Exception as exc:
+                log.warning("[%s] ERROR modifying position #%s: %s", symbol, pos_id, exc)
+                return "error"
+
+        # Signal agrees, SL/TP unchanged → just hold
+        log.info("[%s] HOLD existing %s position #%s — signal still %s  conf=%.3f",
+                 symbol, pos_dir.upper(), pos_id, new_dir.upper(), new_conf)
+        print(f"[{symbol}→{broker_sym}] HOLD existing {pos_dir.upper()} #{pos_id}  "
+              f"signal={new_dir.upper()}  conf={new_conf:.3f}")
+        return "hold"
+
     # ── the loop ──────────────────────────────────────────────────────────────
 
     def run(self, cycles: Optional[int] = None) -> None:
@@ -502,7 +696,8 @@ class LiveTrader:
                     f"\nCycle {cycle_label} done — scanned {summary['scanned']} symbols | "
                     f"{summary['trades']} trade(s) | {summary['holds']} hold | "
                     f"{summary['rejects']} reject | {summary['errors']} error | "
-                    f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped"
+                    f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
+                    f"{summary['managed']} managed"
                 )
 
                 # FIX-6: kill-switch check uses latched state
@@ -532,11 +727,22 @@ class LiveTrader:
         Scan every symbol once.  Never hangs — each oracle.act() call is wrapped
         in a daemon-thread timeout.
 
+        FIX-POS: Before opening any new position, check if one already exists
+        for that symbol.  If yes → re-analyse and manage (hold/modify/close).
+        If no → proceed with normal entry logic.
+        MAX_POSITIONS_PER_SYMBOL = 1 is enforced.
+
+        FIX-DEDUP: Before opening, also query Chronicle to check if the OTHER
+        script (mt5_demo_trader) has already opened a position for this symbol.
+        After a successful fill, log the opened event to Chronicle.
+
         Returns a summary dict:
-          scanned / trades / holds / rejects / errors / timeouts / unmapped / kill_switch
+          scanned / trades / holds / rejects / errors / timeouts / unmapped /
+          managed / kill_switch
         """
         summary = dict(scanned=0, trades=0, holds=0, rejects=0,
-                       errors=0, timeouts=0, unmapped=0, kill_switch=False)
+                       errors=0, timeouts=0, unmapped=0, managed=0,
+                       kill_switch=False)
 
         for symbol in self.symbols:
             # kill-switch check before each symbol (uses cached equity)
@@ -560,7 +766,33 @@ class LiveTrader:
 
             summary["scanned"] += 1
 
+            # ── FIX-POS: check for existing position FIRST ────────────────────
+            existing_pos = self._get_open_position(broker_sym)
+            if existing_pos is not None:
+                outcome = self._manage_existing_position(symbol, broker_sym, existing_pos)
+                summary["managed"] += 1
+                if outcome == "hold":
+                    summary["holds"] += 1
+                elif outcome in ("modified", "closed"):
+                    pass   # position managed; don't open a new one this cycle
+                else:
+                    summary["errors"] += 1
+                continue   # never open a new position on the same symbol this cycle
+            # ── end FIX-POS ───────────────────────────────────────────────────
+
+            # ── FIX-DEDUP: check Chronicle for cross-script open positions ────
+            if self._pos_log.has_open_position(symbol, broker_sym):
+                log.info("[%s] DEDUP: Chronicle shows another script has an open "
+                         "position — skipping new entry this cycle", symbol)
+                print(f"[{symbol}→{broker_sym}] DEDUP: Chronicle shows open position "
+                      f"from another trader — skipping entry (TRADER_ID={_TRADER_ID})")
+                summary["holds"] += 1
+                continue
+            # ── end FIX-DEDUP ─────────────────────────────────────────────────
+
             # ── 1. SIGNAL (with timeout) ──────────────────────────────────────
+            log.info("[%s] no open position — evaluating entry…", symbol)
+            print(f"[{symbol}→{broker_sym}] no open position — evaluating entry…")
             try:
                 sig, timed_out = _call_with_timeout(
                     lambda sym=symbol: self.oracle.act(
@@ -623,7 +855,6 @@ class LiveTrader:
             # FIX-9/11: build broker_plan with BOTH keys:
             #   "symbol"        = Oracle canonical name  (kept for learning loop + logging)
             #   "broker_symbol" = translated broker name (used by MT5Broker.place_order v2)
-            # Do NOT overwrite "symbol" — AdaptiveFusion.learn() and _open_context key on it.
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym   # FIX-11: separate key, not overwrite
 
@@ -638,6 +869,16 @@ class LiveTrader:
                 if res_status == "filled":
                     self._trades_this_session += 1
                     summary["trades"] += 1
+                    # FIX-DEDUP: log opened event to Chronicle so other script sees it
+                    ticket = result.get("order") or result.get("ticket") or 0
+                    self._pos_log.log_opened(
+                        symbol, broker_sym, ticket,
+                        direction=plan["direction"],
+                        volume=result.get("volume", plan.get("size", 0)),
+                        price=result.get("price", 0.0),
+                        sl=plan.get("stop", 0.0),
+                        tp=plan.get("target", 0.0),
+                    )
                 else:
                     # broker rejected (e.g. market closed, insufficient margin)
                     summary["rejects"] += 1

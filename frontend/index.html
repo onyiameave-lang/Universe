@@ -3,449 +3,419 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nexus Command Center — Universe Oracle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel='stylesheet' href='https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Orbitron:wght@700;900&display=swap'>
+<title>Universal Ecosystem — Command Center</title>
+<script src="shared/theme.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<link rel="stylesheet" href="shared/components.css">
 <style>
-:root {
-  --bg:#0A0C10;--card:#111318;--border:#1E2530;
-  --text:#E2E8F0;--muted:#94A3B8;--sub:#64748B;--accent:#6366F1;
+:root { --accent:#6366F1; --accent-rgb:99,102,241; }
+
+/* ── FULL-SCREEN CHAT LAYOUT ── */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
-[data-theme="light"] {
-  --bg:#F8FAFC;--card:#FFFFFF;--border:#E2E8F0;
-  --text:#0F172A;--muted:#475569;--sub:#94A3B8;
+
+/* ── HERO SECTION ── */
+#heroSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 24px;
+  gap: 20px;
+  overflow-y: auto;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden;transition:background .3s,color .3s;}
-body.page-transition-ready{opacity:0;transform:translateY(6px);transition:opacity .22s ease,transform .22s ease;}
-body.page-visible{opacity:1;transform:translateY(0);}
-body.page-leaving{opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease;}
+.hero-glyph { font-size: 52px; line-height: 1; }
+.hero-title { font-size: 32px; font-weight: 800; text-align: center; margin: 0; letter-spacing: -0.5px; }
+.hero-sub { font-size: 15px; color: var(--text-secondary); text-align: center; max-width: 560px; margin: 0; line-height: 1.6; }
 
-/* SIDEBAR */
-.sidebar{width:260px;min-width:260px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;}
-.sidebar-logo{padding:24px 20px 16px;border-bottom:1px solid var(--border);}
-.sidebar-logo .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
-.sidebar-logo .brand-icon{font-size:24px;}
-.sidebar-logo .brand-name{font-size:14px;font-weight:900;letter-spacing:3px;color:var(--accent);font-family:'Orbitron',sans-serif;}
-.sidebar-logo .brand-sub{font-size:11px;color:var(--muted);margin-left:34px;}
-.new-conv-btn{margin:16px 16px 8px;padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;width:calc(100% - 32px);display:flex;align-items:center;gap:8px;justify-content:center;transition:opacity .2s;}
-.new-conv-btn:hover{opacity:.85;}
-.sidebar-section{padding:8px 12px 4px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--sub);text-transform:uppercase;}
-.agent-nav{list-style:none;padding:0 8px;flex:1;overflow-y:auto;}
-.agent-nav li{margin:2px 0;}
-.agent-nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:13px;font-weight:500;transition:all .2s;position:relative;}
-.agent-nav a:hover{background:rgba(99,102,241,.08);color:var(--text);}
-.agent-nav a.active{background:rgba(99,102,241,.15);color:var(--accent);}
-.agent-nav .agent-icon{font-size:16px;width:20px;text-align:center;}
-.agent-nav .status-dot{width:7px;height:7px;border-radius:50%;margin-left:auto;flex-shrink:0;}
-.dot-green{background:#22C55E;box-shadow:0 0 6px #22C55E;}
-.dot-amber{background:#F59E0B;box-shadow:0 0 6px #F59E0B;}
-.dot-red{background:#EF4444;box-shadow:0 0 6px #EF4444;}
-.sidebar-footer{padding:16px;border-top:1px solid var(--border);}
-.sidebar-footer .sys-status{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
-.api-badge-sidebar{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-top:8px;}
-.api-online{background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);}
-.api-offline{background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);}
+/* Hero composer */
+.hero-composer-wrap {
+  width: 100%;
+  max-width: 720px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.hero-composer-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.12);
+}
+#heroInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  max-height: 160px;
+  overflow-y: auto;
+}
+#heroInput::placeholder { color: var(--text-muted); }
+#heroSend {
+  width: 38px; height: 38px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+#heroSend:hover { opacity: 0.85; }
+#heroSend:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* MAIN */
-.main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-.topbar{padding:0 24px;height:56px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card);flex-shrink:0;}
-.topbar-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:900;font-family:'Orbitron',sans-serif;letter-spacing:1px;}
-.topbar-right{display:flex;align-items:center;gap:12px;}
-.theme-toggle{background:var(--border);border:none;border-radius:20px;padding:6px 14px;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s;}
-.theme-toggle:hover{background:var(--accent);color:#fff;}
+/* Hint chips */
+.hero-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 720px;
+}
+.hero-hint-chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.hero-hint-chip:hover {
+  background: rgba(var(--accent-rgb),0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
-/* CHAT AREA */
-.chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.chat-messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;}
-.chat-messages::-webkit-scrollbar{width:4px;}
-.chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+/* Agent grid on hero */
+.hero-agents {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 900px;
+  margin-top: 8px;
+}
+.hero-agent-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.hero-agent-card:hover {
+  border-color: var(--agent-color, var(--accent));
+  background: rgba(var(--agent-rgb, var(--accent-rgb)),0.06);
+}
+.hero-agent-icon {
+  font-size: 22px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(var(--agent-rgb, var(--accent-rgb)),0.12);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.hero-agent-info { flex: 1; min-width: 0; }
+.hero-agent-name { font-weight: 700; font-size: 13px; }
+.hero-agent-role { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-agent-pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
 
-/* STARTER */
-.starter-area{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:24px;padding:40px;}
-.starter-logo{font-size:48px;}
-.starter-title{font-size:26px;font-weight:900;color:var(--text);font-family:'Cinzel',serif;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#E2E8F0 60%,#6366F1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.starter-sub{font-size:14px;color:var(--muted);text-align:center;max-width:480px;line-height:1.6;}
-.starter-chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:600px;}
-.chip{padding:10px 18px;background:var(--card);border:1px solid var(--border);border-radius:20px;font-size:13px;color:var(--text);cursor:pointer;transition:all .2s;}
-.chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.08);}
+/* ── CONVERSATION SECTION ── */
+#convSection {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.conv-header {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.conv-header-title { font-weight: 700; font-size: 15px; }
+.conv-header-sub { font-size: 12px; color: var(--text-muted); }
+.conv-clear-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.conv-clear-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-/* MESSAGES */
-.msg{display:flex;gap:12px;max-width:900px;}
-.msg.user{flex-direction:row-reverse;align-self:flex-end;}
-.msg-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--border);}
-.msg.user .msg-avatar{background:var(--accent);}
-.msg-body{flex:1;}
-.msg-bubble{padding:14px 18px;border-radius:12px;font-size:14px;line-height:1.6;}
-.msg.user .msg-bubble{background:var(--accent);color:#fff;border-radius:12px 12px 4px 12px;}
-.msg.agent .msg-bubble{background:var(--card);border:1px solid var(--border);border-radius:12px 12px 12px 4px;}
-.msg-time{font-size:11px;color:var(--sub);margin-top:4px;}
-.msg.user .msg-time{text-align:right;}
+#convMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
 
-/* ROUTING PANEL */
-.routing-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:12px;}
-.routing-label{font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600;letter-spacing:.5px;}
-.routing-agents{display:flex;gap:10px;flex-wrap:wrap;}
-.routing-agent{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--muted);transition:all .4s;min-width:60px;}
-.routing-agent.active{border-color:var(--agent-color,var(--accent));color:var(--agent-color,var(--accent));background:rgba(99,102,241,.1);box-shadow:0 0 12px rgba(99,102,241,.2);}
-.routing-agent .r-icon{font-size:18px;}
+/* Conv messages */
+.conv-msg { display: flex; flex-direction: column; max-width: 80%; }
+.conv-msg.user { align-self: flex-end; align-items: flex-end; }
+.conv-msg.agent { align-self: flex-start; align-items: flex-start; }
+.conv-agent-label { font-size: 11px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.conv-bubble { padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; word-break: break-word; }
+.user-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.agent-bubble { background: var(--bg-elevated); color: var(--text-primary); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+.conv-msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
 
-/* SUB-CARDS */
-.sub-cards{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
-.sub-card{border-radius:10px;border-left:3px solid var(--agent-color,#6366F1);background:rgba(255,255,255,.03);padding:12px 16px;}
-.sub-card-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.sub-card-icon{font-size:14px;}
-.sub-card-name{font-size:12px;font-weight:700;color:var(--agent-color,#6366F1);letter-spacing:.5px;text-transform:uppercase;}
-.sub-card-body{font-size:13px;color:var(--text);line-height:1.55;}
-.nexus-synthesis{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:14px;color:var(--text);line-height:1.6;}
-.nexus-synthesis-label{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
-
-/* TYPING */
-.typing-dots{display:flex;gap:4px;align-items:center;padding:14px 18px;}
-.typing-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);animation:bounce .8s infinite;}
-.typing-dot:nth-child(2){animation-delay:.15s;}
-.typing-dot:nth-child(3){animation-delay:.3s;}
-@keyframes bounce{0%,80%,100%{transform:translateY(0);}40%{transform:translateY(-8px);}}
-
-/* INPUT */
-.chat-input-area{padding:16px 24px;border-top:1px solid var(--border);background:var(--card);flex-shrink:0;}
-.chat-input-wrap{display:flex;gap:12px;align-items:flex-end;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 16px;transition:border-color .2s;}
-.chat-input-wrap:focus-within{border-color:var(--accent);}
-.chat-input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:14px;font-family:inherit;resize:none;max-height:120px;line-height:1.5;}
-.chat-input::placeholder{color:var(--sub);}
-.send-btn{background:var(--accent);border:none;border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:16px;flex-shrink:0;transition:opacity .2s;}
-.send-btn:hover{opacity:.85;}
-.send-btn:disabled{opacity:.4;cursor:not-allowed;}
-.input-hint{font-size:11px;color:var(--sub);margin-top:8px;text-align:center;}
-
-/* AGENT STATUS GRID */
-.agent-status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
-.agent-status-tile{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--text);transition:all .2s;}
-.agent-status-tile:hover{border-color:var(--accent);background:rgba(99,102,241,.05);}
-.agent-status-tile.online{border-color:rgba(34,197,94,.25);}
-.agent-status-tile.offline{border-color:rgba(239,68,68,.25);}
-.tile-icon{font-size:18px;}
-.tile-info{flex:1;}
-.tile-name{font-size:12px;font-weight:700;color:var(--text);}
-.tile-status{font-size:10px;color:var(--muted);}
-.tile-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+/* Conv composer */
+.conv-composer-wrap {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+.conv-composer-inner {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  transition: border-color 0.2s;
+}
+.conv-composer-inner:focus-within { border-color: var(--accent); }
+#convInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+#convInput::placeholder { color: var(--text-muted); }
+#convSend {
+  width: 36px; height: 36px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+#convSend:hover { opacity: 0.85; }
+#convSend:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
 <body>
-<!-- SIDEBAR -->
-<aside class="sidebar">
-  <div class="sidebar-logo">
-    <div class="brand"><span class="brand-icon">🕸️</span><span class="brand-name">ORACLE</span></div>
-    <div class="brand-sub">Universe Intelligence System</div>
-  </div>
-  <button class="new-conv-btn" onclick="clearChat()">✦ New Conversation</button>
-  <div class="sidebar-section">Agents</div>
-  <ul class="agent-nav" id="agentNav">
-    <li><a href="index.html" class="active"><span class="agent-icon">🕸️</span>Nexus Hub<span class="status-dot dot-green" id="dot-nexus"></span></a></li>
-    <li><a href="oracle.html"><span class="agent-icon">📈</span>Oracle<span class="status-dot dot-amber" id="dot-oracle"></span></a></li>
-    <li><a href="sentinel.html"><span class="agent-icon">📡</span>Sentinel<span class="status-dot dot-amber" id="dot-sentinel"></span></a></li>
-    <li><a href="pulse.html"><span class="agent-icon">💓</span>Pulse<span class="status-dot dot-amber" id="dot-pulse"></span></a></li>
-    <li><a href="atlas.html"><span class="agent-icon">🧭</span>Atlas<span class="status-dot dot-amber" id="dot-atlas"></span></a></li>
-    <li><a href="chronicle.html"><span class="agent-icon">📜</span>Chronicle<span class="status-dot dot-amber" id="dot-chronicle"></span></a></li>
-    <li><a href="nexus.html"><span class="agent-icon">⚡</span>System Health<span class="status-dot dot-amber" id="dot-system"></span></a></li>
-    <li><a href="forge.html"><span class="agent-icon">⚒️</span>Forge<span class="status-dot dot-amber" id="dot-forge"></span></a></li>
-    <li><a href="genesis.html"><span class="agent-icon">⚗️</span>Genesis<span class="status-dot dot-amber" id="dot-genesis"></span></a></li>
-    <li><a href="aegis.html"><span class="agent-icon">🛡️</span>Aegis<span class="status-dot dot-amber" id="dot-aegis"></span></a></li>
-  </ul>
-  <div class="sidebar-footer">
-    <div class="sys-status" id="sysStatus">Connecting to backend…</div>
-    <span id="apiStatusBadge" class="api-badge-sidebar api-offline">⏳ Connecting…</span>
-  </div>
-</aside>
+<div class="page-shell">
 
-<!-- MAIN -->
-<div class="main">
-  <div class="topbar">
-    <div class="topbar-title">🕸️ <span>NEXUS COMMAND CENTER</span></div>
-    <div class="topbar-right">
-      <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">🌌</span>
+    <span class="topbar-brand">UNIVERSAL ECOSYSTEM</span>
+    <span class="topbar-divider"></span>
+    <div class="topbar-tabs">
+      <a href="index.html"     class="topbar-tab active">🌌 Home</a>
+      <a href="oracle.html"    class="topbar-tab">📈 Oracle</a>
+      <a href="atlas.html"     class="topbar-tab">🗺️ Atlas</a>
+      <a href="sentinel.html"  class="topbar-tab">📡 Sentinel</a>
+      <a href="pulse.html"     class="topbar-tab">💓 Pulse</a>
+      <a href="chronicle.html" class="topbar-tab">📜 Chronicle</a>
+      <a href="aegis.html"     class="topbar-tab">🛡️ Aegis</a>
+      <a href="forge.html"     class="topbar-tab">⚙️ Forge</a>
+      <a href="genesis.html"   class="topbar-tab">🌱 Genesis</a>
     </div>
   </div>
+  <div class="topbar-right">
+    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
+  </div>
+</nav>
 
-  <div class="chat-area">
-    <div class="chat-messages" id="chatMessages">
-      <!-- Starter screen -->
-      <div class="starter-area" id="starterArea">
-        <div class="starter-logo">🕸️</div>
-        <div class="starter-title">Universe Oracle</div>
-        <div class="starter-sub">The Nexus orchestrates all 9 agents. Ask anything — Nexus routes your query to the right agents and synthesizes their responses.</div>
-        <!-- Live agent status grid -->
-        <div class="agent-status-grid" id="agentStatusGrid">
-          <div class="agent-status-tile" style="grid-column:1/-1;justify-content:center;color:var(--muted);font-size:12px">⏳ Loading agent status…</div>
-        </div>
-        <div class="starter-chips">
-          <div class="chip" onclick="sendMessage('What is the current trading signal for EURUSD?')">📈 EURUSD signal</div>
-          <div class="chip" onclick="sendMessage('What news is moving the markets right now?')">📡 Market news</div>
-          <div class="chip" onclick="sendMessage('What is the social sentiment on BTCUSD?')">💓 BTC sentiment</div>
-          <div class="chip" onclick="sendMessage('Are there any high-impact economic events today?')">🧭 Economic events</div>
-          <div class="chip" onclick="sendMessage('What patterns has Chronicle found recently?')">📜 Memory patterns</div>
-          <div class="chip" onclick="sendMessage('What is the system health status of all agents?')">⚡ System health</div>
-          <div class="chip" onclick="sendMessage('What is the current model accuracy from Forge?')">⚒️ Model accuracy</div>
-          <div class="chip" onclick="sendMessage('Are there any constitutional violations or security alerts?')">🛡️ Security audit</div>
-        </div>
-      </div>
+<!-- HERO SECTION -->
+<div id="heroSection">
+  <div class="hero-glyph">🌌</div>
+  <h1 class="hero-title">Universal Ecosystem</h1>
+  <p class="hero-sub">Nine specialized AI agents working in concert. Ask anything — Nexus routes your query to the right expert.</p>
+
+  <div class="hero-composer-wrap">
+    <textarea id="heroInput" placeholder="Ask the ecosystem anything… e.g. 'query what are Oracle's current signals'" rows="1"></textarea>
+    <button id="heroSend">➤</button>
+  </div>
+
+  <div class="hero-hints">
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what are the current trading signals')">📈 Trading signals</span>
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('report latest market news')">📰 Latest news</span>
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what is the social sentiment on Bitcoin')">💬 Social sentiment</span>
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query system health status')">⚡ System health</span>
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what is the current strategy')">🌱 Strategy</span>
+    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what do you remember about last week')">📜 Memory</span>
+  </div>
+
+  <!-- Agent cards -->
+  <div class="hero-agents" id="agentGrid">
+    <a href="oracle.html"    class="hero-agent-card" style="--agent-color:#10B981;--agent-rgb:16,185,129">
+      <div class="hero-agent-icon">📈</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Oracle</div><div class="hero-agent-role">Prediction Engine</div></div>
+      <span class="hero-agent-pill" id="pill-oracle">…</span>
+    </a>
+    <a href="atlas.html"     class="hero-agent-card" style="--agent-color:#0EA5E9;--agent-rgb:14,165,233">
+      <div class="hero-agent-icon">🗺️</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Atlas</div><div class="hero-agent-role">Research Engine</div></div>
+      <span class="hero-agent-pill" id="pill-atlas">…</span>
+    </a>
+    <a href="chronicle.html" class="hero-agent-card" style="--agent-color:#8B5CF6;--agent-rgb:139,92,246">
+      <div class="hero-agent-icon">📜</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Chronicle</div><div class="hero-agent-role">Memory Engine</div></div>
+      <span class="hero-agent-pill" id="pill-chronicle">…</span>
+    </a>
+    <a href="aegis.html"     class="hero-agent-card" style="--agent-color:#F97316;--agent-rgb:249,115,22">
+      <div class="hero-agent-icon">🛡️</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Aegis</div><div class="hero-agent-role">Governance</div></div>
+      <span class="hero-agent-pill" id="pill-aegis">…</span>
+    </a>
+    <a href="sentinel.html"  class="hero-agent-card" style="--agent-color:#F59E0B;--agent-rgb:245,158,11">
+      <div class="hero-agent-icon">📡</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Sentinel</div><div class="hero-agent-role">News Intelligence</div></div>
+      <span class="hero-agent-pill" id="pill-sentinel">…</span>
+    </a>
+    <a href="forge.html"     class="hero-agent-card" style="--agent-color:#64748B;--agent-rgb:100,116,139">
+      <div class="hero-agent-icon">⚙️</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Forge</div><div class="hero-agent-role">Automation</div></div>
+      <span class="hero-agent-pill" id="pill-forge">…</span>
+    </a>
+    <a href="genesis.html"   class="hero-agent-card" style="--agent-color:#14B8A6;--agent-rgb:20,184,166">
+      <div class="hero-agent-icon">🌱</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Genesis</div><div class="hero-agent-role">Strategy Engine</div></div>
+      <span class="hero-agent-pill" id="pill-genesis">…</span>
+    </a>
+    <a href="pulse.html"     class="hero-agent-card" style="--agent-color:#EC4899;--agent-rgb:236,72,153">
+      <div class="hero-agent-icon">💓</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Pulse</div><div class="hero-agent-role">Social Sentiment</div></div>
+      <span class="hero-agent-pill" id="pill-pulse">…</span>
+    </a>
+    <a href="nexus.html"     class="hero-agent-card" style="--agent-color:#6366F1;--agent-rgb:99,102,241">
+      <div class="hero-agent-icon">⚡</div>
+      <div class="hero-agent-info"><div class="hero-agent-name">Nexus</div><div class="hero-agent-role">Coordinator Hub</div></div>
+      <span class="hero-agent-pill" id="pill-nexus">…</span>
+    </a>
+  </div>
+</div>
+
+<!-- CONVERSATION SECTION (shown after first message) -->
+<div id="convSection">
+  <div class="conv-header">
+    <span style="font-size:20px">⚡</span>
+    <div>
+      <div class="conv-header-title">Nexus — Universal Hub</div>
+      <div class="conv-header-sub">Routes your query to the right agent</div>
     </div>
-
-    <div class="chat-input-area">
-      <div class="chat-input-wrap">
-        <textarea id="chatInput" class="chat-input" placeholder="Ask the Nexus anything — it routes to the right agents…" rows="1"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage(this.value.trim());}
-          this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
-        <button class="send-btn" id="sendBtn" onclick="sendMessage(document.getElementById('chatInput').value.trim())">➤</button>
-      </div>
-      <div class="input-hint">Nexus routes your query to the right agents · <span id="agentCountHint">connecting…</span></div>
+    <button class="conv-clear-btn" onclick="window._hub&&window._hub.clearSession()">✕ New conversation</button>
+  </div>
+  <div id="convMessages"></div>
+  <div class="conv-composer-wrap">
+    <div class="conv-composer-inner">
+      <textarea id="convInput" placeholder="Continue the conversation…" rows="1"></textarea>
+      <button id="convSend">➤</button>
     </div>
   </div>
 </div>
 
-<script src="api-config.js"></script>
+</div><!-- .page-shell -->
+
+<div id="toast-container"></div>
+
+<script src="shared/config.js"></script>
+<script src="shared/api.js"></script>
+<script src="shared/chat.js"></script>
+<script src="shared/notifications.js"></script>
 <script>
-/* index.html — API-connected Nexus Command Center (v7)
- * Destination: shared/frontend/index.html (or project root frontend/)
- *
- * Architecture:
- *   - Fetches /agents on load to show live agent status grid
- *   - Chat sends to /agents/nexus/query (Nexus orchestrates)
- *   - Falls back to querying individual agents if nexus is offline
- *   - Auto-refreshes agent status every 60s
- */
+const ALL_AGENTS = ['nexus','oracle','atlas','chronicle','aegis','sentinel','forge','genesis','pulse'];
 
-// ── Theme ────────────────────────────────────────────────────────────────────
-function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.getElementById('themeBtn').textContent = isDark ? '🌙 Dark' : '☀️ Light';
-  localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-(function() {
-  const saved = localStorage.getItem('theme') ?? 'dark';
-  document.documentElement.setAttribute('data-theme', saved);
-  document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️ Light' : '🌙 Dark';
-  });
-})();
-
-// ── Page transitions ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  document.body.classList.add('page-transition-ready');
-  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add('page-visible')));
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('a[href]');
-    if (!link) return;
-    const href = link.getAttribute('href');
-    if (!href || href.startsWith('http') || href.startsWith('#')) return;
-    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-    e.preventDefault();
-    document.body.classList.remove('page-visible');
-    document.body.classList.add('page-leaving');
-    setTimeout(() => { window.location.href = href; }, 220);
-  });
-});
-
-// ── Agent metadata ───────────────────────────────────────────────────────────
-const AGENTS_META = [
-  { id: 'oracle',    icon: '📈', name: 'Oracle',    color: '#22C55E', desc: 'Trading signals' },
-  { id: 'sentinel',  icon: '📡', name: 'Sentinel',  color: '#F59E0B', desc: 'News intelligence' },
-  { id: 'pulse',     icon: '💓', name: 'Pulse',     color: '#EC4899', desc: 'Social sentiment' },
-  { id: 'atlas',     icon: '🧭', name: 'Atlas',     color: '#06B6D4', desc: 'Research engine' },
-  { id: 'chronicle', icon: '📜', name: 'Chronicle', color: '#8B5CF6', desc: 'Memory engine' },
-  { id: 'nexus',     icon: '⚡', name: 'Nexus',     color: '#6366F1', desc: 'Coordination hub' },
-  { id: 'forge',     icon: '⚒️', name: 'Forge',     color: '#F97316', desc: 'Training engine' },
-  { id: 'genesis',   icon: '⚗️', name: 'Genesis',   color: '#10B981', desc: 'Agent creation' },
-  { id: 'aegis',     icon: '🛡️', name: 'Aegis',     color: '#EAB308', desc: 'Governance' },
-];
-
-// ── Agent status grid ────────────────────────────────────────────────────────
+// ── AGENT STATUS PILLS ──
 async function loadAgentStatus() {
-  const agents = await apiGet(API.agents);
-  const grid = document.getElementById('agentStatusGrid');
-  const sysStatus = document.getElementById('sysStatus');
-  const hint = document.getElementById('agentCountHint');
-
+  const agents = await fetchAgents();
   if (!agents) {
-    grid.innerHTML = '<div class="agent-status-tile offline" style="grid-column:1/-1;justify-content:center;color:#EF4444;font-size:12px">⚠️ Backend offline — start the FastAPI server at localhost:8000</div>';
-    sysStatus.textContent = 'Backend offline';
-    hint.textContent = 'backend offline';
-    // Update all sidebar dots to red
-    AGENTS_META.forEach(a => {
-      const dot = document.getElementById(`dot-${a.id}`);
-      if (dot) { dot.className = 'status-dot dot-red'; }
+    ALL_AGENTS.forEach(id => {
+      const pill = document.getElementById('pill-' + id);
+      if (pill) { pill.textContent = 'Offline'; pill.style.color = '#EF4444'; }
     });
-    document.getElementById('dot-system').className = 'status-dot dot-red';
     return;
   }
-
-  const onlineIds = new Set(agents.map(a => a.id));
-  const count = agents.length;
-  sysStatus.textContent = `${count}/${AGENTS_META.length} agents online`;
-  hint.textContent = `${count} agents online`;
-
-  // Update sidebar dots
-  AGENTS_META.forEach(a => {
-    const dot = document.getElementById(`dot-${a.id}`);
-    if (dot) dot.className = `status-dot ${onlineIds.has(a.id) ? 'dot-green' : 'dot-red'}`;
+  const onlineSet = new Set(
+    Array.isArray(agents)
+      ? agents.map(a => (a.id || a.name || '').toLowerCase())
+      : Object.keys(agents)
+  );
+  ALL_AGENTS.forEach(id => {
+    const pill = document.getElementById('pill-' + id);
+    if (!pill) return;
+    const online = onlineSet.has(id);
+    pill.textContent = online ? 'Online' : 'Offline';
+    pill.style.color = online ? '#10B981' : '#EF4444';
   });
-  document.getElementById('dot-system').className = 'status-dot dot-green';
-
-  // Render status grid
-  grid.innerHTML = AGENTS_META.map(a => {
-    const online = onlineIds.has(a.id);
-    const agentData = agents.find(ag => ag.id === a.id);
-    return `<a href="${a.id === 'nexus' ? 'nexus.html' : a.id + '.html'}" class="agent-status-tile ${online ? 'online' : 'offline'}" style="--agent-color:${a.color}">
-      <span class="tile-icon">${a.icon}</span>
-      <div class="tile-info">
-        <div class="tile-name">${a.name}</div>
-        <div class="tile-status">${online ? (agentData?.lifecycle_status ?? 'active') : 'offline'}</div>
-      </div>
-      <div class="tile-dot" style="background:${online ? '#22C55E' : '#EF4444'};box-shadow:0 0 6px ${online ? '#22C55E' : '#EF4444'}"></div>
-    </a>`;
-  }).join('');
 }
 
-// ── Chat ─────────────────────────────────────────────────────────────────────
-let chatHistory = [];
-let isThinking = false;
-
-function clearChat() {
-  chatHistory = [];
-  const msgs = document.getElementById('chatMessages');
-  msgs.innerHTML = '';
-  // Re-show starter
-  const starter = document.createElement('div');
-  starter.className = 'starter-area';
-  starter.id = 'starterArea';
-  starter.innerHTML = document.querySelector('.starter-area')?.innerHTML ?? '';
-  msgs.appendChild(starter);
+// ── HERO CHAT ──
+document.addEventListener('DOMContentLoaded', () => {
+  const hub = new HeroChatManager({ agentId: 'nexus' });
+  window._hub = hub;
   loadAgentStatus();
-}
-
-function addMessage(role, content, time) {
-  const starter = document.getElementById('starterArea');
-  if (starter) starter.remove();
-
-  const msgs = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  const t = time ?? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (role === 'user') {
-    div.innerHTML = `<div class="msg-avatar">👤</div><div class="msg-body"><div class="msg-bubble">${content}</div><div class="msg-time">${t}</div></div>`;
-  } else {
-    div.innerHTML = `<div class="msg-avatar">🕸️</div><div class="msg-body"><div class="msg-bubble">${content}</div><div class="msg-time">${t}</div></div>`;
-  }
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  return div;
-}
-
-function addTypingIndicator() {
-  const starter = document.getElementById('starterArea');
-  if (starter) starter.remove();
-  const msgs = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = 'msg agent';
-  div.id = 'typingIndicator';
-  div.innerHTML = `<div class="msg-avatar">🕸️</div><div class="msg-body"><div class="msg-bubble"><div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div></div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function removeTypingIndicator() {
-  document.getElementById('typingIndicator')?.remove();
-}
-
-// Build a routing panel HTML showing which agents are being consulted
-function buildRoutingPanel(agentIds) {
-  const agents = agentIds.map(id => AGENTS_META.find(a => a.id === id) ?? { id, icon: '🤖', name: id, color: '#6366F1' });
-  return `<div class="routing-panel">
-    <div class="routing-label">⚡ NEXUS ROUTING — Consulting ${agents.length} agent${agents.length !== 1 ? 's' : ''}</div>
-    <div class="routing-agents">
-      ${agents.map(a => `<div class="routing-agent active" style="--agent-color:${a.color}"><span class="r-icon">${a.icon}</span>${a.name}</div>`).join('')}
-    </div>
-  </div>`;
-}
-
-// Determine which agents to route to based on query keywords
-function routeQuery(query) {
-  const q = query.toLowerCase();
-  const routes = [];
-  if (/trade|signal|buy|sell|eurusd|gbpusd|usdjpy|xauusd|btcusd|forex|position|equity|portfolio/.test(q)) routes.push('oracle');
-  if (/news|headline|event|fed|ecb|boj|inflation|cpi|nfp|gdp|breaking/.test(q)) routes.push('sentinel');
-  if (/social|sentiment|reddit|twitter|trending|mention|community|mood/.test(q)) routes.push('pulse');
-  if (/research|economic|calendar|risk|study|knowledge|gate|block/.test(q)) routes.push('atlas');
-  if (/memory|pattern|historical|chronicle|remember|past|record|nightly/.test(q)) routes.push('chronicle');
-  if (/system|health|agent|status|uptime|latency|bus|nexus|coordination/.test(q)) routes.push('nexus');
-  if (/model|training|accuracy|forge|retrain|dataset|epoch|loss/.test(q)) routes.push('forge');
-  if (/genesis|certif|blueprint|create|agent creation|hermes|sandbox/.test(q)) routes.push('genesis');
-  if (/aegis|compliance|violation|audit|kill switch|security|governance/.test(q)) routes.push('aegis');
-  // Default: route to nexus + oracle
-  if (!routes.length) routes.push('nexus', 'oracle');
-  return [...new Set(routes)];
-}
-
-async function sendMessage(text) {
-  if (!text || isThinking) return;
-  isThinking = true;
-  document.getElementById('chatInput').value = '';
-  document.getElementById('chatInput').style.height = 'auto';
-  document.getElementById('sendBtn').disabled = true;
-
-  addMessage('user', text);
-  chatHistory.push({ role: 'user', content: text });
-
-  addTypingIndicator();
-
-  // Determine routing
-  const routedAgents = routeQuery(text);
-  const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  // Try Nexus first (it orchestrates all agents)
-  const nexusResult = await apiPost(API.agentQuery('nexus'), { prompt: text }, 30000);
-
-  removeTypingIndicator();
-
-  if (nexusResult && nexusResult.response) {
-    // Nexus responded — show routing panel + response
-    const routingHtml = buildRoutingPanel(routedAgents);
-    const responseHtml = `${routingHtml}<div class="nexus-synthesis-label">⚡ NEXUS SYNTHESIS</div>${nexusResult.response}`;
-    addMessage('agent', responseHtml, t);
-    chatHistory.push({ role: 'agent', content: nexusResult.response });
-  } else {
-    // Nexus offline — query individual agents in parallel
-    const results = await Promise.all(
-      routedAgents.map(async id => {
-        const r = await apiPost(API.agentQuery(id), { prompt: text }, 20000);
-        const meta = AGENTS_META.find(a => a.id === id) ?? { icon: '🤖', name: id, color: '#6366F1' };
-        return { meta, response: r?.response ?? null };
-      })
-    );
-
-    const online = results.filter(r => r.response);
-    if (!online.length) {
-      addMessage('agent', '⚠️ All agents are offline. Start the FastAPI server at <code>localhost:8000</code> with <code>uvicorn api:app --host 0.0.0.0 --port 8000</code>', t);
-    } else {
-      const routingHtml = buildRoutingPanel(online.map(r => r.meta.id));
-      const subCards = online.map(r => `<div class="sub-card" style="--agent-color:${r.meta.color}">
-        <div class="sub-card-header"><span class="sub-card-icon">${r.meta.icon}</span><span class="sub-card-name">${r.meta.name}</span></div>
-        <div class="sub-card-body">${r.response}</div>
-      </div>`).join('');
-      addMessage('agent', `${routingHtml}<div class="sub-cards">${subCards}</div>`, t);
-    }
-  }
-
-  isThinking = false;
-  document.getElementById('sendBtn').disabled = false;
-}
-
-// ── Init ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadAgentStatus();
   setInterval(loadAgentStatus, 60_000);
+  startConnectionPolling(30_000);
 });
 </script>
-</body></html>
+</body>
+</html>

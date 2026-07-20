@@ -220,6 +220,74 @@ async def query_agent(name: str, request: Request):
         add_log(name, "error", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── NEW: /agents/{name}/chat  (used by all frontend chat panels) ──────────
+@app.post("/agents/{name}/chat")
+async def chat_agent(name: str, request: Request):
+    """Natural-language chat with any agent.
+    Accepts: {"message": "user text"}  OR  {"prompt": "user text"}
+    Returns: {"response": "agent reply"}
+    """
+    if name not in AGENTS:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    data = await request.json()
+    message = data.get("message") or data.get("prompt", "")
+    add_log(name, "chat", f"Chat: {message[:80]}")
+
+    agent = AGENTS[name]
+    try:
+        # Try agent-specific chat tasks first, then fall back to user.query
+        CHAT_TASKS = {
+            "oracle":    "portfolio.status",
+            "sentinel":  "news.report",
+            "pulse":     "social.report",
+            "atlas":     "research.query",
+            "chronicle": "memory.query",
+            "nexus":     "ecosystem.status",
+            "forge":     "training.status",
+            "genesis":   "genesis.status",
+            "aegis":     "governance.status",
+        }
+        task = CHAT_TASKS.get(name, "user.query")
+        ctx  = {"query": message, "prompt": message, "_sender": "chat", "topics": [message]}
+
+        if hasattr(agent, "act"):
+            response = agent.act(task, ctx)
+        elif hasattr(agent, "execute"):
+            response = agent.execute(task, ctx)
+        else:
+            response = f"I'm {name}. I received your message: {message}"
+
+        add_log(name, "chat", "Chat response sent")
+        return {"response": response}
+    except Exception as e:
+        add_log(name, "error", str(e))
+        # Return a graceful error instead of 500 so the chat panel shows it
+        return {"response": f"⚠️ {name} encountered an error: {str(e)[:200]}"}
+
+
+# ── NEW: /agents/{name}/status  (used by all frontend status panels) ─────
+@app.get("/agents/{name}/status")
+async def agent_status(name: str):
+    """Return the live status dict from an agent's get_status() method."""
+    if name not in AGENTS:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    agent = AGENTS[name]
+    try:
+        if hasattr(agent, "get_status"):
+            return agent.get_status()
+        return {"name": name, "status": "active"}
+    except Exception as e:
+        return {"name": name, "status": "error", "error": str(e)}
+
+
+# ── NEW: /frontend static mount (fixes 404 on /frontend/index.html) ──────
+_frontend_dir = ROOT / "frontend"
+if _frontend_dir.exists():
+    app.mount("/frontend", StaticFiles(directory=str(_frontend_dir), html=True), name="static-frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

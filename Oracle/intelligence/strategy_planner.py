@@ -26,11 +26,18 @@ import random
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from intelligence.strategy_genome import (
-    StrategyGenome, MarketRegimeModule, TrendModule, MomentumModule,
-    VolatilityModule, EntryModule, ExitModule, RiskModule, PositionModule,
-    TradeManagementModule, ExecutionModule
-)
+try:
+    from intelligence.strategy_genome import (
+        StrategyGenome, MarketRegimeModule, TrendModule, MomentumModule,
+        VolatilityModule, EntryModule, ExitModule, RiskModule, PositionModule,
+        TradeManagementModule, ExecutionModule
+    )
+except ImportError:
+    from Oracle.intelligence.strategy_genome import (  # type: ignore
+        StrategyGenome, MarketRegimeModule, TrendModule, MomentumModule,
+        VolatilityModule, EntryModule, ExitModule, RiskModule, PositionModule,
+        TradeManagementModule, ExecutionModule
+    )
 
 log = logging.getLogger("oracle.planner")
 

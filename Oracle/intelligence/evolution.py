@@ -26,15 +26,38 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from intelligence.strategy_genome import (StrategyGenome, random_strategy, mutate_strategy, crossover_strategy)
-from intelligence.strategy_library import (
-    ALL_FAMILIES, TREND_INDICATORS, MOMENTUM_INDICATORS,
-    VOLATILITY_FILTERS, EXIT_STRATEGIES, select_family, generate_diverse_population,
-)
-from intelligence.technicals import analyze
-from intelligence.genome_validator import GenomeValidator, ValidationReport, EvolutionSummary
-from intelligence.certification_auditor import CertificationAuditor
-from core.backtester import Backtester
+# FIX: dual-import fallbacks so this file works whether Oracle/ is on sys.path
+# (standalone mt5_demo_trader run) or Oracle is loaded as a sub-package (api.py).
+try:
+    from intelligence.strategy_genome import (StrategyGenome, random_strategy, mutate_strategy, crossover_strategy)
+except ImportError:
+    from Oracle.intelligence.strategy_genome import (StrategyGenome, random_strategy, mutate_strategy, crossover_strategy)  # type: ignore
+try:
+    from intelligence.strategy_library import (
+        ALL_FAMILIES, TREND_INDICATORS, MOMENTUM_INDICATORS,
+        VOLATILITY_FILTERS, EXIT_STRATEGIES, select_family, generate_diverse_population,
+    )
+except ImportError:
+    from Oracle.intelligence.strategy_library import (  # type: ignore
+        ALL_FAMILIES, TREND_INDICATORS, MOMENTUM_INDICATORS,
+        VOLATILITY_FILTERS, EXIT_STRATEGIES, select_family, generate_diverse_population,
+    )
+try:
+    from intelligence.technicals import analyze
+except ImportError:
+    from Oracle.intelligence.technicals import analyze  # type: ignore
+try:
+    from intelligence.genome_validator import GenomeValidator, ValidationReport, EvolutionSummary
+except ImportError:
+    from Oracle.intelligence.genome_validator import GenomeValidator, ValidationReport, EvolutionSummary  # type: ignore
+try:
+    from intelligence.certification_auditor import CertificationAuditor
+except ImportError:
+    from Oracle.intelligence.certification_auditor import CertificationAuditor  # type: ignore
+try:
+    from core.backtester import Backtester
+except ImportError:
+    from Oracle.core.backtester import Backtester  # type: ignore
 
 log = logging.getLogger("oracle.evolution")
 

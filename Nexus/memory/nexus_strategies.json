@@ -99,18 +99,21 @@
         "fastest; single clear specialist"
       ],
       "reasons_against": [
-        "misses multi-domain nuance"
+        "misses multi-domain nuance",
+        "failed: no agent for general (repository=atlas)",
+        "failed: no agent for general (repository=atlas)",
+        "failed: SLA breach: atlas exceeded 90.0s"
       ],
-      "attempts": 1,
-      "successes": 1,
-      "failures": 0,
-      "last_outcome": "success",
-      "last_used": 1784149705.5802495,
+      "attempts": 8,
+      "successes": 5,
+      "failures": 3,
+      "last_outcome": "failure",
+      "last_used": 1784517276.4300327,
       "status": "candidate",
       "created_at": 1784149683.1987069,
       "lineage": null,
       "researched": true,
-      "confidence": 0.2065
+      "confidence": 0.3057
     },
     {
       "strategy_id": "strat-ea9e323f62",
@@ -123,13 +126,16 @@
         "grounded in prior knowledge"
       ],
       "reasons_against": [
-        "slightly slower"
+        "slightly slower",
+        "failed: no agent for general (repository=atlas)",
+        "failed: no agent for general (repository=atlas)",
+        "failed: SLA breach: atlas exceeded 90.0s"
       ],
-      "attempts": 0,
+      "attempts": 3,
       "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "failures": 3,
+      "last_outcome": "failure",
+      "last_used": 1784517410.6420915,
       "status": "candidate",
       "created_at": 1784149683.1997092,
       "lineage": null,
@@ -147,13 +153,16 @@
         "required for multi-domain queries; parallel + SLA-bounded"
       ],
       "reasons_against": [
-        "uses several agents"
+        "uses several agents",
+        "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed"
       ],
-      "attempts": 0,
+      "attempts": 3,
       "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "failures": 3,
+      "last_outcome": "failure",
+      "last_used": 1784517410.6420915,
       "status": "candidate",
       "created_at": 1784149683.20071,
       "lineage": null,
