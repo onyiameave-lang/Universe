@@ -6161,5 +6161,111 @@
     "parents": [
       "xov-ce86de"
     ]
+  },
+  "DJI::ranging": {
+    "symbol": "DJI",
+    "regime": "ranging",
+    "genome": {
+      "genome_id": "mut-494a62",
+      "generation": 14,
+      "parents": [
+        "xov-28e158"
+      ],
+      "fitness": 6.3007,
+      "backtests": 15,
+      "best_return": 0.0241,
+      "best_sharpe": 0.396,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "ema",
+          "params": {
+            "fast": 10,
+            "slow": 45
+          }
+        },
+        "momentum": {
+          "logic_type": "volume_momentum",
+          "params": {
+            "period": 20
+          }
+        },
+        "volatility": {
+          "logic_type": "historical_vol",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.275,
+            "regime_bonus": 0.101,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {
+            "slippage_pips": 1.4057353464629527
+          }
+        }
+      }
+    },
+    "in_sample": {
+      "return": 0.0241,
+      "fitness": 6.3007
+    },
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 3,
+      "win_rate": 0.667,
+      "total_return": 0.0074,
+      "final_equity": 10074.24,
+      "profit_factor": 1.742,
+      "max_drawdown": 0.01,
+      "sharpe_proxy": 0.244,
+      "sortino_proxy": 0.429,
+      "recovery_factor": 0.742,
+      "expectancy": 24.75,
+      "consistency": 0.667,
+      "avg_pnl": 24.75
+    },
+    "certified_at": 1784571743.1673515,
+    "generation": 14,
+    "parents": [
+      "xov-28e158"
+    ]
   }
 }
