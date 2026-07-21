@@ -90,8 +90,18 @@ class ResearchEngine:
     # ---- primary: investigate with automatic depth escalation ----
 
     def investigate(self, query: str, domain: str = "general", depth: str = "standard",
-                   sources: Optional[List[str]] = None, max_rounds: int = 3) -> Dict[str, Any]:
+                   sources: Optional[List[str]] = None, max_rounds: int = 1) -> Dict[str, Any]:
+        # FIX-ENG-V3-01: max_rounds default changed from 3 -> 1.
+        # The old default of 3 rounds caused 3 sequential gather() calls, each
+        # hitting Chronicle memories 3 times (logged as "Chronicle returned 3 prior
+        # memories" three times) and re-querying all sources. With sources.py's
+        # 25s deadline per gather(), 3 rounds = 75s minimum, far exceeding the
+        # 30s coordinator timeout. A single parallel gather() with all sources
+        # firing simultaneously is faster and produces equivalent results.
+        # Callers that need deeper research can pass max_rounds=2 explicitly.
+        # (Book II Principle V Graceful Degradation -- one good round > three slow ones.)
         started = time.time()
+        _investigate_deadline = started + 25.0  # FIX-ENG-V3-01: hard 25s wall clock
         report_id = f"rpt-{uuid.uuid4().hex[:10]}"
         prior = self._recall(query, domain)
 
@@ -103,6 +113,15 @@ class ResearchEngine:
 
         conf = {"confidence": 0.0, "factors": {}}
         for round_idx in range(min(max_rounds, len(depths) + 1)):
+            # FIX-ENG-V3-01: Check wall-clock budget before starting each round.
+            # If we're already past the deadline, return what we have rather than
+            # starting another expensive gather() call.
+            if time.time() > _investigate_deadline:
+                import logging
+                logging.getLogger("atlas.engine").info("atlas.engine: investigate() deadline hit after %d round(s) — "
+                         "returning %d items (Book II Principle V Graceful Degradation)",
+                         round_idx, len(all_evidence))
+                break
             round_depth = depths[min(round_idx, len(depths) - 1)]
             gathered = self.sources.gather(query, domain=domain, depth=round_depth, sources=sources)
             new_ev = gathered["evidence"]
@@ -165,7 +184,11 @@ class ResearchEngine:
         agreement = self.contradiction.analyze(all_evidence, claims_by_source)
 
         corpus = " ".join(e.text for e in all_evidence[:6])
-        summary = self._synthesize(query, corpus, agreement, domain, all_evidence[:6]) if corpus else ""
+        # FIX-ATL-DS-01: pass Chronicle's recalled memories as a SEPARATE stream so
+        # the synthesizer can enrich-if-relevant / ignore-if-not (dual-stream).
+        summary = (self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
+                                    chronicle_memories=prior)
+                   if corpus else "")
         key_terms = [k for k, _ in keywords(corpus, top_n=8)] if corpus else []
 
         findings = []
@@ -204,6 +227,29 @@ class ResearchEngine:
                   "duration_sec": round(time.time() - started, 2)}
         self._reports[report_id] = report
         self._preserve(report)
+
+        # FIX-ATL-DS-01: BACKGROUND relevance feedback TO Chronicle (non-blocking).
+        # The user NEVER waits for this -- it runs in a daemon thread AFTER the report
+        # is built. For each recalled memory it asks the local LLM whether the memory
+        # was relevant to the query, then sends the verdict TO Chronicle via
+        # chronicle.execute("memory.feedback", ...), which updates the memory's usage
+        # track record + stores a negative example so the SHARED memory learns for ALL
+        # agents. Feedback goes to Chronicle (the source of truth), NOT to a local
+        # Atlas JSON file. (Book I Article VII Collaboration; Book II Ch VI Memory
+        # Evolution; Book II Principle V Graceful Degradation -- best-effort, never fatal.)
+        if prior and self.chronicle is not None:
+            try:
+                import threading
+                threading.Thread(
+                    target=self._chronicle_feedback_loop,
+                    args=(query, list(prior), summary),
+                    daemon=True,
+                ).start()
+            except Exception as exc:
+                import logging
+                logging.getLogger("atlas.engine").warning(
+                    "atlas.engine: could not launch Chronicle feedback thread: %s", exc)
+
         return report
 
     # ---- FIX-P2-08: LLM-only fallback ----
@@ -224,9 +270,9 @@ class ResearchEngine:
                 system_prompt("atlas"),
                 f"Question: {query}\nDomain: {domain}\n\n"
                 f"All external research sources are currently unavailable (rate limited or DNS failure). "
-                f"Please answer this question directly from your training knowledge. "
-                f"Be accurate, concise (3-5 sentences), and note that this answer is not "
-                f"corroborated by external sources.",
+                f"Answer as accurately as you can, concise (3-5 sentences). "
+                f"If you are NOT confident of the facts, say so explicitly rather than guessing -- "
+                f"do NOT fabricate details. Note that this answer is not corroborated by external sources.",
                 temperature=0.2, max_tokens=400,
             )
             if r.ok and r.text.strip():
@@ -245,16 +291,74 @@ class ResearchEngine:
         return None
 
     def _synthesize(self, query: str, corpus: str, agreement: Dict, domain: str,
-                   documents: Optional[List[Any]] = None) -> str:
+                   documents: Optional[List[Any]] = None,
+                   chronicle_memories: Optional[List[Dict[str, Any]]] = None) -> str:
+        """
+        FIX-ATL-DS-01: DUAL-STREAM synthesis. The LLM receives TWO clearly separated,
+        labelled streams:
+
+          ATLAS SOURCES   -- fresh, authoritative research gathered this turn.
+          CHRONICLE MEMORIES -- what the shared memory recalled (may be irrelevant).
+
+        The prompt instructs the model to ENRICH the answer with a Chronicle memory
+        ONLY when it is genuinely about the question, and to IGNORE memories that are
+        not -- rather than the old approach of either blindly injecting them (which
+        poisoned answers, e.g. "aristotle" -> "an animal is a living organism") or
+        discarding them up front (which loses the enrichment when they ARE relevant).
+        Hard grounding constraints stop the local model from answering out of its
+        own training weights. temperature=0.1 keeps it faithful to the provided text.
+        (Book II Principle I Memory First; Book II Ch IV grounded synthesis;
+         Book II No Silent Failures.)
+        """
         if self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
-                r = self.llm.complete(system_prompt("atlas"),
-                    f"Question: {query}\nConsensus: {agreement.get('consensus')}\n"
-                    f"Dissent: {agreement.get('dissent', [])[:3]}\n\nCorpus:\n{corpus[:3000]}\n\n"
-                    f"Synthesize 3-4 sentences grounded in the corpus. State the consensus and, "
-                    f"if present, the genuine disagreement. Do not overstate certainty.",
-                    temperature=0.2, max_tokens=320)
+
+                # Build numbered ATLAS SOURCE blocks with clear document boundaries.
+                source_blocks: List[str] = []
+                for i, doc in enumerate(documents or [], start=1):
+                    src = getattr(doc, "source", "") or "source"
+                    title = (getattr(doc, "title", "") or "").strip()
+                    text = (getattr(doc, "text", "") or "").strip()
+                    url = getattr(doc, "url", "") or ""
+                    if not text:
+                        continue
+                    block = f"SOURCE {i} [{src}]\nTitle: {title}\n"
+                    if url:
+                        block += f"URL: {url}\n"
+                    block += f"Text: {text[:600]}"
+                    source_blocks.append(block)
+                if not source_blocks and corpus:
+                    source_blocks.append(f"SOURCE 1 [corpus]\nText: {corpus[:1800]}")
+                sources_section = "\n\n".join(source_blocks) if source_blocks else "(none)"
+
+                # Build CHRONICLE MEMORY blocks (separate stream, use-if-relevant).
+                mem_blocks: List[str] = []
+                for i, mem in enumerate(chronicle_memories or [], start=1):
+                    mtext = (mem.get("summary") or mem.get("answer")
+                             or str(mem.get("content", ""))).strip()
+                    if mtext:
+                        mem_blocks.append(f"MEMORY {i} [{mem.get('memory_id', '?')}]: {mtext[:400]}")
+                memories_section = "\n".join(mem_blocks) if mem_blocks else "(none)"
+
+                user_prompt = (
+                    f"Question: {query}\n\n"
+                    f"ATLAS SOURCES (fresh research -- authoritative):\n{sources_section}\n\n"
+                    f"CHRONICLE MEMORIES (from past queries -- use ONLY if relevant):\n"
+                    f"{memories_section}\n\n"
+                    f"Consensus (if computed): {agreement.get('consensus')}\n"
+                    f"Dissent (if any): {agreement.get('dissent', [])[:3]}\n\n"
+                    f"RULES:\n"
+                    f"- Answer ONLY using the ATLAS SOURCES and any RELEVANT CHRONICLE MEMORIES above.\n"
+                    f"- If a Chronicle memory is relevant to THIS question, incorporate it to ENRICH your answer.\n"
+                    f"- If a Chronicle memory is NOT about this question, IGNORE it completely.\n"
+                    f"- Do NOT use your own training knowledge; do NOT invent facts not present in the texts.\n"
+                    f"- If the texts do not contain enough to answer, say so explicitly.\n\n"
+                    f"Task: Write 3-4 sentences that directly answer the question, state the "
+                    f"consensus and any genuine disagreement, and do not overstate certainty."
+                )
+                r = self.llm.complete(system_prompt("atlas"), user_prompt,
+                                      temperature=0.1, max_tokens=320)
                 if r.ok and r.text.strip():
                     return r.text.strip()
             except Exception:
@@ -358,6 +462,158 @@ class ResearchEngine:
                 "claims": extract_claims(ev.text, max_claims=5),
                 "key_terms": [k for k, _ in keywords(ev.text, top_n=8)],
                 "relevance": ev.relevance, "source": ev.source, "url": url}
+
+    # ---- FIX-ATL-DS-01: fast Tier-1 cross-reference gather ----
+
+    def _quick_gather(self, query: str, domain: str = "general", max_sources: int = 5,
+                      timeout: float = 5.0) -> List[Evidence]:
+        """
+        Fast, shallow gather from the fastest available sources only -- used as a quick
+        cross-reference against Chronicle memories WITHOUT paying for a full 19-source
+        sweep. Adapts to whatever the SourceRegistry has registered (wikipedia,
+        hackernews, semantic_scholar, arxiv ... whichever exist). Best-effort: returns
+        whatever it gets within the budget, [] on any failure (graceful degradation).
+        """
+        try:
+            preferred = ["wikipedia", "duckduckgo", "simple_wikipedia", "wiktionary",
+                         "hackernews", "semantic_scholar", "arxiv"]
+            available = set(getattr(self.sources, "available_sources", lambda: [])() or [])
+            if not available:
+                # Fall back to registry keys if available_sources() is absent.
+                available = set(getattr(self.sources, "sources", {}) or {})
+            picked = [s for s in preferred if s in available][:max_sources] or None
+            gathered = self.sources.gather(query, domain=domain, depth="shallow", sources=picked)
+            return gathered.get("evidence", [])[:max_sources]
+        except Exception as exc:
+            import logging
+            logging.getLogger("atlas.engine").warning(
+                "atlas.engine: _quick_gather failed (non-fatal): %s", exc)
+            return []
+
+    # ---- FIX-ATL-DS-01: background relevance feedback TO Chronicle ----
+
+    def _chronicle_feedback_loop(self, query: str, memories: List[Dict[str, Any]],
+                                 answer: str) -> None:
+        """
+        Background RL loop (runs in a daemon thread; user never waits). For each memory
+        Chronicle recalled, ask the local LLM whether it was relevant to the query, then
+        TEACH Chronicle by calling chronicle.execute("memory.feedback", ...). Chronicle
+        uses that to reward/penalise the memory's confidence and store negative examples,
+        so the SHARED memory improves for every agent over time.
+        (Book I Article VII Collaboration; Book II Ch VI Memory Evolution.)
+        """
+        import logging
+        _log = logging.getLogger("atlas.engine")
+        for mem in memories:
+            mem_id = mem.get("memory_id", "")
+            mem_text = (mem.get("summary") or mem.get("answer")
+                        or str(mem.get("content", ""))).strip()
+            if not mem_id or not mem_text:
+                continue
+            relevant, reason = self._judge_relevance(query, mem_text, answer)
+            # FIX-ENG-V3-02: Skip feedback entirely when relevant=None (timeout/error).
+            # Sending feedback with relevant=True on timeout would wrongly reward bad
+            # memories. Neutral (no feedback) is the correct response to uncertainty.
+            if relevant is None:
+                _log.info("atlas.engine: skipping Chronicle feedback for %s (relevance unknown): %s",
+                          mem_id, reason)
+                continue
+            try:
+                self.chronicle.execute("memory.feedback", {
+                    "query": query, "memory_id": mem_id,
+                    "relevant": relevant, "reason": reason,
+                    "source_agent": "atlas", "_sender": "atlas",
+                })
+            except Exception as exc:
+                # Some Chronicle clients expose act()/handle() instead of execute().
+                sent = False
+                for meth in ("act", "handle"):
+                    fn = getattr(self.chronicle, meth, None)
+                    if callable(fn):
+                        try:
+                            if meth == "handle":
+                                fn({"task": "memory.feedback", "context": {
+                                    "query": query, "memory_id": mem_id,
+                                    "relevant": relevant, "reason": reason,
+                                    "source_agent": "atlas"}, "sender": "atlas"})
+                            else:
+                                fn("memory.feedback", {
+                                    "query": query, "memory_id": mem_id,
+                                    "relevant": relevant, "reason": reason,
+                                    "source_agent": "atlas", "_sender": "atlas"})
+                            sent = True
+                            break
+                        except Exception:
+                            continue
+                if not sent:
+                    _log.warning("atlas.engine: Chronicle feedback send failed for %s: %s",
+                                 mem_id, exc)
+
+    def _judge_relevance(self, query: str, memory_text: str, answer: str) -> tuple:
+        """
+        Quick local-LLM relevance judgement. Returns (relevant: bool|None, reason: str).
+
+        FIX-ENG-V3-02: On timeout or error, returns (None, reason) instead of
+        (True, "defaulted relevant"). The old default of True meant that when the
+        relevance-check LLM call timed out (common under load), the memory was
+        marked as relevant and its confidence was RAISED -- the opposite of what
+        we want. A bad memory that caused a timeout now gets NO feedback (neutral),
+        which is better than being wrongly rewarded.
+
+        The caller (_chronicle_feedback_loop) skips sending feedback to Chronicle
+        when relevant=None, so the memory's confidence is unchanged. Over time,
+        memories that consistently cause timeouts will neither be rewarded nor
+        penalised -- they'll stay at their current confidence until a successful
+        judgement is made.
+        (Book II No Silent Failures -- log the timeout; Book II Principle V
+        Graceful Degradation -- neutral is better than wrong.)
+        """
+        if self.llm is None or not getattr(self.llm, "has_any", False):
+            return None, "no-llm-available (skipping feedback)"
+        try:
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as _TE
+            prompt = (
+                f'Query: "{query}"\n'
+                f'Memory: "{memory_text[:300]}"\n\n'
+                f'Is this memory DIRECTLY relevant to answering the query? '
+                f'Reply with JSON only: {{"relevant": true/false, "reason": "brief"}}'
+            )
+
+            def _call():
+                # Prefer a JSON helper if the client has one; else parse from complete().
+                if hasattr(self.llm, "complete_json"):
+                    return self.llm.complete_json("", prompt, temperature=0.0,
+                                                  max_tokens=60, essential=False)
+                from shared.llm import system_prompt  # type: ignore
+                return self.llm.complete(system_prompt("atlas"), prompt,
+                                         temperature=0.0, max_tokens=60)
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                res = pool.submit(_call).result(timeout=3)
+
+            import json as _json
+            raw = res if isinstance(res, dict) else getattr(res, "text", "") or ""
+            if isinstance(raw, str):
+                start, end = raw.find("{"), raw.rfind("}")
+                data = _json.loads(raw[start:end + 1]) if start >= 0 and end > start else {}
+            else:
+                data = raw
+            relevant = bool(data.get("relevant", True))
+            reason = str(data.get("reason", ""))[:200]
+            return relevant, reason or ("relevant" if relevant else "judged irrelevant")
+        except _TE:
+            # FIX-ENG-V3-02: Return None (neutral) on timeout, not True (wrongly relevant).
+            import logging
+            logging.getLogger("atlas.engine").info(
+                "atlas.engine: relevance-check timed out for query=%r — skipping feedback "
+                "(neutral, not defaulting to relevant). FIX-ENG-V3-02.", query[:60])
+            return None, "relevance-check-timeout (skipped, not defaulted)"
+        except Exception as exc:
+            import logging
+            logging.getLogger("atlas.engine").info(
+                "atlas.engine: relevance-check error for query=%r: %s — skipping feedback. "
+                "FIX-ENG-V3-02.", query[:60], exc)
+            return None, f"relevance-check-error: {exc} (skipped, not defaulted)"
 
     def _recall(self, query, domain):
         if self.chronicle is None:

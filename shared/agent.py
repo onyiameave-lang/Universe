@@ -245,6 +245,24 @@ class BaseAgent(abc.ABC):
                 self._learn(problem_type, result.get("status", "complete"), True, context, "")
                 return result
 
+            # FIX-CA-32 (Phase 5j): Early exit on timeout/error
+            # If a strategy returned a timeout error (e.g. "timed out after 130s"),
+            # don't bother trying remaining strategies — they'll hit the same timeout
+            # or the dispatch cache and return the same error. Exit immediately.
+            if "timed out" in err.lower() or "timeout" in err.lower():
+                log.warning(
+                    "[nexus] Strategy '%s' timed out for %s=%r. Exiting early instead of "
+                    "trying remaining strategies. (Book II Principle V Graceful Degradation)",
+                    strategy.name, problem_type, context.get("query", "")[:80]
+                )
+                self._failed += 1
+                self._learn(problem_type, "timeout", False, context, "strategy timed out")
+                return {
+                    "status": "error", "problem_type": problem_type,
+                    "message": err or "Strategy timed out. Please try again.",
+                    "trace": trace,
+                }
+
             diag      = self.reasoning.diagnose_failure(strategy, context, error=err)
             variation = diag.get("variation") or {}
             trace[-1]["diagnosis"] = {

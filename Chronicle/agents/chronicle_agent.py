@@ -70,6 +70,15 @@ except Exception:
 
 log = logging.getLogger("chronicle")
 
+# FIX-CH-FB-01: process-wide lock + timestamp helper for the relevance-feedback ledger.
+import threading as _threading
+from datetime import datetime as _dt, timezone as _tz
+_FB_LOCK = _threading.Lock()
+
+
+def _fb_now() -> str:
+    return _dt.now(_tz.utc).isoformat()
+
 
 class ChronicleAgent(BaseAgent):
     name = "chronicle"
@@ -77,6 +86,7 @@ class ChronicleAgent(BaseAgent):
     domain = "memory"
     description = "Institutional, self-correcting memory and knowledge base."
     capabilities = ["memory.store", "memory.retrieve", "memory.search", "memory.answer",
+                    "memory.feedback",
                     "memory.evolve", "memory.validate", "knowledge_graph.connect",
                     "knowledge_graph.query", "contradiction.detect", "contradiction.adjudicate",
                     "belief.revise", "provenance.trace", "memory.rebalance",
@@ -94,6 +104,12 @@ class ChronicleAgent(BaseAgent):
         self.store = VectorStore(storage_dir=storage_dir)
         self.graph = KnowledgeGraph(storage_dir=storage_dir)
         self.retrieval = RetrievalEngine(self.store, self.graph)
+        # FIX-CH-FB-01: let retrieval consult stored negative feedback so a memory
+        # already judged irrelevant for a look-alike query is down-weighted.
+        try:
+            self.retrieval.penalty_fn = self.mismatch_penalty
+        except Exception:
+            pass
         self.anticipation = AnticipationEngine(self.store, storage_dir=storage_dir)
         self.consolidation = ConsolidationEngine(self.store, self.graph, llm=self.llm)
         self.improvement = ImprovementEngine(self.store, self.graph, reasoning=self.reasoning,
@@ -159,10 +175,29 @@ class ChronicleAgent(BaseAgent):
 
     def answer(self, query: str, requester: str = "unknown",
                domain: Optional[str] = None, top_k: int = 5) -> Dict[str, Any]:
+        """
+        FIX-CH-V3-01: answer() now returns raw memories IMMEDIATELY without calling
+        the LLM for synthesis. The previous implementation called self.think() (an
+        HTTP request to Gemini/Ollama) with a 6s ThreadPoolExecutor timeout, but the
+        log showed Chronicle taking 28-30s -- because the LLM connection was already
+        established (TCP connected) and the 6s timeout only bounded the READ phase,
+        not a slow streaming response. The ThreadPoolExecutor timeout fired at 6s but
+        the underlying thread kept running until the LLM responded at 28s, blocking
+        the executor shutdown.
+
+        Chronicle's constitutional role is FAST MEMORY RETRIEVAL, not synthesis.
+        Synthesis is Atlas's job (Book II Ch IV Research Before Assumption). Chronicle
+        should return its memories in <1s so Atlas can use them as context. The LLM
+        synthesis step was a misallocation of Chronicle's 10s SLA budget.
+
+        The returned memories are passed to Atlas's _synthesize() as the
+        CHRONICLE MEMORIES stream in the dual-stream prompt, where the LLM decides
+        whether each memory is relevant and incorporates it appropriately.
+        (Book II Principle I Memory First -- fast retrieval; Book II Principle V
+        Graceful Degradation -- Chronicle must stay within its 10s SLA.)
+        """
         # FIX-CH-03 (Phase 5g): Set socket timeout at the start of answer() as a
-        # defense-in-depth measure. socket.setdefaulttimeout(8) is already set at
-        # module level and in execute(), but re-setting here ensures it's active
-        # even if called directly (e.g. from tests or other agents).
+        # defense-in-depth measure.
         import socket as _sock
         _sock.setdefaulttimeout(5)
 
@@ -179,43 +214,146 @@ class ChronicleAgent(BaseAgent):
         if not memories:
             return {"status": "complete", "answer": None, "memories": [], "grounded": False,
                    "note": "No relevant memories; generation advised elsewhere."}
-        if self.has_brain:
-            ctx = "\n".join(f"- [{m['memory_id']}] {m['summary']}" for m in memories)
-            # FIX-CH-04 (Phase 5g): Wrap self.think() in a ThreadPoolExecutor with 6s timeout.
-            # self.think() makes an HTTP request to the LLM API. If the LLM is slow or
-            # unreachable, this call can block for 30-60s even with socket.setdefaulttimeout()
-            # set — because the socket is already CONNECTED (DNS resolved, TCP established)
-            # and the timeout only applies to the READ phase, not to a slow streaming response.
-            # The ThreadPoolExecutor timeout is the only reliable bound on this call.
-            from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
-            advice = None
+
+        # FIX-CH-V3-01: Return raw memories immediately. Do NOT call the LLM.
+        # The extractive answer (joining summaries) is fast and sufficient for
+        # Chronicle's role as a memory provider. Atlas will synthesize from these.
+        extractive = " ".join(m["summary"] for m in memories[:3])
+        return {"status": "complete", "answer": extractive, "memories": memories,
+                "grounded": True, "provider": "extractive",
+                "note": "Raw memories returned; synthesis delegated to requesting agent."}
+
+    # ---- relevance feedback: the RL learning loop (Book II Ch VI Memory Evolution) ----
+
+    def apply_relevance_feedback(self, query: str, memory_id: str, relevant: bool,
+                                 reason: str = "", source_agent: str = "unknown") -> Dict[str, Any]:
+        """
+        FIX-CH-FB-01: Receive relevance feedback about a retrieved memory from ANY
+        agent (Atlas, Oracle, ...) and USE it to learn, so future retrievals for the
+        whole ecosystem improve.
+
+        HOW CHRONICLE ACTUALLY LEARNS (not just logging):
+
+          1. record_use(successful=relevant) updates the memory's usage track record
+             (successful_uses / total_uses). This feeds directly into
+             MemoryRecord.compute_confidence() (usage_factor, weight 0.20), which in
+             turn drives RetrievalEngine._rank() (0.3 * confidence). So a memory
+             repeatedly judged IRRELEVANT loses confidence and sinks in ranking; one
+             judged RELEVANT gains confidence and rises. This is a real RL-style
+             reward/penalty on the retrieval policy, using the confidence machinery
+             that already governs ranking -- no parallel scoring system needed.
+
+          2. NEGATIVE EXAMPLES: an irrelevant (query, memory) pair is stored as a
+             structured 'relevance_feedback' memory (SOCIAL pillar). _mismatch_penalty()
+             (called from RetrievalEngine) reads these and down-weights a memory for a
+             NEW query that looks like a query the memory was already rejected for.
+             This is how Chronicle stops surfacing "animal" memories for "aristotle"
+             even before its confidence has fully decayed.
+
+          3. The feedback is also appended to a durable ledger on disk
+             (Chronicle/memory/relevance_feedback.json via the store's dir) so the
+             signal survives restarts and is auditable (Book II No Silent Failures).
+
+        Constitutional law: Book II Principle I Memory First; Ch VI Memory Evolution
+        ("knowledge is refined by use"); Ch VIII self-correction; Book I Article VII
+        Collaboration (agents teach the shared memory).
+        """
+        rec = self.store.get(memory_id)
+        applied = {"memory_id": memory_id, "found": rec is not None, "relevant": relevant}
+
+        # 1. Reward / penalise the memory's usage track record -> confidence -> ranking.
+        if rec is not None:
+            before = rec.confidence
+            rec.record_use(source_agent or "feedback", successful=bool(relevant))
+            # record_use alone can't push usage below the 0.5 neutral floor for a
+            # brand-new memory (success_rate*volume=0 -> exactly 0.5). To make negative
+            # feedback actually BITE (and positive feedback actually reward), apply an
+            # explicit, bounded confidence nudge on top and persist it. This is the RL
+            # reward signal made effective. (Book II Ch VI Memory Evolution.)
+            delta = 0.08 if relevant else -0.12
+            rec.confidence = round(min(max(rec.confidence + delta, 0.0), 1.0), 4)
+            self.store.update(rec)
+            # store.update() recomputes confidence from factors; re-apply the nudge so
+            # the earned adjustment survives (the nudge encodes verified relevance that
+            # the static factors cannot yet see).
+            rec.confidence = round(min(max(rec.confidence + delta, 0.0), 1.0), 4)
+            self.store._records[rec.memory_id] = rec  # persist the nudged value
             try:
-                with _TPE(max_workers=1) as _pool:
-                    _fut = _pool.submit(
-                        self.think,
-                        f"Question: {query}\n\nMemories:\n{ctx}\n\nAnswer using ONLY these, "
-                        f"cite ids, note gaps.",
-                        temperature=0.2,
-                        max_tokens=400,
-                    )
-                    advice = _fut.result(timeout=6)
-                    log.debug("[chronicle] answer: LLM think() returned in %.2fs for query=%r",
-                              _time.monotonic() - _t0, query)
-            except _TE:
-                log.warning(
-                    "[chronicle] answer: LLM think() timed out after 6s for query=%r — "
-                    "falling back to extractive answer. "
-                    "Constitutional: Book II Principle V Graceful Degradation.",
-                    query,
-                )
-                advice = None
-            except Exception as _exc:
-                log.warning("[chronicle] answer: LLM think() failed (%s) — falling back to extractive.", _exc)
-                advice = None
-            if advice:
-                return {"status": "complete", "answer": advice.strip(), "memories": memories, "grounded": True}
-        return {"status": "complete", "answer": " ".join(m["summary"] for m in memories[:3]),
-               "memories": memories, "grounded": True, "provider": "extractive"}
+                self.store._persist()
+            except Exception:
+                pass
+            applied["confidence_before"] = before
+            applied["confidence_after"] = rec.confidence
+
+        # 2. Persist a negative example so future look-alike queries are pre-filtered.
+        if not relevant:
+            try:
+                neg = MemoryRecord(
+                    pillar=MemoryPillar.SOCIAL, domain="feedback",
+                    content=f"Memory {memory_id} judged IRRELEVANT to query '{query}'. Reason: {reason}",
+                    summary=f"irrelevant:{query[:80]}",
+                    source_repository="chronicle", source_agent=source_agent,
+                    evidence=[reason] if reason else [],
+                    tags=["relevance_feedback", "negative", memory_id])
+                neg.embedding = self.embedder.encode(query)
+                self.store.add(neg)
+                applied["negative_example_stored"] = neg.memory_id
+            except Exception as exc:
+                log.warning("[chronicle] feedback: could not store negative example: %s", exc)
+
+        # 3. Durable, auditable ledger (survives restart) under Chronicle's own memory dir.
+        try:
+            self._append_feedback_ledger({
+                "query": query, "memory_id": memory_id, "relevant": bool(relevant),
+                "reason": reason, "source_agent": source_agent, "ts": _fb_now()})
+        except Exception as exc:
+            log.warning("[chronicle] feedback: ledger append failed: %s", exc)
+
+        log.info("[chronicle] relevance feedback from %s: memory=%s relevant=%s reason=%s",
+                 source_agent, memory_id, relevant, (reason or "")[:80])
+        return {"status": "complete", **applied}
+
+    def _append_feedback_ledger(self, entry: Dict[str, Any]) -> None:
+        """Append one feedback record to Chronicle/memory/relevance_feedback.json (thread-safe)."""
+        import json
+        from pathlib import Path as _P
+        # Chronicle's constitutional data dir is its own storage_dir (memory/), NOT Nexus/data.
+        ledger = _P(self.store.storage_dir) / "relevance_feedback.json"
+        with _FB_LOCK:
+            data: List[Dict[str, Any]] = []
+            if ledger.exists():
+                try:
+                    data = json.loads(ledger.read_text(encoding="utf-8"))
+                    if not isinstance(data, list):
+                        data = []
+                except Exception:
+                    data = []
+            data.append(entry)
+            if len(data) > 10000:
+                data = data[-10000:]
+            tmp = ledger.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(ledger)
+
+    def mismatch_penalty(self, query_embedding: List[float], memory_id: str,
+                         threshold: float = 0.6) -> float:
+        """
+        Read stored negative examples for this memory and return a penalty in [0,1]
+        if the CURRENT query closely resembles a query this memory was already judged
+        irrelevant for. Used by RetrievalEngine to down-weight known-bad matches.
+        """
+        try:
+            from core.embeddings import cosine_similarity  # type: ignore
+        except Exception:
+            return 0.0
+        penalty = 0.0
+        for rec in self.store.all():
+            if "negative" not in rec.tags or memory_id not in rec.tags or not rec.embedding:
+                continue
+            sim = cosine_similarity(query_embedding, rec.embedding)
+            if sim >= threshold:
+                penalty = max(penalty, min(0.6, sim))
+        return penalty
 
     # ---- reasoning strategy handlers ----
 
@@ -255,6 +393,13 @@ class ChronicleAgent(BaseAgent):
                                                            ctx.get("domain"), ctx.get("limit", 5))}
         if task == "memory.answer":
             return self.answer(ctx.get("query", ""), sender, ctx.get("domain"), ctx.get("limit", 5))
+        if task == "memory.feedback":
+            # FIX-CH-FB-01: any agent can teach Chronicle which retrieved memory was
+            # relevant / irrelevant to a query. This is the ecosystem-wide RL loop.
+            return self.apply_relevance_feedback(
+                query=ctx.get("query", ""), memory_id=ctx.get("memory_id", ""),
+                relevant=bool(ctx.get("relevant", False)), reason=ctx.get("reason", ""),
+                source_agent=ctx.get("source_agent", sender))
         if task == "contradiction.detect":
             return {"status": "complete", **self.contradiction.scan(
                 domain=ctx.get("domain"), auto_revise=ctx.get("auto_revise", False))}

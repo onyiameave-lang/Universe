@@ -249,6 +249,15 @@ class NexusAgent(BaseAgent):
                                         chronicle=chronicle_client, atlas=atlas_client, llm=self.llm)
         if chronicle_client is not None:
             self.registry.register("chronicle", chronicle_client)
+        # FIX-CA-31: Per-query dispatch cache — prevents the same (agent, query) from
+        # being dispatched multiple times within a single execute() call.
+        # The solve() loop tries 3 strategies; each calls _strat_direct() which calls
+        # the same agent. Without this cache, Sentinel (or any slow agent) gets
+        # dispatched 3 times for the same query, wasting 3x the time and API quota.
+        # Cleared at the start of every execute() call so it never leaks across queries.
+        # Constitutional: Book II Principle V Graceful Degradation — partial data from
+        # the first dispatch is always better than 3 identical failing dispatches.
+        self._dispatch_cache: Dict[tuple, Any] = {}
 
     def register_strategies(self) -> None:
         if self.reasoning is None:
@@ -581,24 +590,44 @@ class NexusAgent(BaseAgent):
         #            task variant gets the right data.
         topics = [symbol] if symbol and dispatch_domain in ("news", "social") else None
 
-        # BUG-N3 FIX: pass full context including domain, depth, memory_context
-        # BUG-N6 FIX: include memory_context so Atlas can use Chronicle prior knowledge
-        # FIX-CA-09: Wrap with timeout (30s per agent)
-        out = self._dispatch_with_timeout(
-            agent.name,
-            PRIMARY_TASK.get(agent.name, ""),
-            {
-                "query": raw_query,
-                "symbol": symbol,                    # FIX-CA-01 + FIX-CA-19
-                "topics": topics,                    # FIX-CA-20: for Sentinel/Pulse collectors
-                "domain": dispatch_domain,           # FIX-CA-02
-                "depth": c.get("depth", "standard"),
-                "user_id": c.get("user_id", "user"),
-                "memory_context": c.get("memory_context"),   # BUG-N6 FIX
-            },
-            priority=c.get("priority", 4),
-            timeout_sec=30,
-        )
+        # FIX-CA-31: Check per-query dispatch cache before calling the agent.
+        # If this (agent, query) pair was already dispatched in this execute() call,
+        # return the cached result immediately — no re-dispatch, no wasted time.
+        # This prevents the solve() 3-strategy loop from calling Sentinel 3 times
+        # for the same query when all 3 strategies resolve to the same agent.
+        _cache_key = (agent.name, raw_query)
+        if _cache_key in self._dispatch_cache:
+            cached_out = self._dispatch_cache[_cache_key]
+            log.info(
+                "_strat_direct: returning cached result for agent=%s query=%r "
+                "(preventing duplicate dispatch). Constitutional: Book II Principle V.",
+                agent.name, raw_query[:80],
+            )
+            # Re-run the promotion logic on the cached result so every strategy
+            # attempt gets the same treatment (complete/degraded vs error).
+            out = cached_out
+        else:
+            # BUG-N3 FIX: pass full context including domain, depth, memory_context
+            # BUG-N6 FIX: include memory_context so Atlas can use Chronicle prior knowledge
+            # FIX-CA-09: Wrap with timeout (30s per agent)
+            out = self._dispatch_with_timeout(
+                agent.name,
+                PRIMARY_TASK.get(agent.name, ""),
+                {
+                    "query": raw_query,
+                    "symbol": symbol,                    # FIX-CA-01 + FIX-CA-19
+                    "topics": topics,                    # FIX-CA-20: for Sentinel/Pulse collectors
+                    "domain": dispatch_domain,           # FIX-CA-02
+                    "depth": c.get("depth", "standard"),
+                    "user_id": c.get("user_id", "user"),
+                    "memory_context": c.get("memory_context"),   # BUG-N6 FIX
+                },
+                priority=c.get("priority", 4),
+                timeout_sec=30,
+            )
+            # FIX-CA-31: Store result in per-query cache so subsequent strategy
+            # attempts (memory_first, orchestrate) don't re-dispatch the same agent.
+            self._dispatch_cache[_cache_key] = out
 
         # BUG-N1 FIX: if Atlas returned status="error" but has a usable report,
         # promote it to "complete" with degraded=True rather than propagating
@@ -706,6 +735,10 @@ class NexusAgent(BaseAgent):
     # ---- BaseAgent contract ----
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        # FIX-CA-31: Clear per-query dispatch cache at the start of each execute() call.
+        # This ensures the cache is scoped to a single user query, not shared across
+        # different queries that happen to route to the same agent.
+        self._dispatch_cache = {}
         ctx = context
         priority = ctx.get("priority", self._priority(ctx.get("query", "")))
 

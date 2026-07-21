@@ -24,11 +24,38 @@ from core.vector_store import VectorStore                             # type: ig
 from core.knowledge_graph import KnowledgeGraph                       # type: ignore
 
 
+def _record_retrieval(rec, requester: str) -> None:
+    """
+    FIX-CH-FB-02: Register that a memory was RETRIEVED without asserting the
+    retrieval was successful. Increments total_uses (exposure) but leaves
+    successful_uses untouched, so an unverified retrieval no longer inflates
+    confidence. Real success is credited later by relevance feedback.
+    Falls back to the record's own record_use() if the fields differ.
+    """
+    import time as _t
+    try:
+        rec.total_uses += 1
+        if requester and requester not in rec.used_by:
+            rec.used_by.append(requester)
+        rec.updated_at = _t.time()
+        rec.compute_confidence()
+    except Exception:
+        try:
+            rec.record_use(requester, successful=True)
+        except Exception:
+            pass
+
+
 class RetrievalEngine:
     def __init__(self, store: VectorStore, graph: KnowledgeGraph):
         self.store = store
         self.graph = graph
         self.embedder = get_embedding_model()
+        # FIX-CH-FB-02: optional callback set by ChronicleAgent -> mismatch_penalty.
+        # Given (query_embedding, memory_id) it returns a penalty in [0,1] for
+        # memories previously judged irrelevant to a look-alike query. Kept as an
+        # attribute (not a ctor arg) so existing callers/tests remain compatible.
+        self.penalty_fn = None
 
     def retrieve(self, query: str, requester: str = "unknown", intent: str = "",
                  domain: Optional[str] = None, pillar: Optional[str] = None,
@@ -75,9 +102,31 @@ class RetrievalEngine:
         evolved = sum(1 for rec, _ in semantic if self.graph.neighbors(rec.memory_id, "supersedes"))
         trace["stage_5_evolution"] = {"evolved_memories": evolved}
 
-        ranked = self._rank(list(semantic) + related)
+        # FIX-CH-FB-02: apply negative-feedback penalty from prior relevance judgements
+        # so memories already rejected for a look-alike query are down-weighted BEFORE
+        # ranking, not just after their confidence slowly decays.
+        candidates = list(semantic) + related
+        if self.penalty_fn is not None:
+            adjusted = []
+            for rec, score in candidates:
+                try:
+                    pen = self.penalty_fn(q_emb, rec.memory_id)
+                except Exception:
+                    pen = 0.0
+                adjusted.append((rec, score * (1.0 - pen)))
+            candidates = adjusted
+        trace["stage_penalty"] = {"applied": self.penalty_fn is not None}
+
+        ranked = self._rank(candidates)
+        # FIX-CH-FB-02: Do NOT pre-reward retrieval as successful=True. The old code
+        # inflated successful_uses on EVERY retrieval -- relevant or not -- which raised
+        # confidence for bad matches and made Chronicle unable to learn. We now only
+        # register that the memory was RETRIEVED (total_uses via record_retrieval),
+        # leaving successful_uses to be set later by real relevance feedback
+        # (apply_relevance_feedback). Ranking/confidence thus reflect earned relevance.
+        # (Book II Ch VI Memory Evolution -- knowledge is refined by verified use.)
         for rec, _ in ranked[:top_k]:
-            rec.record_use(requester, successful=True)
+            _record_retrieval(rec, requester)
             self.store.update(rec)
 
         results = [{"memory_id": rec.memory_id,

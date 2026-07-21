@@ -26,7 +26,7 @@ New in this version (deep-fix):
      "full jitter" strategy that prevents synchronised retry waves.
 
   6. PROMPT DEDUP CACHE — identical (system, prompt, temperature, max_tokens) tuples within
-     LLM_CACHE_TTL_SEC (default 120 s) return the cached result with zero API calls.
+     LLM_CACHE_TTL_SEC (default 120 s) return the cached result with zero HTTP calls.
 
   7. STATS — llm.stats() now includes circuit_breaker_trips, skipped_non_essential,
      cache_hits, rate_limited_waits so you can observe the gate working.
@@ -40,6 +40,12 @@ Environment variables (all optional, safe defaults):
   CIRCUIT_BREAKER_COOLDOWN_SEC        float (default 60.0)
   LLM_PROVIDER_ORDER                  comma-separated (default "anthropic,openai,gemini")
   ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL
+  OLLAMA_TIMEOUT                      float (default 25.0) — per-request HTTP timeout for
+                                      Ollama. Was 120s, which caused Atlas to block for
+                                      75-95s past the coordinator's 30s hard timeout.
+                                      FIX-LLM-01: Reduced to 25s so Ollama calls always
+                                      complete (or fail) within the coordinator's budget.
+                                      Configurable via OLLAMA_TIMEOUT env var.
 """
 from __future__ import annotations
 
@@ -367,6 +373,21 @@ class OllamaProvider(_Provider):
     Local Ollama provider — uses raw urllib HTTP, no 'ollama' package needed.
     Enabled when OLLAMA_MODEL is set in .env (e.g. OLLAMA_MODEL=llama3).
     Ollama must be running: `ollama serve` (default port 11434).
+
+    FIX-LLM-01 (2026-07-21): Reduced per-request HTTP timeout from 120s to 25s.
+    ROOT CAUSE: The coordinator's _dispatch_with_timeout() enforces a 30s hard
+    limit on every agent call. Atlas's synthesis path calls self.llm.complete()
+    (Ollama) with a 120s urllib timeout. When Ollama is slow (large model, cold
+    start, or CPU-only inference), the Ollama call blocks for 75-95s — well past
+    the coordinator's 30s limit. The coordinator's outer ThreadPoolExecutor fires
+    at 30s and logs "Agent 'atlas' timed out after 75.23s (limit=30s)", but the
+    inner Ollama thread keeps running until urllib's 120s timeout fires, holding
+    the process hostage and consuming resources.
+    FIX: Reduced urllib timeout to 25s (5s margin under the 30s coordinator limit).
+    This ensures Ollama either responds or fails within the coordinator's budget.
+    Configurable via OLLAMA_TIMEOUT env var for operators with faster hardware.
+    Constitutional: Book II Principle V Graceful Degradation — a fast failure is
+    always better than a slow hang that blocks the entire pipeline.
     """
     name = "ollama"
 
@@ -374,6 +395,9 @@ class OllamaProvider(_Provider):
         # FIX-01: Re-read env vars at construction time (after load_dotenv)
         self._url   = os.getenv("OLLAMA_URL", "http://localhost:11434").strip()
         self._model = os.getenv("OLLAMA_MODEL", "").strip()
+        # FIX-LLM-01: Per-request timeout. Default 25s (5s under coordinator's 30s limit).
+        # Was 120s — caused Atlas to block for 75-95s past the coordinator's hard timeout.
+        self._timeout = float(os.getenv("OLLAMA_TIMEOUT", "25.0"))
         self._ok    = False
         if not self._model:
             return
@@ -423,7 +447,7 @@ class OllamaProvider(_Provider):
             method="POST",
         )
         try:
-            with _ur.urlopen(req, timeout=120.0) as resp:
+            with _ur.urlopen(req, timeout=self._timeout) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
         except _ue.URLError as exc:
             raise RuntimeError(f"Ollama unreachable at {self._url}: {exc}") from exc

@@ -33,6 +33,25 @@ FIX LOG (phase4-nexus-execution-v1  2026-07-21):
              can tune it without code changes.
              Constitutional law: Book II Principle V Graceful Degradation —
              SLA should not kill valid queries that are legitimately slow.
+
+FIX LOG (phase5-nexus-execution-v2  2026-07-21):
+  BUG-P5-01  AGENT_MIN_BUDGET["sentinel"] was missing entirely.
+             Sentinel fetches from 11+ RSS/API sources (Guardian, BBC, CNBC,
+             MarketWatch, FT, HackerNews, NewsAPI, etc.) and legitimately
+             needs 3-10 seconds to complete a gather pass.
+             Without a floor, Sentinel ran under PRIORITY_BUDGET[4] = 3.0s,
+             which it routinely exceeded by 0.5-2s, causing:
+               _strat_direct: sentinel returned error with no usable report.
+               msg=SLA breach: sentinel exceeded 3.0s
+             on EVERY call — even when Sentinel had 95 valid articles ready.
+             The coordinator then retried Sentinel 3 times (same result each
+             time), wasting ~9-12 seconds and returning nothing to the user.
+             FIX: Added AGENT_MIN_BUDGET["sentinel"] = 20.0 seconds.
+             20s is generous enough for all 11 sources to respond (or timeout
+             individually) while staying well within the coordinator's 30s
+             hard limit. Configurable via SENTINEL_SLA_BUDGET env var.
+             Constitutional law: Book II Principle V Graceful Degradation —
+             a 95-article result is not a failure; the SLA must not kill it.
 """
 from __future__ import annotations
 
@@ -62,7 +81,17 @@ PRIORITY_BUDGET = {1: 8.0, 2: 6.0, 3: 4.0, 4: 3.0, 5: 2.0}   # emergency..backgr
 # Configurable via ATLAS_SLA_BUDGET env var for operator tuning.
 # Constitutional law: Book II Principle V Graceful Degradation.
 _atlas_sla = float(os.getenv("ATLAS_SLA_BUDGET", "180.0"))
-AGENT_MIN_BUDGET = {"atlas": _atlas_sla}
+# FIX-P5-01: Sentinel fetches from 11+ sources and legitimately needs 3-10s.
+# Without this floor it ran under PRIORITY_BUDGET[4]=3.0s and breached SLA
+# on every call, causing a 3x retry loop that returned nothing to the user.
+# 20s floor keeps Sentinel well within the coordinator's 30s hard timeout.
+# Configurable via SENTINEL_SLA_BUDGET env var for operator tuning.
+# Constitutional law: Book II Principle V Graceful Degradation.
+_sentinel_sla = float(os.getenv("SENTINEL_SLA_BUDGET", "20.0"))
+AGENT_MIN_BUDGET = {
+    "atlas":    _atlas_sla,
+    "sentinel": _sentinel_sla,
+}
 
 
 class CircuitBreaker:

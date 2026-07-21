@@ -64,7 +64,9 @@ from typing import Any, Dict, List, Optional, Tuple
 log = logging.getLogger("atlas.sources")
 
 _USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
-_TIMEOUT = 12
+_TIMEOUT = 5   # FIX-SRC-V3-01: reduced from 12s -> 5s per-source HTTP timeout
+               # 12s * 3 sources = 36s just for one gather round; 5s keeps us under budget.
+               # (Book II Principle V Graceful Degradation -- fast fail, not slow hang.)
 
 
 def _build_ssl_context() -> Optional["ssl.SSLContext"]:
@@ -163,7 +165,7 @@ def _strip_html(html: str) -> str:
 # ============================================================
 
 def _gather_safe(src_name: str, gather_fn, query: str, limit: int,
-                 max_retries: int = 2) -> Tuple[List, str]:
+                 max_retries: int = 0) -> Tuple[List, str]:
     """
     Wraps a source's gather() call with:
       - Per-source minimum gap enforcement (FIX-P2-01)
@@ -171,6 +173,14 @@ def _gather_safe(src_name: str, gather_fn, query: str, limit: int,
       - DNS error graceful skip (FIX-P2-05)
       - 403 graceful skip — no retries (FIX-P2-04)
       - Per-source 120s cooldown after exhausting retries (FIX-P2-06)
+
+    FIX-SRC-V3-02: max_retries default changed from 2 -> 0.
+    With max_retries=2, a single 429 caused 3 attempts with exponential backoff
+    (1.4s + 3.1s + 6.6s) + 120s cooldown = 131s total, consuming the entire
+    30s coordinator budget. With max_retries=0, a 429 fails immediately and
+    the gather() moves on to the next source. Sources are plentiful; retrying
+    a rate-limited source is not worth the time budget.
+    (Book II Principle V Graceful Degradation -- skip fast, don't hang.)
 
     Returns (evidence_list, status_string).
     (Book II No Silent Failures — every outcome is named and logged.)
@@ -517,15 +527,19 @@ class SourceRegistry:
 
     # domain -> which sources are most appropriate (Atlas reasons over these)
     DOMAIN_SOURCES = {
-        "general": ["wikipedia", "semantic_scholar", "hackernews"],
-        "research": ["semantic_scholar", "arxiv", "pubmed", "crossref"],
-        "engineering": ["arxiv", "hackernews", "semantic_scholar"],
-        "trading": ["gdelt", "hackernews", "wikipedia"],
-        "prediction": ["gdelt", "hackernews", "wikipedia"],
-        "news": ["gdelt", "hackernews"],
-        "social": ["hackernews", "gdelt"],
-        "medicine": ["pubmed", "semantic_scholar"],
-        "science": ["arxiv", "semantic_scholar", "pubmed"],
+        "general":     ["wikipedia", "hackernews", "semantic_scholar"],
+        # FIX-SRC-V3-03: removed gdelt from general/engineering/science.
+        # GDELT returns HTTP 429 constantly and has SSL timeouts. Wikipedia is
+        # fast, free, and reliable -- it should be first for all general queries.
+        # GDELT is kept only for news/trading/prediction where it's the right tool.
+        "research":    ["semantic_scholar", "arxiv", "pubmed", "crossref"],
+        "engineering": ["wikipedia", "arxiv", "hackernews", "semantic_scholar"],
+        "trading":     ["gdelt", "hackernews", "wikipedia"],
+        "prediction":  ["gdelt", "hackernews", "wikipedia"],
+        "news":        ["gdelt", "hackernews"],
+        "social":      ["hackernews", "gdelt"],
+        "medicine":    ["pubmed", "semantic_scholar"],
+        "science":     ["wikipedia", "arxiv", "semantic_scholar", "pubmed"],
     }
 
     def __init__(self, chronicle_client=None):
@@ -580,7 +594,16 @@ class SourceRegistry:
         FIX-P2-06: Uses _gather_safe() for every source — rate limiting,
         backoff, and graceful error handling built in.
         FIX-P2-07: Checks Chronicle first (Memory First principle).
+        FIX-SRC-V3-04: Added 25s wall-clock deadline. gather() returns whatever
+        evidence it has collected when the deadline hits, rather than waiting for
+        all sources to complete. This prevents a slow source (GDELT SSL timeout,
+        semantic_scholar 429) from consuming the entire coordinator budget.
+        Individual source timeout is already 5s (_TIMEOUT), but the ThreadPoolExecutor
+        pool.map() call blocks until ALL futures complete. The deadline ensures we
+        return early with partial results rather than waiting for stragglers.
+        (Book II Principle V Graceful Degradation -- partial results > no results.)
         """
+        _gather_deadline = time.time() + 25.0  # FIX-SRC-V3-04: 25s wall clock
         limit = {"shallow": 2, "standard": 3, "deep": 6}.get(depth, 3)
         chosen = self.sources_for(domain, sources)
         evidence: List[Evidence] = []
@@ -593,6 +616,9 @@ class SourceRegistry:
             status["chronicle"] = {"gathered": len(chronicle_ev), "status": "ok"}
 
         def _run(src_name: str) -> Tuple[str, List[Evidence], str]:
+            # FIX-SRC-V3-04: Check deadline before starting each source.
+            if time.time() > _gather_deadline:
+                return src_name, [], "skipped_deadline"
             src = self.sources.get(src_name)
             if not src or not getattr(src, "available", False):
                 return src_name, [], "unavailable"
@@ -600,10 +626,28 @@ class SourceRegistry:
             items, st = _gather_safe(src_name, src.gather, query, limit)
             return src_name, items, st
 
+        # FIX-SRC-V3-04: Use as_completed() instead of pool.map() so we can
+        # collect results as they arrive and stop when the deadline hits,
+        # rather than blocking until the slowest source finishes.
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
-            for src_name, items, st in pool.map(_run, chosen):
-                status[src_name] = {"gathered": len(items), "status": st}
-                evidence.extend(items)
+            futures = {pool.submit(_run, src_name): src_name for src_name in chosen}
+            for fut in concurrent.futures.as_completed(futures,
+                                                        timeout=max(0.1, _gather_deadline - time.time())):
+                try:
+                    src_name, items, st = fut.result()
+                    status[src_name] = {"gathered": len(items), "status": st}
+                    evidence.extend(items)
+                except concurrent.futures.TimeoutError:
+                    # Deadline hit — cancel remaining futures and return what we have
+                    for f in futures:
+                        f.cancel()
+                    log.info("atlas.sources: gather() deadline hit — returning %d items from %d sources "
+                             "(Book II Principle V Graceful Degradation)", len(evidence), len(status))
+                    status["_deadline_hit"] = True
+                    break
+                except Exception as exc:
+                    src_name = futures.get(fut, "unknown")
+                    log.warning("atlas.sources: future for %s raised: %s", src_name, exc)
 
         if not evidence:
             status["_summary"] = "no evidence gathered (sources unreachable or no matches)"
