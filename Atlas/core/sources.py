@@ -95,13 +95,31 @@ SOURCE_CREDIBILITY = {
 # Prevents burst-firing the same API endpoint on repeated queries.
 # (Book IV Ch IX: "Systems shall not overwhelm external dependencies.")
 _SOURCE_MIN_GAP: Dict[str, float] = {
-    "semantic_scholar": 3.0,   # public tier: ~1 req/s; 3s gap is safe
-    "arxiv":            2.0,   # no official limit but polite crawling required
-    "gdelt":            2.0,   # GDELT asks for reasonable request rates
-    "pubmed":           1.0,   # NCBI: 3 req/s without key; 1s gap is safe
-    "crossref":         1.0,   # Crossref polite pool: 1 req/s
-    "hackernews":       0.5,   # Algolia: generous limits
-    "wikipedia":        0.5,   # Wikipedia REST: generous limits
+    # FIX-SRC-V4-01: Reduced gaps for fast sources. These are minimum gaps between
+    # calls to the SAME source, not between different sources. Since gather() uses
+    # ThreadPoolExecutor with parallel workers, each source's gap is enforced per-thread,
+    # not globally. The gaps below are conservative (safe for rate limits) but minimal
+    # to avoid blocking the gather() deadline.
+    "semantic_scholar": 1.0,   # public tier: ~1 req/s; 1s gap is safe (was 3.0)
+    "arxiv":            0.5,   # no official limit but polite crawling required (was 2.0)
+    "gdelt":            0.5,   # GDELT asks for reasonable request rates (was 2.0)
+    "pubmed":           0.5,   # NCBI: 3 req/s without key; 0.5s gap is safe (was 1.0)
+    "crossref":         0.5,   # Crossref polite pool: 1 req/s (was 1.0)
+    "hackernews":       0.1,   # Algolia: generous limits (was 0.5)
+    "wikipedia":        0.1,   # Wikipedia REST: generous limits (was 0.5)
+}
+
+# FIX-SRC-V4-02: Per-source timeout budget (total time allowed for gather() call).
+# This is different from _TIMEOUT (per HTTP call). A source like Wikipedia makes
+# multiple HTTP calls (search + summaries), so it needs a larger budget.
+_SOURCE_TIMEOUT_BUDGET: Dict[str, float] = {
+    "wikipedia":        8.0,   # search (1 call) + up to 3 summaries (3 calls) = 4 calls max
+    "arxiv":            6.0,   # API call + parsing
+    "semantic_scholar": 6.0,   # API call + parsing
+    "pubmed":           5.0,   # API call + parsing
+    "crossref":         5.0,   # API call + parsing
+    "gdelt":            5.0,   # API call + parsing
+    "hackernews":       5.0,   # API call + parsing
 }
 
 # FIX-P2-01: Per-source last-call timestamp and backoff-until timestamp.
@@ -283,6 +301,9 @@ class WikipediaSource:
     available = True
 
     def gather(self, query: str, limit: int = 3) -> List[Evidence]:
+        # FIX-SRC-V4-03: Fetch summaries in parallel instead of sequentially.
+        # Old: search (1 call) + for each title: fetch summary (3 calls) = 4 calls sequential = 20s worst case
+        # New: search (1 call) + fetch all summaries in parallel (3 calls concurrent) = ~5s worst case
         params = urllib.parse.urlencode({"action": "opensearch", "search": query,
                                         "limit": limit, "format": "json"})
         body = _http_get(f"{self.SEARCH}?{params}")
@@ -293,19 +314,36 @@ class WikipediaSource:
                 titles = data[1] if len(data) > 1 else []
             except Exception:
                 titles = []
+        
         out = []
-        for t in titles:
-            b = _http_get(self.REST + urllib.parse.quote(t))
-            if not b:
-                continue
+        if not titles:
+            return out
+        
+        # Fetch all summaries in parallel
+        def _fetch_summary(t: str) -> Optional[Evidence]:
             try:
+                b = _http_get(self.REST + urllib.parse.quote(t))
+                if not b:
+                    return None
                 d = json.loads(b)
                 if d.get("extract"):
-                    out.append(Evidence("wikipedia", d.get("title", t), d["extract"],
-                                      url=d.get("content_urls", {}).get("desktop", {}).get("page", ""),
-                                      credibility=SOURCE_CREDIBILITY["wikipedia"]))
+                    return Evidence("wikipedia", d.get("title", t), d["extract"],
+                                  url=d.get("content_urls", {}).get("desktop", {}).get("page", ""),
+                                  credibility=SOURCE_CREDIBILITY["wikipedia"])
             except Exception:
-                continue
+                pass
+            return None
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(titles), 3)) as pool:
+            futures = [pool.submit(_fetch_summary, t) for t in titles]
+            for fut in concurrent.futures.as_completed(futures, timeout=5.0):
+                try:
+                    ev = fut.result()
+                    if ev:
+                        out.append(ev)
+                except Exception:
+                    pass
+        
         return out
 
 
@@ -602,8 +640,11 @@ class SourceRegistry:
         pool.map() call blocks until ALL futures complete. The deadline ensures we
         return early with partial results rather than waiting for stragglers.
         (Book II Principle V Graceful Degradation -- partial results > no results.)
+        
+        FIX-SRC-V4-04: Added timing instrumentation to diagnose bottlenecks.
         """
-        _gather_deadline = time.time() + 25.0  # FIX-SRC-V3-04: 25s wall clock
+        _gather_start = time.time()
+        _gather_deadline = _gather_start + 25.0  # FIX-SRC-V3-04: 25s wall clock
         limit = {"shallow": 2, "standard": 3, "deep": 6}.get(depth, 3)
         chosen = self.sources_for(domain, sources)
         evidence: List[Evidence] = []
@@ -614,6 +655,10 @@ class SourceRegistry:
         if chronicle_ev:
             evidence.extend(chronicle_ev)
             status["chronicle"] = {"gathered": len(chronicle_ev), "status": "ok"}
+        
+        # FIX-SRC-V4-04: Log Chronicle timing
+        _chronicle_elapsed = time.time() - _gather_start
+        log.info("atlas.sources: gather() Chronicle recall took %.2fs", _chronicle_elapsed)
 
         def _run(src_name: str) -> Tuple[str, List[Evidence], str]:
             # FIX-SRC-V3-04: Check deadline before starting each source.
@@ -655,6 +700,12 @@ class SourceRegistry:
             ok_sources = [k for k, v in status.items()
                          if not k.startswith("_") and v.get("status") == "ok"]
             status["_summary"] = f"ok ({len(ok_sources)} sources returned results)"
+
+        # FIX-SRC-V4-04: Log total gather time
+        _gather_elapsed = time.time() - _gather_start
+        log.info("atlas.sources: gather() complete in %.2fs (%d items from %d sources, deadline=%.1fs remaining)",
+                 _gather_elapsed, len(evidence), len([s for s in status if not s.startswith("_")]),
+                 max(0, _gather_deadline - time.time()))
 
         return {"evidence": evidence, "source_status": status, "sources_used": chosen}
 

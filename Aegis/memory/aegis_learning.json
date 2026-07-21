@@ -1350,11 +1350,51 @@
       "task": "agent.error",
       "repeated": true,
       "repeat_count": 75
+    },
+    {
+      "root_cause": "Unknown task",
+      "lesson": "Task definition is incomplete or missing required information",
+      "adjustment": "Verify and define the task before proceeding",
+      "confidence": 0.2,
+      "source": "llm_reflection",
+      "task": "agent.error",
+      "repeated": true,
+      "repeat_count": 76
+    },
+    {
+      "root_cause": "Unknown task",
+      "lesson": "Task 'agent.error' requires explicit error handling and logging.",
+      "adjustment": "Implement a try-catch block around the failed operation to log the error and provide more informative feedback.",
+      "confidence": 0.5,
+      "source": "llm_reflection",
+      "task": "agent.error",
+      "repeated": true,
+      "repeat_count": 77
+    },
+    {
+      "root_cause": "Unknown task",
+      "lesson": "Task definition is incomplete or missing required information",
+      "adjustment": "Verify and complete the task definition by adding the 'task' key with a valid JSON object containing the agent, task name, and error message.",
+      "confidence": 0.1,
+      "source": "llm_reflection",
+      "task": "agent.error",
+      "repeated": true,
+      "repeat_count": 78
+    },
+    {
+      "root_cause": "Unknown task",
+      "lesson": "Task 'agent.error' requires specific input or context to function correctly.",
+      "adjustment": "Verify and validate the input data before executing tasks.",
+      "confidence": 0.2,
+      "source": "llm_reflection",
+      "task": "agent.error",
+      "repeated": true,
+      "repeat_count": 79
     }
   ],
   "failure_signatures": {
     "threat_response::all attempts failed": 25,
-    "agent.error::Unknown task: agent.error": 75,
+    "agent.error::Unknown task: agent.error": 79,
     "audit.action::'NoneType' object has no attribute 'get'": 34,
     "governance.status::Unknown task: governance.status": 1
   }

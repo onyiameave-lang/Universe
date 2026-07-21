@@ -103,7 +103,12 @@ class ResearchEngine:
         started = time.time()
         _investigate_deadline = started + 25.0  # FIX-ENG-V3-01: hard 25s wall clock
         report_id = f"rpt-{uuid.uuid4().hex[:10]}"
+        
+        # FIX-ENG-V4-01: Timing instrumentation
+        _t_recall_start = time.time()
         prior = self._recall(query, domain)
+        _t_recall_elapsed = time.time() - _t_recall_start
+        log.info("atlas.engine: investigate() _recall took %.2fs", _t_recall_elapsed)
 
         all_evidence: List[Evidence] = []
         source_status: Dict[str, Any] = {}
@@ -123,7 +128,12 @@ class ResearchEngine:
                          round_idx, len(all_evidence))
                 break
             round_depth = depths[min(round_idx, len(depths) - 1)]
+            # FIX-ENG-V4-01: Timing instrumentation
+            _t_gather_start = time.time()
             gathered = self.sources.gather(query, domain=domain, depth=round_depth, sources=sources)
+            _t_gather_elapsed = time.time() - _t_gather_start
+            log.info("atlas.engine: investigate() gather round %d took %.2fs (%d items)",
+                     round_idx + 1, _t_gather_elapsed, len(gathered["evidence"]))
             new_ev = gathered["evidence"]
             # dedupe by (source,title)
             seen = {(e.source, e.title) for e in all_evidence}
@@ -186,9 +196,13 @@ class ResearchEngine:
         corpus = " ".join(e.text for e in all_evidence[:6])
         # FIX-ATL-DS-01: pass Chronicle's recalled memories as a SEPARATE stream so
         # the synthesizer can enrich-if-relevant / ignore-if-not (dual-stream).
+        # FIX-ENG-V4-01: Timing instrumentation for synthesis
+        _t_synth_start = time.time()
         summary = (self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
                                     chronicle_memories=prior)
                    if corpus else "")
+        _t_synth_elapsed = time.time() - _t_synth_start
+        log.info("atlas.engine: investigate() synthesis took %.2fs", _t_synth_elapsed)
         key_terms = [k for k, _ in keywords(corpus, top_n=8)] if corpus else []
 
         findings = []
@@ -227,6 +241,11 @@ class ResearchEngine:
                   "duration_sec": round(time.time() - started, 2)}
         self._reports[report_id] = report
         self._preserve(report)
+        
+        # FIX-ENG-V4-01: Log total investigate time
+        _t_total = time.time() - started
+        log.info("atlas.engine: investigate() complete in %.2fs (deadline=%.1fs remaining)",
+                 _t_total, max(0, _investigate_deadline - time.time()))
 
         # FIX-ATL-DS-01: BACKGROUND relevance feedback TO Chronicle (non-blocking).
         # The user NEVER waits for this -- it runs in a daemon thread AFTER the report
