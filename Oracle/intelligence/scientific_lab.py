@@ -644,8 +644,8 @@ class ScientificResearchLab:
         # Benchmark update (automatic, never crashes Oracle)
         try:
             self.benchmark.record_experiment(final_result)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("benchmark record failed: %s", exc)
 
         return final_result
 

@@ -12,6 +12,12 @@ Turns raw multi-source articles into institutional intelligence:
   6. REPORT        per-symbol sentiment + top events + high-priority alerts.
   7. PRESERVE      important intelligence -> Chronicle.
 
+Constitutional fix (2026-07-20): Principle 3 — Memory First.
+  _consult_chronicle() now queries Chronicle BEFORE hitting external news APIs.
+  If a fresh cached report exists (< CHRONICLE_CACHE_TTL_SEC old), it is
+  returned directly, avoiding redundant external calls and respecting the
+  "retrieve before generating" mandate.
+
 Every number derives from real gathered text. Offline, it reports the
 limitation honestly instead of inventing news.
 """
@@ -33,6 +39,10 @@ from intelligence.credibility import (credibility_score, misinformation_risk,   
 from intelligence.analysis import (extract_symbols, classify_event, sentiment,       # type: ignore
                                    EventClusterer)
 
+# How old (seconds) a Chronicle-cached news report can be before we bypass it
+# and fetch fresh data.  Default: 15 minutes.
+CHRONICLE_CACHE_TTL_SEC = int(900)
+
 
 class IntelligenceEngine:
     def __init__(self, chronicle_client=None, llm=None):
@@ -42,7 +52,65 @@ class IntelligenceEngine:
         self.clusterer = EventClusterer()
         self._articles: List[Dict[str, Any]] = []
 
+    # ------------------------------------------------------------------
+    # Principle 3 — Memory First: consult Chronicle before external APIs
+    # ------------------------------------------------------------------
+
+    def _consult_chronicle(self, topics: Optional[List[str]]) -> Optional[Dict[str, Any]]:
+        """Query Chronicle for a recent cached news report on *topics*.
+
+        Returns the cached report dict if one exists and is fresh enough
+        (< CHRONICLE_CACHE_TTL_SEC old), otherwise returns None so the
+        caller proceeds with live external collection.
+
+        Constitutional basis: Principle 3 — "Memory First — retrieve before
+        generating.  Every agent MUST consult Chronicle before hitting
+        external APIs."
+        """
+        if self.chronicle is None:
+            return None
+        try:
+            query = " ".join(topics) if topics else "news intelligence report"
+            results = self.chronicle.search(query=query, domain="news", limit=1)
+            if not results:
+                return None
+            # results may be a list of dicts or a dict with a 'results' key
+            hits = results if isinstance(results, list) else results.get("results", [])
+            if not hits:
+                return None
+            hit = hits[0]
+            # Check freshness — Chronicle entries carry a 'timestamp' field
+            stored_at = hit.get("timestamp") or hit.get("created_at") or 0
+            age_sec = time.time() - float(stored_at)
+            if age_sec > CHRONICLE_CACHE_TTL_SEC:
+                return None  # stale — fetch fresh
+            # Return a minimal report wrapper so callers can detect a cache hit
+            return {
+                "status": "complete",
+                "source": "chronicle_cache",
+                "age_sec": round(age_sec, 1),
+                "cached_summary": hit.get("content", ""),
+                "report": None,  # full structured report not stored; summary only
+                "note": (f"Chronicle cache hit (age {round(age_sec)}s < "
+                         f"{CHRONICLE_CACHE_TTL_SEC}s TTL). "
+                         "Skipped external API calls per Principle 3."),
+            }
+        except Exception:
+            return None  # Chronicle unavailable — fall through to live fetch
+
     def gather(self, topics=None, sources=None, limit=8) -> Dict[str, Any]:
+        # ---- Principle 3: Memory First ----
+        cached = self._consult_chronicle(topics)
+        if cached is not None:
+            # Fresh Chronicle hit — return without hitting external APIs
+            return {
+                "articles": [],
+                "source_status": {"chronicle": "cache_hit"},
+                "count": 0,
+                "duration_sec": 0.0,
+                "chronicle_cache": cached,
+            }
+
         started = time.time()
         raw = self.collectors.collect(topics=topics, sources=sources, limit=limit)
         articles = [a.to_dict() for a in raw["articles"]]
@@ -67,6 +135,9 @@ class IntelligenceEngine:
 
     def report(self, topics=None, sources=None) -> Dict[str, Any]:
         gathered = self.gather(topics=topics, sources=sources)
+        # If Chronicle returned a fresh cache hit, surface it directly
+        if gathered.get("chronicle_cache"):
+            return gathered["chronicle_cache"]
         articles = gathered["articles"]
         if not articles:
             return {"status": "complete", "report": None,

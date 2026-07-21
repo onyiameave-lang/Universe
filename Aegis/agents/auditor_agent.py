@@ -90,6 +90,10 @@ class AegisAgent(BaseAgent):
                         storage_dir=storage_dir or str(_REPO_ROOT / "memory"), **kw)
         sdir = storage_dir or str(_REPO_ROOT / "security")
         self.audit_log = AuditLog(storage_dir=sdir)
+        # Constitutional fix: wire Chronicle into AuditLog for cross-ecosystem
+        # mirroring (Principles 2 & 6 — Everything Communicates / Nothing Dies).
+        if chronicle_client is not None:
+            self.audit_log.set_chronicle(chronicle_client)
         self.policies = PolicyStore(storage_dir=sdir)
         self.risk = RiskRegister(storage_dir=sdir)
         self.anomaly = AnomalyDetector()
@@ -159,9 +163,48 @@ class AegisAgent(BaseAgent):
 
     # ---- risk-weighted enforcement ----
 
+    def _consult_chronicle_for_entity(self, agent: str) -> Optional[Dict[str, Any]]:
+        """Query Chronicle for prior audit history on *agent* before risk scoring.
+
+        Constitutional basis: Principle 3 — "Memory First — retrieve before
+        generating."  Aegis should know an entity's full audit history before
+        assigning a risk score, not just the current incident.
+
+        Returns a dict with 'prior_incidents' and 'prior_severity_max' if
+        Chronicle has history, or None if Chronicle is unavailable / no history.
+        """
+        if self.chronicle is None:
+            return None
+        try:
+            results = self.chronicle.search(
+                query=f"AEGIS AUDIT agent={agent}",
+                domain="audit",
+                limit=10,
+            )
+            hits = results if isinstance(results, list) else (results or {}).get("results", [])
+            if not hits:
+                return None
+            severity_order = {"info": 0, "warning": 1, "violation": 2, "critical": 3}
+            max_sev = max(
+                (severity_order.get(h.get("severity", "info"), 0) for h in hits),
+                default=0,
+            )
+            sev_names = {v: k for k, v in severity_order.items()}
+            return {
+                "prior_incidents": len(hits),
+                "prior_severity_max": sev_names.get(max_sev, "info"),
+                "chronicle_history": True,
+            }
+        except Exception:
+            return None  # Chronicle unavailable — proceed without history
+
     def audit_action(self, repository: str, agent: str, action: str,
                     context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
+        # ---- Principle 3: Memory First — consult Chronicle before scoring ----
+        prior_history = self._consult_chronicle_for_entity(agent)
+        if prior_history:
+            context = {**context, **prior_history}
         violated = self._evaluate_policies(action, context)
         # accumulate risk exposure from each violated policy
         for pol in violated:

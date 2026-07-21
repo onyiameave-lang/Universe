@@ -42,8 +42,8 @@ def _atomic_write(path: Path, content: str):
         log.warning("Atomic write failed for %s: %s. Falling back to direct write.", path, exc)
         try:
             path.write_text(content, encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as exc:
+            log.error("fallback direct write also failed for %s: %s", path, exc)
 
 
 def _safe_load_json(path: Path, default):

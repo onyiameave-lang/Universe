@@ -67410,12 +67410,32 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 4
+    },
+    {
+      "source": "heuristic",
+      "task": "routing",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'routing' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 13
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no approach succeeded in 3 attempts",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 13
     }
   ],
   "failure_signatures": {
     "heartbeat::Unknown task: heartbeat": 6710,
-    "routing::all attempts failed": 12,
-    "ecosystem.route::no approach succeeded in 3 attempts": 12,
+    "routing::all attempts failed": 13,
+    "ecosystem.route::no approach succeeded in 3 attempts": 13,
     "user.query::Unknown task: user.query": 3,
     "ecosystem.status::Unknown task: ecosystem.status": 4
   }

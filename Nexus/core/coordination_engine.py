@@ -71,10 +71,26 @@ class CoordinationEngine:
         start = time.time()
         success = True
         try:
-            out = agent.handle.handle({"sender": "nexus", "receiver": agent_name,
-                                      "task": task, "context": context}) \
-                if hasattr(agent.handle, "handle") else \
-                agent.handle({"sender": "nexus", "receiver": agent_name, "task": task, "context": context})
+            # Constitutional fix (2026-07-20) — Audit item P3-11:
+            # Engineering rule "No silent failures": the old code called
+            # agent.handle.handle({...}) which is not the BaseAgent interface
+            # and caused every dispatch to fail silently.
+            #
+            # Correct call order (most-specific first):
+            #   1. agent.handle.act(task, context)   — canonical BaseAgent interface
+            #   2. agent.handle.handle({...})         — legacy fallback
+            #   3. agent.handle({...})                — callable-handle fallback
+            handle = agent.handle
+            if hasattr(handle, "act"):
+                out = handle.act(task, context)
+            elif hasattr(handle, "handle"):
+                out = handle.handle({"sender": "nexus", "receiver": agent_name,
+                                     "task": task, "context": context})
+            elif callable(handle):
+                out = handle({"sender": "nexus", "receiver": agent_name,
+                              "task": task, "context": context})
+            else:
+                out = {"status": "error", "message": f"{agent_name} handle has no callable interface"}
             success = out.get("status") != "error" if isinstance(out, dict) else True
         except Exception as exc:
             success = False

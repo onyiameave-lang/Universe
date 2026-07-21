@@ -980,10 +980,30 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 87
+    },
+    {
+      "root_cause": "The input 'query' parameter for the research task likely contained a command prefix ('query ') as part of the actual search string, leading the underlying research tool to misinterpret or fail to process the query correctly. The system probably expected a pure natural language query.",
+      "lesson": "Input validation for research queries is crucial. Queries should be clean natural language, free of extraneous command prefixes or keywords that could interfere with the research tool's parsing or execution.",
+      "adjustment": "Implement a pre-processing step for the 'query' parameter in 'research_path' tasks. This step should identify and strip common command prefixes (e.g., 'query ', 'search ', 'find ') from the beginning of the query string before passing it to the research execution engine. For example, 'query what is an animal' would become 'what is an animal'.",
+      "confidence": 0.9,
+      "source": "llm_reflection",
+      "task": "research_path",
+      "repeated": true,
+      "repeat_count": 88
+    },
+    {
+      "root_cause": "The input 'query' parameter for the research task likely contained a command prefix ('query ') as part of the actual search string, leading the underlying research tool to misinterpret or fail to process the query correctly. The system probably expected a pure natural language query.",
+      "lesson": "Input validation for research queries is crucial. Queries should be clean natural language, free of extraneous command prefixes or keywords that could interfere with the research tool's parsing or execution.",
+      "adjustment": "Implement a pre-processing step for the 'query' parameter in 'research_path' tasks. This step should identify and strip common command prefixes (e.g., 'query ', 'search ', 'find ') from the beginning of the query string before passing it to the research execution engine. For example, 'query what is an animal' would become 'what is an animal'.",
+      "confidence": 0.9,
+      "source": "llm_reflection",
+      "task": "research_path",
+      "repeated": true,
+      "repeat_count": 89
     }
   ],
   "failure_signatures": {
-    "research_path::all attempts failed": 87,
+    "research_path::all attempts failed": 89,
     "research.investigate::'NoneType' object has no attribute 'get'": 11
   }
 }

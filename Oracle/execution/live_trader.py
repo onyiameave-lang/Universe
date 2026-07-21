@@ -832,8 +832,8 @@ class LiveTrader:
                     conf_str = ""
                     try:
                         conf_str = f"conf={sig['signal']['confidence']:.3f}  "
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        log.debug("could not format confidence for display: %s", exc)
                     log.info("[%s] REJECT %sreasons=%s", symbol, conf_str, reasons)
                     print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
                     summary["rejects"] += 1

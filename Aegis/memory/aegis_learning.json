@@ -1020,11 +1020,22 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 43
+    },
+    {
+      "source": "heuristic",
+      "task": "governance.status",
+      "root_cause": "Unknown task: governance.status",
+      "lesson": "Task 'governance.status' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
     }
   ],
   "failure_signatures": {
     "threat_response::all attempts failed": 25,
     "agent.error::Unknown task: agent.error": 43,
-    "audit.action::'NoneType' object has no attribute 'get'": 34
+    "audit.action::'NoneType' object has no attribute 'get'": 34,
+    "governance.status::Unknown task: governance.status": 1
   }
 }

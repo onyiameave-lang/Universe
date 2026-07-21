@@ -8,6 +8,13 @@ Principle IV Traceability.)
 Hash-chained: each entry stores the hash of the previous entry, so any
 tampering with history is detectable via verify_integrity(). This is a real
 integrity mechanism, not decoration. Append-only JSONL on disk.
+
+Constitutional fix (2026-07-20):
+  Principle 6 — "Nothing Dies Without Leaving Knowledge": audit events are
+  now ALSO mirrored to Chronicle so audit history is shared across the
+  ecosystem and survives machine boundaries.
+  Principle 2 — "Everything Communicates": Aegis audit events are now
+  visible to all agents that query Chronicle (domain="audit").
 """
 from __future__ import annotations
 
@@ -23,14 +30,20 @@ from typing import Any, Dict, List, Optional
 class AuditLog:
     GENESIS_HASH = "0" * 64
 
-    def __init__(self, storage_dir: str = "security"):
+    def __init__(self, storage_dir: str = "security", chronicle_client=None):
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._path = self.storage_dir / "audit_log.jsonl"
         self._lock = threading.RLock()
         self._entries: List[Dict[str, Any]] = []
         self._last_hash = self.GENESIS_HASH
+        # Chronicle client for cross-ecosystem mirroring (Principles 2 & 6)
+        self._chronicle = chronicle_client
         self._load()
+
+    def set_chronicle(self, chronicle_client) -> None:
+        """Wire a Chronicle client after construction (called by AuditorAgent)."""
+        self._chronicle = chronicle_client
 
     def _load(self) -> None:
         if not self._path.exists():
@@ -54,6 +67,36 @@ class AuditLog:
         payload = json.dumps({k: v for k, v in entry.items() if k != "entry_hash"}, sort_keys=True)
         return hashlib.sha256((self._last_hash + payload).encode("utf-8")).hexdigest()
 
+    def _mirror_to_chronicle(self, entry: Dict[str, Any]) -> None:
+        """Mirror the audit entry to Chronicle (Principles 2 & 6).
+
+        Only mirrors severity >= 'warning' to avoid flooding Chronicle with
+        routine 'info' events.  Failures are silently swallowed so Chronicle
+        unavailability never breaks the local audit chain.
+        """
+        if self._chronicle is None:
+            return
+        if entry.get("severity", "info") == "info":
+            return  # skip routine info events to keep Chronicle signal-rich
+        try:
+            summary = (
+                f"[AEGIS AUDIT] {entry['iso_time']} | "
+                f"repo={entry['repository']} agent={entry['agent']} "
+                f"action={entry['action']} severity={entry['severity']} | "
+                f"{entry.get('detail', '')} | "
+                f"violations={entry.get('violations', [])} | "
+                f"audit_id={entry['audit_id']}"
+            )
+            self._chronicle.store(
+                content=summary,
+                memory_type="episodic",
+                domain="audit",
+                tags=["aegis", "audit", entry["severity"], entry["repository"]],
+                source="aegis",
+            )
+        except Exception:
+            pass  # aegis:allow-silent — Chronicle unavailability must not break audit
+
     def append(self, repository: str, agent: str, action: str, severity: str = "info",
                detail: str = "", context: Optional[Dict[str, Any]] = None,
                violations: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -68,6 +111,8 @@ class AuditLog:
             self._entries.append(entry)
             with self._path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
+            # Mirror to Chronicle for cross-ecosystem visibility (Principles 2 & 6)
+            self._mirror_to_chronicle(entry)
             return entry
 
     def verify_integrity(self) -> Dict[str, Any]:
@@ -103,4 +148,5 @@ class AuditLog:
             for e in self._entries:
                 by_sev[e["severity"]] = by_sev.get(e["severity"], 0) + 1
                 by_repo[e["repository"]] = by_repo.get(e["repository"], 0) + 1
-            return {"total": len(self._entries), "by_severity": by_sev, "by_repository": by_repo}
+            return {"total": len(self._entries), "by_severity": by_sev, "by_repository": by_repo,
+                    "chronicle_mirroring": self._chronicle is not None}

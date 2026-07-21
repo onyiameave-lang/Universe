@@ -168,8 +168,10 @@ class MT5Broker:
 
     def disconnect(self) -> None:
         if self._mt5:
-            try: self._mt5.shutdown()
-            except Exception: pass
+            try:
+                self._mt5.shutdown()
+            except Exception as exc:
+                log.debug("MT5 shutdown call failed (likely already disconnected): %s", exc)
 
     # ── FIX-A: symbols() ──────────────────────────────────────────────────────────────────────────────────────────
     def symbols(self) -> List[str]:
@@ -652,8 +654,8 @@ class MT5Broker:
             info = self._mt5.account_info()
             if info is not None:
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("connection health check failed: %s", exc)
 
         # Connection dropped — attempt reconnect
         log.warning("_ensure_connected(): MT5 connection lost, attempting reconnect…")
