@@ -148,12 +148,28 @@ class SentinelAgent(BaseAgent):
             if self.reasoning is not None:
                 solved = self.solve("news_path", {"topics": ctx.get("topics")})
                 if solved.get("status") == "complete":
-                    return {"status": "complete", "report": solved.get("report"),
-                           "news_path": solved.get("path")}
-                return {"status": "complete", **self.engine.report(
-                    topics=ctx.get("topics"), sources=PATH_SOURCES["broad_sweep"]),
-                    "note": "fell back to broad sweep"}
-            return {"status": "complete", **self.engine.report(topics=ctx.get("topics"))}
+                    report = solved.get("report") or {}
+                    return {
+                        "status": "complete",
+                        "report": report,
+                        "news_path": solved.get("path"),
+                        "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+                    }
+                broad = self.engine.report(topics=ctx.get("topics"), sources=PATH_SOURCES["broad_sweep"])
+                report = broad.get("report") or {}
+                return {
+                    "status": "complete",
+                    **broad,
+                    "note": "fell back to broad sweep",
+                    "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+                }
+            broad = self.engine.report(topics=ctx.get("topics"))
+            report = broad.get("report") or {}
+            return {
+                "status": "complete",
+                **broad,
+                "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+            }
         if task in ("news.sentiment", "news.for_symbol"):
             # FIX-SA-05 (Phase 5h): Coordinator now passes both ctx["symbol"] and
             # ctx["topics"]. Prefer topics (already a list) so collectors get the
@@ -165,7 +181,15 @@ class SentinelAgent(BaseAgent):
             result = self.engine.sentiment_for(symbol, topics=topics)
             log.info("[sentinel] execute: sentiment_for(%r) completed in %.2fs — article_count=%d",
                      symbol, time.time() - _t0, result.get("article_count", 0))
-            return {"status": "complete", "sentiment": result}
+            # FIX-SA-07 (Phase 5i): Bubble up the plain-text 'summary' from the
+            # engine result so coordinator._format_result() and main.py's
+            # _extract_summary() can surface it without parsing nested dicts.
+            return {
+                "status": "complete",
+                "sentiment": result,
+                "summary": result.get("summary", ""),   # FIX-SA-07
+                "symbol": symbol,
+            }
         if task == "news.credibility":
             log.info("[sentinel] execute: task='news.credibility' topics=%r — calling engine.gather()", ctx.get("topics"))
             g = self.engine.gather(topics=ctx.get("topics"))

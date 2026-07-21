@@ -373,6 +373,185 @@ class NexusAgent(BaseAgent):
             "timeout": True,
         }
 
+    # FIX-CA-21 (Phase 5i): Human-readable output formatter.
+    # The coordinator is the final gatekeeper before output reaches the user.
+    # Every agent returns a raw dict; this method converts it to a clean,
+    # readable string that main.py's _print_result() can surface directly.
+    #
+    # Handles ALL result types:
+    #   news/sentiment  → 📰 headline list + sentiment label
+    #   research/report → 📚 findings summary
+    #   memory/answer   → 🧠 memory answer
+    #   trading         → 📈 signal/prediction
+    #   social          → 💬 social sentiment
+    #   error/timeout   → ⚠️ graceful message
+    #   unknown         → compact JSON fallback
+    def _format_result(self, result: dict, query: str = "", domain: str = "") -> str:
+        """Convert a raw agent result dict into a human-readable string."""
+        import datetime as _dt
+        today = _dt.date.today().strftime("%B %d, %Y")
+        status = result.get("status", "unknown")
+
+        # ── ERROR / TIMEOUT ──────────────────────────────────────────────────
+        if status == "error":
+            msg = result.get("message", "")
+            if result.get("timeout"):
+                return (
+                    f"⚠️  The specialist agent is experiencing delays.\n"
+                    f"   Please try again in a moment.\n"
+                    f"   (Detail: {msg})"
+                )
+            return f"⚠️  {msg or 'No result returned.'}"
+
+        # ── NEWS / SENTIMENT (Sentinel) ──────────────────────────────────────
+        # Sentinel returns: {"status":"complete","sentiment":{...},"summary":"..."}
+        # or:               {"status":"complete","result":{"sentiment":{...}}}
+        sentiment_data = (
+            result.get("sentiment")
+            or (result.get("result") or {}).get("sentiment")
+        )
+        if sentiment_data and isinstance(sentiment_data, dict) and "article_count" in sentiment_data:
+            symbol = sentiment_data.get("symbol", query.upper())
+            count = sentiment_data.get("article_count", 0)
+            label = sentiment_data.get("sentiment_label", "")
+            conf = sentiment_data.get("confidence", 0)
+            top_headlines = sentiment_data.get("top_headlines") or []
+            top_headline = sentiment_data.get("top_headline", "")
+            if not top_headlines and top_headline:
+                top_headlines = [top_headline]
+            plain = sentiment_data.get("summary", "")
+            if plain:
+                return (
+                    f"📰 {symbol} News Summary — {today}\n\n"
+                    f"{plain}"
+                )
+            if count == 0:
+                return (
+                    f"📰 {symbol} News — {today}\n\n"
+                    f"No live news articles found for {symbol} at this time.\n"
+                    f"The news feeds may be temporarily unavailable. Please try again in a moment."
+                )
+            lines = [f"📰 {symbol} News Summary — {today}", ""]
+            for i, h in enumerate(top_headlines[:5], 1):
+                lines.append(f"  {i}. \"{h}\"")
+            lines.append("")
+            lines.append(f"Sentiment: {label or 'Neutral ⚪'} | Sources: {count} articles | Confidence: {round(conf * 100)}%")
+            return "\n".join(lines)
+
+        # ── NEWS REPORT (Sentinel news.report) ──────────────────────────────
+        report_data = (
+            result.get("report")
+            or (result.get("result") or {}).get("report")
+        )
+        if report_data and isinstance(report_data, dict) and "article_count" in report_data:
+            topic_str = query or "markets"
+            count = report_data.get("article_count", 0)
+            label = report_data.get("sentiment_label", "")
+            plain = report_data.get("summary", "")
+            top_headlines = report_data.get("top_headlines") or []
+            if plain:
+                return f"📰 News Report — {today}\n\n{plain}"
+            if count == 0:
+                return (
+                    f"📰 News Report — {today}\n\n"
+                    f"No news articles found for '{topic_str}' at this time.\n"
+                    f"The news feeds may be temporarily unavailable. Please try again in a moment."
+                )
+            lines = [f"📰 News Report — {today}", ""]
+            for i, h in enumerate(top_headlines[:5], 1):
+                lines.append(f"  {i}. \"{h}\"")
+            lines.append("")
+            lines.append(f"Sentiment: {label or 'Neutral ⚪'} | Sources: {count} articles")
+            return "\n".join(lines)
+
+        # ── RESEARCH (Atlas) ─────────────────────────────────────────────────
+        # Atlas returns: {"status":"complete","report":{"summary":"...","findings":[...]}}
+        # or:            {"status":"complete","result":{"report":{...}}}
+        research_report = (
+            result.get("report")
+            or (result.get("result") or {}).get("report")
+        )
+        if research_report and isinstance(research_report, dict) and (
+            research_report.get("summary") or research_report.get("findings")
+        ):
+            summary = research_report.get("summary", "")
+            findings = research_report.get("findings") or []
+            sources = research_report.get("sources") or []
+            conf = research_report.get("confidence", "")
+            lines = [f"📚 Research Summary — {today}", ""]
+            if summary:
+                lines.append(summary)
+            elif findings:
+                for f in findings[:3]:
+                    lines.append(f"• {f}")
+            lines.append("")
+            if sources:
+                lines.append(f"Sources: {len(sources)} | Confidence: {conf or 'N/A'}")
+            return "\n".join(lines)
+
+        # ── MEMORY / CHRONICLE ───────────────────────────────────────────────
+        # Chronicle returns: {"status":"complete","answer":"...","memories":[...]}
+        # or fast-path:      {"status":"complete","summary":"..."}
+        answer = (
+            result.get("answer")
+            or (result.get("result") or {}).get("answer")
+        )
+        memories = result.get("memories") or (result.get("result") or {}).get("memories") or []
+        if answer and isinstance(answer, str):
+            lines = [f"🧠 From memory ({len(memories)} relevant records):", ""]
+            lines.append(answer)
+            return "\n".join(lines)
+
+        # ── TRADING / ORACLE ─────────────────────────────────────────────────
+        prediction = (
+            result.get("prediction")
+            or (result.get("result") or {}).get("prediction")
+            or result.get("signal")
+            or (result.get("result") or {}).get("signal")
+        )
+        if prediction and isinstance(prediction, dict):
+            symbol = prediction.get("symbol", query.upper())
+            direction = prediction.get("direction", "")
+            confidence = prediction.get("confidence", "")
+            lines = [f"📈 Trading Signal — {symbol} — {today}", ""]
+            if direction:
+                lines.append(f"Direction: {direction}")
+            if confidence:
+                lines.append(f"Confidence: {confidence}")
+            return "\n".join(lines)
+
+        # ── SOCIAL / PULSE ───────────────────────────────────────────────────
+        social = (
+            result.get("social_sentiment")
+            or (result.get("result") or {}).get("social_sentiment")
+        )
+        if social and isinstance(social, dict):
+            symbol = social.get("symbol", query.upper())
+            label = social.get("sentiment_label", "")
+            count = social.get("post_count", 0)
+            lines = [f"💬 Social Sentiment — {symbol} — {today}", ""]
+            lines.append(f"Sentiment: {label or 'Neutral ⚪'} | Posts: {count}")
+            return "\n".join(lines)
+
+        # ── PLAIN TEXT FIELDS ────────────────────────────────────────────────
+        # Check top-level 'summary', 'text', 'answer', 'message' (non-error)
+        for key in ("summary", "text", "answer"):
+            val = result.get(key)
+            if val and isinstance(val, str) and len(val) > 10:
+                return val
+        # Check nested result dict
+        inner = result.get("result")
+        if isinstance(inner, dict):
+            for key in ("summary", "text", "answer"):
+                val = inner.get(key)
+                if val and isinstance(val, str) and len(val) > 10:
+                    return val
+
+        # ── FALLBACK: compact JSON ───────────────────────────────────────────
+        import json as _json
+        compact = _json.dumps(result, default=str)
+        return compact[:600] + ("..." if len(compact) > 600 else "")
+
     def _strat_direct(self, c):
         if self._needs_multiple(c.get("query", "")):
             return {"status": "error", "message": "multi-domain; not direct"}
@@ -547,7 +726,10 @@ class NexusAgent(BaseAgent):
                         domain="coordination",
                         tags=["nexus", "fast_path", "cache_hit"],
                     )
-                    return {"status": fast["status"], "priority": priority, **fast}
+                    # FIX-CA-22 (Phase 5i): Add human_summary to fast-path result.
+                    _hs = self._format_result(fast, query=ctx.get("query", ""), domain="memory")
+                    return {"status": fast["status"], "priority": priority,
+                            "human_summary": _hs, "summary": _hs, **fast}
 
                 # FIX-CA-14: Store bypass_flag in context for _try_strategies to use
                 if bypass_flag:
@@ -616,7 +798,13 @@ class NexusAgent(BaseAgent):
                         "Constitutional: Book II Principle V Graceful Degradation.",
                         ctx.get("query"), domain_hint,
                     )
-                return {"status": solved.get("status", "complete"), "priority": priority, **solved}
+                # FIX-CA-22 (Phase 5i): Add human_summary to solved result.
+                _q = ctx.get("query", "")
+                _dom = (self.classifier.classify(_q) or {}).get("domain", "general") if _q else "general"
+                _hs = self._format_result(solved, query=_q, domain=_dom)
+                _final = {"status": solved.get("status", "complete"), "priority": priority,
+                          "human_summary": _hs, "summary": _hs, **solved}
+                return _final
             # FIX-CA-13 (Phase 5e): engine.route() calls coordination_engine._dispatch()
             # which has NO timeout wrapper. Wrap it here so it can't hang forever.
             log.info("[nexus] No reasoning engine; falling back to engine.route() with 30s timeout.")
@@ -627,7 +815,8 @@ class NexusAgent(BaseAgent):
                 with ThreadPoolExecutor(max_workers=1) as _pool:
                     _fut = _pool.submit(_engine_route)
                     _route_result = _fut.result(timeout=30)
-                return {"status": "complete", **_route_result}
+                _hs2 = self._format_result(_route_result, query=ctx.get("query", ""), domain="general")
+                return {"status": "complete", "human_summary": _hs2, "summary": _hs2, **_route_result}
             except FuturesTimeoutError:
                 log.warning("[nexus] engine.route() timed out after 30s for query=%r.", ctx.get("query", ""))
                 return {"status": "error", "priority": priority,

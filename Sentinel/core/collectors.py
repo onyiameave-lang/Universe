@@ -206,6 +206,19 @@ def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
             body = r.read().decode(r.headers.get_content_charset() or "utf-8", errors="replace")
         log.info("[sentinel.collectors] _get: OK %s in %.2fs (%d bytes)", url[:60], time.time() - _t0, len(body))
         return body
+    except urllib.error.HTTPError as exc:
+        # FIX-SC-07 (Phase 5i): HTTPError carries the response body — read it so
+        # callers (e.g. NewsAPICollector) can parse the JSON error payload and log
+        # the actual API error code (e.g. "apiKeyInvalid", "rateLimited").
+        # Previously this fell through to the generic except and returned None,
+        # hiding the real reason for the 401/429.
+        try:
+            err_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = ""
+        log.warning("[sentinel.collectors] _get: HTTP %d %s in %.2fs — %s — body=%r",
+                    exc.code, exc.reason, time.time() - _t0, url[:60], err_body[:200])
+        return err_body if err_body else None
     except Exception as exc:
         log.warning("[sentinel.collectors] _get: FAILED %s in %.2fs — %s: %s",
                     url[:60], time.time() - _t0, type(exc).__name__, exc)
@@ -360,6 +373,11 @@ class NewsAPICollector:
         if not key:
             log.info("[sentinel.newsapi] NEWSAPI_KEY not set — skipping NewsAPI collector")
             return []
+
+        # FIX-SC-08 (Phase 5i): Log key prefix so user can verify the correct key
+        # is being read. Shows first 8 chars + "..." to avoid leaking the full key.
+        log.info("[sentinel.newsapi] using NEWSAPI_KEY=%s... (len=%d)",
+                 key[:8], len(key))
 
         # FIX-SC-05 (Phase 5h): Map financial symbols to human-readable search terms.
         # NewsAPI doesn't understand "GBPUSD" — it needs "pound sterling GBP forex".

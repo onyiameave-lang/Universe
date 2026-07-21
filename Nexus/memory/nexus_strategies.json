@@ -343,18 +343,19 @@
         "misses multi-domain nuance",
         "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.2666. multi-domain; not direct",
         "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
-        "failed: no agent for news (repository=sentinel)"
+        "failed: no agent for news (repository=sentinel)",
+        "failed: SLA breach: sentinel exceeded 3.0s"
       ],
-      "attempts": 1,
-      "successes": 0,
-      "failures": 1,
+      "attempts": 3,
+      "successes": 1,
+      "failures": 2,
       "last_outcome": "failure",
-      "last_used": 1784621587.8285613,
+      "last_used": 1784661875.534146,
       "status": "candidate",
       "created_at": 1784621564.569649,
       "lineage": null,
       "researched": true,
-      "confidence": 0.0
+      "confidence": 0.0615
     },
     {
       "strategy_id": "strat-dae6b416eb",
@@ -370,18 +371,19 @@
         "slightly slower",
         "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
         "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
-        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)"
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
+        "failed: [sentinel] news agent is currently experiencing delays. Please try again in a moment."
       ],
-      "attempts": 0,
-      "successes": 0,
-      "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "attempts": 2,
+      "successes": 1,
+      "failures": 1,
+      "last_outcome": "success",
+      "last_used": 1784661875.5646088,
       "status": "candidate",
       "created_at": 1784622448.962484,
       "lineage": null,
       "researched": true,
-      "confidence": 0.0
+      "confidence": 0.0945
     }
   ]
 }
