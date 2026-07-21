@@ -16,6 +16,25 @@ Upgrades over the sequential version:
     Atlas (evidence) and Chronicle (belief history) to adjudicate, exactly as
     Chronicle now reconciles beliefs.
   * LEARNED ORDERING via the CollaborationGraph (unchanged interface).
+
+FIX LOG (phase5-orchestration-v1  2026-07-21):
+  FIX-OR-01  CONTEXT_KEY was missing "prediction" key.
+             Oracle's actual domain attribute is "prediction" (confirmed from
+             Oracle/agents/oracle_agent.py line 108: domain = "prediction").
+             When a multi-domain query included a trading/prediction sub-task,
+             Oracle's result was dispatched but never injected into
+             shared_context because CONTEXT_KEY had no "prediction" entry.
+             Subsequent agents (Sentinel, Pulse) received no market_context.
+             FIX: Added "prediction": "market_context" to CONTEXT_KEY.
+             Constitutional law: Book III Ch VIII Standardized Interfaces;
+             Book II Everything Communicates.
+
+  FIX-OR-02  PRIMARY_TASK was missing sentinel, pulse, forge, genesis, nexus.
+             Orchestrator.run() calls PRIMARY_TASK.get(repo, "") — missing
+             entries produce empty task strings, causing agents to return
+             "Unknown task: " errors.
+             FIX: Added all 9 agents to PRIMARY_TASK.
+             Constitutional law: Book III Ch VIII Standardized Interfaces.
 """
 from __future__ import annotations
 
@@ -26,14 +45,32 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from Nexus.intelligence.collaboration_graph import CollaborationGraph  # type: ignore
 
-CONTEXT_KEY = {"news": "news_context", "social": "social_context", "research": "research_context",
-               "memory": "memory_context", "trading": "market_context",
-               "governance": "governance_context", "training": "training_context",
-               "creation": "creation_context"}
+# FIX-OR-01: Added "prediction" -> "market_context" (Oracle.domain = "prediction")
+CONTEXT_KEY = {
+    "news": "news_context",
+    "social": "social_context",
+    "research": "research_context",
+    "memory": "memory_context",
+    "trading": "market_context",
+    "prediction": "market_context",   # FIX-OR-01: Oracle's actual domain
+    "governance": "governance_context",
+    "training": "training_context",
+    "creation": "creation_context",
+    "coordination": "coordination_context",
+}
 
-PRIMARY_TASK = {"oracle": "trade.signal", "sentinel": "news.sentiment", "pulse": "social.sentiment",
-                "atlas": "research.investigate", "forge": "training.run", "chronicle": "memory.answer",
-                "aegis": "ecosystem.health", "genesis": "capability.analyze"}
+# FIX-OR-02: All 9 agents now have PRIMARY_TASK entries.
+PRIMARY_TASK = {
+    "oracle": "trade.signal",
+    "sentinel": "news.sentiment",
+    "pulse": "social.sentiment",
+    "atlas": "research.investigate",
+    "forge": "training.run",
+    "chronicle": "memory.answer",
+    "aegis": "ecosystem.health",
+    "genesis": "capability.analyze",
+    "nexus": "ecosystem.monitor",
+}
 
 
 class Orchestrator:
@@ -273,9 +310,9 @@ class Orchestrator:
         if self.chronicle is None:
             return
         try:
-            self.chronicle.store(content=f"Multi-agent answer to '{session['query']}': {session['synthesis']}",
-                                memory_type="episodic", domain="coordination",
+            self.chronicle.store_memory(content=f"Multi-agent answer to '{session['query']}': {session['synthesis']}",
+                                pillar="episodic", domain="coordination",
                                 tags=["nexus", "multi_agent"] + [d for lvl in session["levels"] for d in lvl],
-                                source="nexus")
+                                source_repository="nexus")
         except Exception:
             pass  # aegis:allow-silent

@@ -272,9 +272,9 @@ class ForgeAgent(BaseAgent):
         if self.chronicle is None:
             return
         try:
-            self.chronicle.store(content=f"Forge trained '{name}' via {backend}: {metrics}",
-                                memory_type="evolutionary", domain="training",
-                                tags=["forge", backend], source="forge")
+            self.chronicle.store_memory(content=f"Forge trained '{name}' via {backend}: {metrics}",
+                                pillar="evolutionary", domain="training",
+                                tags=["forge", backend], source_repository="forge")
         except Exception:
             log.debug("chronicle persist failed")
 

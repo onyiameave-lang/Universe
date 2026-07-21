@@ -23,6 +23,9 @@ limitation honestly instead of inventing news.
 """
 from __future__ import annotations
 
+import concurrent.futures as _cf
+import logging
+import socket as _socket
 import sys
 import time
 import uuid
@@ -42,6 +45,13 @@ from intelligence.analysis import (extract_symbols, classify_event, sentiment,  
 # How old (seconds) a Chronicle-cached news report can be before we bypass it
 # and fetch fresh data.  Default: 15 minutes.
 CHRONICLE_CACHE_TTL_SEC = int(900)
+
+# FIX-IE-02 (Phase 5e): Nuclear socket timeout — bounds DNS resolution which
+# urllib timeout= does NOT cover. Set here so it applies even if collectors.py
+# hasn't been imported yet. Constitutional: Book II Principle V.
+_socket.setdefaulttimeout(15)
+
+log = logging.getLogger(__name__)
 
 
 class IntelligenceEngine:
@@ -112,7 +122,12 @@ class IntelligenceEngine:
             }
 
         started = time.time()
+        # FIX-IE-03 (Phase 5e): Log before collectors.collect() so we can see
+        # exactly where the hang occurs in production logs.
+        log.info("[sentinel.engine] gather: topics=%r sources=%r — calling collectors.collect()", topics, sources)
         raw = self.collectors.collect(topics=topics, sources=sources, limit=limit)
+        log.info("[sentinel.engine] gather: collectors.collect() returned %d articles in %.2fs",
+                 len(raw.get("articles", [])), time.time() - started)
         articles = [a.to_dict() for a in raw["articles"]]
         # enrich
         for a in articles:
@@ -161,12 +176,45 @@ class IntelligenceEngine:
         self._preserve(report)
         return {"status": "complete", "report": report}
 
-    def sentiment_for(self, symbol: str) -> Dict[str, Any]:
+    def sentiment_for(self, symbol: str, topics: Optional[List[str]] = None) -> Dict[str, Any]:
+        # FIX-IE-05 (Phase 5h): Accept optional `topics` parameter.
+        # When the coordinator passes topics=["GBPUSD"], use that list directly
+        # for gather() so collectors filter by the right symbol terms.
+        # Fall back to [symbol] if topics is not provided (backward compatible).
+        gather_topics = topics if topics else ([symbol] if symbol else None)
         rel = [a for a in self._articles if symbol.upper() in [s.upper() for s in a.get("symbols", [])]]
         if not rel:
-            # try a fresh targeted gather
-            g = self.gather(topics=[symbol])
+            # FIX-IE-04 (Phase 5e): Wrap targeted gather() in a thread with 20s
+            # timeout. Previously this call had NO timeout — if collectors hung on
+            # DNS for symbol-specific feeds, sentiment_for() blocked forever.
+            # Constitutional: Book II Principle V Graceful Degradation.
+            log.info("[sentinel.engine] sentiment_for: no cached articles for %r — fetching live (20s timeout) topics=%r",
+                     symbol, gather_topics)
+            _t0 = time.time()
+            def _gather():
+                _socket.setdefaulttimeout(15)
+                return self.gather(topics=gather_topics)
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
+                    _fut = _pool.submit(_gather)
+                    g = _fut.result(timeout=20)
+                log.info("[sentinel.engine] sentiment_for: gather(%r) completed in %.2fs — %d articles collected",
+                         gather_topics, time.time() - _t0, g.get("count", 0))
+            except _cf.TimeoutError:
+                log.warning("[sentinel.engine] sentiment_for: gather(%r) TIMED OUT after %.2fs — returning empty sentiment",
+                            gather_topics, time.time() - _t0)
+                return {"symbol": symbol, "sentiment": 0.0, "article_count": 0, "confidence": 0.0,
+                        "note": "timed out fetching live news; try again in a moment"}
             rel = [a for a in g["articles"] if symbol.upper() in [s.upper() for s in a.get("symbols", [])]]
+            if not rel and g.get("articles"):
+                # FIX-IE-06 (Phase 5h): If symbol extraction didn't match any article
+                # (e.g. "GBPUSD" not in article.symbols because analysis.py missed it),
+                # fall back to returning ALL gathered articles with a note.
+                # This prevents returning empty results when news WAS fetched.
+                log.info("[sentinel.engine] sentiment_for: symbol %r not found in article.symbols — "
+                         "returning all %d gathered articles (symbol extraction miss)",
+                         symbol, len(g["articles"]))
+                rel = g["articles"]
         if not rel:
             return {"symbol": symbol, "sentiment": 0.0, "article_count": 0, "confidence": 0.0}
         # credibility-weighted sentiment

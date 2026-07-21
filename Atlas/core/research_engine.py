@@ -15,6 +15,47 @@ Beyond gather-and-summarize, this engine behaves like a research desk:
   * FULL PROVENANCE: every claim traces to sources; the report is auditable.
 
 Confidence is calibrated (analysis.compute_confidence) and never fabricated.
+
+FIX LOG (Phase 2):
+  FIX-P2-08: Added _llm_only_answer() — when ALL external sources fail (zero
+              evidence), the engine asks the LLM directly and returns a report
+              with source_status._summary="llm_only" and confidence=0.4.
+              This prevents "Insufficient evidence to synthesize." from
+              propagating up to research_agent._run() as a failure.
+              (Book II Principle V Graceful Degradation; Book IV resilience.)
+  FIX-P2-09: investigate() now calls _llm_only_answer() when all_evidence is
+              empty after all gather rounds. The report is marked honestly with
+              limitations noting LLM-only sourcing. (Book II No Silent Failures.)
+  FIX-P2-10: SourceRegistry is now constructed with chronicle_client so that
+              Memory First (Book II Principle I) is honoured at the source layer.
+  FIX-P2-11: _preserve() now logs errors at WARNING instead of silently passing.
+              (Book II No Silent Failures — Chronicle write failures are visible.)
+  FIX-P2-12: _preserve() sends research results TO Chronicle after every
+              successful investigation. (Book II Everything Communicates;
+              Chronicle as main source of truth.)
+
+FIX LOG (phase4-atlas-engine-v1  2026-07-21):
+  BUG-P4-01  _preserve() and _preserve_hypothesis() called chronicle.store(...)
+             which resolves to ChronicleAgent.self.store — a VectorStore instance
+             attribute — not the store() convenience method.  VectorStore is not
+             callable, so every Chronicle write raised:
+               TypeError: 'VectorStore' object is not callable
+             logged as "Chronicle store failed (non-fatal): 'VectorStore' object
+             is not callable".
+             ROOT CAUSE: ChronicleAgent defines both:
+               self.store = VectorStore(...)   # instance attribute (line ~80)
+               def store(self, ...): ...       # convenience method (line ~220)
+             Python resolves self.store to the instance attribute first, so
+             chronicle.store(...) hits the VectorStore object, not the method.
+             FIX: Changed chronicle.store(...) -> chronicle.store_memory(...)
+             which is the unambiguous public API (no name collision).
+             Constitutional law: Book II Principle I Memory First —
+             Chronicle writes must actually work.
+
+  BUG-P4-02  _recall() silently swallowed all Chronicle read errors (bare
+             except: return []).  No log, no audit trail.
+             FIX: Errors now logged at WARNING level with exc_info=True.
+             Constitutional law: Book II No Silent Failures.
 """
 from __future__ import annotations
 
@@ -38,7 +79,9 @@ class ResearchEngine:
     def __init__(self, chronicle_client=None, llm=None, confidence_target: float = 0.6):
         self.chronicle = chronicle_client
         self.llm = llm
-        self.sources = SourceRegistry()
+        # FIX-P2-10: Pass chronicle_client to SourceRegistry so Memory First
+        # is honoured at the source layer. (Book II Principle I.)
+        self.sources = SourceRegistry(chronicle_client=chronicle_client)
         self.contradiction = ContradictionEngine(llm=llm)
         self.confidence_target = confidence_target
         self._reports: Dict[str, Dict[str, Any]] = {}
@@ -91,6 +134,19 @@ class ResearchEngine:
                     extra.relevance = relevance(query, f"{extra.title}. {extra.text}")
                     all_evidence.append(extra)
 
+        # FIX-P2-08/09: LLM-only fallback when ALL sources returned zero evidence.
+        # (Book II Principle V Graceful Degradation — the desk never returns empty-handed
+        # when the LLM itself is available and working.)
+        llm_only_mode = False
+        if not all_evidence:
+            llm_fallback = self._llm_only_answer(query, domain)
+            if llm_fallback:
+                all_evidence = [llm_fallback]
+                source_status["_summary"] = "llm_only"
+                source_status["llm_fallback"] = {"gathered": 1, "status": "ok"}
+                conf = {"confidence": 0.4, "factors": {"llm_only": True}}
+                llm_only_mode = True
+
         evidence = [e.to_dict() for e in all_evidence]
 
         # claim extraction + contradiction/consensus analysis
@@ -119,6 +175,8 @@ class ResearchEngine:
             findings.append(f"Gathered {len(all_evidence)} items across "
                           f"{len({e.source for e in all_evidence})} independent sources over "
                           f"{len(rounds)} round(s).")
+            if llm_only_mode:
+                findings.append("All external sources unavailable — answer provided by LLM directly.")
             if agreement.get("contradictions"):
                 findings.append(f"Detected {len(agreement['contradictions'])} genuine "
                               f"cross-source disagreement(s).")
@@ -126,6 +184,8 @@ class ResearchEngine:
             findings.append("No external evidence gathered; sources unreachable or no matches.")
 
         limitations = []
+        if llm_only_mode:
+            limitations.append("Answer sourced from LLM only — no external evidence corroborated.")
         if conf["confidence"] < self.confidence_target:
             limitations.append(f"Confidence {conf['confidence']} below target "
                              f"{self.confidence_target} after {len(rounds)} round(s).")
@@ -145,6 +205,44 @@ class ResearchEngine:
         self._reports[report_id] = report
         self._preserve(report)
         return report
+
+    # ---- FIX-P2-08: LLM-only fallback ----
+
+    def _llm_only_answer(self, query: str, domain: str) -> Optional[Evidence]:
+        """
+        FIX-P2-08: When ALL external sources fail, ask the LLM directly.
+        Returns a synthetic Evidence item so the rest of the pipeline works
+        normally. Marked with source="llm_fallback" and credibility=0.5.
+        (Book II Principle V Graceful Degradation — the desk never returns
+        empty-handed when the LLM is available.)
+        """
+        if self.llm is None or not getattr(self.llm, "has_any", False):
+            return None
+        try:
+            from shared.llm import system_prompt  # type: ignore
+            r = self.llm.complete(
+                system_prompt("atlas"),
+                f"Question: {query}\nDomain: {domain}\n\n"
+                f"All external research sources are currently unavailable (rate limited or DNS failure). "
+                f"Please answer this question directly from your training knowledge. "
+                f"Be accurate, concise (3-5 sentences), and note that this answer is not "
+                f"corroborated by external sources.",
+                temperature=0.2, max_tokens=400,
+            )
+            if r.ok and r.text.strip():
+                from core.sources import Evidence, SOURCE_CREDIBILITY  # type: ignore
+                return Evidence(
+                    source="llm_fallback",
+                    title=f"LLM answer: {query[:80]}",
+                    text=r.text.strip(),
+                    url="",
+                    credibility=0.5,
+                )
+        except Exception as exc:
+            import logging
+            logging.getLogger("atlas.engine").warning(
+                "atlas.engine: LLM-only fallback failed: %s", exc)
+        return None
 
     def _synthesize(self, query: str, corpus: str, agreement: Dict, domain: str,
                    documents: Optional[List[Any]] = None) -> str:
@@ -267,27 +365,53 @@ class ResearchEngine:
         try:
             res = self.chronicle.search(query=query, domain=domain, limit=3, requester="atlas")
             return res if isinstance(res, list) else []
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger("atlas.engine").warning(
+                "atlas.engine: Chronicle search failed (non-fatal): %s "
+                "(Book II No Silent Failures — Chronicle read errors are visible)", exc)
             return []
 
     def _preserve(self, report):
+        # FIX-P2-11/12: Log errors at WARNING (No Silent Failures) and always
+        # attempt to store research results in Chronicle (Everything Communicates).
+        # FIX-P4-01: Use store_memory() not store() — ChronicleAgent.self.store is
+        # a VectorStore instance attribute that shadows the store() method.
+        # store_memory() is the unambiguous public API.
+        # Constitutional law: Book II Principle I Memory First.
         if self.chronicle is None:
             return
         try:
-            self.chronicle.store(content=report["summary"], memory_type="semantic",
-                                domain=report["domain"], tags=["atlas", "research"] + report["key_terms"][:5],
-                                source="atlas", evidence=[e["url"] for e in report["evidence"] if e.get("url")])
-        except Exception:
-            pass  # aegis:allow-silent
+            self.chronicle.store_memory(
+                content=report["summary"],
+                pillar="semantic",
+                domain=report["domain"],
+                summary=report["summary"][:160],
+                source_repository="Atlas",
+                source_agent="atlas",
+                evidence=[e["url"] for e in report["evidence"] if e.get("url")],
+                tags=["atlas", "research"] + report["key_terms"][:5],
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger("atlas.engine").warning(
+                "atlas.engine: Chronicle store failed (non-fatal): %s "
+                "(Book II No Silent Failures — Chronicle write errors are visible)", exc)
 
     def _preserve_hypothesis(self, h):
+        # FIX-P4-01: Use store_memory() not store() — same VectorStore name collision.
         if self.chronicle is None:
             return
         try:
-            self.chronicle.store(
+            self.chronicle.store_memory(
                 content=f"Hypothesis: {h['statement']} -> {h['status']} (conf {h['confidence']})",
-                memory_type="evolutionary", domain=h["domain"],
-                tags=["atlas", "hypothesis", h["status"]], source="atlas")
+                pillar="evolutionary",
+                domain=h["domain"],
+                summary=f"Hypothesis {h['status']}: {h['statement'][:120]}",
+                source_repository="Atlas",
+                source_agent="atlas",
+                tags=["atlas", "hypothesis", h["status"]],
+            )
         except Exception:
             pass  # aegis:allow-silent
 

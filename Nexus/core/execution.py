@@ -18,12 +18,28 @@ Real production-hardening for the coordinator:
   * RESULT CACHE     TTL cache memoizes recent (agent, task, key) results, so
                      identical sub-queries don't re-run the whole pipeline.
   * PARALLEL DISPATCH independent sub-tasks run concurrently via a thread pool.
+
+FIX LOG (phase4-nexus-execution-v1  2026-07-21):
+  BUG-P4-04  AGENT_MIN_BUDGET["atlas"] was 90.0 seconds.  When external APIs
+             are rate-limited (HTTP 429), Atlas's _gather_safe() enters a
+             120-second cooldown per source.  A single rate-limited source
+             therefore exceeds the 90s SLA, causing:
+               _strat_direct: Atlas returned error with no usable report.
+               msg=SLA breach: atlas exceeded 90.0s
+             even when Atlas had a valid LLM-only answer ready.
+             FIX: Increased AGENT_MIN_BUDGET["atlas"] to 180.0 seconds
+             (covers 1 full cooldown cycle + synthesis time).
+             Made configurable via ATLAS_SLA_BUDGET env var so operators
+             can tune it without code changes.
+             Constitutional law: Book II Principle V Graceful Degradation —
+             SLA should not kill valid queries that are legitimately slow.
 """
 from __future__ import annotations
 
 import concurrent.futures
 import hashlib
 import json
+import os
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -38,7 +54,15 @@ PRIORITY_BUDGET = {1: 8.0, 2: 6.0, 3: 4.0, 4: 3.0, 5: 2.0}   # emergency..backgr
 # 2-8s window above. Without this floor, every single Atlas call breached
 # its SLA regardless of priority, making routing to Atlas structurally
 # non-functional no matter how well Atlas itself worked.
-AGENT_MIN_BUDGET = {"atlas": 90.0}
+#
+# BUG-P4-04 FIX: Increased from 90.0 -> 180.0 seconds.
+# When sources are rate-limited, Atlas's _gather_safe() cooldown is 120s.
+# 90s < 120s cooldown -> SLA breach before Atlas can even fall back to LLM.
+# 180s > 120s cooldown -> Atlas has time to exhaust sources + synthesize.
+# Configurable via ATLAS_SLA_BUDGET env var for operator tuning.
+# Constitutional law: Book II Principle V Graceful Degradation.
+_atlas_sla = float(os.getenv("ATLAS_SLA_BUDGET", "180.0"))
+AGENT_MIN_BUDGET = {"atlas": _atlas_sla}
 
 
 class CircuitBreaker:

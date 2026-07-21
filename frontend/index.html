@@ -1,421 +1,314 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Universal Ecosystem — Command Center</title>
-<script src="shared/theme.js"></script>
-<link rel="stylesheet" href="shared/shared.css">
-<link rel="stylesheet" href="shared/components.css">
-<style>
-:root { --accent:#6366F1; --accent-rgb:99,102,241; }
-
-/* ── FULL-SCREEN CHAT LAYOUT ── */
-html, body { height: 100%; margin: 0; overflow: hidden; }
-.page-shell {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-}
-
-/* ── HERO SECTION ── */
-#heroSection {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px 24px;
-  gap: 20px;
-  overflow-y: auto;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.hero-glyph { font-size: 52px; line-height: 1; }
-.hero-title { font-size: 32px; font-weight: 800; text-align: center; margin: 0; letter-spacing: -0.5px; }
-.hero-sub { font-size: 15px; color: var(--text-secondary); text-align: center; max-width: 560px; margin: 0; line-height: 1.6; }
-
-/* Hero composer */
-.hero-composer-wrap {
-  width: 100%;
-  max-width: 720px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 12px 14px;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.hero-composer-wrap:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.12);
-}
-#heroInput {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: inherit;
-  font-size: 15px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  max-height: 160px;
-  overflow-y: auto;
-}
-#heroInput::placeholder { color: var(--text-muted); }
-#heroSend {
-  width: 38px; height: 38px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 17px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  transition: opacity 0.15s;
-}
-#heroSend:hover { opacity: 0.85; }
-#heroSend:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* Hint chips */
-.hero-hints {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  max-width: 720px;
-}
-.hero-hint-chip {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.hero-hint-chip:hover {
-  background: rgba(var(--accent-rgb),0.1);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Agent grid on hero */
-.hero-agents {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  width: 100%;
-  max-width: 900px;
-  margin-top: 8px;
-}
-.hero-agent-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  text-decoration: none;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transition: border-color 0.2s, background 0.2s;
-}
-.hero-agent-card:hover {
-  border-color: var(--agent-color, var(--accent));
-  background: rgba(var(--agent-rgb, var(--accent-rgb)),0.06);
-}
-.hero-agent-icon {
-  font-size: 22px;
-  width: 38px; height: 38px;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(var(--agent-rgb, var(--accent-rgb)),0.12);
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-.hero-agent-info { flex: 1; min-width: 0; }
-.hero-agent-name { font-weight: 700; font-size: 13px; }
-.hero-agent-role { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hero-agent-pill {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-/* ── CONVERSATION SECTION ── */
-#convSection {
-  flex: 1;
-  display: none;
-  flex-direction: column;
-  overflow: hidden;
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.conv-header {
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-.conv-header-title { font-weight: 700; font-size: 15px; }
-.conv-header-sub { font-size: 12px; color: var(--text-muted); }
-.conv-clear-btn {
-  margin-left: auto;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.conv-clear-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-#convMessages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 800px;
-  width: 100%;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-/* Conv messages */
-.conv-msg { display: flex; flex-direction: column; max-width: 80%; }
-.conv-msg.user { align-self: flex-end; align-items: flex-end; }
-.conv-msg.agent { align-self: flex-start; align-items: flex-start; }
-.conv-agent-label { font-size: 11px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-.conv-bubble { padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; word-break: break-word; }
-.user-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-.agent-bubble { background: var(--bg-elevated); color: var(--text-primary); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
-.conv-msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
-
-/* Conv composer */
-.conv-composer-wrap {
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-}
-.conv-composer-inner {
-  width: 100%;
-  max-width: 800px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  transition: border-color 0.2s;
-}
-.conv-composer-inner:focus-within { border-color: var(--accent); }
-#convInput {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: inherit;
-  font-size: 14px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  max-height: 120px;
-  overflow-y: auto;
-}
-#convInput::placeholder { color: var(--text-muted); }
-#convSend {
-  width: 36px; height: 36px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  transition: opacity 0.15s;
-}
-#convSend:hover { opacity: 0.85; }
-#convSend:disabled { opacity: 0.4; cursor: not-allowed; }
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Universe — Command Center</title>
+  <link rel="stylesheet" href="shared/shared.css"/>
+  <link rel="stylesheet" href="shared/components.css"/>
+  <script src="shared/theme.js"></script>
 </head>
 <body>
-<div class="page-shell">
+  <canvas id="cosmos-canvas"></canvas>
 
-<!-- TOPBAR -->
-<nav class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-logo">🌌</span>
-    <span class="topbar-brand">UNIVERSAL ECOSYSTEM</span>
-    <span class="topbar-divider"></span>
-    <div class="topbar-tabs">
-      <a href="index.html"     class="topbar-tab active">🌌 Home</a>
-      <a href="oracle.html"    class="topbar-tab">📈 Oracle</a>
-      <a href="atlas.html"     class="topbar-tab">🗺️ Atlas</a>
-      <a href="sentinel.html"  class="topbar-tab">📡 Sentinel</a>
-      <a href="pulse.html"     class="topbar-tab">💓 Pulse</a>
-      <a href="chronicle.html" class="topbar-tab">📜 Chronicle</a>
-      <a href="aegis.html"     class="topbar-tab">🛡️ Aegis</a>
-      <a href="forge.html"     class="topbar-tab">⚙️ Forge</a>
-      <a href="genesis.html"   class="topbar-tab">🌱 Genesis</a>
+  <div class="hub-shell">
+    <!-- Topbar -->
+    <header class="hub-topbar">
+      <a href="index.html" class="hub-logo">
+        <div class="hub-logo-glyph icon-md">
+          <span data-icon="agent:nexus"></span>
+        </div>
+        <span class="hub-logo-name">Universe</span>
+      </a>
+      <div style="flex:1"></div>
+      <div id="connBadge" class="conn-badge">
+        <span class="conn-dot"></span>
+        <span id="connText">Connecting…</span>
+      </div>
+      <button class="icon-btn theme-toggle-btn" title="Toggle theme" style="margin-left:8px">
+        <span data-icon="ui:theme" class="icon-md"></span>
+      </button>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hub-hero" id="hubHero">
+      <div class="hero-glyph icon-3xl">
+        <span data-icon="agent:nexus"></span>
+      </div>
+      <h1 class="hub-hero-title">Universe</h1>
+      <p class="hub-hero-bio">
+        A constellation of sovereign intelligences, forged in the crucible of data —
+        commanding the tides of markets, knowledge, and time itself.
+        Nine celestial minds orbit the nexus of infinite possibility.
+      </p>
+      <div class="hero-composer" id="heroComposer">
+        <textarea class="hero-input" id="heroInput" rows="1"
+          placeholder="Speak your query into the void…"
+          aria-label="Message the Universe"></textarea>
+        <button class="hero-send-btn" id="heroSend" disabled title="Send">
+          <span data-icon="ui:send" class="icon-md"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Agent Summary Cards (below hero) -->
+    <section class="hub-agents-section" id="hubAgentsSection">
+      <div class="hub-agents-title">Live Constellation Status</div>
+      <div class="hub-agents-grid" id="agentsGrid">
+        <!-- Populated by JS -->
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+        <div class="agent-summary-card skeleton" style="height:160px"></div>
+      </div>
+    </section>
+
+    <!-- Conversation View (hidden until first message) -->
+    <div class="hub-conversation" id="hubConversation">
+      <div class="conv-header">
+        <button class="back-to-hub-btn" id="backToHubBtn">
+          <span data-icon="ui:back" class="icon-sm"></span>
+          Return to the Constellation
+        </button>
+        <div id="convConnBadge" class="conn-badge" style="margin-left:auto">
+          <span class="conn-dot"></span>
+          <span>Live</span>
+        </div>
+      </div>
+      <div class="conv-messages" id="convMessages"></div>
+      <div class="conv-composer" id="convComposer">
+        <textarea class="hero-input" id="convInput" rows="1"
+          placeholder="Continue the dialogue…"
+          aria-label="Continue conversation"></textarea>
+        <button class="hero-send-btn" id="convSend" disabled title="Send">
+          <span data-icon="ui:send" class="icon-md"></span>
+        </button>
+      </div>
     </div>
   </div>
-  <div class="topbar-right">
-    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
-  </div>
-</nav>
 
-<!-- HERO SECTION -->
-<div id="heroSection">
-  <div class="hero-glyph">🌌</div>
-  <h1 class="hero-title">Universal Ecosystem</h1>
-  <p class="hero-sub">Nine specialized AI agents working in concert. Ask anything — Nexus routes your query to the right expert.</p>
+  <div id="toast-container"></div>
 
-  <div class="hero-composer-wrap">
-    <textarea id="heroInput" placeholder="Ask the ecosystem anything… e.g. 'query what are Oracle's current signals'" rows="1"></textarea>
-    <button id="heroSend">➤</button>
-  </div>
+  <script src="shared/icons.js"></script>
+  <script src="shared/config.js"></script>
+  <script src="shared/api.js"></script>
+  <script src="shared/notifications.js"></script>
+  <script src="shared/cosmos.js"></script>
+  <script src="shared/chat.js"></script>
+  <script>
+  // ── Agent registry for hub cards ──
+  const HUB_AGENTS = [
+    { id:'nexus',     name:'Nexus',     role:'Orchestrator',  icon:'agent:nexus',     color:'59,130,246',  href:'nexus.html',
+      metrics:[{l:'Agents',k:'agents_active'},{l:'Tasks',k:'tasks_queued'},{l:'Uptime',k:'uptime'},{l:'Msgs/hr',k:'messages_per_hour'}] },
+    { id:'oracle',    name:'Oracle',    role:'Trading',       icon:'agent:oracle',    color:'16,185,129',  href:'oracle.html',
+      metrics:[{l:'PnL Today',k:'pnl_today'},{l:'Win Rate',k:'win_rate'},{l:'Trades',k:'open_trades'},{l:'Signals',k:'signals_today'}] },
+    { id:'atlas',     name:'Atlas',     role:'Research',      icon:'agent:atlas',     color:'14,165,233',  href:'atlas.html',
+      metrics:[{l:'Reports',k:'reports_today'},{l:'Sources',k:'sources_monitored'},{l:'Sectors',k:'sectors_tracked'},{l:'Alerts',k:'alerts'}] },
+    { id:'chronicle', name:'Chronicle', role:'History',       icon:'agent:chronicle', color:'139,92,246',  href:'chronicle.html',
+      metrics:[{l:'Events',k:'events_logged'},{l:'Queries',k:'queries_today'},{l:'Storage',k:'storage_used'},{l:'Uptime',k:'uptime'}] },
+    { id:'sentinel',  name:'Sentinel',  role:'Monitoring',    icon:'agent:sentinel',  color:'245,158,11',  href:'sentinel.html',
+      metrics:[{l:'Alerts',k:'alerts_today'},{l:'Sentiment',k:'market_sentiment'},{l:'Sources',k:'sources_monitored'},{l:'Threats',k:'threats_detected'}] },
+    { id:'aegis',     name:'Aegis',     role:'Security',      icon:'agent:aegis',     color:'249,115,22',  href:'aegis.html',
+      metrics:[{l:'Risk Score',k:'risk_score'},{l:'Anomalies',k:'anomalies_detected'},{l:'Blocked',k:'threats_blocked'},{l:'Compliance',k:'compliance_score'}] },
+    { id:'forge',     name:'Forge',     role:'Builder',       icon:'agent:forge',     color:'100,116,139', href:'forge.html',
+      metrics:[{l:'Builds',k:'builds_today'},{l:'Success',k:'success_rate'},{l:'Deploy',k:'deployments'},{l:'Health',k:'system_health'}] },
+    { id:'genesis',   name:'Genesis',   role:'Strategy',      icon:'agent:genesis',   color:'20,184,166',  href:'genesis.html',
+      metrics:[{l:'Strategies',k:'active_strategies'},{l:'Return',k:'avg_return'},{l:'Goals',k:'goals_met'},{l:'Backtests',k:'backtests_run'}] },
+    { id:'pulse',     name:'Pulse',     role:'Sentiment',     icon:'agent:pulse',     color:'236,72,153',  href:'pulse.html',
+      metrics:[{l:'Sentiment',k:'overall_sentiment'},{l:'Posts',k:'posts_analyzed'},{l:'Trending',k:'trending_topics'},{l:'Score',k:'sentiment_score'}] },
+  ];
 
-  <div class="hero-hints">
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what are the current trading signals')">📈 Trading signals</span>
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('report latest market news')">📰 Latest news</span>
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what is the social sentiment on Bitcoin')">💬 Social sentiment</span>
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query system health status')">⚡ System health</span>
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what is the current strategy')">🌱 Strategy</span>
-    <span class="hero-hint-chip" onclick="window._hub&&window._hub._setPrompt('query what do you remember about last week')">📜 Memory</span>
-  </div>
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
 
-  <!-- Agent cards -->
-  <div class="hero-agents" id="agentGrid">
-    <a href="oracle.html"    class="hero-agent-card" style="--agent-color:#10B981;--agent-rgb:16,185,129">
-      <div class="hero-agent-icon">📈</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Oracle</div><div class="hero-agent-role">Prediction Engine</div></div>
-      <span class="hero-agent-pill" id="pill-oracle">…</span>
-    </a>
-    <a href="atlas.html"     class="hero-agent-card" style="--agent-color:#0EA5E9;--agent-rgb:14,165,233">
-      <div class="hero-agent-icon">🗺️</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Atlas</div><div class="hero-agent-role">Research Engine</div></div>
-      <span class="hero-agent-pill" id="pill-atlas">…</span>
-    </a>
-    <a href="chronicle.html" class="hero-agent-card" style="--agent-color:#8B5CF6;--agent-rgb:139,92,246">
-      <div class="hero-agent-icon">📜</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Chronicle</div><div class="hero-agent-role">Memory Engine</div></div>
-      <span class="hero-agent-pill" id="pill-chronicle">…</span>
-    </a>
-    <a href="aegis.html"     class="hero-agent-card" style="--agent-color:#F97316;--agent-rgb:249,115,22">
-      <div class="hero-agent-icon">🛡️</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Aegis</div><div class="hero-agent-role">Governance</div></div>
-      <span class="hero-agent-pill" id="pill-aegis">…</span>
-    </a>
-    <a href="sentinel.html"  class="hero-agent-card" style="--agent-color:#F59E0B;--agent-rgb:245,158,11">
-      <div class="hero-agent-icon">📡</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Sentinel</div><div class="hero-agent-role">News Intelligence</div></div>
-      <span class="hero-agent-pill" id="pill-sentinel">…</span>
-    </a>
-    <a href="forge.html"     class="hero-agent-card" style="--agent-color:#64748B;--agent-rgb:100,116,139">
-      <div class="hero-agent-icon">⚙️</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Forge</div><div class="hero-agent-role">Automation</div></div>
-      <span class="hero-agent-pill" id="pill-forge">…</span>
-    </a>
-    <a href="genesis.html"   class="hero-agent-card" style="--agent-color:#14B8A6;--agent-rgb:20,184,166">
-      <div class="hero-agent-icon">🌱</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Genesis</div><div class="hero-agent-role">Strategy Engine</div></div>
-      <span class="hero-agent-pill" id="pill-genesis">…</span>
-    </a>
-    <a href="pulse.html"     class="hero-agent-card" style="--agent-color:#EC4899;--agent-rgb:236,72,153">
-      <div class="hero-agent-icon">💓</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Pulse</div><div class="hero-agent-role">Social Sentiment</div></div>
-      <span class="hero-agent-pill" id="pill-pulse">…</span>
-    </a>
-    <a href="nexus.html"     class="hero-agent-card" style="--agent-color:#6366F1;--agent-rgb:99,102,241">
-      <div class="hero-agent-icon">⚡</div>
-      <div class="hero-agent-info"><div class="hero-agent-name">Nexus</div><div class="hero-agent-role">Coordinator Hub</div></div>
-      <span class="hero-agent-pill" id="pill-nexus">…</span>
-    </a>
-  </div>
-</div>
-
-<!-- CONVERSATION SECTION (shown after first message) -->
-<div id="convSection">
-  <div class="conv-header">
-    <span style="font-size:20px">⚡</span>
-    <div>
-      <div class="conv-header-title">Nexus — Universal Hub</div>
-      <div class="conv-header-sub">Routes your query to the right agent</div>
-    </div>
-    <button class="conv-clear-btn" onclick="window._hub&&window._hub.clearSession()">✕ New conversation</button>
-  </div>
-  <div id="convMessages"></div>
-  <div class="conv-composer-wrap">
-    <div class="conv-composer-inner">
-      <textarea id="convInput" placeholder="Continue the conversation…" rows="1"></textarea>
-      <button id="convSend">➤</button>
-    </div>
-  </div>
-</div>
-
-</div><!-- .page-shell -->
-
-<div id="toast-container"></div>
-
-<script src="shared/config.js"></script>
-<script src="shared/api.js"></script>
-<script src="shared/chat.js"></script>
-<script src="shared/notifications.js"></script>
-<script>
-const ALL_AGENTS = ['nexus','oracle','atlas','chronicle','aegis','sentinel','forge','genesis','pulse'];
-
-// ── AGENT STATUS PILLS ──
-async function loadAgentStatus() {
-  const agents = await fetchAgents();
-  if (!agents) {
-    ALL_AGENTS.forEach(id => {
-      const pill = document.getElementById('pill-' + id);
-      if (pill) { pill.textContent = 'Offline'; pill.style.color = '#EF4444'; }
-    });
-    return;
+  // ── Connection check ──
+  async function checkConnection() {
+    const badge = document.getElementById('connBadge');
+    const text  = document.getElementById('connText');
+    try {
+      const r = await fetch(`${API_BASE}/agents`, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        badge.className = 'conn-badge online';
+        text.textContent = 'Live';
+        return true;
+      }
+    } catch(e) {}
+    badge.className = 'conn-badge offline';
+    text.textContent = 'Offline';
+    return false;
   }
-  const onlineSet = new Set(
-    Array.isArray(agents)
-      ? agents.map(a => (a.id || a.name || '').toLowerCase())
-      : Object.keys(agents)
-  );
-  ALL_AGENTS.forEach(id => {
-    const pill = document.getElementById('pill-' + id);
-    if (!pill) return;
-    const online = onlineSet.has(id);
-    pill.textContent = online ? 'Online' : 'Offline';
-    pill.style.color = online ? '#10B981' : '#EF4444';
-  });
-}
 
-// ── HERO CHAT ──
-document.addEventListener('DOMContentLoaded', () => {
-  const hub = new HeroChatManager({ agentId: 'nexus' });
-  window._hub = hub;
-  loadAgentStatus();
-  setInterval(loadAgentStatus, 60_000);
-  startConnectionPolling(30_000);
-});
-</script>
+  // ── Fetch agent data and render cards ──
+  async function loadAgentCards() {
+    const grid = document.getElementById('agentsGrid');
+    const results = await Promise.allSettled(
+      HUB_AGENTS.map(a => fetch(`${API_BASE}/agents/${a.id}/data`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()))
+    );
+
+    grid.innerHTML = '';
+    HUB_AGENTS.forEach((agent, i) => {
+      const data = results[i].status === 'fulfilled' ? results[i].value : null;
+      const status = data ? (data.status || 'active') : 'offline';
+      const dotClass = status === 'active' ? 'dot-green' : status === 'idle' ? 'dot-amber' : 'dot-gray';
+
+      const metricsHtml = agent.metrics.map(m => {
+        const val = data ? (data[m.k] ?? data.metrics?.[m.k] ?? '—') : '—';
+        return `<div class="agent-metric">
+          <span class="agent-metric-label">${m.l}</span>
+          <span class="agent-metric-value" style="color:rgb(${agent.color})">${val}</span>
+        </div>`;
+      }).join('');
+
+      const updated = data ? 'Just now' : 'Offline';
+
+      grid.innerHTML += `
+        <a href="${agent.href}" class="agent-summary-card" data-agent="${agent.id}"
+           style="--agent-rgb:${agent.color};--agent-color:rgb(${agent.color})">
+          <div class="agent-card-header">
+            <div class="agent-card-icon icon-lg" data-icon="${agent.icon}"></div>
+            <div>
+              <div class="agent-card-name">${agent.name}</div>
+              <div class="agent-card-role">${agent.role}</div>
+            </div>
+          </div>
+          <div class="agent-card-metrics">${metricsHtml}</div>
+          <div class="agent-card-footer">
+            <div class="agent-card-status">
+              <span class="dot ${dotClass}"></span>
+              <span>${status.charAt(0).toUpperCase()+status.slice(1)}</span>
+            </div>
+            <span class="agent-card-link">Open Dashboard →</span>
+          </div>
+        </a>`;
+    });
+
+    // Re-inject icons for newly created elements
+    if (typeof injectIcons === 'function') injectIcons();
+  }
+
+  // ── Hero → Conversation transition ──
+  const heroInput  = document.getElementById('heroInput');
+  const heroSend   = document.getElementById('heroSend');
+  const convInput  = document.getElementById('convInput');
+  const convSend   = document.getElementById('convSend');
+  const hubHero    = document.getElementById('hubHero');
+  const hubAgents  = document.getElementById('hubAgentsSection');
+  const hubConv    = document.getElementById('hubConversation');
+  const convMsgs   = document.getElementById('convMessages');
+  const backBtn    = document.getElementById('backToHubBtn');
+
+  let conversationActive = false;
+
+  function autoGrow(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  [heroInput, convInput].forEach(el => {
+    el.addEventListener('input', () => {
+      autoGrow(el);
+      const btn = el === heroInput ? heroSend : convSend;
+      btn.disabled = !el.value.trim();
+    });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const btn = el === heroInput ? heroSend : convSend;
+        if (!btn.disabled) btn.click();
+      }
+    });
+  });
+
+  function addMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = `conv-msg ${role}`;
+    div.innerHTML = `<div class="conv-bubble">${text}</div>`;
+    convMsgs.appendChild(div);
+    convMsgs.scrollTop = convMsgs.scrollHeight;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'conv-msg agent';
+    div.id = 'typingIndicator';
+    div.innerHTML = `<div class="conv-bubble" style="padding:10px 14px">
+      <div style="display:flex;gap:4px;align-items:center">
+        <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+      </div>
+    </div>`;
+    convMsgs.appendChild(div);
+    convMsgs.scrollTop = convMsgs.scrollHeight;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById('typingIndicator');
+    if (t) t.remove();
+  }
+
+  async function sendMessage(text) {
+    if (!text.trim()) return;
+    if (!conversationActive) {
+      // Transition hero → conversation
+      hubHero.classList.add('hidden');
+      hubAgents.style.display = 'none';
+      hubConv.classList.add('visible');
+      conversationActive = true;
+    }
+    addMessage('user', text);
+    showTyping();
+    try {
+      const r = await fetch(`${API_BASE}/agents/nexus/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+        signal: AbortSignal.timeout(15000)
+      });
+      removeTyping();
+      if (r.ok) {
+        const d = await r.json();
+        addMessage('agent', d.response || d.message || 'The constellation has received your query.');
+      } else {
+        addMessage('agent', 'The nexus is unreachable. Ensure the backend is running: <code>python api.py</code>');
+      }
+    } catch(e) {
+      removeTyping();
+      addMessage('agent', 'Connection lost. Start the backend: <code>python api.py</code>');
+    }
+  }
+
+  heroSend.addEventListener('click', () => {
+    const t = heroInput.value.trim();
+    heroInput.value = '';
+    heroInput.style.height = 'auto';
+    heroSend.disabled = true;
+    sendMessage(t);
+  });
+
+  convSend.addEventListener('click', () => {
+    const t = convInput.value.trim();
+    convInput.value = '';
+    convInput.style.height = 'auto';
+    convSend.disabled = true;
+    sendMessage(t);
+  });
+
+  backBtn.addEventListener('click', () => {
+    hubConv.classList.remove('visible');
+    hubHero.classList.remove('hidden');
+    hubAgents.style.display = '';
+    conversationActive = false;
+    convMsgs.innerHTML = '';
+  });
+
+  // ── Init ──
+  checkConnection();
+  loadAgentCards();
+  setInterval(loadAgentCards, 60000);
+  setInterval(checkConnection, 30000);
+  </script>
 </body>
 </html>

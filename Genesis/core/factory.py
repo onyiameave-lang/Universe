@@ -217,10 +217,10 @@ class AgentFactory:
         self._pending.pop(record_id, None)
         if self.chronicle:
             try:
-                self.chronicle.store(content=f"Genesis deployed agent '{bp['name']}' v{entry['version']} "
+                self.chronicle.store_memory(content=f"Genesis deployed agent '{bp['name']}' v{entry['version']} "
                                           f"for {bp['domain']} after certification + human approval.",
-                                    memory_type="constitutional", domain="creation",
-                                    tags=["genesis", "agent_birth", bp["domain"]], source="genesis")
+                                    pillar="constitutional", domain="creation",
+                                    tags=["genesis", "agent_birth", bp["domain"]], source_repository="genesis")
             except Exception:
                 pass  # aegis:allow-silent
         return {"status": "deployed", "path": str(repo), "version": entry["version"],

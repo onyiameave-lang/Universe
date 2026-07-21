@@ -183,12 +183,12 @@ class MethodDiscovery:
             return
         try:
             verdict = "adopted as new champion" if adopted else "did not beat champion"
-            self.chronicle.store(
+            self.chronicle.store_memory(
                 content=f"Forge evaluated training method '{method}' for {key}: "
                        f"cv_score={round(score,4)}, {verdict}.",
-                memory_type="evolutionary", domain="training",
+                pillar="evolutionary", domain="training",
                 tags=["forge", "method_discovery", method, "adopted" if adopted else "rejected"],
-                source="forge")
+                source_repository="forge")
         except Exception:
             pass  # aegis:allow-silent
 

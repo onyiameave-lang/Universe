@@ -21,6 +21,26 @@ records provenance for every item so claims are traceable:
 Each source reports `available` and returns typed Evidence with a per-source
 credibility prior. Failures degrade honestly (explicit reason, never fabricated).
 Concurrency: sources are fetched in parallel with a thread pool for desk-speed.
+
+FIX LOG (Phase 2):
+  FIX-P2-01: Added per-source minimum call gaps and token-bucket rate limiting.
+              (Book IV resilience; Book II No Silent Failures.)
+  FIX-P2-02: Added full-jitter exponential backoff on HTTP 429 responses.
+              (Book IV Ch IX Constitutional Deployment and Operations Standards.)
+  FIX-P2-03: ArxivSource.API changed from http:// to https:// — plain HTTP
+              fails DNS on VPN/restricted networks. (Book II Research Before
+              Assumption.)
+  FIX-P2-04: _http_get() now raises RateLimitError on 429 and ForbiddenError
+              on 403 instead of returning None silently. (Book II No Silent
+              Failures; Book IV Fail Loudly.)
+  FIX-P2-05: DNS failures (socket.gaierror) are caught and returned as
+              status="dns_error" — source is skipped, others continue.
+              (Book IV resilience; Book II graceful degradation.)
+  FIX-P2-06: SourceRegistry.gather() uses _gather_safe() that wraps every
+              source call with backoff, per-source cooldown, and honest status
+              reporting. (Book II Principle III Everything Communicates.)
+  FIX-P2-07: Chronicle integration added to SourceRegistry — past evidence
+              is retrieved before external calls (Memory First, Book II Principle I).
 """
 from __future__ import annotations
 
@@ -29,15 +49,23 @@ import io
 import json
 import logging
 import os
+import random
 import re
+import socket
 import ssl
+import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+log = logging.getLogger("atlas.sources")
 
 _USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
 _TIMEOUT = 12
+
 
 def _build_ssl_context() -> Optional["ssl.SSLContext"]:
     """Use certifi's CA bundle if available, so requests don't depend on
@@ -58,9 +86,161 @@ _SSL_CONTEXT = _build_ssl_context()
 SOURCE_CREDIBILITY = {
     "semantic_scholar": 0.90, "pubmed": 0.90, "crossref": 0.88, "arxiv": 0.82,
     "wikipedia": 0.75, "gdelt": 0.65, "hackernews": 0.55, "web": 0.50,
-    "pdf": 0.60, "unknown": 0.40,
+    "pdf": 0.60, "unknown": 0.40, "chronicle": 0.85,
 }
 
+# FIX-P2-01: Per-source minimum gap between calls (seconds).
+# Prevents burst-firing the same API endpoint on repeated queries.
+# (Book IV Ch IX: "Systems shall not overwhelm external dependencies.")
+_SOURCE_MIN_GAP: Dict[str, float] = {
+    "semantic_scholar": 3.0,   # public tier: ~1 req/s; 3s gap is safe
+    "arxiv":            2.0,   # no official limit but polite crawling required
+    "gdelt":            2.0,   # GDELT asks for reasonable request rates
+    "pubmed":           1.0,   # NCBI: 3 req/s without key; 1s gap is safe
+    "crossref":         1.0,   # Crossref polite pool: 1 req/s
+    "hackernews":       0.5,   # Algolia: generous limits
+    "wikipedia":        0.5,   # Wikipedia REST: generous limits
+}
+
+# FIX-P2-01: Per-source last-call timestamp and backoff-until timestamp.
+_source_last_call: Dict[str, float] = {}
+_source_backoff_until: Dict[str, float] = {}
+_source_lock = threading.Lock()
+
+
+# ============================================================
+# Custom exceptions (FIX-P2-04)
+# ============================================================
+
+class RateLimitError(Exception):
+    """Raised when a source returns HTTP 429 Too Many Requests."""
+
+class ForbiddenError(Exception):
+    """Raised when a source returns HTTP 403 Forbidden."""
+
+
+# ============================================================
+# HTTP helper (FIX-P2-04: raises on 429/403 instead of returning None)
+# ============================================================
+
+def _http_get(url: str, headers: Optional[Dict[str, str]] = None, raw: bool = False):
+    """Fetch URL. Raises RateLimitError on 429, ForbiddenError on 403.
+    Returns None on other errors (logged at WARNING). (FIX-P2-04)"""
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT) as resp:
+            data = resp.read()
+            if raw:
+                return data
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return data.decode(charset, errors="replace")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 429:
+            raise RateLimitError(f"HTTP 429 from {url}") from exc
+        if exc.code == 403:
+            raise ForbiddenError(f"HTTP 403 from {url}") from exc
+        log.warning("HTTP %s fetch failed for %s: %s", exc.code, url, exc)
+        return None
+    except socket.gaierror:
+        # FIX-P2-05: DNS failures are re-raised so _gather_safe() can tag them
+        raise
+    except Exception as exc:
+        log.warning("HTTP fetch failed for %s: %s", url, exc)
+        return None
+
+
+def _strip_html(html: str) -> str:
+    html = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", html)
+    text = re.sub(r"(?s)<[^>]+>", " ", html)
+    for a, b in (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&#39;", "'")):
+        text = text.replace(a, b)
+    text = re.sub(r"&#\d+;", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# ============================================================
+# Rate-limiting wrapper (FIX-P2-01, FIX-P2-02)
+# ============================================================
+
+def _gather_safe(src_name: str, gather_fn, query: str, limit: int,
+                 max_retries: int = 2) -> Tuple[List, str]:
+    """
+    Wraps a source's gather() call with:
+      - Per-source minimum gap enforcement (FIX-P2-01)
+      - Full-jitter exponential backoff on 429 (FIX-P2-02)
+      - DNS error graceful skip (FIX-P2-05)
+      - 403 graceful skip — no retries (FIX-P2-04)
+      - Per-source 120s cooldown after exhausting retries (FIX-P2-06)
+
+    Returns (evidence_list, status_string).
+    (Book II No Silent Failures — every outcome is named and logged.)
+    """
+    now = time.time()
+
+    # Check if source is in cooldown from a previous 429 exhaustion
+    with _source_lock:
+        backoff_until = _source_backoff_until.get(src_name, 0.0)
+        if now < backoff_until:
+            remaining = round(backoff_until - now, 1)
+            log.info("atlas.sources: %s in cooldown for %.1fs more — skipping", src_name, remaining)
+            return [], "rate_limited_cooldown"
+
+        # Enforce minimum gap between calls to this source
+        min_gap = _SOURCE_MIN_GAP.get(src_name, 0.0)
+        last_call = _source_last_call.get(src_name, 0.0)
+        wait = min_gap - (now - last_call)
+        if wait > 0:
+            time.sleep(wait)
+
+        _source_last_call[src_name] = time.time()
+
+    for attempt in range(max_retries + 1):
+        try:
+            items = gather_fn(query, limit=limit)
+            return items, "ok" if items else "no_results"
+
+        except RateLimitError as exc:
+            # FIX-P2-02: Full-jitter exponential backoff
+            base_wait = min(32.0, 2 ** attempt)
+            jitter = random.uniform(0, base_wait)
+            wait_sec = base_wait + jitter
+            log.warning("atlas.sources: %s HTTP 429 (attempt %d/%d) — backing off %.1fs: %s",
+                        src_name, attempt + 1, max_retries + 1, wait_sec, exc)
+            if attempt < max_retries:
+                time.sleep(wait_sec)
+            else:
+                # Exhausted retries — put source in 120s cooldown
+                with _source_lock:
+                    _source_backoff_until[src_name] = time.time() + 120.0
+                log.error("atlas.sources: %s exhausted %d retries on 429 — "
+                          "cooling down 120s. (Book II No Silent Failures)",
+                          src_name, max_retries + 1)
+                return [], "rate_limited"
+
+        except ForbiddenError as exc:
+            # FIX-P2-04: 403 = permanent for this call; no retries
+            log.warning("atlas.sources: %s HTTP 403 — skipping (no retries): %s", src_name, exc)
+            return [], "http_403"
+
+        except socket.gaierror as exc:
+            # FIX-P2-05: DNS failure — skip source, don't crash the desk
+            log.warning("atlas.sources: %s DNS resolution failed — skipping: %s", src_name, exc)
+            return [], "dns_error"
+
+        except Exception as exc:
+            log.warning("atlas.sources: %s unexpected error (attempt %d/%d): %s",
+                        src_name, attempt + 1, max_retries + 1, exc)
+            if attempt < max_retries:
+                time.sleep(1.0)
+            else:
+                return [], f"error: {exc}"
+
+    return [], "error: max_retries_exceeded"
+
+
+# ============================================================
+# Evidence dataclass
+# ============================================================
 
 @dataclass
 class Evidence:
@@ -80,29 +260,6 @@ class Evidence:
                 "url": self.url, "author": self.author, "date": self.date,
                 "citations": self.citations, "relevance": round(self.relevance, 3),
                 "credibility": round(self.credibility, 3), "corroboration": self.corroboration}
-
-
-def _http_get(url: str, headers: Optional[Dict[str, str]] = None, raw: bool = False):
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, **(headers or {})})
-    try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT) as resp:
-            data = resp.read()
-            if raw:
-                return data
-            charset = resp.headers.get_content_charset() or "utf-8"
-            return data.decode(charset, errors="replace")
-    except Exception as exc:
-        logging.getLogger("atlas.sources").warning("HTTP fetch failed for %s: %s", url, exc)
-        return None
-
-
-def _strip_html(html: str) -> str:
-    html = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", html)
-    text = re.sub(r"(?s)<[^>]+>", " ", html)
-    for a, b in (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&#39;", "'")):
-        text = text.replace(a, b)
-    text = re.sub(r"&#\d+;", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 # ============================================================
@@ -144,7 +301,9 @@ class WikipediaSource:
 
 class ArxivSource:
     name = "arxiv"
-    API = "http://export.arxiv.org/api/query"
+    # FIX-P2-03: Changed from http:// to https:// — plain HTTP fails DNS on
+    # VPN/restricted networks. (Book II Research Before Assumption.)
+    API = "https://export.arxiv.org/api/query"
     available = True
 
     def gather(self, query: str, limit: int = 3) -> List[Evidence]:
@@ -344,11 +503,17 @@ class PDFSource:
 
 
 # ============================================================
-# Aggregating registry with parallel fetch
+# Aggregating registry with parallel fetch + rate limiting
 # ============================================================
 
 class SourceRegistry:
-    """All sources, fetched in parallel, with honest per-source status."""
+    """All sources, fetched in parallel, with honest per-source status.
+
+    FIX-P2-06: gather() now uses _gather_safe() for every source call,
+    providing rate limiting, backoff, and graceful error handling.
+    FIX-P2-07: Chronicle integration — past evidence retrieved before
+    external calls (Memory First, Book II Principle I).
+    """
 
     # domain -> which sources are most appropriate (Atlas reasons over these)
     DOMAIN_SOURCES = {
@@ -363,7 +528,7 @@ class SourceRegistry:
         "science": ["arxiv", "semantic_scholar", "pubmed"],
     }
 
-    def __init__(self):
+    def __init__(self, chronicle_client=None):
         self.sources = {
             "wikipedia": WikipediaSource(), "arxiv": ArxivSource(),
             "semantic_scholar": SemanticScholarSource(), "pubmed": PubMedSource(),
@@ -371,28 +536,69 @@ class SourceRegistry:
         }
         self.web = WebSource()
         self.pdf = PDFSource()
+        # FIX-P2-07: Chronicle client for Memory First principle
+        self.chronicle = chronicle_client
 
     def sources_for(self, domain: str, override: Optional[List[str]] = None) -> List[str]:
         if override:
             return [s for s in override if s in self.sources]
         return self.DOMAIN_SOURCES.get(domain, self.DOMAIN_SOURCES["general"])
 
+    def _recall_from_chronicle(self, query: str, domain: str) -> List[Evidence]:
+        """FIX-P2-07: Retrieve past evidence from Chronicle before hitting external APIs.
+        (Book II Principle I Memory First — ask Chronicle before generating new knowledge.)"""
+        if self.chronicle is None:
+            return []
+        try:
+            results = self.chronicle.search(query=query, domain=domain, limit=3,
+                                            requester="atlas.sources")
+            if not isinstance(results, list):
+                return []
+            chronicle_evidence = []
+            for mem in results:
+                summary = mem.get("summary", "") or mem.get("content", "")
+                if summary:
+                    chronicle_evidence.append(Evidence(
+                        source="chronicle",
+                        title=f"[Memory] {summary[:80]}",
+                        text=summary,
+                        url="",
+                        credibility=SOURCE_CREDIBILITY["chronicle"],
+                    ))
+            if chronicle_evidence:
+                log.info("atlas.sources: Chronicle returned %d prior memories for '%s'",
+                         len(chronicle_evidence), query[:60])
+            return chronicle_evidence
+        except Exception as exc:
+            log.warning("atlas.sources: Chronicle recall failed (non-fatal): %s", exc)
+            return []
+
     def gather(self, query: str, domain: str = "general", depth: str = "standard",
                sources: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Gather evidence from all chosen sources in parallel.
+        FIX-P2-06: Uses _gather_safe() for every source — rate limiting,
+        backoff, and graceful error handling built in.
+        FIX-P2-07: Checks Chronicle first (Memory First principle).
+        """
         limit = {"shallow": 2, "standard": 3, "deep": 6}.get(depth, 3)
         chosen = self.sources_for(domain, sources)
         evidence: List[Evidence] = []
         status: Dict[str, Any] = {}
 
-        def _run(src_name):
+        # FIX-P2-07: Memory First — check Chronicle before external calls
+        chronicle_ev = self._recall_from_chronicle(query, domain)
+        if chronicle_ev:
+            evidence.extend(chronicle_ev)
+            status["chronicle"] = {"gathered": len(chronicle_ev), "status": "ok"}
+
+        def _run(src_name: str) -> Tuple[str, List[Evidence], str]:
             src = self.sources.get(src_name)
             if not src or not getattr(src, "available", False):
                 return src_name, [], "unavailable"
-            try:
-                items = src.gather(query, limit=limit)
-                return src_name, items, "ok" if items else "no_results"
-            except Exception as exc:
-                return src_name, [], f"error: {exc}"
+            # FIX-P2-06: _gather_safe wraps with rate limiting + backoff
+            items, st = _gather_safe(src_name, src.gather, query, limit)
+            return src_name, items, st
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
             for src_name, items, st in pool.map(_run, chosen):
@@ -401,6 +607,11 @@ class SourceRegistry:
 
         if not evidence:
             status["_summary"] = "no evidence gathered (sources unreachable or no matches)"
+        else:
+            ok_sources = [k for k, v in status.items()
+                         if not k.startswith("_") and v.get("status") == "ok"]
+            status["_summary"] = f"ok ({len(ok_sources)} sources returned results)"
+
         return {"evidence": evidence, "source_status": status, "sources_used": chosen}
 
     def fetch_url(self, url: str) -> Optional[Evidence]:
@@ -456,7 +667,7 @@ class CrossrefSource:
 
 # register crossref into any SourceRegistry instances created after import
 _orig_init = SourceRegistry.__init__
-def _patched_init(self):
-    _orig_init(self)
+def _patched_init(self, chronicle_client=None):
+    _orig_init(self, chronicle_client=chronicle_client)
     self.sources["crossref"] = CrossrefSource()
 SourceRegistry.__init__ = _patched_init

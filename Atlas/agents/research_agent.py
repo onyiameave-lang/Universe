@@ -17,6 +17,26 @@ now with institutional strategies that trade breadth, rigor, and speed:
 It learns which approach yields high-confidence, well-corroborated reports for
 which kinds of query. If a path underperforms the confidence target, the engine
 auto-escalates depth and Atlas can retry a different path.
+
+FIX LOG (Phase 2):
+  FIX-P2-13: _run() success check fixed — the original check required BOTH
+              confidence >= target AND evidence present. This caused every
+              query to return status="error" when external sources were
+              rate-limited (zero evidence), even when the LLM fallback
+              produced a valid answer. New check: status="complete" whenever
+              the report has a non-empty summary (covers llm_only fallback,
+              partial evidence, and full evidence). (Book II Graceful
+              Degradation; Book IV No Silent Failures.)
+  FIX-P2-14: execute() no longer triggers a second broad-desk sweep when
+              solve() is exhausted. Instead it returns the best available
+              report from the reasoning trace. This prevents the "no approach
+              succeeded in 3 attempts" cascade from repeating indefinitely.
+              (Book IV resilience — exhausted strategies return best effort,
+              not another doomed attempt.)
+  FIX-P2-15: Chronicle integration hooks added — Atlas sends completed
+              research results to Chronicle and retrieves prior research
+              before starting a new investigation. (Book II Memory First;
+              Book II Everything Communicates; Chronicle as source of truth.)
 """
 from __future__ import annotations
 
@@ -107,7 +127,31 @@ class AtlasAgent(BaseAgent):
                                         domain=context.get("domain", "general"),
                                         depth=context.get("depth", "standard"),
                                         sources=PATH_SOURCES[path])
-        ok = report["confidence"] >= self.engine.confidence_target and bool(report["evidence"])
+        summary = report.get("summary", "")
+        source_summary = report.get("source_status", {}).get("_summary", "")
+
+        # FIX-P2-13: Accept the report as "complete" when:
+        #   (a) summary is non-empty and not the sentinel failure string, OR
+        #   (b) source_status._summary is "llm_only" (LLM fallback succeeded), OR
+        #   (c) confidence >= target with any evidence present.
+        # The original check (confidence >= target AND evidence) caused every
+        # rate-limited query to return status="error" even when the LLM answered.
+        # (Book II Graceful Degradation — partial answers are better than errors.)
+        has_answer = bool(summary and summary != "Insufficient evidence to synthesize.")
+        llm_only = source_summary == "llm_only"
+        above_target = (report["confidence"] >= self.engine.confidence_target
+                        and bool(report["evidence"]))
+        ok = has_answer and (above_target or llm_only or bool(report.get("evidence")))
+
+        # FIX-P2-15: Send completed research to Chronicle (Everything Communicates).
+        if ok:
+            self._send_to_chronicle(
+                content=summary,
+                memory_type="semantic",
+                domain=context.get("domain", "general"),
+                tags=["atlas", "research", path] + report.get("key_terms", [])[:3],
+            )
+
         return {"status": "complete" if ok else "error",
                "message": "" if ok else "below confidence target via this path",
                "report": report, "path": path}
@@ -117,17 +161,47 @@ class AtlasAgent(BaseAgent):
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
         if task == "research.investigate":
+            # FIX-P2-15: Memory First — retrieve prior research from Chronicle
+            # before starting a new investigation.
+            prior = self._receive_from_chronicle(
+                query=ctx.get("query", ""),
+                domain=ctx.get("domain", "general"),
+            )
+            if prior:
+                log.info("atlas: Chronicle returned %d prior memories for '%s'",
+                         len(prior), ctx.get("query", "")[:60])
+
             if self.reasoning is not None:
                 solved = self.solve("research_path", {"query": ctx.get("query", ""),
                     "domain": ctx.get("domain", "general"), "depth": ctx.get("depth", "standard")})
                 if solved.get("status") == "complete":
                     return {"status": "complete", "report": solved.get("report"),
                            "research_path": solved.get("path")}
-                # exhausted: return best-effort broad-desk result honestly
+
+                # FIX-P2-14: solve() exhausted — return best available report
+                # from the reasoning trace instead of triggering another doomed
+                # broad-desk sweep. (Book IV resilience.)
+                trace = solved.get("trace", [])
+                best_report = None
+                for step in reversed(trace):
+                    candidate = step.get("report") if isinstance(step, dict) else None
+                    if candidate and candidate.get("summary") and \
+                       candidate["summary"] != "Insufficient evidence to synthesize.":
+                        best_report = candidate
+                        break
+                if best_report:
+                    log.info("atlas: all paths below target — returning best-effort report "
+                             "from trace (conf=%.2f). (FIX-P2-14)", best_report.get("confidence", 0))
+                    return {"status": "complete", "report": best_report,
+                            "note": "all paths below target; returned best-effort from trace"}
+
+                # Last resort: one broad-desk sweep (not a loop — execute() is called once)
+                log.info("atlas: no usable trace report — falling back to broad-desk sweep")
                 return {"status": "complete", "report": self.engine.investigate(
                     ctx.get("query", ""), ctx.get("domain", "general"),
                     sources=PATH_SOURCES["broad_desk"]),
                     "note": "all paths below target; returned best-effort broad sweep"}
+
             return {"status": "complete", "report": self.engine.investigate(
                 ctx.get("query", ""), ctx.get("domain", "general"), ctx.get("depth", "standard"))}
         if task == "hypothesis.generate":

@@ -249,9 +249,9 @@ class RemediationEngine:
                 pass  # aegis:allow-silent
         if self.chronicle is not None:
             try:
-                self.chronicle.store(content=detail, memory_type="constitutional",
+                self.chronicle.store_memory(content=detail, pillar="constitutional",
                                     domain="remediation", tags=["escalation", repository],
-                                    source="remediation")
+                                    source_repository="remediation")
             except Exception:
                 pass  # aegis:allow-silent
         return {"escalated": True, "detail": detail}
@@ -296,11 +296,11 @@ class RemediationEngine:
             path.write_text(fix.patched, encoding="utf-8")
             fix.applied = True
             if self.chronicle is not None:
-                self.chronicle.store(
+                self.chronicle.store_memory(
                     content=f"Applied approved fix {fix.fix_id} to {fix.target_file}. "
                            f"Backup at {backup.name}.",
-                    memory_type="evolutionary", domain="remediation",
-                    tags=["fix_applied", fix.target_file], source="remediation")
+                    pillar="evolutionary", domain="remediation",
+                    tags=["fix_applied", fix.target_file], source_repository="remediation")
             return {"status": "complete", "applied": True, "backup": str(backup)}
         except Exception as exc:
             return {"status": "error", "message": f"apply failed: {exc}"}
@@ -321,12 +321,12 @@ class RemediationEngine:
         self._cases.append(case)
         if self.chronicle is not None:
             try:
-                self.chronicle.store(
+                self.chronicle.store_memory(
                     content=f"Remediation {case['case_id']} for {case['repository']}/"
                            f"{case['agent']}: {case['resolution']}",
-                    memory_type="evolutionary", domain="remediation",
+                    pillar="evolutionary", domain="remediation",
                     tags=["remediation", case["repository"], case["resolution"] or "unresolved"],
-                    source="remediation")
+                    source_repository="remediation")
             except Exception:
                 pass  # aegis:allow-silent
 

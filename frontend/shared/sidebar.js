@@ -1,71 +1,111 @@
 /**
- * sidebar.js — Universe Ecosystem v3
- * Sidebar collapse/expand, responsive behavior, active nav item highlighting.
+ * Universe v8 — Sidebar Manager
+ * Builds the sidebar nav with SVG icons from ICONS registry.
+ * Handles collapse/expand with localStorage persistence.
  */
 
-const SidebarManager = {
-  _collapsed: false,
-  _storageKey: 'ue-sidebar-collapsed',
+const AGENTS_NAV = [
+  { id: 'nexus',     name: 'Nexus',     role: 'Orchestrator',  icon: 'agent:nexus',     color: '59,130,246',  href: 'nexus.html' },
+  { id: 'oracle',    name: 'Oracle',    role: 'Trading',       icon: 'agent:oracle',    color: '16,185,129',  href: 'oracle.html' },
+  { id: 'atlas',     name: 'Atlas',     role: 'Research',      icon: 'agent:atlas',     color: '14,165,233',  href: 'atlas.html' },
+  { id: 'chronicle', name: 'Chronicle', role: 'History',       icon: 'agent:chronicle', color: '139,92,246',  href: 'chronicle.html' },
+  { id: 'sentinel',  name: 'Sentinel',  role: 'Monitoring',    icon: 'agent:sentinel',  color: '245,158,11',  href: 'sentinel.html' },
+  { id: 'aegis',     name: 'Aegis',     role: 'Security',      icon: 'agent:aegis',     color: '249,115,22',  href: 'aegis.html' },
+  { id: 'forge',     name: 'Forge',     role: 'Builder',       icon: 'agent:forge',     color: '100,116,139', href: 'forge.html' },
+  { id: 'genesis',   name: 'Genesis',   role: 'Strategy',      icon: 'agent:genesis',   color: '20,184,166',  href: 'genesis.html' },
+  { id: 'pulse',     name: 'Pulse',     role: 'Sentiment',     icon: 'agent:pulse',     color: '236,72,153',  href: 'pulse.html' },
+];
 
-  init() {
-    document.addEventListener('DOMContentLoaded', () => {
-      // Restore saved state
-      const saved = localStorage.getItem(this._storageKey);
-      if (saved === '1') this._setCollapsed(true, false);
+function buildSidebarNav(activeAgentId) {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
 
-      // Bind toggle button
-      const btn = document.getElementById('sidebarToggle');
-      if (btn) btn.addEventListener('click', () => this.toggle());
+  const collapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+  if (collapsed) sidebar.classList.add('collapsed');
 
-      // Highlight active nav item
-      this._highlightActive();
+  sidebar.innerHTML = `
+    <div class="sidebar-header">
+      <div class="sidebar-logo-icon icon-md">
+        <span data-icon="agent:nexus"></span>
+      </div>
+      <span class="sidebar-logo-text">Universe</span>
+      <button class="sidebar-collapse-btn icon-sm" id="sidebarCollapseBtn" title="Toggle sidebar">
+        <span data-icon="ui:collapse"></span>
+      </button>
+    </div>
 
-      // Responsive: auto-collapse on tablet
-      this._handleResize();
-      window.addEventListener('resize', () => this._handleResize());
-    });
-  },
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Navigation</div>
 
-  toggle() {
-    this._setCollapsed(!this._collapsed);
-  },
+      <a href="index.html" class="sidebar-nav-item ${!activeAgentId ? 'active' : ''}" title="Command Center">
+        <span class="sidebar-nav-icon icon-md" data-icon="ui:home"></span>
+        <span class="sidebar-nav-label">Command Center</span>
+      </a>
 
-  _setCollapsed(collapsed, save = true) {
-    this._collapsed = collapsed;
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.toggle('collapsed', collapsed);
-    if (save) localStorage.setItem(this._storageKey, collapsed ? '1' : '0');
-  },
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section-label">Constellation</div>
 
-  _highlightActive() {
-    const current = window.location.pathname.split('/').pop() || 'index.html';
-    document.querySelectorAll('.sidebar-nav-item[href]').forEach(link => {
-      const href = link.getAttribute('href');
-      if (href === current || (current === '' && href === 'index.html')) {
-        link.classList.add('active');
+      ${AGENTS_NAV.map(agent => `
+        <a href="${agent.href}"
+           class="sidebar-nav-item ${agent.id === activeAgentId ? 'active' : ''}"
+           data-agent-id="${agent.id}"
+           style="--agent-rgb: ${agent.color};"
+           title="${agent.name} — ${agent.role}">
+          <span class="sidebar-nav-icon icon-md" data-icon="${agent.icon}"></span>
+          <span class="sidebar-nav-label">${agent.name}</span>
+        </a>
+      `).join('')}
+
+      <div class="sidebar-divider"></div>
+
+      <button class="sidebar-nav-item" id="sidebarThemeBtn" title="Toggle theme" style="width:100%;background:none;border:none;cursor:pointer;text-align:left;">
+        <span class="sidebar-nav-icon icon-md" data-icon="ui:theme"></span>
+        <span class="sidebar-nav-label">Toggle Theme</span>
+      </button>
+    </nav>
+  `;
+
+  // Inject icons
+  if (typeof injectIcons === 'function') injectIcons();
+
+  // Collapse toggle
+  const collapseBtn = document.getElementById('sidebarCollapseBtn');
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      const isCollapsed = sidebar.classList.contains('collapsed');
+      localStorage.setItem('sidebar-collapsed', isCollapsed);
+      // Flip arrow icon
+      const iconEl = collapseBtn.querySelector('[data-icon]');
+      if (iconEl) {
+        iconEl.setAttribute('data-icon', isCollapsed ? 'ui:expand' : 'ui:collapse');
+        if (typeof injectIcons === 'function') injectIcons();
       }
     });
-    // Also highlight topbar tabs
-    document.querySelectorAll('.topbar-tab[href]').forEach(link => {
-      const href = link.getAttribute('href');
-      if (href === current || (current === '' && href === 'index.html')) {
-        link.classList.add('active');
+    // Set correct initial arrow
+    if (collapsed) {
+      const iconEl = collapseBtn.querySelector('[data-icon]');
+      if (iconEl) {
+        iconEl.setAttribute('data-icon', 'ui:expand');
+        if (typeof injectIcons === 'function') injectIcons();
       }
-    });
-  },
-
-  _handleResize() {
-    const w = window.innerWidth;
-    if (w < 1280 && w >= 768) {
-      // Tablet: auto-collapse but don't save
-      const sidebar = document.getElementById('sidebar');
-      if (sidebar && !this._collapsed) sidebar.classList.add('collapsed');
-    } else if (w >= 1280) {
-      // Desktop: restore saved state
-      const sidebar = document.getElementById('sidebar');
-      if (sidebar) sidebar.classList.toggle('collapsed', this._collapsed);
     }
-  },
-};
+  }
 
-SidebarManager.init();
+  // Theme toggle
+  const themeBtn = document.getElementById('sidebarThemeBtn');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      if (typeof window.toggleTheme === 'function') window.toggleTheme();
+    });
+  }
+}
+
+// Auto-init if sidebar element exists
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    const agentId = sidebar.getAttribute('data-active-agent') || null;
+    buildSidebarNav(agentId);
+  }
+});

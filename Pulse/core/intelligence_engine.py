@@ -401,7 +401,7 @@ class IntelligenceEngine:
             return
         try:
             cats = ", ".join(report.get("categories_found", []))
-            self.chronicle.store(
+            self.chronicle.store_memory(
                 content=(
                     f"Social: {report['post_count']} posts, "
                     f"mood {report['market_mood']} "
@@ -411,10 +411,10 @@ class IntelligenceEngine:
                     f"{len(report['manipulation']['manipulation_flags'])} "
                     f"manipulation flags."
                 ),
-                memory_type="social", domain="social",
+                pillar="social", domain="social",
                 tags=["pulse", "intelligence", report["market_mood"],
                       report.get("region", "Global").lower()],
-                source="pulse",
+                source_repository="pulse",
             )
         except Exception:
             pass  # aegis:allow-silent

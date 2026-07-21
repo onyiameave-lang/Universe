@@ -425,11 +425,11 @@ class ReasoningEngine:
             return
         try:
             verdict = "worked" if success else "failed"
-            self.chronicle.store(
+            self.chronicle.store_memory(
                 content=f"Strategy '{s.name}' for {s.problem_type} {verdict}. "
                        f"Confidence now {s.confidence}. {detail}",
-                memory_type="evolutionary", domain="strategy",
-                tags=["strategy", s.problem_type, verdict], source=self.agent)
+                pillar="evolutionary", domain="strategy",
+                tags=["strategy", s.problem_type, verdict], source_repository=self.agent)
         except Exception:
             pass  # aegis:allow-silent
 

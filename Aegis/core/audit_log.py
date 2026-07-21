@@ -87,12 +87,12 @@ class AuditLog:
                 f"violations={entry.get('violations', [])} | "
                 f"audit_id={entry['audit_id']}"
             )
-            self._chronicle.store(
+            self._chronicle.store_memory(
                 content=summary,
-                memory_type="episodic",
+                pillar="episodic",
                 domain="audit",
                 tags=["aegis", "audit", entry["severity"], entry["repository"]],
-                source="aegis",
+                source_repository="aegis",
             )
         except Exception:
             pass  # aegis:allow-silent — Chronicle unavailability must not break audit

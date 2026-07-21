@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import time
 
 # Add current dir to path for imports
 ROOT = Path(__file__).resolve().parent
+FRONTEND_ROOT = ROOT / "frontend"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -138,7 +139,6 @@ app.include_router(chronicle_router, prefix="/agents")
 # Serve the HTML dashboards from the same FastAPI process. This keeps the
 # existing API routes intact while making http://localhost:8000 load the portal.
 for static_name in [
-    "shared",
     "Nexus",
     "Oracle",
     "Atlas",
@@ -157,7 +157,16 @@ for static_name in [
 async def root(request: Request):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        return FileResponse(ROOT / "index.html")
+        return RedirectResponse(url="/frontend/")
+    return {
+        "status": "online",
+        "ecosystem": "Universal AI",
+        "active_agents": list(AGENTS.keys()),
+        "version": "1.0.0"
+    }
+
+@app.get("/health")
+async def health():
     return {
         "status": "online",
         "ecosystem": "Universal AI",
@@ -187,6 +196,35 @@ async def list_agents():
             "capabilities": getattr(agent, "capabilities", [])
         })
     return results
+
+@app.get("/agents/{name}/data")
+async def agent_data(name: str):
+    """Return dashboard-friendly data for the frontend panels."""
+    if name not in AGENTS:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    agent = AGENTS[name]
+    data: Dict[str, Any] = {
+        "id": name,
+        "name": getattr(agent, "name", name),
+        "description": getattr(agent, "description", ""),
+        "status": getattr(agent, "lifecycle_status", "active"),
+        "capabilities": getattr(agent, "capabilities", []),
+        "metrics": {},
+    }
+
+    try:
+        if hasattr(agent, "get_status"):
+            status_data = agent.get_status()
+            if isinstance(status_data, dict):
+                data.update(status_data)
+        elif hasattr(agent, "status") and isinstance(getattr(agent, "status"), dict):
+            data.update(getattr(agent, "status"))
+    except Exception as exc:
+        data["status"] = "error"
+        data["error"] = str(exc)
+
+    return data
 
 @app.get("/logs")
 async def get_logs(limit: int = 10):
@@ -283,9 +321,10 @@ async def agent_status(name: str):
 
 
 # ── NEW: /frontend static mount (fixes 404 on /frontend/index.html) ──────
-_frontend_dir = ROOT / "frontend"
-if _frontend_dir.exists():
-    app.mount("/frontend", StaticFiles(directory=str(_frontend_dir), html=True), name="static-frontend")
+if FRONTEND_ROOT.exists():
+    app.mount("/frontend", StaticFiles(directory=str(FRONTEND_ROOT), html=True), name="static-frontend")
+else:
+    logger.warning("Frontend directory not found at %s", FRONTEND_ROOT)
 
 
 if __name__ == "__main__":

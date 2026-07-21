@@ -103,18 +103,21 @@
         "failed: no agent for general (repository=atlas)",
         "failed: no agent for general (repository=atlas)",
         "failed: SLA breach: atlas exceeded 90.0s",
-        "failed: SLA breach: atlas exceeded 90.0s"
+        "failed: SLA breach: atlas exceeded 90.0s",
+        "failed: BaseAgent._receive_from_chronicle() got an unexpected keyword argument 'domain'",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: no agent for trading (repository=oracle)"
       ],
-      "attempts": 9,
+      "attempts": 12,
       "successes": 5,
-      "failures": 4,
+      "failures": 7,
       "last_outcome": "failure",
-      "last_used": 1784535427.4668405,
-      "status": "candidate",
+      "last_used": 1784609828.319176,
+      "status": "deprecated",
       "created_at": 1784149683.1987069,
       "lineage": null,
       "researched": true,
-      "confidence": 0.2666
+      "confidence": 0.1933
     },
     {
       "strategy_id": "strat-ea9e323f62",
@@ -131,14 +134,15 @@
         "failed: no agent for general (repository=atlas)",
         "failed: no agent for general (repository=atlas)",
         "failed: SLA breach: atlas exceeded 90.0s",
-        "failed: SLA breach: atlas exceeded 90.0s"
+        "failed: SLA breach: atlas exceeded 90.0s",
+        "failed: BaseAgent._receive_from_chronicle() got an unexpected keyword argument 'domain'"
       ],
-      "attempts": 4,
+      "attempts": 5,
       "successes": 0,
-      "failures": 4,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1784535525.5458446,
-      "status": "candidate",
+      "last_used": 1784607520.0827124,
+      "status": "deprecated",
       "created_at": 1784149683.1997092,
       "lineage": null,
       "researched": true,
@@ -159,15 +163,222 @@
         "failed: single-domain; orchestration not needed",
         "failed: single-domain; orchestration not needed",
         "failed: single-domain; orchestration not needed",
+        "failed: single-domain; orchestration not needed",
         "failed: single-domain; orchestration not needed"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784607520.0847232,
+      "status": "deprecated",
+      "created_at": 1784149683.20071,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-7712c4fbb2",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: SLA breach: atlas exceeded 90.0s",
+        "failed: no agent for trading (repository=oracle)",
+        "failed: no agent for training (repository=forge)",
+        "failed: multi-domain; needs orchestration"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784614568.6454346,
+      "status": "deprecated",
+      "created_at": 1784607736.0979617,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-d0700ec6e5",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: no agent for trading (repository=oracle)",
+        "failed: no agent for training (repository=forge)"
+      ],
+      "attempts": 5,
+      "successes": 2,
+      "failures": 3,
+      "last_outcome": "failure",
+      "last_used": 1784614415.3083868,
+      "status": "deprecated",
+      "created_at": 1784607736.0979617,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.1176
+    },
+    {
+      "strategy_id": "strat-72149c40f2",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "memory: Nexus routed query='query is there a trade on EURUSD' status=error strategy=unknown",
+        "failed: multi-domain; not direct",
+        "failed: no agent for training (repository=forge)",
+        "failed: multi-domain; not direct",
+        "failed: multi-domain; not direct",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)"
+      ],
+      "attempts": 12,
+      "successes": 5,
+      "failures": 7,
+      "last_outcome": "failure",
+      "last_used": 1784621159.5993419,
+      "status": "deprecated",
+      "created_at": 1784610601.288624,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.1933
+    },
+    {
+      "strategy_id": "strat-c92850baf7",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3589. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. multi-domain; needs orchestration",
+        "failed: [sentinel] news agent is currently experiencing delays. Please try again in a moment.",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784621587.8854232,
+      "status": "deprecated",
+      "created_at": 1784615610.3511515,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-bad4e6de5f",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents",
+        "memory: Strategy 'orchestrate' for routing failed. Confidence now 0.1176. no agent for training (repository=forge)",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3589. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. multi-domain; needs orchestration",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)",
+        "failed: no agent for news (repository=sentinel)"
       ],
       "attempts": 4,
       "successes": 0,
       "failures": 4,
       "last_outcome": "failure",
-      "last_used": 1784535525.55057,
+      "last_used": 1784621587.8601048,
       "status": "candidate",
-      "created_at": 1784149683.20071,
+      "created_at": 1784615610.3531182,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-d685622d01",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist",
+        "memory: Strategy 'direct_specialist' for routing worked. Confidence now 0.3006. ok"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.2666. multi-domain; not direct",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
+        "failed: no agent for news (repository=sentinel)"
+      ],
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_outcome": "failure",
+      "last_used": 1784621587.8285613,
+      "status": "candidate",
+      "created_at": 1784621564.569649,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-dae6b416eb",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784622448.962484,
       "lineage": null,
       "researched": true,
       "confidence": 0.0

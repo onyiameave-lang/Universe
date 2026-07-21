@@ -11,6 +11,7 @@ Run:
 
 Commands:
     <query>                       route (auto: direct / memory-first / orchestrate)
+    query <query>                 explicit route command (strips "query " prefix)
     urgent <query>                route on the fast priority lane
     classify <query>              classification only
     agents                        live agents + health
@@ -30,6 +31,87 @@ FIX LOG (nexus-full-fix-v1):
          Full stack trace now visible on errors.
   FIX-4  Added _print_result() helper for human-readable output (non-JSON mode).
   FIX-5  Added ' --json' suffix support to any query for raw JSON output.
+
+FIX LOG (phase4-nexus-main-v1  2026-07-21):
+  BUG-P4-03  The CLI command "query what is an animal" passed the full string
+             including the word "query" to nexus.act("ecosystem.route",
+             {"query": "query what is an animal"}).  Atlas then forwarded
+             "query what is an animal" verbatim to every source adapter,
+             producing URLs like:
+               semantic_scholar HTTP 429: query=query+what+is+an+animal
+               gdelt HTTP 429: query=query+what+is+an+animal
+             ROOT CAUSE: The main() REPL had handlers for "classify ", "urgent ",
+             "agents", "breakers", "execution", "monitor" but NO handler for
+             "query " — so it fell through to the else branch which passed the
+             full line (including "query ") as the query string.
+             FIX: Added elif line.startswith("query "): that strips the 7-char
+             prefix before routing.  Also added "query <text>" to the Commands
+             docstring and the startup banner.
+             Constitutional law: Book III Ch VIII Standardized Interfaces —
+             the CLI contract must strip command prefixes before forwarding.
+
+FIX LOG (phase5-nexus-main-v1  2026-07-21):
+  FIX-M-01  LIVE_REPOS only loaded Chronicle, Atlas, Aegis.  Oracle, Sentinel,
+             and Pulse were never instantiated or registered with Nexus.
+             Multi-domain queries like "is there a trade on EURUSD and what is
+             the news sentiment" would classify correctly to trading+news but
+             then fail with "no agent for trading" and "no agent for news"
+             because neither Oracle nor Sentinel was in the registry.
+             FIX: Added Oracle, Sentinel, Pulse to LIVE_REPOS.
+             Confirmed agent class names from actual code:
+               Oracle/agents/oracle_agent.py   -> OracleAgent
+               Sentinel/agents/sentinel_agent.py -> SentinelAgent
+               Pulse/agents/pulse_agent.py     -> PulseAgent
+             Constitutional law: Book III Ch VIII Standardized Interfaces;
+             Book II Principle V Graceful Degradation — agents that are
+             registered but unavailable degrade gracefully; agents that are
+             never registered cause guaranteed routing failures.
+
+  FIX-M-02  boot() registered agents under their folder name (e.g. "chronicle",
+             "atlas") but coordinator_agent.py looks up agents by their
+             agent.name attribute (e.g. "oracle", "sentinel", "pulse").
+             For Chronicle and Atlas this happened to match. For Oracle
+             (folder="Oracle", name="oracle"), Sentinel (folder="Sentinel",
+             name="sentinel"), Pulse (folder="Pulse", name="pulse") it also
+             matches — but the registration key must be the agent's .name
+             attribute, not the folder name.
+             FIX: boot() now registers using agent.name (already correct for
+             Chronicle/Atlas; explicitly verified for new agents).
+             Constitutional law: Book III Ch VIII Standardized Interfaces.
+
+  FIX-M-03  _extract_summary() did not handle multi-agent orchestration
+             session results. When Nexus ran an orchestration session, the
+             result contained {"session": {"synthesis": "...", "per_agent": {...}}}
+             but _extract_summary() only checked session.get("synthesis") and
+             session.get("summary"). Multi-agent results also have
+             session["transcript"] with per-agent contributions.
+             FIX: Added session transcript extraction as fallback.
+             Constitutional law: Book II No Silent Failures.
+
+FIX LOG (phase5b-main-v1  2026-07-21):
+  FIX-M-03  Atlas registered BEFORE on_start() printed "Registered: ['chronicle']".
+             The log line in on_start() fires when nexus.start() is called, which
+             happens BEFORE atlas/oracle/sentinel/pulse are registered in boot().
+             FIX: Moved the "Registered:" log to the END of boot(), after all
+             agents are registered, so it accurately reflects the full roster.
+             Constitutional law: Book II No Silent Failures.
+
+  FIX-M-04  Forge and Genesis were absent from LIVE_REPOS entirely.
+             Queries like "train a new strategy for GBPUSD" had no agent to
+             handle them -> "no approach succeeded in 3 attempts".
+             FIX: Added Forge (ForgeAgent) and Genesis (GenesisAgent) to
+             LIVE_REPOS with graceful degradation (log warning, skip, no crash).
+             Confirmed class names from actual code:
+               Forge/agents/training_agent.py   -> class ForgeAgent
+               Genesis/agents/creator_agent.py  -> class GenesisAgent
+             Constitutional law: Book II Principle V Graceful Degradation.
+
+  FIX-M-05  CLI had no "query " prefix handler. The word "query" leaked into
+             search strings: "query what is an animal" -> Atlas searched for
+             "query what is an animal" instead of "what is an animal".
+             FIX: Added elif line.startswith("query "): handler that strips
+             the 6-char prefix before routing.
+             Constitutional law: Book III Ch VIII Standardized Interfaces.
 """
 from __future__ import annotations
 
@@ -54,10 +136,23 @@ _unload_conflicting_modules = unload_conflicting_modules
 
 from agents.coordinator_agent import NexusAgent  # type: ignore
 
+# FIX-M-01: Added Oracle, Sentinel, Pulse to LIVE_REPOS.
+# FIX-M-04: Added Forge, Genesis to LIVE_REPOS.
+#   Confirmed class names from actual repo code:
+#   Oracle/agents/oracle_agent.py   -> class OracleAgent
+#   Sentinel/agents/sentinel_agent.py -> class SentinelAgent
+#   Pulse/agents/pulse_agent.py     -> class PulseAgent
+#   Forge/agents/training_agent.py  -> class ForgeAgent
+#   Genesis/agents/creator_agent.py -> class GenesisAgent
 LIVE_REPOS = {
-    "chronicle": ("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent"),
-    "atlas": ("Atlas", "agents/research_agent.py", "AtlasAgent"),
-    "aegis": ("Aegis", "agents/auditor_agent.py", "AegisAgent"),
+    "chronicle": ("Chronicle", "agents/chronicle_agent.py",  "ChronicleAgent"),
+    "atlas":     ("Atlas",     "agents/research_agent.py",   "AtlasAgent"),
+    "oracle":    ("Oracle",    "agents/oracle_agent.py",     "OracleAgent"),    # FIX-M-01
+    "sentinel":  ("Sentinel",  "agents/sentinel_agent.py",   "SentinelAgent"),  # FIX-M-01
+    "pulse":     ("Pulse",     "agents/pulse_agent.py",      "PulseAgent"),     # FIX-M-01
+    "aegis":     ("Aegis",     "agents/auditor_agent.py",    "AegisAgent"),
+    "forge":     ("Forge",     "agents/training_agent.py",   "ForgeAgent"),     # FIX-M-04
+    "genesis":   ("Genesis",   "agents/creator_agent.py",    "GenesisAgent"),   # FIX-M-04
 }
 
 
@@ -85,6 +180,8 @@ def _load_class(folder, rel, cls):
 def boot():
     log = logging.getLogger("nexus")
     _unload_conflicting_modules()
+
+    # --- Chronicle (memory, source of truth) ---
     chronicle = None
     Ch = _load_class("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
     if Ch:
@@ -94,6 +191,8 @@ def boot():
         except Exception as exc:
             log.warning("Chronicle failed: %s", exc)
     _unload_conflicting_modules()
+
+    # --- Atlas (research) ---
     atlas = None
     At = _load_class("Atlas", "agents/research_agent.py", "AtlasAgent")
     if At:
@@ -103,17 +202,25 @@ def boot():
         except Exception:
             atlas = None
     _unload_conflicting_modules()
+
+    # --- Nexus coordinator ---
     nexus = NexusAgent(chronicle_client=chronicle, atlas_client=atlas)
     nexus.start()
     if chronicle:
-        nexus.register_agent("chronicle", chronicle)
+        nexus.register_agent(chronicle.name, chronicle)
     if atlas:
-        nexus.register_agent("atlas", atlas)
+        nexus.register_agent(atlas.name, atlas)
+
+    # --- All other agents (Oracle, Sentinel, Pulse, Aegis, Forge, Genesis) ---
+    # FIX-M-01: Oracle, Sentinel, Pulse now included.
+    # FIX-M-04: Forge, Genesis now included with graceful degradation.
+    # FIX-M-02: Register using agent.name (not folder name) for correct lookup.
     for name, (folder, rel, cls_name) in LIVE_REPOS.items():
         if name in ("chronicle", "atlas"):
-            continue
+            continue  # already registered above
         Cls = _load_class(folder, rel, cls_name)
         if not Cls:
+            log.warning("Could not load %s (%s/%s) — skipping (graceful degradation).", name, folder, rel)
             continue
         try:
             try:
@@ -121,10 +228,24 @@ def boot():
             except TypeError:
                 agent = Cls()
             agent.start()
-            nexus.register_agent(name, agent)
+            # FIX-M-02: use agent.name attribute as registry key
+            reg_name = getattr(agent, "name", name)
+            nexus.register_agent(reg_name, agent)
+            log.info("Registered agent: %s (domain=%s)", reg_name, getattr(agent, "domain", "?"))
         except Exception as exc:
-            log.warning("%s failed: %s", name, exc)
+            import traceback
+            # BUG B FIX (Phase 5c): Log full traceback so startup failures are
+            # visible and diagnosable. "No Silent Failures" — Book II.
+            log.warning(
+                "%s failed to start: %s — skipping (graceful degradation).\n"
+                "Full traceback:\n%s",
+                name, exc, traceback.format_exc(),
+            )
         _unload_conflicting_modules()
+
+    # FIX-M-03: Log the FINAL roster AFTER all agents are registered.
+    # (on_start() fires before agents are registered, so its log was always stale.)
+    log.info("Nexus boot complete. Live agents: %s", list(nexus.registry.all().keys()))
     return nexus
 
 
@@ -164,13 +285,26 @@ def _extract_summary(result: dict) -> Optional[str]:
     if isinstance(inner, dict):
         return _extract_summary(inner)
 
-    # 3. Check a "session" synthesis
+    # 3. Check a "session" synthesis (multi-agent orchestration result)
     # FIX-2: was result.get("session", {}) — same pattern, fixed for consistency
+    # FIX-M-03: Also extract from session transcript for multi-agent results
     session = result.get("session")
-    if isinstance(session, dict) and session.get("synthesis"):
-        return str(session["synthesis"])
-    if isinstance(session, dict) and session.get("summary"):
-        return str(session["summary"])
+    if isinstance(session, dict):
+        if session.get("synthesis"):
+            return str(session["synthesis"])
+        if session.get("summary"):
+            return str(session["summary"])
+        # FIX-M-03: Extract from transcript contributions
+        transcript = session.get("transcript") or []
+        parts = []
+        for entry in transcript:
+            contrib = entry.get("contribution") or {}
+            s = _extract_summary(contrib)
+            if s:
+                agent_name = entry.get("domain") or entry.get("repository") or entry.get("agent", "")
+                parts.append(f"[{agent_name.upper()}] {s}" if agent_name else s)
+        if parts:
+            return "\n\n".join(parts)
 
     # 4. Plain text fields (only for non-error results)
     for key in ("text", "answer", "message", "summary"):
@@ -191,14 +325,17 @@ def _print_result(result: dict, use_json: bool) -> None:
     strategy = result.get("_strategy") or result.get("_reasoning", {}).get("chosen", "")
     routed = result.get("routed_to", "")
     priority = result.get("priority", "")
+    degraded = result.get("degraded", False)
 
-    header_parts = [f"[{status.upper()}]"]
+    header_parts = [f"[{status.upper()}{'*' if degraded else ''}]"]
     if strategy:
         header_parts.append(f"via {strategy}")
     if routed:
         header_parts.append(f"-> {routed}")
     if priority:
         header_parts.append(f"(priority {priority})")
+    if degraded:
+        header_parts.append("(best-effort)")
     print(" ".join(header_parts))
 
     summary = _extract_summary(result)
@@ -217,12 +354,13 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     nexus = boot()
 
+    live = list(nexus.registry.all().keys())
     print("=" * 64)
     print("  NEXUS - Institutional Coordinator")
     print("  SLAs. Circuit breakers. Parallel orchestration. Learned collaboration.")
     print("=" * 64)
-    print(f"  Live agents: {list(nexus.registry.all().keys())}")
-    print("  Commands: <query> | urgent <query> | classify <q> | agents | breakers | execution | monitor | quit")
+    print(f"  Live agents ({len(live)}): {live}")
+    print("  Commands: <query> | query <query> | urgent <query> | classify <q> | agents | breakers | execution | monitor | quit")
     print("  Tip: append ' --json' to any query for raw JSON output")
 
     while True:
@@ -243,6 +381,11 @@ def main():
             elif line.startswith("urgent "):
                 result = nexus.act("ecosystem.route",
                     {"query": line[7:], "priority": 2, "_sender": "user"})
+                _print_result(result, use_json)
+            # FIX-M-05: Strip "query " prefix so it doesn't leak into search terms.
+            elif line.startswith("query "):
+                result = nexus.act("ecosystem.route",
+                    {"query": line[6:].strip(), "_sender": "user"})
                 _print_result(result, use_json)
             elif line == "agents":
                 print(json.dumps(nexus.registry.health_summary(), indent=2, default=str))

@@ -55,8 +55,10 @@ from __future__ import annotations
 import concurrent.futures
 import html as _html
 import json
+import logging
 import os
 import re
+import socket as _socket
 import time
 import urllib.parse
 import urllib.request
@@ -77,6 +79,18 @@ except Exception:
 
 _UA = "SentinelNewsAI/1.0 (AI Ecosystem news intelligence)"
 _TIMEOUT = 12
+
+# FIX-SC-01 (Phase 5e): Set socket-level default timeout at module load time.
+# urllib's timeout= parameter only covers the READ phase of an HTTP connection.
+# DNS resolution happens BEFORE the socket connects and is NOT bounded by
+# urllib timeout=. On a network with dropped DNS packets (firewall, sandbox,
+# unreachable nameserver), urllib.request.urlopen() blocks FOREVER at the OS
+# level in a C-level getaddrinfo() syscall — no Python timeout can interrupt it.
+# socket.setdefaulttimeout() is the ONLY way to bound DNS hangs.
+# Constitutional: Book II Principle V Graceful Degradation.
+_socket.setdefaulttimeout(_TIMEOUT)
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Default key-free RSS wires (financial + world + commodity).
@@ -181,10 +195,20 @@ class Article:
 
 def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
     req = urllib.request.Request(url, headers={"User-Agent": _UA, **(headers or {})})
+    # FIX-SC-02 (Phase 5e): Log each HTTP fetch attempt so we can see exactly
+    # which URL hangs in production logs. Constitutional: Book II No Silent Failures.
+    # FIX-SC-06 (Phase 5h): Upgraded from DEBUG to INFO/WARNING so errors are
+    # visible in production logs without needing --debug flag.
+    log.info("[sentinel.collectors] _get: fetching %s (timeout=%ds)", url[:80], _TIMEOUT)
+    _t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
-            return r.read().decode(r.headers.get_content_charset() or "utf-8", errors="replace")
-    except Exception:
+            body = r.read().decode(r.headers.get_content_charset() or "utf-8", errors="replace")
+        log.info("[sentinel.collectors] _get: OK %s in %.2fs (%d bytes)", url[:60], time.time() - _t0, len(body))
+        return body
+    except Exception as exc:
+        log.warning("[sentinel.collectors] _get: FAILED %s in %.2fs — %s: %s",
+                    url[:60], time.time() - _t0, type(exc).__name__, exc)
         return None
 
 
@@ -254,11 +278,18 @@ class RSSCollector:
                     break
 
         out = []
-        for name, url in feeds:
+        # FIX-SC-04 (Phase 5e): Fetch each RSS feed in its own thread with a
+        # per-feed timeout. Previously feeds were fetched sequentially — if feed
+        # N hung on DNS, feeds N+1..end never ran. Now all feeds run concurrently
+        # and each is individually bounded. Constitutional: Book II Principle V.
+        def _fetch_feed(name_url):
+            name, url = name_url
+            log.debug("[sentinel.collectors] RSSCollector: fetching feed '%s' %s", name, url[:60])
             body = _get(url)
             if not body:
-                continue
+                return []
             items = re.findall(r"(?s)<(?:item|entry)>(.*?)</(?:item|entry)>", body)
+            feed_articles = []
             for it in items[:limit]:
                 title = self._tag(it, "title")
                 if not title:
@@ -266,10 +297,23 @@ class RSSCollector:
                 link = self._tag(it, "link") or self._attr_link(it)
                 desc = self._tag(it, "description") or self._tag(it, "summary")
                 pub = self._tag(it, "pubDate") or self._tag(it, "published")
-                out.append(Article(
+                feed_articles.append(Article(
                     _aid(title, name), _clean(title), name,
                     _clean(link), pub[:25], _clean(desc),
                 ))
+            log.debug("[sentinel.collectors] RSSCollector: feed '%s' returned %d articles", name, len(feed_articles))
+            return feed_articles
+
+        # Run all feeds concurrently; each is bounded by socket.setdefaulttimeout
+        # + urllib timeout=_TIMEOUT. Cap workers to avoid overwhelming the network.
+        max_workers = min(len(feeds), 8)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futs = {pool.submit(_fetch_feed, nurl): nurl[0] for nurl in feeds}
+            for fut in concurrent.futures.as_completed(futs, timeout=_TIMEOUT + 3):
+                try:
+                    out.extend(fut.result())
+                except Exception as exc:
+                    log.debug("[sentinel.collectors] RSSCollector: feed '%s' raised %s", futs[fut], exc)
 
         # S-11: post-collection topic filter — only when a specific topic is requested
         if topics and out:
@@ -314,18 +358,44 @@ class NewsAPICollector:
     def collect(self, topics=None, limit=8) -> List[Article]:
         key = (getattr(_cfg, "newsapi_key", "") or os.environ.get("NEWSAPI_KEY", "")).strip()
         if not key:
+            log.info("[sentinel.newsapi] NEWSAPI_KEY not set — skipping NewsAPI collector")
             return []
-        q = " OR ".join(topics or ["markets", "economy", "forex"])
+
+        # FIX-SC-05 (Phase 5h): Map financial symbols to human-readable search terms.
+        # NewsAPI doesn't understand "GBPUSD" — it needs "pound sterling GBP forex".
+        # Use the same _SYMBOL_FEED_TERMS dict that RSS/Guardian use for consistency.
+        query_terms: List[str] = []
+        for t in (topics or []):
+            t_upper = t.upper()
+            if t_upper in _SYMBOL_FEED_TERMS:
+                # Use first 4 terms joined with OR for a rich but focused query
+                query_terms.extend(_SYMBOL_FEED_TERMS[t_upper][:4])
+            else:
+                query_terms.append(t)
+        q = " OR ".join(query_terms) if query_terms else "markets economy forex"
+
         params = urllib.parse.urlencode({
             "q": q, "sortBy": "publishedAt", "pageSize": limit, "language": "en",
         })
-        body = _get(f"{self.API}?{params}", headers={"X-Api-Key": key})
+        url = f"{self.API}?{params}"
+        log.info("[sentinel.newsapi] fetching: q=%r pageSize=%d", q, limit)
+        body = _get(url, headers={"X-Api-Key": key})
         if not body:
+            log.warning("[sentinel.newsapi] ERROR: _get() returned None for %s — "
+                        "check NEWSAPI_KEY validity and network connectivity", url[:80])
             return []
         try:
-            arts = json.loads(body).get("articles", [])
-        except Exception:
+            parsed = json.loads(body)
+        except Exception as exc:
+            log.warning("[sentinel.newsapi] ERROR: JSON parse failed — %s — body[:200]=%r", exc, body[:200])
             return []
+        # NewsAPI returns {"status": "error", "code": "...", "message": "..."} on bad key/quota
+        if parsed.get("status") == "error":
+            log.warning("[sentinel.newsapi] API ERROR: code=%r message=%r",
+                        parsed.get("code"), parsed.get("message"))
+            return []
+        arts = parsed.get("articles", [])
+        log.info("[sentinel.newsapi] API returned %d articles for q=%r", len(arts), q)
         out = []
         for a in arts:
             title = _html.unescape(a.get("title") or "")   # S-8
@@ -336,6 +406,7 @@ class NewsAPICollector:
                     _html.unescape(a.get("description") or ""),
                     a.get("content") or "",
                 ))
+        log.info("[sentinel.newsapi] returning %d articles", len(out))
         return out
 
 
@@ -383,15 +454,22 @@ class GuardianCollector:
             "order-by": "newest",
             "api-key": key,
         })
-        body = _get(f"{self.API}?{params}")
+        url = f"{self.API}?{params}"
+        log.info("[sentinel.guardian] fetching: q=%r api-key=%s", q, "test" if key == "test" else "***")
+        body = _get(url)
         if not body:
+            log.warning("[sentinel.guardian] ERROR: _get() returned None — "
+                        "Guardian API unreachable (network/firewall). url=%s", url[:100])
             GuardianCollector._last_fail = time.time()
             return []
         try:
-            results = json.loads(body).get("response", {}).get("results", [])
-        except Exception:
+            parsed = json.loads(body)
+            results = parsed.get("response", {}).get("results", [])
+        except Exception as exc:
+            log.warning("[sentinel.guardian] ERROR: JSON parse failed — %s — body[:200]=%r", exc, body[:200])
             GuardianCollector._last_fail = time.time()
             return []
+        log.info("[sentinel.guardian] API returned %d results for q=%r", len(results), q)
         out = []
         for r in results:
             title = _html.unescape(r.get("webTitle") or "")   # S-8
@@ -425,27 +503,41 @@ class HNCollector:
             return []
 
         out: List[Article] = []
-        for item_id in ids:
-            if len(out) >= limit:
-                break
+        # FIX-SC-03 (Phase 5e): Previously fetched limit*3 items SEQUENTIALLY.
+        # Each _get() call can hang on DNS for up to _TIMEOUT seconds. With
+        # limit=8, that's 24 sequential potential hangs = up to 288s total.
+        # Fix: fetch all items concurrently with a shared timeout budget.
+        # Constitutional: Book II Principle V Graceful Degradation.
+        def _fetch_item(item_id):
             item_body = _get(self.ITEM_URL.format(item_id))
             if not item_body:
-                continue
+                return None
             try:
-                item = json.loads(item_body)
+                return json.loads(item_body)
             except Exception:
+                return None
+
+        log.debug("[sentinel.collectors] HNCollector: fetching %d items concurrently", len(ids))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(ids), 10)) as pool:
+            item_futs = list(pool.map(_fetch_item, ids, timeout=_TIMEOUT + 3))
+
+        for item in item_futs:
+            if len(out) >= limit:
+                break
+            if item is None:
                 continue
             if item.get("type") != "story" or item.get("dead") or item.get("deleted"):
                 continue
             title = _html.unescape(item.get("title") or "")   # S-8
             if not title:
                 continue
-            url = item.get("url") or f"https://news.ycombinator.com/item?id={item_id}"
+            url = item.get("url") or f"https://news.ycombinator.com/item?id={item.get('id', '')}"
             pub = time.strftime("%Y-%m-%d", time.gmtime(item.get("time", 0)))
             out.append(Article(
                 _aid(title, "hackernews"), title, "hackernews",
                 url, pub, title,
             ))
+        log.debug("[sentinel.collectors] HNCollector: returning %d articles", len(out))
         return out
 
 

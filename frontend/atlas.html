@@ -1,114 +1,230 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Atlas — Research Engine</title>
-<script src="shared/theme.js"></script>
-<link rel="stylesheet" href="shared/shared.css">
-<link rel="stylesheet" href="shared/components.css">
-<style>:root { --accent:#0EA5E9; --accent-rgb:14,165,233; }</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Atlas — Universe</title>
+  <link rel="stylesheet" href="shared/shared.css"/>
+  <link rel="stylesheet" href="shared/components.css"/>
+  <script src="shared/theme.js"></script>
 </head>
-<body>
-
-<!-- TOPBAR -->
-<nav class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-logo">🗺️</span>
-    <span class="topbar-brand">ATLAS</span>
-    <span class="topbar-divider"></span>
-    <span class="topbar-page-name">Research Engine</span>
+<body data-agent="atlas">
+  <canvas id="cosmos-canvas"></canvas>
+  <div class="app-shell">
+    <aside id="sidebar" data-active-agent="atlas"></aside>
+    <div class="main-content">
+      <header class="topbar">
+        <div class="topbar-agent-icon icon-md"><span data-icon="agent:atlas"></span></div>
+        <div>
+          <div class="topbar-title">Atlas</div>
+          <div class="topbar-subtitle">The Celestial Cartographer</div>
+        </div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions">
+          <div id="connBadge" class="conn-badge"><span class="conn-dot"></span><span id="connText">Connecting…</span></div>
+          <button class="icon-btn theme-toggle-btn" title="Toggle theme"><span data-icon="ui:theme" class="icon-md"></span></button>
+        </div>
+      </header>
+      <main class="dashboard-content">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Reports Today</div>
+            <div class="kpi-value" id="kpi_reports_today">—</div>
+            <div class="kpi-delta neu" id="kpid_reports_today"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Sources</div>
+            <div class="kpi-value" id="kpi_sources_monitored">—</div>
+            <div class="kpi-delta neu" id="kpid_sources_monitored"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Sectors</div>
+            <div class="kpi-value" id="kpi_sectors_tracked">—</div>
+            <div class="kpi-delta neu" id="kpid_sectors_tracked"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Alerts</div>
+            <div class="kpi-value" id="kpi_alerts">—</div>
+            <div class="kpi-delta neg" id="kpid_alerts"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Live Feed</span>
+            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          </div>
+          <div class="card-body">
+            <div id="section_primary" class="feed-list">
+              <div class="skeleton skeleton-card"></div>
+              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Secondary Data</span>
+            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          </div>
+          <div class="card-body">
+            <div id="section_secondary" class="feed-list">
+              <div class="skeleton skeleton-card"></div>
+              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
   </div>
-  <div class="topbar-right">
-    <span id="connBadge" class="api-badge api-loading">⏳ Connecting…</span>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light</button>
-    <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
-  </div>
-</nav>
 
-<!-- CHAT LAYOUT -->
-<div class="agent-chat-layout">
-
-  <!-- SESSION SIDEBAR -->
-  <aside class="chat-session-sidebar">
-    <div class="chat-session-header">
-      <div class="chat-session-agent-icon">🗺️</div>
-      <div class="chat-session-agent-info">
-        <div class="chat-session-agent-name">Atlas</div>
-        <div class="chat-session-agent-role">Research Engine</div>
+  <button class="chat-fab" id="chatFab" title="Ask Atlas">
+    <span data-icon="ui:chat" class="icon-lg"></span>
+  </button>
+  <div class="chat-drawer-overlay" id="chatOverlay"></div>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-drawer-header">
+      <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:atlas"></span></div>
+      <div>
+        <div class="chat-drawer-title">Atlas</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Research Intelligence</div>
+      </div>
+      <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
+    </div>
+    <div class="chat-drawer-messages" id="chatMessages">
+      <div class="chat-msg agent">
+        <div class="chat-bubble">Greetings. I am Atlas, the celestial cartographer. How may I illuminate the path before you?</div>
       </div>
     </div>
-    <button class="chat-new-btn" id="chatNewBtn">＋ New Chat</button>
-    <div class="chat-session-list-wrap">
-      <ul class="chat-session-list" id="chatSessionList"></ul>
-    </div>
-    <div style="padding:12px 16px;border-top:1px solid var(--border)">
-      <a href="index.html" style="font-size:12px;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:6px">
-        ← Back to Hub
-      </a>
-    </div>
-  </aside>
-
-  <!-- MAIN CHAT AREA -->
-  <div class="chat-main-area">
-    <div class="chat-main-header">
-      <div class="chat-main-agent-dot" style="background:#0EA5E9"></div>
-      <span class="chat-main-agent-name">Atlas</span>
-      <span class="chat-main-agent-role">Research Engine</span>
-      <span class="chat-main-hint">POST /agents/atlas/chat</span>
-    </div>
-
-    <!-- Messages -->
-    <div class="chat-messages-wrap" id="chatMessages"></div>
-
-    <!-- Empty state -->
-    <div class="chat-empty-state" id="chatEmptyState">
-      <div class="chat-empty-icon">🗺️</div>
-      <div class="chat-empty-title">Chat with Atlas</div>
-      <div class="chat-empty-desc">e.g. 'query what is quantitative easing'</div>
-      <div class="chat-hint-chips">
-        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query what is inflation')">query what is inflation</span>
-        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query explain forex')">query explain forex</span>
-        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query Bitcoin history')">query Bitcoin history</span>
-        <span class="chat-hint-chip" onclick="window._chat&&window._chat._fillInput('query market cap')">query market cap</span>
+    <div class="chat-drawer-input-area">
+      <div class="chat-hints">
+        <button class="chat-hint-chip">What is your current status?</button>
+        <button class="chat-hint-chip">Show me the latest data</button>
+        <button class="chat-hint-chip">Explain your top signal</button>
       </div>
-    </div>
-
-    <!-- Input -->
-    <div class="chat-input-wrap">
       <div class="chat-input-row">
-        <textarea class="chat-input-v5" id="chatInput" placeholder="e.g. 'query what is quantitative easing'" rows="1"></textarea>
-        <button class="chat-send-v5" id="chatSend">➤</button>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Atlas…"></textarea>
+        <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
+  <div id="toast-container"></div>
 
-</div>
+  <script src="shared/icons.js"></script>
+  <script src="shared/config.js"></script>
+  <script src="shared/api.js"></script>
+  <script src="shared/notifications.js"></script>
+  <script src="shared/cosmos.js"></script>
+  <script src="shared/sidebar.js"></script>
+  <script>
+  const AGENT_ID = 'atlas';
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
 
-<div id="toast-container"></div>
+  async function checkConn() {
+    const badge = document.getElementById('connBadge');
+    const text  = document.getElementById('connText');
+    try {
+      const r = await fetch(API_BASE + '/agents', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+    } catch(e) {}
+    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+  }
 
-<script src="shared/config.js"></script>
-<script src="shared/api.js"></script>
-<script src="shared/chat.js"></script>
-<script src="shared/notifications.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const chat = new AgentChat('atlas', {
-    messagesId: 'chatMessages',
-    inputId:    'chatInput',
-    sendId:     'chatSend',
-    newBtnId:   'chatNewBtn',
-    listId:     'chatSessionList',
-    emptyId:    'chatEmptyState',
+  function setKpi(key, val, delta) {
+    const el = document.getElementById('kpi_' + key);
+    const de = document.getElementById('kpid_' + key);
+    if (el) el.textContent = val != null ? val : '—';
+    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+  }
+
+  function offlinePanel(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '<div class="offline-panel"><div class="offline-icon icon-xl"><span data-icon="ui:connected" class="icon-xl"></span></div><div class="offline-title">Awaiting Connection</div><div class="offline-msg">Start the backend to receive live data.</div><code class="offline-code">python api.py</code></div>';
+    if (typeof injectIcons === 'function') injectIcons();
+  }
+
+  function renderFeedItem(item) {
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+  }
+
+  async function loadDashboard() {
+    try {
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      // KPIs
+            setKpi('reports_today', d['reports_today'] != null ? d['reports_today'] : (d.metrics && d.metrics['reports_today'] != null ? d.metrics['reports_today'] : null), d.deltas && d.deltas['reports_today']);
+      setKpi('sources_monitored', d['sources_monitored'] != null ? d['sources_monitored'] : (d.metrics && d.metrics['sources_monitored'] != null ? d.metrics['sources_monitored'] : null), d.deltas && d.deltas['sources_monitored']);
+      setKpi('sectors_tracked', d['sectors_tracked'] != null ? d['sectors_tracked'] : (d.metrics && d.metrics['sectors_tracked'] != null ? d.metrics['sectors_tracked'] : null), d.deltas && d.deltas['sectors_tracked']);
+      setKpi('alerts', d['alerts'] != null ? d['alerts'] : (d.metrics && d.metrics['alerts'] != null ? d.metrics['alerts'] : null), d.deltas && d.deltas['alerts']);
+      // Primary section: first array found in data
+      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
+      if (keys.length > 0) {
+        const el = document.getElementById('section_primary');
+        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
+      } else { offlinePanel('section_primary'); }
+      if (keys.length > 1) {
+        const el2 = document.getElementById('section_secondary');
+        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
+      } else { offlinePanel('section_secondary'); }
+      if (typeof injectIcons === 'function') injectIcons();
+    } catch(e) {
+      offlinePanel('section_primary');
+      offlinePanel('section_secondary');
+    }
+  }
+
+  // Chat
+  const fab=document.getElementById('chatFab'), drawer=document.getElementById('chatDrawer'),
+        overlay=document.getElementById('chatOverlay'), closeBtn=document.getElementById('chatClose'),
+        chatIn=document.getElementById('chatInput'), chatSnd=document.getElementById('chatSend'),
+        chatMsg=document.getElementById('chatMessages');
+
+  fab.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('visible'); });
+  closeBtn.addEventListener('click', () => { drawer.classList.remove('open'); overlay.classList.remove('visible'); });
+  overlay.addEventListener('click', () => { drawer.classList.remove('open'); overlay.classList.remove('visible'); });
+
+  chatIn.addEventListener('input', () => {
+    chatIn.style.height='auto'; chatIn.style.height=Math.min(chatIn.scrollHeight,120)+'px';
+    chatSnd.disabled=!chatIn.value.trim();
   });
-  // Helper for hint chips
-  chat._fillInput = function(text) {
-    const inp = document.getElementById(this.inputId);
-    if (inp) { inp.value = text; inp.focus(); }
-  };
-  window._chat = chat;
-  startConnectionPolling(30_000);
-});
-</script>
+  chatIn.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); if(!chatSnd.disabled) chatSnd.click(); } });
+
+  document.querySelectorAll('.chat-hint-chip').forEach(c => {
+    c.addEventListener('click', () => { chatIn.value=c.textContent; chatIn.dispatchEvent(new Event('input')); chatSnd.click(); });
+  });
+
+  function addMsg(role, text) {
+    const d=document.createElement('div'); d.className='chat-msg '+role;
+    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
+  }
+  function addTyping() {
+    const d=document.createElement('div'); d.className='chat-msg agent';
+    d.innerHTML='<div class="chat-typing"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
+    chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
+  }
+
+  chatSnd.addEventListener('click', async () => {
+    const text=chatIn.value.trim(); if(!text) return;
+    chatIn.value=''; chatIn.style.height='auto'; chatSnd.disabled=true;
+    addMsg('user', text);
+    const t=addTyping();
+    try {
+      const r=await fetch(API_BASE+'/agents/'+AGENT_ID+'/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:text}), signal:AbortSignal.timeout(15000)
+      });
+      t.remove();
+      const data=await r.json();
+      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+    } catch(e) { t.remove(); addMsg('agent','Connection lost. Run: <code>python api.py</code>'); }
+  });
+
+  checkConn();
+  loadDashboard();
+  setInterval(loadDashboard, 45000);
+  setInterval(checkConn, 30000);
+  </script>
 </body>
 </html>

@@ -371,8 +371,9 @@ class OllamaProvider(_Provider):
     name = "ollama"
 
     def __init__(self):
-        self._url   = _OLLAMA_URL
-        self._model = _OLLAMA_MODEL
+        # FIX-01: Re-read env vars at construction time (after load_dotenv)
+        self._url   = os.getenv("OLLAMA_URL", "http://localhost:11434").strip()
+        self._model = os.getenv("OLLAMA_MODEL", "").strip()
         self._ok    = False
         if not self._model:
             return
@@ -461,18 +462,24 @@ class LLMClient:
         }
         # Default order: Ollama first (free, local, no rate limits) when configured,
         # then cloud providers as fallback.
+        # FIX-01: Re-read OLLAMA_MODEL at construction time (after load_dotenv)
+        # instead of at module import time. This ensures the env var is read AFTER
+        # Nexus/main.py calls load_dotenv().
+        ollama_model = os.getenv("OLLAMA_MODEL", "").strip()
+        
         if preferred_order:
             order = preferred_order
         else:
             env_order = os.getenv("LLM_PROVIDER_ORDER", "").strip()
             if env_order:
                 order = env_order.split(",")
-            elif _OLLAMA_MODEL:
+            elif ollama_model:
                 # Ollama configured → use it first, cloud providers as fallback
                 order = ["ollama", "anthropic", "openai", "gemini"]
                 log.info(
-                    "LLM provider order: ollama (primary) → anthropic → openai → gemini "
-                    "(set LLM_PROVIDER_ORDER to override)"
+                    "LLM provider order: ollama (primary, model=%s) → anthropic → openai → gemini "
+                    "(set LLM_PROVIDER_ORDER to override)",
+                    ollama_model
                 )
             else:
                 order = ["anthropic", "openai", "gemini"]

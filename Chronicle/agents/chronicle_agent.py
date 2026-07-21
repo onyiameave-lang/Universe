@@ -25,6 +25,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# FIX-CH-01 (Phase 5f): Set socket timeout at module level to bound DNS resolution
+# and socket operations. This is a nuclear option that protects against hangs in
+# embedding services, external APIs, and any network calls made by Chronicle.
+# Constitutional law: Book II Principle V Graceful Degradation.
+import socket
+socket.setdefaulttimeout(8)
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -152,15 +159,59 @@ class ChronicleAgent(BaseAgent):
 
     def answer(self, query: str, requester: str = "unknown",
                domain: Optional[str] = None, top_k: int = 5) -> Dict[str, Any]:
+        # FIX-CH-03 (Phase 5g): Set socket timeout at the start of answer() as a
+        # defense-in-depth measure. socket.setdefaulttimeout(8) is already set at
+        # module level and in execute(), but re-setting here ensures it's active
+        # even if called directly (e.g. from tests or other agents).
+        import socket as _sock
+        _sock.setdefaulttimeout(5)
+
+        import time as _time
+        _t0 = _time.monotonic()
+        log.debug("[chronicle] answer: starting retrieval for query=%r requester=%s", query, requester)
+
         retrieval = self._retrieve(query, requester, domain, top_k)
         memories = retrieval["results"]
+
+        log.debug("[chronicle] answer: retrieval returned %d memories in %.2fs for query=%r",
+                  len(memories), _time.monotonic() - _t0, query)
+
         if not memories:
             return {"status": "complete", "answer": None, "memories": [], "grounded": False,
                    "note": "No relevant memories; generation advised elsewhere."}
         if self.has_brain:
             ctx = "\n".join(f"- [{m['memory_id']}] {m['summary']}" for m in memories)
-            advice = self.think(f"Question: {query}\n\nMemories:\n{ctx}\n\nAnswer using ONLY these, "
-                              f"cite ids, note gaps.", temperature=0.2, max_tokens=400)
+            # FIX-CH-04 (Phase 5g): Wrap self.think() in a ThreadPoolExecutor with 6s timeout.
+            # self.think() makes an HTTP request to the LLM API. If the LLM is slow or
+            # unreachable, this call can block for 30-60s even with socket.setdefaulttimeout()
+            # set — because the socket is already CONNECTED (DNS resolved, TCP established)
+            # and the timeout only applies to the READ phase, not to a slow streaming response.
+            # The ThreadPoolExecutor timeout is the only reliable bound on this call.
+            from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
+            advice = None
+            try:
+                with _TPE(max_workers=1) as _pool:
+                    _fut = _pool.submit(
+                        self.think,
+                        f"Question: {query}\n\nMemories:\n{ctx}\n\nAnswer using ONLY these, "
+                        f"cite ids, note gaps.",
+                        temperature=0.2,
+                        max_tokens=400,
+                    )
+                    advice = _fut.result(timeout=6)
+                    log.debug("[chronicle] answer: LLM think() returned in %.2fs for query=%r",
+                              _time.monotonic() - _t0, query)
+            except _TE:
+                log.warning(
+                    "[chronicle] answer: LLM think() timed out after 6s for query=%r — "
+                    "falling back to extractive answer. "
+                    "Constitutional: Book II Principle V Graceful Degradation.",
+                    query,
+                )
+                advice = None
+            except Exception as _exc:
+                log.warning("[chronicle] answer: LLM think() failed (%s) — falling back to extractive.", _exc)
+                advice = None
             if advice:
                 return {"status": "complete", "answer": advice.strip(), "memories": memories, "grounded": True}
         return {"status": "complete", "answer": " ".join(m["summary"] for m in memories[:3]),
@@ -183,8 +234,16 @@ class ChronicleAgent(BaseAgent):
     # ---- BaseAgent contract ----
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        # FIX-CH-01 (Phase 5f): Re-set socket timeout at start of execute() to ensure
+        # it's active even if other code has changed it. This is a defense-in-depth measure.
+        socket.setdefaulttimeout(8)
+        
         ctx = context
         sender = ctx.get("_sender", "unknown")
+        
+        # FIX-CH-02 (Phase 5f): Debug logging for observability
+        if task == "memory.answer":
+            log.info("[chronicle] memory.answer: searching for query=%r from %s", ctx.get("query", ""), sender)
 
         if task == "memory.store":
             return self.store_memory(content=ctx.get("content", ""), pillar=ctx.get("pillar", "semantic"),

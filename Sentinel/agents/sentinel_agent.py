@@ -16,7 +16,9 @@ and credibility-weighted sentiment throughout.
 from __future__ import annotations
 
 import logging
+import socket as _socket
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -45,12 +47,23 @@ except Exception:
         def start(self): self._started = True; self.on_start()
         def stop(self): self._started = False
 
-log = logging.getLogger("sentinel")
+# FIX-SA-01 (Phase 5e): Nuclear socket timeout at module level.
+# Ensures DNS resolution is bounded even if collectors.py is imported
+# before its own module-level setdefaulttimeout runs.
+# Constitutional: Book II Principle V Graceful Degradation.
+_socket.setdefaulttimeout(15)
 
+log = logging.getLogger(__name__)
+
+# FIX-SA-04 (Phase 5h): PATH_SOURCES referenced "gdelt" which was renamed to
+# "guardian" in collectors.py (fix S-2). "gdelt" is silently skipped by
+# CollectorRegistry.collect() because it's not in self.collectors — meaning
+# wire_priority and broad_sweep never actually ran Guardian.
+# Fixed: all three paths now use "guardian" (the registered collector name).
 PATH_SOURCES = {
-    "wire_priority": ["rss", "gdelt"],
-    "premium_api": ["newsapi", "rss"],
-    "broad_sweep": ["rss", "newsapi", "gdelt", "hackernews"],
+    "wire_priority": ["rss", "guardian"],
+    "premium_api":   ["newsapi", "rss", "guardian"],
+    "broad_sweep":   ["rss", "newsapi", "guardian", "hackernews"],
 }
 
 
@@ -94,7 +107,32 @@ class SentinelAgent(BaseAgent):
     def _strat_broad(self, c): return self._report(c, "broad_sweep")
 
     def _report(self, context, path) -> Dict[str, Any]:
-        out = self.engine.report(topics=context.get("topics"), sources=PATH_SOURCES[path])
+        # FIX-SA-02 (Phase 5e): Log before/after engine.report() so we can
+        # see exactly where Sentinel hangs in production logs.
+        # FIX-SA-03: Wrap engine.report() in a thread with 25s timeout so
+        # Sentinel itself never hangs its caller (coordinator has 30s outer).
+        import concurrent.futures as _cf
+        topics = context.get("topics")
+        log.info("[sentinel] _report: path='%s' topics=%r — calling engine.report()", path, topics)
+        _t0 = time.time()
+        def _do_report():
+            _socket.setdefaulttimeout(15)
+            return self.engine.report(topics=topics, sources=PATH_SOURCES[path])
+        try:
+            with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
+                _fut = _pool.submit(_do_report)
+                out = _fut.result(timeout=25)
+            log.info("[sentinel] _report: path='%s' completed in %.2fs — %d articles",
+                     path, time.time() - _t0, out.get("report", {}).get("article_count", 0) if out.get("report") else 0)
+        except _cf.TimeoutError:
+            elapsed = round(time.time() - _t0, 2)
+            log.warning("[sentinel] _report: path='%s' TIMED OUT after %.2fs. "
+                        "Returning graceful degradation. Constitutional: Book II Principle V.", path, elapsed)
+            return {"status": "error", "message": f"news collection timed out after {elapsed}s (path={path})",
+                    "path": path, "source_status": {}}
+        except Exception as exc:
+            log.error("[sentinel] _report: path='%s' raised %s", path, exc)
+            return {"status": "error", "message": str(exc), "path": path, "source_status": {}}
         ok = out.get("report") is not None and out["report"]["article_count"] > 0
         return {"status": "complete" if ok else "error",
                "message": "" if ok else "no credible news via this path",
@@ -104,6 +142,8 @@ class SentinelAgent(BaseAgent):
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
+        log.info("[sentinel] execute: task=%r symbol=%r topics=%r query=%r",
+                 task, ctx.get("symbol"), ctx.get("topics"), ctx.get("query", "")[:60])
         if task in ("news.report", "news.collect", "news.events"):
             if self.reasoning is not None:
                 solved = self.solve("news_path", {"topics": ctx.get("topics")})
@@ -115,8 +155,19 @@ class SentinelAgent(BaseAgent):
                     "note": "fell back to broad sweep"}
             return {"status": "complete", **self.engine.report(topics=ctx.get("topics"))}
         if task in ("news.sentiment", "news.for_symbol"):
-            return {"status": "complete", "sentiment": self.engine.sentiment_for(ctx.get("symbol", ""))}
+            # FIX-SA-05 (Phase 5h): Coordinator now passes both ctx["symbol"] and
+            # ctx["topics"]. Prefer topics (already a list) so collectors get the
+            # right filter. Fall back to [symbol] if topics is absent/empty.
+            symbol = ctx.get("symbol", "")
+            topics = ctx.get("topics") or ([symbol] if symbol else None)
+            log.info("[sentinel] execute: task=%r — effective symbol=%r topics=%r", task, symbol, topics)
+            _t0 = time.time()
+            result = self.engine.sentiment_for(symbol, topics=topics)
+            log.info("[sentinel] execute: sentiment_for(%r) completed in %.2fs — article_count=%d",
+                     symbol, time.time() - _t0, result.get("article_count", 0))
+            return {"status": "complete", "sentiment": result}
         if task == "news.credibility":
+            log.info("[sentinel] execute: task='news.credibility' topics=%r — calling engine.gather()", ctx.get("topics"))
             g = self.engine.gather(topics=ctx.get("topics"))
             return {"status": "complete", "articles": [
                 {"title": a["title"], "source": a["source"], "credibility": a["credibility"],

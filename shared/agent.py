@@ -101,7 +101,9 @@ class BaseAgent(abc.ABC):
             try:
                 self.register_strategies()
             except Exception as exc:
-                log.debug("%s register_strategies failed: %s", self.name, exc)
+                # FIX-04: Upgraded from DEBUG to ERROR level (No Silent Failures)
+                log.error("%s: Failed to register strategies: %s\n%s", 
+                          self.name, exc, traceback.format_exc())
 
     # ============================================================
     # Lifecycle
@@ -377,27 +379,107 @@ class BaseAgent(abc.ABC):
         return parsed
 
     # ============================================================
-    # Memory access
+    # Memory access (Chronicle integration)
     # ============================================================
+    # FIX-03: Explicit Chronicle send/receive hooks (Memory First principle)
+    # FIX-04: Upgraded error logging from DEBUG to ERROR level (No Silent Failures)
+
+    def _send_to_chronicle(self, content: Any, domain: str = "general",
+                           tags: Optional[List[str]] = None,
+                           memory_type: str = "semantic",
+                           summary: str = "", **kw) -> bool:
+        """Store an event/result in Chronicle (Memory First principle, Book 2).
+
+        Signature matches all callers:
+          research_agent.py:  _send_to_chronicle(content=..., memory_type=..., domain=..., tags=...)
+          coordinator_agent.py: _send_to_chronicle(content=..., domain=..., tags=...)
+
+        Calls chronicle.store_memory() — the real ChronicleAgent public API.
+        FIX-CHR-01: was calling chronicle.record() which does not exist.
+        FIX-CHR-02: was expecting (event_type, data) but callers pass content= kwargs.
+        """
+        if not self.chronicle:
+            log.warning("%s: Chronicle unavailable, event not persisted (domain=%s)",
+                        self.name, domain)
+            return False
+        try:
+            self.chronicle.store_memory(
+                content=content,
+                pillar=memory_type,
+                domain=domain,
+                summary=summary or (str(content)[:160] if content else ""),
+                source_repository=getattr(self, "repository", self.name),
+                source_agent=self.name,
+                tags=tags or [],
+            )
+            return True
+        except Exception as exc:
+            log.error("%s: Failed to send to Chronicle (domain=%s): %s\n%s",
+                      self.name, domain, exc, traceback.format_exc())
+            return False
+
+    def _receive_from_chronicle(self, query: str, domain: Optional[str] = None,
+                                limit: int = 5) -> Optional[List[Dict]]:
+        """Retrieve memories from Chronicle (Memory First principle, Book 2).
+
+        Signature matches all callers:
+          coordinator_agent.py: _receive_from_chronicle(ctx["query"])   — positional string
+          research_agent.py:    _receive_from_chronicle(query=..., domain=...)
+
+        Calls chronicle.search() — the real ChronicleAgent public API.
+        FIX-CHR-03: was calling chronicle.query() which does not exist.
+        FIX-CHR-04: was expecting a dict but callers pass a plain string.
+        """
+        if not self.chronicle:
+            log.warning("%s: Chronicle unavailable, cannot retrieve knowledge", self.name)
+            return None
+        try:
+            return self.chronicle.search(
+                query=query,
+                domain=domain or getattr(self, "domain", "general"),
+                limit=limit,
+            )
+        except Exception as exc:
+            log.error("%s: Failed to retrieve from Chronicle (query=%r): %s\n%s",
+                      self.name, query, exc, traceback.format_exc())
+            return None
 
     def remember(self, content: Any, memory_type: str = "semantic",
                  domain: Optional[str] = None, tags: Optional[List[str]] = None,
                  evidence: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         if self.chronicle is None:
+            log.warning("%s: Chronicle unavailable, cannot store memory", self.name)
             return None
         try:
-            return self.chronicle.store(
-                content=content, memory_type=memory_type,
-                domain=domain or self.domain, tags=tags,
-                source=self.name, evidence=evidence,
+            # FIX-P4-01: chronicle.store() resolves to ChronicleAgent.self.store
+            # (a VectorStore instance attribute), not the store() method.
+            # Use store_memory() — the unambiguous public API.
+            # Constitutional law: Book II Principle I Memory First.
+            result = self.chronicle.store_memory(
+                content=content,
+                pillar=memory_type,
+                domain=domain or self.domain,
+                summary=str(content)[:160] if content else "",
+                source_repository=getattr(self, "repository", self.name),
+                source_agent=self.name,
+                tags=tags or [],
+                evidence=evidence or [],
             )
+            # FIX-04: Log success at INFO level for observability
+            if result:
+                log.debug("%s: Stored memory (type=%s, domain=%s)", 
+                          self.name, memory_type, domain or self.domain)
+            return result
         except Exception as exc:
-            log.debug("%s remember() failed: %s", self.name, exc)
+            # FIX-04: Upgraded from DEBUG to ERROR level (No Silent Failures)
+            log.error("%s: Failed to store memory: %s\n%s", 
+                      self.name, exc, traceback.format_exc())
             return None
 
     def recall(self, query: str, domain: Optional[str] = None,
                limit: int = 5) -> List[Dict[str, Any]]:
         if self.chronicle is None:
+            log.warning("%s: Chronicle unavailable, cannot recall memory", self.name)
             return []
         try:
             res = self.chronicle.search(
@@ -405,12 +487,16 @@ class BaseAgent(abc.ABC):
                 limit=limit, requester=self.name,
             )
             return res if isinstance(res, list) else []
-        except Exception:
+        except Exception as exc:
+            # FIX-04: Upgraded from silent to ERROR level
+            log.error("%s: Failed to recall memory (query=%s): %s\n%s", 
+                      self.name, query, exc, traceback.format_exc())
             return []
 
     def research(self, query: str,
                  domain: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if self.atlas is None:
+            log.warning("%s: Atlas unavailable, cannot research", self.name)
             return None
         try:
             out = self.atlas.handle({
@@ -419,7 +505,10 @@ class BaseAgent(abc.ABC):
                 "sender": self.name,
             })
             return out.get("report") if isinstance(out, dict) else None
-        except Exception:
+        except Exception as exc:
+            # FIX-04: Upgraded from silent to ERROR level
+            log.error("%s: Failed to research (query=%s): %s\n%s", 
+                      self.name, query, exc, traceback.format_exc())
             return None
 
     # ============================================================

@@ -39,6 +39,7 @@ import json
 import logging
 import os
 import re
+import socket as _socket
 import time
 import urllib.parse
 import urllib.request
@@ -55,6 +56,12 @@ _UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 _TIMEOUT = 14
+
+# FIX-PC-01 (Phase 5e): Nuclear socket timeout at module level.
+# urllib timeout= only covers the READ phase; DNS resolution is NOT bounded.
+# socket.setdefaulttimeout() is the only way to prevent C-level DNS hangs.
+# Constitutional: Book II Principle V Graceful Degradation.
+_socket.setdefaulttimeout(_TIMEOUT)
 
 PULSE_USER_REGION: str = os.getenv("PULSE_USER_REGION", "NG").upper()
 
@@ -111,11 +118,17 @@ def _get(url: str, headers: Optional[Dict] = None,
          timeout: int = _TIMEOUT) -> Optional[str]:
     req = urllib.request.Request(
         url, headers={"User-Agent": _UA, **(headers or {})})
+    # FIX-PC-02 (Phase 5e): Log each fetch so we can see which URL hangs.
+    log.debug("[pulse.collectors] _get: fetching %s (timeout=%ds)", url[:80], timeout)
+    _t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read().decode(
+            body = r.read().decode(
                 r.headers.get_content_charset() or "utf-8", errors="replace")
-    except Exception:
+        log.debug("[pulse.collectors] _get: OK %s in %.2fs (%d bytes)", url[:60], time.time() - _t0, len(body))
+        return body
+    except Exception as exc:
+        log.debug("[pulse.collectors] _get: FAILED %s in %.2fs — %s", url[:60], time.time() - _t0, exc)
         return None
 
 

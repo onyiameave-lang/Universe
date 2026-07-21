@@ -181,14 +181,14 @@ class LearningLog:
         if self.chronicle is None:
             return
         try:
-            self.chronicle.store(
+            self.chronicle.store_memory(
                 content=(
                     f"Lesson [{self.agent}]: {lesson.get('lesson')} "
                     f"(cause: {lesson.get('root_cause')}; "
                     f"fix: {lesson.get('adjustment')})"
                 ),
-                memory_type="evolutionary", domain="learning",
-                tags=["lesson", self.agent], source=self.agent,
+                pillar="evolutionary", domain="learning",
+                tags=["lesson", self.agent], source_repository=self.agent,
             )
         except Exception:
             pass  # aegis:allow-silent
