@@ -5652,13 +5652,11 @@
     "symbol": "USDCHF",
     "regime": "ranging",
     "genome": {
-      "genome_id": "mut-c6a210",
-      "generation": 10,
-      "parents": [
-        "xov-28bbc8"
-      ],
+      "genome_id": "imm-4fc33a",
+      "generation": 0,
+      "parents": [],
       "fitness": 1.3037,
-      "backtests": 11,
+      "backtests": 7,
       "best_return": 0.0002,
       "best_sharpe": 0.0,
       "modules": {
@@ -5674,31 +5672,33 @@
           }
         },
         "trend": {
-          "logic_type": "ema_slope",
+          "logic_type": "donchian_trend",
           "params": {
             "period": 20,
             "slow": 48
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "rsi",
           "params": {
-            "period": 12,
-            "threshold": 15
+            "period": 14,
+            "upper": 70,
+            "lower": 30
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "atr_expansion",
           "params": {
-            "period": 20
+            "period": 14,
+            "expansion_ratio": 1.2
           }
         },
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.247,
+            "base_threshold": 0.209,
             "regime_bonus": 0.1,
-            "threshold": 0.247
+            "threshold": 0.209
           }
         },
         "exit": {
@@ -5735,22 +5735,20 @@
       "status": "complete",
       "trades": 2,
       "win_rate": 1.0,
-      "total_return": 0.0279,
-      "final_equity": 10279.36,
+      "total_return": 0.0293,
+      "final_equity": 10293.42,
       "profit_factor": null,
       "max_drawdown": 0.0,
-      "sharpe_proxy": 13.535,
+      "sharpe_proxy": 44.593,
       "sortino_proxy": 0.0,
       "recovery_factor": 0.0,
-      "expectancy": 139.68,
+      "expectancy": 146.71,
       "consistency": 1.0,
-      "avg_pnl": 139.68
+      "avg_pnl": 146.71
     },
-    "certified_at": 1784688789.4692347,
-    "generation": 10,
-    "parents": [
-      "xov-28bbc8"
-    ]
+    "certified_at": 1784741046.2585468,
+    "generation": 0,
+    "parents": []
   },
   "RUT::trending_up": {
     "symbol": "RUT",
