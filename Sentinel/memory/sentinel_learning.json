@@ -60,9 +60,90 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 6
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "news.sentiment",
+      "root_cause": "No module named 'core.collectors'",
+      "lesson": "Task 'news.sentiment' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 7
+    },
+    {
+      "source": "heuristic",
+      "task": "news.sentiment",
+      "root_cause": "No module named 'core.collectors'",
+      "lesson": "Task 'news.sentiment' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 8
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 5
+    },
+    {
+      "source": "heuristic",
+      "task": "news_path",
+      "root_cause": "all attempts failed",
+      "lesson": "Task 'news_path' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 6
     }
   ],
   "failure_signatures": {
-    "news.sentiment::No module named 'core.collectors'": 6
+    "news.sentiment::No module named 'core.collectors'": 8,
+    "news_path::all attempts failed": 6
   }
 }

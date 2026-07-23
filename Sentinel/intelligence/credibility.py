@@ -23,7 +23,10 @@ import re
 from collections import Counter
 from typing import Any, Dict, List
 
-from core.collectors import SOURCE_BASE_CREDIBILITY  # type: ignore
+try:
+    from core.collectors import SOURCE_BASE_CREDIBILITY  # type: ignore
+except ImportError:
+    from Sentinel.core.collectors import SOURCE_BASE_CREDIBILITY  # type: ignore
 
 _WORD = re.compile(r"[a-z0-9]+")
 SENSATIONAL = {"shocking", "unbelievable", "secret", "exposed", "destroyed", "slams",

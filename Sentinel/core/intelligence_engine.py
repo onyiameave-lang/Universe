@@ -36,7 +36,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from core.collectors import CollectorRegistry                                        # type: ignore
+try:
+    from core.collectors import CollectorRegistry, _topic_matches_article             # type: ignore
+except ImportError:
+    from Sentinel.core.collectors import CollectorRegistry, _topic_matches_article     # type: ignore
 from intelligence.credibility import (credibility_score, misinformation_risk,        # type: ignore
                                       compute_corroboration)
 from intelligence.analysis import (extract_symbols, classify_event, sentiment,       # type: ignore
@@ -204,7 +207,6 @@ class IntelligenceEngine:
         # broad results. Degrades gracefully: if filter removes everything,
         # return all articles (better than empty).
         if topics and articles:
-            from core.collectors import _topic_matches_article  # type: ignore
             filtered = [
                 a for a in articles
                 if _topic_matches_article((a["title"] + " " + a.get("summary", "")).lower(), topics)

@@ -12,9 +12,15 @@ Five stages before any generation:
   V   Evolution  - has this knowledge already evolved? (supersedes edges)
 
 Real logic over the vector store and knowledge graph. Explainable trace.
+
+FIX-HYBRID-01: Stage III now uses HybridRetriever (SBERT + BM25) for the
+final ranking step, replacing the pure cosine _rank(). The five-stage
+pipeline is unchanged; HybridRetriever re-scores the candidates assembled
+by stages III-IV and returns them in hybrid-score order.
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,6 +28,20 @@ from core.embeddings import get_embedding_model, cosine_similarity  # type: igno
 from core.memory_record import MemoryRecord, MemoryPillar, SOURCE_CREDIBILITY  # type: ignore
 from core.vector_store import VectorStore                             # type: ignore
 from core.knowledge_graph import KnowledgeGraph                       # type: ignore
+
+# FIX-HYBRID-01: import the hybrid scorer
+try:
+    from intelligence.hybrid_retrieval import HybridRetriever  # type: ignore
+    _HYBRID_AVAILABLE = True
+except ImportError:
+    try:
+        from hybrid_retrieval import HybridRetriever  # type: ignore
+        _HYBRID_AVAILABLE = True
+    except ImportError:
+        _HYBRID_AVAILABLE = False
+        HybridRetriever = None  # type: ignore
+
+log = logging.getLogger("chronicle.retrieval")
 
 
 def _record_retrieval(rec, requester: str) -> None:
@@ -52,10 +72,64 @@ class RetrievalEngine:
         self.graph = graph
         self.embedder = get_embedding_model()
         # FIX-CH-FB-02: optional callback set by ChronicleAgent -> mismatch_penalty.
-        # Given (query_embedding, memory_id) it returns a penalty in [0,1] for
-        # memories previously judged irrelevant to a look-alike query. Kept as an
-        # attribute (not a ctor arg) so existing callers/tests remain compatible.
         self.penalty_fn = None
+
+        # FIX-HYBRID-01: instantiate HybridRetriever over current store records.
+        # Converts MemoryRecord objects to plain dicts for the retriever.
+        self._hybrid: Optional[HybridRetriever] = None
+        if _HYBRID_AVAILABLE and HybridRetriever is not None:
+            try:
+                self._hybrid = HybridRetriever(
+                    self._records_as_dicts(), use_sbert=True
+                )
+                # FIX-HYBRID-01: register refresh callback with the store so
+                # add() / update() / archive() automatically invalidate the
+                # SBERT embedding cache without callers needing to know.
+                self.store._hybrid_notify = self._refresh_hybrid
+                log.info("[chronicle.retrieval] HybridRetriever initialised "
+                         "(%d records)", len(self.store.all()))
+            except Exception as exc:
+                log.warning("[chronicle.retrieval] HybridRetriever init failed: %s — "
+                            "falling back to cosine-only ranking", exc)
+                self._hybrid = None
+        else:
+            log.info("[chronicle.retrieval] hybrid_retrieval not available — "
+                     "using cosine-only ranking")
+
+    # ------------------------------------------------------------------
+    # Helper: convert store records to plain dicts for HybridRetriever
+    # ------------------------------------------------------------------
+
+    def _records_as_dicts(self) -> List[Dict[str, Any]]:
+        """Return all active MemoryRecords as plain dicts (HybridRetriever input)."""
+        out = []
+        for rec in self.store.all(include_archived=False):
+            d = {
+                "memory_id": rec.memory_id,
+                "summary": rec.summary or "",
+                "content": str(rec.content or "")[:500],
+                "tags": list(rec.tags or []),
+                "lesson": rec.lesson or "",
+                "domain": rec.domain or "",
+                "pillar": rec.pillar.value if hasattr(rec.pillar, "value") else str(rec.pillar),
+                "confidence": rec.confidence,
+                "updated_at": rec.updated_at,
+                "embedding": list(rec.embedding or []),
+            }
+            out.append(d)
+        return out
+
+    def _refresh_hybrid(self) -> None:
+        """Rebuild HybridRetriever corpus when store records change."""
+        if self._hybrid is not None:
+            try:
+                self._hybrid.update_records(self._records_as_dicts())
+            except Exception as exc:
+                log.debug("[chronicle.retrieval] hybrid refresh failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Main retrieve() — five-stage pipeline, unchanged interface
+    # ------------------------------------------------------------------
 
     def retrieve(self, query: str, requester: str = "unknown", intent: str = "",
                  domain: Optional[str] = None, pillar: Optional[str] = None,
@@ -102,9 +176,7 @@ class RetrievalEngine:
         evolved = sum(1 for rec, _ in semantic if self.graph.neighbors(rec.memory_id, "supersedes"))
         trace["stage_5_evolution"] = {"evolved_memories": evolved}
 
-        # FIX-CH-FB-02: apply negative-feedback penalty from prior relevance judgements
-        # so memories already rejected for a look-alike query are down-weighted BEFORE
-        # ranking, not just after their confidence slowly decays.
+        # FIX-CH-FB-02: apply negative-feedback penalty
         candidates = list(semantic) + related
         if self.penalty_fn is not None:
             adjusted = []
@@ -117,14 +189,14 @@ class RetrievalEngine:
             candidates = adjusted
         trace["stage_penalty"] = {"applied": self.penalty_fn is not None}
 
-        ranked = self._rank(candidates)
-        # FIX-CH-FB-02: Do NOT pre-reward retrieval as successful=True. The old code
-        # inflated successful_uses on EVERY retrieval -- relevant or not -- which raised
-        # confidence for bad matches and made Chronicle unable to learn. We now only
-        # register that the memory was RETRIEVED (total_uses via record_retrieval),
-        # leaving successful_uses to be set later by real relevance feedback
-        # (apply_relevance_feedback). Ranking/confidence thus reflect earned relevance.
-        # (Book II Ch VI Memory Evolution -- knowledge is refined by verified use.)
+        # FIX-HYBRID-01: re-rank candidates with HybridRetriever (SBERT + BM25)
+        # instead of the pure cosine _rank(). Falls back to _rank() if hybrid
+        # is unavailable or raises.
+        ranked = self._hybrid_rank(candidates, query, domain, top_k)
+        trace["stage_hybrid"] = {
+            "scorer": "sbert+bm25" if (self._hybrid is not None) else "cosine-only"
+        }
+
         for rec, _ in ranked[:top_k]:
             _record_retrieval(rec, requester)
             self.store.update(rec)
@@ -140,6 +212,83 @@ class RetrievalEngine:
                 "count": len(results), "trace": trace,
                 "duration_ms": round((time.time() - started) * 1000, 1),
                 "generation_advised": len(results) == 0}
+
+    # ------------------------------------------------------------------
+    # Hybrid ranking (replaces _rank for the final sort)
+    # ------------------------------------------------------------------
+
+    def _hybrid_rank(self, candidates: List[Tuple[MemoryRecord, float]],
+                     query: str, domain: Optional[str],
+                     top_k: int) -> List[Tuple[MemoryRecord, float]]:
+        """
+        FIX-HYBRID-01: Re-rank candidates using HybridRetriever (SBERT + BM25).
+
+        Strategy:
+          1. Refresh the HybridRetriever corpus (cheap if records unchanged).
+          2. Build a lookup dict from memory_id -> MemoryRecord for the candidates.
+          3. Ask HybridRetriever to score each candidate record dict.
+          4. Return sorted (MemoryRecord, hybrid_score) pairs.
+
+        Falls back to cosine _rank() if HybridRetriever is unavailable.
+        """
+        if self._hybrid is None or not candidates:
+            return self._rank(candidates)
+
+        try:
+            # Refresh corpus so newly added records are included
+            self._refresh_hybrid()
+
+            # Build candidate dict lookup
+            cand_map: Dict[str, Tuple[MemoryRecord, float]] = {}
+            for rec, cosine_score in candidates:
+                cand_map[rec.memory_id] = (rec, cosine_score)
+
+            # Build plain-dict versions of candidates for HybridRetriever
+            cand_dicts: List[Dict[str, Any]] = []
+            for rec, cosine_score in candidates:
+                d = {
+                    "memory_id": rec.memory_id,
+                    "summary": rec.summary or "",
+                    "content": str(rec.content or "")[:500],
+                    "tags": list(rec.tags or []),
+                    "lesson": rec.lesson or "",
+                    "domain": rec.domain or "",
+                    "pillar": rec.pillar.value if hasattr(rec.pillar, "value") else str(rec.pillar),
+                    "confidence": rec.confidence,
+                    "updated_at": rec.updated_at,
+                    "embedding": list(rec.embedding or []),
+                    "score": cosine_score,  # passed as fallback cosine in BM25-only mode
+                }
+                cand_dicts.append(d)
+
+            # Score each candidate with the hybrid scorer
+            scored_dicts: List[Tuple[Dict[str, Any], float]] = []
+            for d in cand_dicts:
+                s = self._hybrid.score(query, d, query_domain=domain)
+                scored_dicts.append((d, s))
+
+            scored_dicts.sort(key=lambda x: x[1], reverse=True)
+
+            # Reconstruct (MemoryRecord, score) pairs
+            result: List[Tuple[MemoryRecord, float]] = []
+            for d, s in scored_dicts[:top_k]:
+                mid = d["memory_id"]
+                if mid in cand_map:
+                    result.append((cand_map[mid][0], s))
+
+            log.debug("[chronicle.retrieval] hybrid_rank: %d candidates → top %d "
+                      "(scorer=%s)", len(candidates), len(result),
+                      self._hybrid.stats().get("mode", "?"))
+            return result
+
+        except Exception as exc:
+            log.warning("[chronicle.retrieval] hybrid_rank failed (%s) — "
+                        "falling back to cosine _rank()", exc)
+            return self._rank(candidates)
+
+    # ------------------------------------------------------------------
+    # Original cosine _rank (kept as fallback)
+    # ------------------------------------------------------------------
 
     def _intent(self, intent: str, pillar: Optional[str]) -> List[MemoryPillar]:
         if pillar:
@@ -158,6 +307,7 @@ class RetrievalEngine:
         return [p for kw, p in mapping.items() if kw in il]
 
     def _rank(self, candidates: List[Tuple[MemoryRecord, float]]) -> List[Tuple[MemoryRecord, float]]:
+        """Original cosine-only ranking (fallback when HybridRetriever unavailable)."""
         now = time.time()
         ranked = []
         for rec, sim in candidates:

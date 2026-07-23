@@ -732,6 +732,62 @@ class NexusAgent(BaseAgent):
         specialist_domains = [d for d in domains if d not in ("general", "coordination")]
         return len(specialist_domains) >= 2
 
+    def _is_capability_question(self, query: str) -> bool:
+        q = (query or "").lower()
+        if "universe" in q and "what should" in q and self._needs_multiple(query):
+            return True
+        return bool(re.search(
+            r"\b(who|which|what)\b.*\b(agent|agents|handle|handles|responsible|should do|can do|route|routes)\b"
+            r"|\b(agent|agents|universe|ecosystem)\b.*\b(handle|handles|responsible|capabilities|roster|list|route|routes|should do)\b",
+            q,
+        ))
+
+    def _answer_capability_question(self, query: str) -> Dict[str, Any]:
+        registry = self.registry.all()
+        domains = [d for d in self._classify_domains(query)
+                   if d not in ("general", "coordination", "memory")]
+        wants_roster = bool(re.search(r"\b(each|all|every|roster|list)\b.*\bagents?\b", query.lower()))
+
+        selected: Dict[str, Dict[str, Any]] = {}
+        if wants_roster or not domains:
+            selected = registry
+        else:
+            for domain in domains:
+                agent = self.registry.find_by_domain(domain)
+                if agent:
+                    selected[agent.name] = agent.to_dict()
+
+        if not selected:
+            selected = registry
+
+        lines = []
+        for name, info in selected.items():
+            caps = info.get("capabilities") or []
+            cap_text = ", ".join(caps[:4]) if caps else "no declared capabilities"
+            lines.append(f"- {name.title()} ({info.get('domain') or 'general'}): {cap_text}")
+
+        if wants_roster:
+            summary = "Current live agent roster from Nexus registry:\n" + "\n".join(lines)
+        elif len(selected) > 1:
+            summary = (
+                "Nexus should orchestrate this as a multi-agent job, then synthesize the results:\n"
+                + "\n".join(lines)
+            )
+        else:
+            summary = "Nexus would route that request to this registered specialist:\n" + "\n".join(lines)
+
+        return {
+            "status": "complete",
+            "human_summary": summary,
+            "summary": summary,
+            "query": query,
+            "domains": domains,
+            "agents": list(selected.keys()),
+            "registry": selected,
+            "confidence": 0.9 if selected else 0.2,
+            "_strategy": "registry_capability_discovery",
+        }
+
     # ---- BaseAgent contract ----
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -748,6 +804,15 @@ class NexusAgent(BaseAgent):
             return {"status": "complete", "session": self.orchestrator.run(
                 ctx.get("query", ""), ctx.get("user_id", "user"), priority=priority)}
         if task == "ecosystem.route":
+            if ctx.get("query") and self._is_capability_question(ctx["query"]):
+                answer = self._answer_capability_question(ctx["query"])
+                self._send_to_chronicle(
+                    content=f"Nexus answered capability discovery for query={ctx['query']!r}",
+                    domain="coordination",
+                    tags=["nexus", "capability_discovery"],
+                )
+                return {"priority": priority, **answer}
+
             if ctx.get("query"):
                 # FIX-CA-04: Chronicle fast path — check BEFORE solve() to short-circuit.
                 # Constitutional: Book II Principle I Memory First.
@@ -834,6 +899,72 @@ class NexusAgent(BaseAgent):
                 # FIX-CA-22 (Phase 5i): Add human_summary to solved result.
                 _q = ctx.get("query", "")
                 _dom = (self.classifier.classify(_q) or {}).get("domain", "general") if _q else "general"
+
+                # FIX-CA-V9-01 (Phase 9): Chronicle fallback when ALL strategies fail.
+                # When solve() returns status="error", the user gets nothing. But Chronicle
+                # already retrieved relevant memories at the start of this execute() call
+                # (stored in ctx["_chronicle_prior"]). Surface those memories as a degraded
+                # but useful answer instead of returning an empty error.
+                # Constitutional law: Book II Principle V Graceful Degradation —
+                # "Never return nothing when you have something."
+                if solved.get("status") == "error" and _q:
+                    # Try Chronicle prior knowledge first (already retrieved, no extra call)
+                    _prior = ctx.get("_chronicle_prior")
+                    _fallback_text = None
+                    if _prior:
+                        _parts = []
+                        for _m in (_prior if isinstance(_prior, list) else [_prior])[:3]:
+                            if isinstance(_m, dict):
+                                _t = _m.get("content") or _m.get("summary") or _m.get("answer") or ""
+                            else:
+                                _t = str(_m)
+                            if _t and len(_t.strip()) > 20:
+                                _parts.append(_t.strip())
+                        if _parts:
+                            _fallback_text = "\n\n".join(_parts)
+                    # If no prior, do a fresh Chronicle search (fast, <1s)
+                    if not _fallback_text and self.registry.get("chronicle"):
+                        try:
+                            _fb_mems = self._receive_from_chronicle(_q, limit=5)
+                            if _fb_mems:
+                                _parts = []
+                                for _m in (_fb_mems if isinstance(_fb_mems, list) else [_fb_mems])[:3]:
+                                    if isinstance(_m, dict):
+                                        _t = _m.get("content") or _m.get("summary") or _m.get("answer") or ""
+                                    else:
+                                        _t = str(_m)
+                                    if _t and len(_t.strip()) > 20:
+                                        _parts.append(_t.strip())
+                                if _parts:
+                                    _fallback_text = "\n\n".join(_parts)
+                        except Exception as _fb_exc:
+                            log.warning("[nexus] FIX-CA-V9-01: Chronicle fallback search failed: %s", _fb_exc)
+                    if _fallback_text:
+                        log.info(
+                            "[nexus] FIX-CA-V9-01: Chronicle fallback succeeded for query=%r (%d chars). "
+                            "Constitutional: Book II Principle V Graceful Degradation.",
+                            _q, len(_fallback_text),
+                        )
+                        _hs = (
+                            f"\u26a0\ufe0f  Specialist agent unavailable \u2014 answer from memory (may be outdated):\n\n"
+                            f"{_fallback_text}"
+                        )
+                        return {
+                            "status": "complete",
+                            "degraded": True,
+                            "priority": priority,
+                            "human_summary": _hs,
+                            "summary": _hs,
+                            "routed_to": "chronicle_fallback",
+                            "_strategy": "chronicle_fallback",
+                            "message": "Answered from Chronicle memory (specialist agent unavailable).",
+                        }
+                    log.warning(
+                        "[nexus] FIX-CA-V9-01: Chronicle fallback found no usable memories for query=%r. "
+                        "Returning error to user.",
+                        _q,
+                    )
+
                 _hs = self._format_result(solved, query=_q, domain=_dom)
                 _final = {"status": solved.get("status", "complete"), "priority": priority,
                           "human_summary": _hs, "summary": _hs, **solved}

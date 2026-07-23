@@ -133,7 +133,7 @@
     const badge = document.getElementById('connBadge');
     const text  = document.getElementById('connText');
     try {
-      const r = await fetch(API_BASE + '/agents', { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
       if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
     } catch(e) {}
     badge.className='conn-badge offline'; text.textContent='Offline'; return false;
@@ -149,7 +149,7 @@
   function offlinePanel(id) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.innerHTML = '<div class="offline-panel"><div class="offline-icon icon-xl"><span data-icon="ui:connected" class="icon-xl"></span></div><div class="offline-title">Awaiting Connection</div><div class="offline-msg">Start the backend to receive live data.</div><code class="offline-code">python api.py</code></div>';
+    el.innerHTML = '<div class="offline-panel"><div class="offline-icon icon-xl"><span data-icon="ui:connected" class="icon-xl"></span></div><div class="offline-title">Awaiting Connection</div><div class="offline-msg">Reconnecting to live data.</div></div>';
     if (typeof injectIcons === 'function') injectIcons();
   }
 
@@ -225,12 +225,12 @@
     try {
       const r=await fetch(API_BASE+'/agents/'+AGENT_ID+'/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:text}), signal:AbortSignal.timeout(15000)
+        body:JSON.stringify({message:text}), signal:AbortSignal.timeout(60000)
       });
       t.remove();
       const data=await r.json();
       addMsg('agent', data.response||data.message||'The oracle has spoken.');
-    } catch(e) { t.remove(); addMsg('agent','Connection lost. Run: <code>python api.py</code>'); }
+    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 
   checkConn();

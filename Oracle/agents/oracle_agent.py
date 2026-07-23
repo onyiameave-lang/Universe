@@ -223,7 +223,11 @@ class OracleAgent(BaseAgent):
         if task == "market.analyze":
             return self.analyze_market(symbol)
         if task == "trade.signal":
-            out = self.signal(symbol); out.pop("_technicals", None); return out
+            out = self.signal(symbol)
+            if out.get("status") == "complete":
+                self._preserve(symbol, out)
+            out.pop("_technicals", None)
+            return out
         if task == "strategy.evolve":
             md = self.data.get(symbol)
             series = md["series"] if md["status"] == "complete" else self.data.synthetic(symbol, n=160)

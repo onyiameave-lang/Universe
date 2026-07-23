@@ -9,9 +9,17 @@ const ConnectionState = {
   online: false,
   latency: null,
   lastCheck: null,
+  misses: 0,
   listeners: [],
 
-  set(online, latency) {
+  set(online, latency, opts = {}) {
+    if (!online && opts.tolerateMiss && this.online && this.misses < 2) {
+      this.misses += 1;
+      this.lastCheck = Date.now();
+      this._updateBadge('Reconnecting');
+      return;
+    }
+    if (online) this.misses = 0;
     const changed = this.online !== online;
     this.online = online;
     this.latency = latency;
@@ -22,12 +30,12 @@ const ConnectionState = {
 
   onChange(fn) { this.listeners.push(fn); },
 
-  _updateBadge() {
+  _updateBadge(label) {
     const badge = document.getElementById('connBadge');
     if (!badge) return;
     if (this.online) {
       badge.className = 'api-badge api-online';
-      badge.innerHTML = `<span class="dot dot-green"></span> Live${this.latency ? ` · ${this.latency}ms` : ''}`;
+      badge.innerHTML = `<span class="dot dot-green"></span> ${label || 'Live'}${this.latency ? ` · ${this.latency}ms` : ''}`;
     } else {
       badge.className = 'api-badge api-offline';
       badge.innerHTML = `<span class="dot dot-red"></span> Offline`;
@@ -131,9 +139,9 @@ let _connPollTimer = null;
 function startConnectionPolling(intervalMs = 30000) {
   const check = async () => {
     const t0 = performance.now();
-    const data = await apiGet(API.agents, { timeout: 5000, retries: 0 });
+    const data = await apiGet(API.health, { timeout: 8000, retries: 1 });
     const latency = Math.round(performance.now() - t0);
-    ConnectionState.set(!!data, data ? latency : null);
+    ConnectionState.set(!!data, data ? latency : null, { tolerateMiss: true });
   };
   check();
   _connPollTimer = setInterval(check, intervalMs);
@@ -179,10 +187,8 @@ function showOfflinePanel(containerId, agentName) {
   el.innerHTML = `
     <div class="offline-panel">
       <div class="offline-icon">🔌</div>
-      <div class="offline-title">Backend Offline</div>
-      <div class="offline-desc">Start the server to see ${agentName || 'agent'} data.<br>
-        <code style="font-size:12px;opacity:0.7">cd Universal_AI &amp;&amp; python api.py</code>
-      </div>
+      <div class="offline-title">Reconnecting</div>
+      <div class="offline-desc">Live ${agentName || 'agent'} data will return automatically when the backend responds.</div>
     </div>`;
 }
 

@@ -247,7 +247,10 @@ class PulseAgent(BaseAgent):
         # ── social.manipulation ───────────────────────────────────────────────
         if task == "social.manipulation":
             g = self.engine.gather(topics=ctx.get("topics"))
-            from intelligence.authenticity import detect_manipulation  # type: ignore
+            try:
+                from intelligence.authenticity import detect_manipulation  # type: ignore
+            except ImportError:
+                from Pulse.intelligence.authenticity import detect_manipulation  # type: ignore
             return {
                 "status": "complete",
                 **detect_manipulation(g["posts"], symbol=ctx.get("symbol")),

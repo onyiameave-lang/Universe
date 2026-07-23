@@ -130,7 +130,7 @@
     const badge = document.getElementById('connBadge');
     const text  = document.getElementById('connText');
     try {
-      const r = await fetch(`${API_BASE}/agents`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
       if (r.ok) {
         badge.className = 'conn-badge online';
         text.textContent = 'Live';
@@ -226,7 +226,10 @@
   function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = `conv-msg ${role}`;
-    div.innerHTML = `<div class="conv-bubble">${text}</div>`;
+    const bubble = document.createElement('div');
+    bubble.className = 'conv-bubble';
+    bubble.textContent = text;
+    div.appendChild(bubble);
     convMsgs.appendChild(div);
     convMsgs.scrollTop = convMsgs.scrollHeight;
   }
@@ -261,22 +264,22 @@
     addMessage('user', text);
     showTyping();
     try {
-      const r = await fetch(`${API_BASE}/agents/nexus/chat`, {
+      const r = await fetch(`${API_BASE}/ecosystem/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
-        signal: AbortSignal.timeout(15000)
+        signal: AbortSignal.timeout(60000)
       });
       removeTyping();
       if (r.ok) {
         const d = await r.json();
         addMessage('agent', d.response || d.message || 'The constellation has received your query.');
       } else {
-        addMessage('agent', 'The nexus is unreachable. Ensure the backend is running: <code>python api.py</code>');
+        addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
       }
     } catch(e) {
       removeTyping();
-      addMessage('agent', 'Connection lost. Start the backend: <code>python api.py</code>');
+      addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
     }
   }
 

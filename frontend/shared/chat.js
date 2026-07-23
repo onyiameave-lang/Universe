@@ -106,7 +106,7 @@ class ChatDrawer {
 
     this._addMessage('agent',
       reply === null
-        ? '⚠️ The oracle sleeps. Awaken the backend: `python api.py`'
+        ? 'The backend is still working or reconnecting. Please try again in a moment.'
         : reply
     );
   }
@@ -217,7 +217,7 @@ class HeroChatManager {
     this._hideTyping();
     this.sending = false;
     this._addMessage('agent',
-      reply ?? '⚠️ The oracle sleeps. Awaken the backend: `python api.py`'
+      reply ?? 'The backend is still working or reconnecting. Please try again in a moment.'
     );
   }
 
@@ -234,7 +234,7 @@ class HeroChatManager {
     this._hideTyping();
     this.sending = false;
     this._addMessage('agent',
-      reply ?? '⚠️ The oracle sleeps. Awaken the backend: `python api.py`'
+      reply ?? 'The backend is still working or reconnecting. Please try again in a moment.'
     );
   }
 

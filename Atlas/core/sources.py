@@ -205,7 +205,23 @@ def _gather_safe(src_name: str, gather_fn, query: str, limit: int,
     """
     now = time.time()
 
-    # Check if source is in cooldown from a previous 429 exhaustion
+    # FIX-SRC-V6-01 (2026-07-22): Move time.sleep() OUTSIDE the lock.
+    # ROOT CAUSE: The original code called time.sleep(wait) while holding
+    # _source_lock. Since gather() runs all sources in parallel via
+    # ThreadPoolExecutor, every source thread had to acquire _source_lock
+    # before starting. If wikipedia needed a 0.1s gap sleep, it held the lock
+    # for 0.1s while ALL other source threads (arxiv, semantic_scholar, etc.)
+    # queued up waiting. This turned parallel execution into sequential:
+    #   Thread 1 (wikipedia): acquire lock, sleep 0.1s, release lock -> 0.1s
+    #   Thread 2 (arxiv):     wait for lock, acquire, sleep 0.5s, release -> 0.6s total
+    #   Thread 3 (semantic):  wait for lock, acquire, sleep 1.0s, release -> 1.6s total
+    # Total: 1.6s of pure lock contention BEFORE any HTTP call starts.
+    # FIX: Read the timestamps under the lock (fast), release the lock, THEN sleep.
+    # This way threads only hold the lock for microseconds, not milliseconds.
+    # Constitutional law: Book II Principle V Graceful Degradation -- parallel
+    # execution must actually be parallel.
+
+    # Step 1: Read state and compute wait under lock (fast, no I/O)
     with _source_lock:
         backoff_until = _source_backoff_until.get(src_name, 0.0)
         if now < backoff_until:
@@ -213,14 +229,16 @@ def _gather_safe(src_name: str, gather_fn, query: str, limit: int,
             log.info("atlas.sources: %s in cooldown for %.1fs more — skipping", src_name, remaining)
             return [], "rate_limited_cooldown"
 
-        # Enforce minimum gap between calls to this source
         min_gap = _SOURCE_MIN_GAP.get(src_name, 0.0)
         last_call = _source_last_call.get(src_name, 0.0)
         wait = min_gap - (now - last_call)
-        if wait > 0:
-            time.sleep(wait)
-
+        # Update last_call timestamp NOW (before sleep) so other threads
+        # see this source as "recently called" and don't pile up.
         _source_last_call[src_name] = time.time()
+
+    # Step 2: Sleep OUTSIDE the lock so other source threads can proceed in parallel
+    if wait > 0:
+        time.sleep(wait)
 
     for attempt in range(max_retries + 1):
         try:
@@ -674,10 +692,19 @@ class SourceRegistry:
         # FIX-SRC-V3-04: Use as_completed() instead of pool.map() so we can
         # collect results as they arrive and stop when the deadline hits,
         # rather than blocking until the slowest source finishes.
+        # FIX-SRC-V6-02 (2026-07-22): Use a fixed 20s timeout for as_completed()
+        # instead of computing it from the deadline AFTER Chronicle recall.
+        # The old code computed timeout=max(0.1, _gather_deadline - time.time())
+        # AFTER Chronicle recall. If Chronicle took 2s, the timeout was 23s.
+        # But if Chronicle took 5s (slow), the timeout was 20s. This was fine.
+        # The real problem: _gather_deadline was 25s from gather() START, but
+        # the coordinator's budget for Atlas is now 28s. We need gather() to
+        # complete in <=20s so research_engine.investigate() has 8s for synthesis.
+        # Fixed 20s timeout is cleaner and more predictable than dynamic computation.
+        _sources_timeout = min(20.0, max(0.1, _gather_deadline - time.time()))
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
             futures = {pool.submit(_run, src_name): src_name for src_name in chosen}
-            for fut in concurrent.futures.as_completed(futures,
-                                                        timeout=max(0.1, _gather_deadline - time.time())):
+            for fut in concurrent.futures.as_completed(futures, timeout=_sources_timeout):
                 try:
                     src_name, items, st = fut.result()
                     status[src_name] = {"gathered": len(items), "status": st}

@@ -41,10 +41,18 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from core.collectors import CollectorRegistry                                    # type: ignore
-from intelligence.authenticity import (authenticity_weight, bot_risk,            # type: ignore
-                                       detect_manipulation)
-from intelligence.sentiment import extract_symbols, sentiment, TrendDetector     # type: ignore
+try:
+    from core.collectors import CollectorRegistry                                # type: ignore
+except ImportError:
+    from Pulse.core.collectors import CollectorRegistry                          # type: ignore
+try:
+    from intelligence.authenticity import (authenticity_weight, bot_risk,        # type: ignore
+                                           detect_manipulation)
+    from intelligence.sentiment import extract_symbols, sentiment, TrendDetector # type: ignore
+except ImportError:
+    from Pulse.intelligence.authenticity import (authenticity_weight, bot_risk,  # type: ignore
+                                                 detect_manipulation)
+    from Pulse.intelligence.sentiment import extract_symbols, sentiment, TrendDetector  # type: ignore
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants

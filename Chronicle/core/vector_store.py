@@ -9,14 +9,20 @@ writes), semantic search via numpy when available else correct pure-Python,
 constitutional filters (domain, pillar, confidence), and archive-not-delete
 (nothing dies without record, Ch VIII). Swap for Chroma/FAISS/pgvector later
 without touching callers.
+
+FIX-VS-V8-01: Windows-safe atomic write (os.replace with shutil.move fallback).
+FIX-HYBRID-01: hybrid_retriever observer — notified on add/update so SBERT
+               cache stays consistent with the live record corpus.
 """
 from __future__ import annotations
 
 import json
+import os
+import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core.embeddings import cosine_similarity  # type: ignore
 from core.memory_record import MemoryRecord      # type: ignore
@@ -39,6 +45,10 @@ class VectorStore:
         self._matrix = None
         self._matrix_ids: List[str] = []
         self._dirty = True
+        # FIX-HYBRID-01: optional callback invoked after add/update so
+        # RetrievalEngine can refresh the HybridRetriever corpus.
+        # Set by RetrievalEngine after construction; never called in __init__.
+        self._hybrid_notify: Optional[Callable[[], None]] = None
         self._load()
 
     def _load(self) -> None:
@@ -55,10 +65,37 @@ class VectorStore:
                 self._path.rename(self.storage_dir / "records.corrupt.json")
 
     def _persist(self) -> None:
+        """FIX-VS-V8-01: Windows-safe atomic write with retry fallback."""
         data = [r.to_dict(include_embedding=True) for r in self._records.values()]
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data), encoding="utf-8")
-        tmp.replace(self._path)
+        if sys.platform == "win32":
+            import shutil
+            for attempt in range(3):
+                try:
+                    os.replace(str(tmp), str(self._path))
+                    return
+                except (PermissionError, OSError):
+                    if attempt < 2:
+                        time.sleep(0.05 * (attempt + 1))
+                    else:
+                        try:
+                            shutil.move(str(tmp), str(self._path))
+                        except Exception:
+                            try:
+                                tmp.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+        else:
+            tmp.replace(self._path)
+
+    def _notify_hybrid(self) -> None:
+        """FIX-HYBRID-01: Notify HybridRetriever that records changed."""
+        if self._hybrid_notify is not None:
+            try:
+                self._hybrid_notify()
+            except Exception:
+                pass
 
     def add(self, record: MemoryRecord) -> MemoryRecord:
         with self._lock:
@@ -66,6 +103,7 @@ class VectorStore:
             self._records[record.memory_id] = record
             self._dirty = True
             self._persist()
+        self._notify_hybrid()  # FIX-HYBRID-01: outside lock to avoid deadlock
         return record
 
     def get(self, memory_id: str) -> Optional[MemoryRecord]:
@@ -79,6 +117,7 @@ class VectorStore:
             self._records[record.memory_id] = record
             self._dirty = True
             self._persist()
+        self._notify_hybrid()  # FIX-HYBRID-01: outside lock to avoid deadlock
 
     def archive(self, memory_id: str) -> bool:
         with self._lock:
@@ -89,7 +128,8 @@ class VectorStore:
             rec.updated_at = time.time()
             self._dirty = True
             self._persist()
-            return True
+        self._notify_hybrid()  # FIX-HYBRID-01
+        return True
 
     def all(self, include_archived: bool = False) -> List[MemoryRecord]:
         with self._lock:

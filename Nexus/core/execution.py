@@ -80,7 +80,7 @@ PRIORITY_BUDGET = {1: 8.0, 2: 6.0, 3: 4.0, 4: 3.0, 5: 2.0}   # emergency..backgr
 # 180s > 120s cooldown -> Atlas has time to exhaust sources + synthesize.
 # Configurable via ATLAS_SLA_BUDGET env var for operator tuning.
 # Constitutional law: Book II Principle V Graceful Degradation.
-_atlas_sla = float(os.getenv("ATLAS_SLA_BUDGET", "180.0"))
+_atlas_sla = float(os.getenv("ATLAS_SLA_BUDGET", "25.0"))  # FIX-P9-01: 180.0->25.0 (thread zombie fix)
 # FIX-P5-01: Sentinel fetches from 11+ sources and legitimately needs 3-10s.
 # Without this floor it ran under PRIORITY_BUDGET[4]=3.0s and breached SLA
 # on every call, causing a 3x retry loop that returned nothing to the user.

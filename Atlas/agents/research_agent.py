@@ -41,7 +41,9 @@ FIX LOG (Phase 2):
 from __future__ import annotations
 
 import logging
+import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -171,6 +173,18 @@ class AtlasAgent(BaseAgent):
                 log.info("atlas: Chronicle returned %d prior memories for '%s'",
                          len(prior), ctx.get("query", "")[:60])
 
+            query = ctx.get("query", "")
+            domain = ctx.get("domain", "general")
+            if self._is_explanatory_query(query) and not self._needs_fresh_evidence(query):
+                fallback_report = self._best_effort_report(query, domain)
+                self._remember_best_effort(fallback_report, domain)
+                return {
+                    "status": "complete",
+                    "report": fallback_report,
+                    "research_path": "memory_or_llm_explanation",
+                    "degraded": fallback_report.get("source_status", {}).get("_summary") != "chronicle_memory",
+                }
+
             if self.reasoning is not None:
                 solved = self.solve("research_path", {"query": ctx.get("query", ""),
                     "domain": ctx.get("domain", "general"), "depth": ctx.get("depth", "standard")})
@@ -195,12 +209,36 @@ class AtlasAgent(BaseAgent):
                     return {"status": "complete", "report": best_report,
                             "note": "all paths below target; returned best-effort from trace"}
 
-                # Last resort: one broad-desk sweep (not a loop — execute() is called once)
-                log.info("atlas: no usable trace report — falling back to broad-desk sweep")
-                return {"status": "complete", "report": self.engine.investigate(
-                    ctx.get("query", ""), ctx.get("domain", "general"),
-                    sources=PATH_SOURCES["broad_desk"]),
-                    "note": "all paths below target; returned best-effort broad sweep"}
+                # FIX-AGT-V6-01 (2026-07-22): REMOVED broad-desk sweep fallback.
+                # ROOT CAUSE: When solve() exhausted all 3 strategies AND the trace had
+                # no usable report, this code fired a FOURTH engine.investigate() call
+                # with ALL 5 sources (broad_desk). This was the 37-second second gap
+                # visible in the logs: "no usable trace report — falling back to broad-desk sweep"
+                # followed by 37s of silence before the Gemini call.
+                # The broad-desk sweep is ALWAYS doomed when the 3 strategy paths already
+                # failed — if wikipedia/arxiv/semantic_scholar couldn't answer in 3 attempts,
+                # querying all 5 sources won't help. It just wastes 37 more seconds.
+                # FIX: Return a graceful degradation response immediately. The LLM-only
+                # fallback in research_engine._llm_only_answer() already handles the case
+                # where all external sources fail. If that also failed, we return an honest
+                # "insufficient evidence" response rather than burning 37 more seconds.
+                # Constitutional law: Book II Principle V Graceful Degradation — return
+                # partial results immediately rather than retrying a doomed path.
+                # Book IV No Silent Failures — log the failure clearly.
+                log.warning(
+                    "atlas: no usable trace report after %d strategies — returning graceful degradation. "
+                    "FIX-AGT-V6-01: broad-desk sweep removed (was adding 37s with no benefit). "
+                    "Constitutional: Book II Principle V Graceful Degradation.",
+                    3,
+                )
+                fallback_report = self._best_effort_report(ctx.get("query", ""), ctx.get("domain", "general"))
+                self._remember_best_effort(fallback_report, ctx.get("domain", "general"))
+                return {
+                    "status": "complete",
+                    "report": fallback_report,
+                    "note": "all paths below target; graceful degradation (FIX-AGT-V6-01)",
+                    "degraded": True,
+                }
 
             return {"status": "complete", "report": self.engine.investigate(
                 ctx.get("query", ""), ctx.get("domain", "general"), ctx.get("depth", "standard"))}
@@ -224,3 +262,149 @@ class AtlasAgent(BaseAgent):
 
     def investigate(self, query: str, domain: str = "general", depth: str = "standard"):
         return self.engine.investigate(query, domain, depth)
+
+    def _best_effort_report(self, query: str, domain: str = "general") -> Dict[str, Any]:
+        """Return the best non-hardcoded answer available when live research fails."""
+        cleaned = (query or "").strip()
+        answer, source, confidence = self._best_effort_answer(cleaned, domain)
+        return {
+            "query": cleaned,
+            "domain": domain,
+            "summary": answer,
+            "confidence": confidence,
+            "findings": [
+                "Live research paths were exhausted or unavailable.",
+                f"Atlas used {source} instead of a hardcoded topic response.",
+                "This degraded answer should be replaced by corroborated sources when connectivity or API limits recover.",
+            ],
+            "limitations": [
+                "No fresh external evidence was gathered for this response.",
+                "Treat this as degraded output unless Chronicle or LLM evidence is shown.",
+            ],
+            "evidence": [],
+            "key_terms": re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", cleaned.lower())[:8],
+            "source_status": {"_summary": source},
+        }
+
+    def _best_effort_answer(self, query: str, domain: str) -> tuple[str, str, float]:
+        memory_answer = self._chronicle_best_effort(query, domain)
+        if memory_answer:
+            return memory_answer, "chronicle_memory", 0.35
+
+        llm_answer = self._llm_best_effort(query, domain)
+        if llm_answer:
+            return llm_answer, "llm_best_effort", 0.45
+
+        return (
+            f"Atlas could not gather fresh evidence or a relevant learned memory for: '{query}'. "
+            "I will not invent a research answer. The failed path has been recorded so Atlas can improve its source "
+            "selection and retry strategy before answering this topic with confidence.",
+            "insufficient_evidence_recorded",
+            0.1,
+        )
+
+    def _llm_best_effort(self, query: str, domain: str) -> Optional[str]:
+        if not getattr(self, "llm", None) or not getattr(self.llm, "has_any", False):
+            return None
+        try:
+            from shared.llm import system_prompt  # type: ignore
+            prompt = (
+                "Live research collectors failed. Answer the user's question directly from model knowledge only. "
+                "Do not claim fresh citations or live source verification. Keep it concise, useful, and mark uncertainty.\n\n"
+                f"Domain: {domain}\nQuestion: {query}"
+            )
+            pool = ThreadPoolExecutor(max_workers=1)
+            future = pool.submit(
+                self.llm.complete,
+                system_prompt("atlas"),
+                prompt,
+                0.2,
+                450,
+                None,
+                True,
+            )
+            try:
+                result = future.result(timeout=30)
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+            text = getattr(result, "text", "") if getattr(result, "ok", False) else ""
+            return text.strip() if text and len(text.strip()) > 20 else None
+        except FuturesTimeoutError:
+            log.warning("atlas: LLM best-effort answer timed out for query=%r", query[:80])
+            return None
+        except Exception as exc:
+            log.warning("atlas: LLM best-effort answer unavailable: %s", exc)
+            return None
+
+    def _chronicle_best_effort(self, query: str, domain: str) -> Optional[str]:
+        memories = self._receive_from_chronicle(query=query, domain=domain, limit=12) or []
+        if not memories and domain and domain != "general":
+            memories = self._receive_from_chronicle(query=query, domain="general", limit=12) or []
+        query_terms = {
+            term for term in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", (query or "").lower())
+            if term not in {
+                "the", "and", "for", "with", "what", "are", "how", "why", "when",
+                "where", "who", "explain", "research", "about", "from", "that",
+                "this", "your", "into", "give", "tell",
+            }
+        }
+        parts: List[str] = []
+        for memory in memories:
+            if isinstance(memory, dict):
+                if memory.get("pillar") in {"evolutionary", "operational", "strategy"}:
+                    continue
+                text = memory.get("content") or memory.get("summary") or memory.get("answer") or ""
+            else:
+                text = str(memory)
+            text = " ".join(str(text).split())
+            lowered = text.lower()
+            if any(marker in lowered for marker in (
+                "could not gather fresh",
+                "live research paths were exhausted",
+                "nexus routed query",
+                "chronicle fast-path hit",
+                "specialist agent unavailable",
+                "strategy '" ,
+                "experiencing delays",
+                "no approach succeeded",
+            )):
+                continue
+            memory_terms = set(re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower()))
+            if query_terms and not (query_terms & memory_terms):
+                continue
+            if len(text) > 20:
+                parts.append(text[:700])
+        if not parts:
+            return None
+        joined = "\n\n".join(parts[:3])
+        return (
+            "Atlas could not gather fresh sources, so it is answering from relevant Chronicle memory "
+            f"(may be incomplete or outdated):\n\n{joined}"
+        )
+
+    def _is_explanatory_query(self, query: str) -> bool:
+        q = (query or "").lower()
+        return bool(re.search(r"\b(explain|what is|what are|define|tell me about|how does|how do)\b", q))
+
+    def _needs_fresh_evidence(self, query: str) -> bool:
+        q = (query or "").lower()
+        return bool(re.search(
+            r"\b(latest|current|today|now|recent|news|source|sources|citation|citations|cite|"
+            r"paper|papers|study|studies|price|market|trend|trending|breaking)\b",
+            q,
+        ))
+
+    def _remember_best_effort(self, report: Dict[str, Any], domain: str) -> None:
+        source = report.get("source_status", {}).get("_summary", "")
+        if source == "insufficient_evidence_recorded":
+            memory_type = "operational"
+            tags = ["atlas", "failed_retrieval", "needs_retry"]
+        else:
+            memory_type = "semantic"
+            tags = ["atlas", "best_effort", source]
+        self._send_to_chronicle(
+            content=report.get("summary", ""),
+            memory_type=memory_type,
+            domain=domain,
+            tags=tags + report.get("key_terms", [])[:3],
+        )

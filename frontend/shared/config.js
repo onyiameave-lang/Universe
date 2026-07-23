@@ -20,6 +20,7 @@ const API = {
 
   agentData:   (id) => `${BASE_URL}/agents/${id}/data`,
   agentChat:   (id) => `${BASE_URL}/agents/${id}/chat`,
+  ecosystemChat: `${BASE_URL}/ecosystem/chat`,
 
   ws:          (id) => `${BASE_URL.replace(/^http/, 'ws')}/ws/${id}`,
 };

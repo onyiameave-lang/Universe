@@ -101,7 +101,15 @@ class ResearchEngine:
         # Callers that need deeper research can pass max_rounds=2 explicitly.
         # (Book II Principle V Graceful Degradation -- one good round > three slow ones.)
         started = time.time()
-        _investigate_deadline = started + 25.0  # FIX-ENG-V3-01: hard 25s wall clock
+        # FIX-ENG-V6-01 (2026-07-22): Reduced investigate() deadline from 25s -> 20s.
+        # The executor's budget for Atlas is now 28s (FIX-EX-V6-01). We need:
+        #   - gather(): <=15s (sources fire in parallel, 5s per HTTP call)
+        #   - synthesis: <=8s (LLM call, capped separately)
+        #   - overhead: ~2s (Chronicle recall, report building)
+        # Total: ~25s, well under the 28s executor budget.
+        # The 20s deadline for investigate() leaves 8s for synthesis + overhead.
+        # Constitutional law: Book II Principle V Graceful Degradation.
+        _investigate_deadline = started + 20.0  # FIX-ENG-V6-01: 20s (was 25s)
         report_id = f"rpt-{uuid.uuid4().hex[:10]}"
         
         # FIX-ENG-V4-01: Timing instrumentation
@@ -197,10 +205,34 @@ class ResearchEngine:
         # FIX-ATL-DS-01: pass Chronicle's recalled memories as a SEPARATE stream so
         # the synthesizer can enrich-if-relevant / ignore-if-not (dual-stream).
         # FIX-ENG-V4-01: Timing instrumentation for synthesis
+        # FIX-ENG-V6-02 (2026-07-22): Cap synthesis at 8s with a hard deadline.
+        # The LLM call in _synthesize() can take 3-25s depending on model load.
+        # Without a cap, a slow synthesis call consumes the entire remaining budget
+        # and the executor times out before the report is returned to the user.
+        # 8s is generous for a 3-4 sentence synthesis (Gemini typically takes 3-6s).
+        # On timeout, fall back to the non-LLM extractive summarizer (always fast).
+        # Constitutional law: Book II Principle V Graceful Degradation.
         _t_synth_start = time.time()
-        summary = (self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
-                                    chronicle_memories=prior)
-                   if corpus else "")
+        if corpus:
+            import concurrent.futures as _cf
+            def _do_synthesize():
+                return self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
+                                        chronicle_memories=prior)
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=1) as _sp:
+                    _sfut = _sp.submit(_do_synthesize)
+                    summary = _sfut.result(timeout=8.0)
+            except _cf.TimeoutError:
+                log.warning("atlas.engine: synthesis LLM call exceeded 8s — using extractive fallback. "
+                            "FIX-ENG-V6-02. Constitutional: Book II Principle V Graceful Degradation.")
+                # Extractive fallback: one sentence per document (fast, no LLM)
+                summary = self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
+                                           chronicle_memories=None)
+            except Exception as _se:
+                log.warning("atlas.engine: synthesis failed (%s) — using extractive fallback.", _se)
+                summary = ""
+        else:
+            summary = ""
         _t_synth_elapsed = time.time() - _t_synth_start
         log.info("atlas.engine: investigate() synthesis took %.2fs", _t_synth_elapsed)
         key_terms = [k for k, _ in keywords(corpus, top_n=8)] if corpus else []

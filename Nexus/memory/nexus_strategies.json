@@ -503,14 +503,15 @@
         "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
         "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
         "failed: [atlas] general agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
         "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
       ],
-      "attempts": 4,
+      "attempts": 5,
       "successes": 0,
-      "failures": 4,
+      "failures": 5,
       "last_outcome": "failure",
-      "last_used": 1784676780.2445695,
-      "status": "candidate",
+      "last_used": 1784677456.0091221,
+      "status": "deprecated",
       "created_at": 1784671681.2099674,
       "lineage": null,
       "researched": true,
@@ -533,18 +534,371 @@
         "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
         "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
         "failed: [atlas] general agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
         "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
       ],
-      "attempts": 4,
+      "attempts": 5,
       "successes": 1,
-      "failures": 3,
+      "failures": 4,
       "last_outcome": "failure",
-      "last_used": 1784676780.1442175,
-      "status": "candidate",
+      "last_used": 1784677455.9281697,
+      "status": "deprecated",
       "created_at": 1784672214.4084907,
       "lineage": null,
       "researched": true,
-      "confidence": 0.0456
+      "confidence": 0.0362
+    },
+    {
+      "strategy_id": "strat-40ea5eea14",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge",
+        "memory: Strategy 'memory_first' for routing worked. Confidence now 0.0945. ok"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [sentinel] news agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784799756.0662186,
+      "status": "deprecated",
+      "created_at": 1784677337.7536318,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-37bca08dc4",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.0362. SLA breach: sentinel exceeded 3.0s",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.2666. multi-domain; not direct",
+        "failed: [sentinel] news agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784800822.672855,
+      "status": "deprecated",
+      "created_at": 1784678248.2720497,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-31b6dac50b",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded",
+        "memory: Strategy 'orchestrate' for routing worked. Confidence now 0.0945. ok"
+      ],
+      "reasons_against": [
+        "uses several agents",
+        "memory: Strategy 'orchestrate' for routing failed. Confidence now 0.1176. no agent for training (repository=forge)",
+        "memory: Strategy 'orchestrate' for routing failed. Confidence now 0.0. SLA breach: sentinel exceeded 3.0s",
+        "failed: [sentinel] news agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784800822.5851862,
+      "status": "deprecated",
+      "created_at": 1784678248.273789,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-f51ef0b896",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge",
+        "memory: Strategy 'memory_first' for routing worked. Confidence now 0.0945. ok"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: [oracle] trading agent is currently experiencing delays. Please try again in a moment.",
+        "failed: SLA breach: oracle exceeded 3.0s"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784804905.087986,
+      "status": "deprecated",
+      "created_at": 1784800751.7958431,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-98b1d39ec5",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.0362. SLA breach: sentinel exceeded 3.0s",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.2666. multi-domain; not direct",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: [oracle] trading agent is currently experiencing delays. Please try again in a moment.",
+        "failed: SLA breach: oracle exceeded 3.0s",
+        "failed: SLA breach: oracle exceeded 3.0s"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784805918.0502603,
+      "status": "deprecated",
+      "created_at": 1784801618.8434086,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-71c717188d",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded",
+        "memory: Strategy 'orchestrate' for routing worked. Confidence now 0.0945. ok"
+      ],
+      "reasons_against": [
+        "uses several agents",
+        "memory: Strategy 'orchestrate' for routing failed. Confidence now 0.1176. no agent for training (repository=forge)",
+        "memory: Strategy 'orchestrate' for routing failed. Confidence now 0.0. SLA breach: sentinel exceeded 3.0s",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: 'str' object has no attribute 'get'",
+        "failed: [oracle] trading agent is currently experiencing delays. Please try again in a moment.",
+        "failed: SLA breach: oracle exceeded 3.0s",
+        "failed: SLA breach: oracle exceeded 3.0s"
+      ],
+      "attempts": 9,
+      "successes": 4,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784805917.5972633,
+      "status": "deprecated",
+      "created_at": 1784801618.8518457,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.1888
+    },
+    {
+      "strategy_id": "strat-b39047eb6c",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge",
+        "memory: Strategy 'memory_first' for routing worked. Confidence now 0.0945. ok"
+      ],
+      "reasons_against": [
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)",
+        "failed: SLA breach: oracle exceeded 3.0s",
+        "failed: [atlas] general agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: SLA breach: oracle exceeded 3.0s"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784809150.3657694,
+      "status": "deprecated",
+      "created_at": 1784805172.7515166,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-685f7df633",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance",
+        "failed: [atlas] general agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: multi-domain; not direct",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: SLA breach: oracle exceeded 3.0s"
+      ],
+      "attempts": 5,
+      "successes": 0,
+      "failures": 5,
+      "last_outcome": "failure",
+      "last_used": 1784809151.724678,
+      "status": "deprecated",
+      "created_at": 1784805948.3357537,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-fe1909f37a",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents",
+        "failed: [atlas] general agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment.",
+        "failed: [atlas] research agent is currently experiencing delays. Please try again in a moment."
+      ],
+      "attempts": 5,
+      "successes": 2,
+      "failures": 3,
+      "last_outcome": "failure",
+      "last_used": 1784807952.6060667,
+      "status": "deprecated",
+      "created_at": 1784805948.337758,
+      "lineage": null,
+      "researched": true,
+      "confidence": 0.1176
+    },
+    {
+      "strategy_id": "strat-dd21a6daa1",
+      "problem_type": "routing",
+      "name": "direct_specialist",
+      "description": "",
+      "handler": "_strat_direct",
+      "params": {},
+      "reasons_for": [
+        "fastest; single clear specialist"
+      ],
+      "reasons_against": [
+        "misses multi-domain nuance"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784809444.8907683,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-2cf2bb0840",
+      "problem_type": "routing",
+      "name": "memory_first",
+      "description": "",
+      "handler": "_strat_memory_first",
+      "params": {},
+      "reasons_for": [
+        "grounded in prior knowledge"
+      ],
+      "reasons_against": [
+        "slightly slower"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784809444.8943489,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
+    },
+    {
+      "strategy_id": "strat-a683862320",
+      "problem_type": "routing",
+      "name": "orchestrate",
+      "description": "",
+      "handler": "_strat_orchestrate",
+      "params": {},
+      "reasons_for": [
+        "required for multi-domain queries; parallel + SLA-bounded"
+      ],
+      "reasons_against": [
+        "uses several agents"
+      ],
+      "attempts": 0,
+      "successes": 0,
+      "failures": 0,
+      "last_outcome": "",
+      "last_used": 0.0,
+      "status": "candidate",
+      "created_at": 1784809444.8978035,
+      "lineage": null,
+      "researched": false,
+      "confidence": 0.0
     }
   ]
 }
