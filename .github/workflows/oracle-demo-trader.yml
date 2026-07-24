@@ -2,21 +2,13 @@ name: Oracle Demo Trader
 
 on:
   schedule:
-    # Every 12 hours: 04:00, 16:00 UTC
-    # Offset by 4h from oracle-soak.yml (which runs at 00:00, 08:00, 16:00 UTC)
-    # so both workflows never run at the same time.
-    #
-    # ── FREE TIER BUDGET ──────────────────────────────────────────────────────
-    # Soak  (every 8h,  ~12 min/run): 3 × 12 × 30.44 = 1,096 min/month
-    # Demo  (every 12h, ~8  min/run): 2 ×  8 × 30.44 =   487 min/month
-    # TOTAL: 1,583 / 2,000 min/month = 79.1%  ✅ SAFE
-    # Buffer: ~417 min/month for manual runs and reruns
-    # ─────────────────────────────────────────────────────────────────────────
+    # Every 12 hours: 04:00, 16:00 UTC — offset from oracle-soak.yml so they
+    # never overlap.
     - cron: "0 4,16 * * *"
   workflow_dispatch: {}   # trigger manually from the GitHub Actions tab
 
 permissions:
-  contents: write   # required to commit signal logs back to the repo
+  contents: write   # required to commit the run's console log back to the repo
 
 jobs:
   demo-trader:
@@ -36,70 +28,56 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install numpy pandas yfinance python-dotenv requests
+          pip install numpy pandas yfinance python-dotenv requests certifi
 
       - name: Run demo trader — paper mode, 1 cycle, all 41 symbols
         # NOTE: MetaTrader 5 (mt5 Python package) requires Windows + MT5 terminal.
         # On GitHub Actions (ubuntu-latest) MT5 is unavailable, so the trader
         # automatically falls back to PAPER MODE — it generates signals, applies
         # champion genomes, and logs results without placing real orders.
-        # To run against a real MT5 demo account, use a self-hosted Windows runner
-        # and set MT5_LOGIN / MT5_PASSWORD / MT5_SERVER as repo secrets.
+        # mt5_demo_trader.py does NOT write its own log/CSV/JSON file -- it only
+        # prints to the console -- so we capture stdout ourselves below instead
+        # of expecting a file the script never creates.
         working-directory: .
         run: |
+          mkdir -p Oracle/logs
+          RUN_STAMP=$(date -u +'%Y-%m-%d_%H%M')
           python -m Oracle.execution.mt5_demo_trader \
             --cycles 1 \
             --interval 0 \
-            --max-trades 20
+            --max-trades 20 \
+            2>&1 | tee "Oracle/logs/demo_run_${RUN_STAMP}.log"
+          echo "RUN_STAMP=${RUN_STAMP}" >> "$GITHUB_ENV"
         env:
           ORACLE_PAPER_TRADING: "true"
-          # Uncomment and add as GitHub repo secrets for real MT5 demo account:
-          # MT5_LOGIN:    ${{ secrets.MT5_LOGIN }}
-          # MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
-          # MT5_SERVER:   ${{ secrets.MT5_SERVER }}
+          # Uncomment and add as GitHub repo secrets for real MT5 demo account
+          # (still won't execute real orders on ubuntu-latest -- MT5 needs
+          # Windows -- but lets Sentinel/Pulse/Atlas use a real LLM key):
           # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      - name: Commit signal logs back to the repo
+      - name: Commit run log back to the repo
         run: |
           git config user.name "oracle-demo-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add Oracle/logs/demo_trader.csv Oracle/logs/demo_signals.json Oracle/data_cache/ || true
-          git diff --cached --quiet || git commit -m "Demo trader pass: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git add "Oracle/logs/demo_run_${RUN_STAMP}.log" Oracle/data_cache/ || true
+          git diff --cached --quiet || git commit -m "Demo trader run: ${RUN_STAMP} UTC"
           git push
 
-      # ── Optional: post a summary to the Actions run summary ─────────────────
       - name: Print signal summary
         if: always()
         run: |
-          echo "## Oracle Demo Trader — Signal Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f Oracle/logs/demo_signals.json ]; then
-            python3 - <<'PYEOF'
-import json, os, sys
-path = "Oracle/logs/demo_signals.json"
-try:
-    with open(path) as f:
-        signals = json.load(f)
-    if isinstance(signals, list):
-        buys  = [s for s in signals if s.get("action") == "BUY"]
-        sells = [s for s in signals if s.get("action") == "SELL"]
-        holds = [s for s in signals if s.get("action") == "HOLD"]
-        print(f"| Metric | Value |")
-        print(f"|--------|-------|")
-        print(f"| Total symbols scanned | {len(signals)} |")
-        print(f"| BUY signals | {len(buys)} |")
-        print(f"| SELL signals | {len(sells)} |")
-        print(f"| HOLD signals | {len(holds)} |")
-        if buys:
-            top = sorted(buys, key=lambda x: x.get("confidence", 0), reverse=True)[:3]
-            print(f"\n**Top BUY signals:**")
-            for s in top:
-                print(f"- {s.get('symbol')} — confidence {s.get('confidence', 0):.3f}")
-    else:
-        print("Signal log format unexpected.")
-except Exception as e:
-    print(f"Could not parse signal log: {e}")
-PYEOF
+          echo "## Oracle Demo Trader — Signal Summary (${RUN_STAMP} UTC)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          LOG="Oracle/logs/demo_run_${RUN_STAMP}.log"
+          if [ -f "$LOG" ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E "^Cycle .* done" "$LOG" | tail -5 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Rejections / errors this run" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E "no trade:|ERROR" "$LOG" | tail -20 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "No signal log found at Oracle/logs/demo_signals.json"
-          fi >> $GITHUB_STEP_SUMMARY
+            echo "No log file found at $LOG" >> "$GITHUB_STEP_SUMMARY"
+          fi
