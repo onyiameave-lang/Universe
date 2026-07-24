@@ -825,15 +825,15 @@
     "symbol": "XAUUSD",
     "regime": "high_volatility",
     "genome": {
-      "genome_id": "mut-a393fc",
-      "generation": 50,
+      "genome_id": "mut-aef8ad",
+      "generation": 18,
       "parents": [
-        "xov-c811cc"
+        "xov-818ef9"
       ],
-      "fitness": 11.2724,
-      "backtests": 15,
-      "best_return": 0.0553,
-      "best_sharpe": 0.948,
+      "fitness": 6.7255,
+      "backtests": 10,
+      "best_return": 0.0056,
+      "best_sharpe": 0.0,
       "modules": {
         "market_regime": {
           "logic_type": "default",
@@ -849,14 +849,15 @@
         "trend": {
           "logic_type": "market_structure",
           "params": {
-            "lookback": 24,
-            "slow": 44
+            "lookback": 19,
+            "slow": 45
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "roc",
           "params": {
-            "lookback": 10
+            "period": 10,
+            "threshold": 15
           }
         },
         "volatility": {
@@ -869,17 +870,16 @@
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.191,
-            "regime_bonus": 0.149,
-            "threshold": 0.5
+            "base_threshold": 0.335,
+            "regime_bonus": 0.15
           }
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "swing_stops",
           "params": {
-            "max_bars": 20,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "lookback": 10,
+            "tp_mult": 2.751,
+            "sl_mult": 1.983
           }
         },
         "risk": {
@@ -901,28 +901,28 @@
       }
     },
     "in_sample": {
-      "return": 0.0553,
-      "fitness": 11.2724
+      "return": 0.0056,
+      "fitness": 6.7255
     },
     "out_of_sample": {
       "status": "complete",
-      "trades": 6,
-      "win_rate": 0.833,
-      "total_return": 0.051,
-      "final_equity": 10509.99,
-      "profit_factor": 5.877,
-      "max_drawdown": 0.01,
-      "sharpe_proxy": 0.841,
-      "sortino_proxy": 1.991,
-      "recovery_factor": 5.1,
-      "expectancy": 85.0,
-      "consistency": 0.833,
-      "avg_pnl": 85.0
+      "trades": 2,
+      "win_rate": 1.0,
+      "total_return": 0.023,
+      "final_equity": 10229.95,
+      "profit_factor": null,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 3.283,
+      "sortino_proxy": 0.0,
+      "recovery_factor": 0.0,
+      "expectancy": 114.97,
+      "consistency": 1.0,
+      "avg_pnl": 114.97
     },
-    "certified_at": 1784230101.0177186,
-    "generation": 50,
+    "certified_at": 1784888561.9697459,
+    "generation": 18,
     "parents": [
-      "xov-c811cc"
+      "xov-818ef9"
     ]
   },
   "USDCAD::trending_up": {
