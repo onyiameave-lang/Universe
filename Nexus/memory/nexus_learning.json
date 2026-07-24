@@ -67972,6 +67972,26 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 43
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no strategy available; agent must register approaches",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "ecosystem.route",
+      "root_cause": "no strategy available; agent must register approaches",
+      "lesson": "Task 'ecosystem.route' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
     }
   ],
   "failure_signatures": {
@@ -67984,6 +68004,7 @@
     "ecosystem.route::Sentinel (news) could not retrieve live data for 'what is the latest news on mic": 1,
     "ecosystem.route::Sentinel (news) could not retrieve live data for 'what is the latest news on nvi": 2,
     "ecosystem.route::name 'FRESHNESS_KEYWORDS' is not defined": 2,
-    "ecosystem.route::Sentinel (news) could not retrieve live data for 'what is the latest news on XAU": 2
+    "ecosystem.route::Sentinel (news) could not retrieve live data for 'what is the latest news on XAU": 2,
+    "ecosystem.route::no strategy available; agent must register approaches": 2
   }
 }

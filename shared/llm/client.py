@@ -412,7 +412,13 @@ class OllamaProvider(_Provider):
             self._ok = False  # Ollama not running yet — will retry at call time
 
     def available(self) -> bool:
-        return bool(self._model)  # available if configured; actual reachability checked at call time
+        # FIX-LLM-02: Only mark Ollama available when the model is configured
+        # AND the probe at __init__ time succeeded. If Ollama is not running,
+        # returning True here causes every LLM call to block for OLLAMA_TIMEOUT
+        # (default 25s) before falling through to the cloud providers.
+        # Constitutional law: Book II Principle V Graceful Degradation —
+        # a fast failure is always better than a 25s hang per request.
+        return bool(self._model) and self._ok
 
     def complete(self, system, messages, temperature, max_tokens) -> LLMResult:
         import urllib.request as _ur
@@ -508,6 +514,18 @@ class LLMClient:
             else:
                 order = ["anthropic", "openai", "gemini"]
         self._order = [p.strip() for p in order if p.strip() in self._providers]
+
+        # FIX-LLM-03: Log a warning if Ollama is in the order but not reachable.
+        # This makes the degradation visible in logs rather than silently causing 25s hangs.
+        if "ollama" in self._order and not self._providers["ollama"].available():
+            log.warning(
+                "LLM provider order includes 'ollama' but Ollama is not reachable at %s "
+                "(model=%s). Removing from active provider list to prevent 25s hangs per request. "
+                "Start Ollama ('ollama serve') to re-enable it. "
+                "Constitutional: Book II Principle V Graceful Degradation.",
+                _OLLAMA_URL, ollama_model or "(not configured)",
+            )
+            self._order = [p for p in self._order if p != "ollama"]
 
         # stats counters
         self._calls              = 0

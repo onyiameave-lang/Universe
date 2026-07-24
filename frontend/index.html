@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Universe — Command Center</title>
-  <link rel="stylesheet" href="shared/shared.css"/>
-  <link rel="stylesheet" href="shared/components.css"/>
+  <link rel="stylesheet" href="shared/shared.css" />
+  <link rel="stylesheet" href="shared/components.css" />
   <script src="shared/theme.js"></script>
 </head>
+
 <body>
   <canvas id="cosmos-canvas"></canvas>
 
@@ -42,8 +44,7 @@
         Nine celestial minds orbit the nexus of infinite possibility.
       </p>
       <div class="hero-composer" id="heroComposer">
-        <textarea class="hero-input" id="heroInput" rows="1"
-          placeholder="Speak your query into the void…"
+        <textarea class="hero-input" id="heroInput" rows="1" placeholder="Speak your query into the void…"
           aria-label="Message the Universe"></textarea>
         <button class="hero-send-btn" id="heroSend" disabled title="Send">
           <span data-icon="ui:send" class="icon-md"></span>
@@ -82,8 +83,7 @@
       </div>
       <div class="conv-messages" id="convMessages"></div>
       <div class="conv-composer" id="convComposer">
-        <textarea class="hero-input" id="convInput" rows="1"
-          placeholder="Continue the dialogue…"
+        <textarea class="hero-input" id="convInput" rows="1" placeholder="Continue the dialogue…"
           aria-label="Continue conversation"></textarea>
         <button class="hero-send-btn" id="convSend" disabled title="Send">
           <span data-icon="ui:send" class="icon-md"></span>
@@ -101,71 +101,89 @@
   <script src="shared/cosmos.js"></script>
   <script src="shared/chat.js"></script>
   <script>
-  // ── Agent registry for hub cards ──
-  const HUB_AGENTS = [
-    { id:'nexus',     name:'Nexus',     role:'Orchestrator',  icon:'agent:nexus',     color:'59,130,246',  href:'nexus.html',
-      metrics:[{l:'Agents',k:'agents_active'},{l:'Tasks',k:'tasks_queued'},{l:'Uptime',k:'uptime'},{l:'Msgs/hr',k:'messages_per_hour'}] },
-    { id:'oracle',    name:'Oracle',    role:'Trading',       icon:'agent:oracle',    color:'16,185,129',  href:'oracle.html',
-      metrics:[{l:'PnL Today',k:'pnl_today'},{l:'Win Rate',k:'win_rate'},{l:'Trades',k:'open_trades'},{l:'Signals',k:'signals_today'}] },
-    { id:'atlas',     name:'Atlas',     role:'Research',      icon:'agent:atlas',     color:'14,165,233',  href:'atlas.html',
-      metrics:[{l:'Reports',k:'reports_today'},{l:'Sources',k:'sources_monitored'},{l:'Sectors',k:'sectors_tracked'},{l:'Alerts',k:'alerts'}] },
-    { id:'chronicle', name:'Chronicle', role:'History',       icon:'agent:chronicle', color:'139,92,246',  href:'chronicle.html',
-      metrics:[{l:'Events',k:'events_logged'},{l:'Queries',k:'queries_today'},{l:'Storage',k:'storage_used'},{l:'Uptime',k:'uptime'}] },
-    { id:'sentinel',  name:'Sentinel',  role:'Monitoring',    icon:'agent:sentinel',  color:'245,158,11',  href:'sentinel.html',
-      metrics:[{l:'Alerts',k:'alerts_today'},{l:'Sentiment',k:'market_sentiment'},{l:'Sources',k:'sources_monitored'},{l:'Threats',k:'threats_detected'}] },
-    { id:'aegis',     name:'Aegis',     role:'Security',      icon:'agent:aegis',     color:'249,115,22',  href:'aegis.html',
-      metrics:[{l:'Risk Score',k:'risk_score'},{l:'Anomalies',k:'anomalies_detected'},{l:'Blocked',k:'threats_blocked'},{l:'Compliance',k:'compliance_score'}] },
-    { id:'forge',     name:'Forge',     role:'Builder',       icon:'agent:forge',     color:'100,116,139', href:'forge.html',
-      metrics:[{l:'Builds',k:'builds_today'},{l:'Success',k:'success_rate'},{l:'Deploy',k:'deployments'},{l:'Health',k:'system_health'}] },
-    { id:'genesis',   name:'Genesis',   role:'Strategy',      icon:'agent:genesis',   color:'20,184,166',  href:'genesis.html',
-      metrics:[{l:'Strategies',k:'active_strategies'},{l:'Return',k:'avg_return'},{l:'Goals',k:'goals_met'},{l:'Backtests',k:'backtests_run'}] },
-    { id:'pulse',     name:'Pulse',     role:'Sentiment',     icon:'agent:pulse',     color:'236,72,153',  href:'pulse.html',
-      metrics:[{l:'Sentiment',k:'overall_sentiment'},{l:'Posts',k:'posts_analyzed'},{l:'Trending',k:'trending_topics'},{l:'Score',k:'sentiment_score'}] },
-  ];
+    // ── Agent registry for hub cards ──
+    const HUB_AGENTS = [
+      {
+        id: 'nexus', name: 'Nexus', role: 'Orchestrator', icon: 'agent:nexus', color: '59,130,246', href: 'nexus.html',
+        metrics: [{ l: 'Agents', k: 'agents_active' }, { l: 'Tasks', k: 'tasks_queued' }, { l: 'Uptime', k: 'uptime' }, { l: 'Msgs/hr', k: 'messages_per_hour' }]
+      },
+      {
+        id: 'oracle', name: 'Oracle', role: 'Trading', icon: 'agent:oracle', color: '16,185,129', href: 'oracle.html',
+        metrics: [{ l: 'PnL Today', k: 'pnl_today' }, { l: 'Win Rate', k: 'win_rate' }, { l: 'Trades', k: 'open_trades' }, { l: 'Signals', k: 'signals_today' }]
+      },
+      {
+        id: 'atlas', name: 'Atlas', role: 'Research', icon: 'agent:atlas', color: '14,165,233', href: 'atlas.html',
+        metrics: [{ l: 'Reports', k: 'reports_today' }, { l: 'Sources', k: 'sources_monitored' }, { l: 'Sectors', k: 'sectors_tracked' }, { l: 'Alerts', k: 'alerts' }]
+      },
+      {
+        id: 'chronicle', name: 'Chronicle', role: 'History', icon: 'agent:chronicle', color: '139,92,246', href: 'chronicle.html',
+        metrics: [{ l: 'Events', k: 'events_logged' }, { l: 'Queries', k: 'queries_today' }, { l: 'Storage', k: 'storage_used' }, { l: 'Uptime', k: 'uptime' }]
+      },
+      {
+        id: 'sentinel', name: 'Sentinel', role: 'Monitoring', icon: 'agent:sentinel', color: '245,158,11', href: 'sentinel.html',
+        metrics: [{ l: 'Alerts', k: 'alerts_today' }, { l: 'Sentiment', k: 'market_sentiment' }, { l: 'Sources', k: 'sources_monitored' }, { l: 'Threats', k: 'threats_detected' }]
+      },
+      {
+        id: 'aegis', name: 'Aegis', role: 'Security', icon: 'agent:aegis', color: '249,115,22', href: 'aegis.html',
+        metrics: [{ l: 'Risk Score', k: 'risk_score' }, { l: 'Anomalies', k: 'anomalies_detected' }, { l: 'Blocked', k: 'threats_blocked' }, { l: 'Compliance', k: 'compliance_score' }]
+      },
+      {
+        id: 'forge', name: 'Forge', role: 'Builder', icon: 'agent:forge', color: '100,116,139', href: 'forge.html',
+        metrics: [{ l: 'Builds', k: 'builds_today' }, { l: 'Success', k: 'success_rate' }, { l: 'Deploy', k: 'deployments' }, { l: 'Health', k: 'system_health' }]
+      },
+      {
+        id: 'genesis', name: 'Genesis', role: 'Strategy', icon: 'agent:genesis', color: '20,184,166', href: 'genesis.html',
+        metrics: [{ l: 'Strategies', k: 'active_strategies' }, { l: 'Return', k: 'avg_return' }, { l: 'Goals', k: 'goals_met' }, { l: 'Backtests', k: 'backtests_run' }]
+      },
+      {
+        id: 'pulse', name: 'Pulse', role: 'Sentiment', icon: 'agent:pulse', color: '236,72,153', href: 'pulse.html',
+        metrics: [{ l: 'Sentiment', k: 'overall_sentiment' }, { l: 'Posts', k: 'posts_analyzed' }, { l: 'Trending', k: 'trending_topics' }, { l: 'Score', k: 'sentiment_score' }]
+      },
+    ];
 
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
+    const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
 
-  // ── Connection check ──
-  async function checkConnection() {
-    const badge = document.getElementById('connBadge');
-    const text  = document.getElementById('connText');
-    try {
-      const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
-      if (r.ok) {
-        badge.className = 'conn-badge online';
-        text.textContent = 'Live';
-        return true;
-      }
-    } catch(e) {}
-    badge.className = 'conn-badge offline';
-    text.textContent = 'Offline';
-    return false;
-  }
+    // ── Connection check ──
+    async function checkConnection() {
+      const badge = document.getElementById('connBadge');
+      const text = document.getElementById('connText');
+      try {
+        const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+          badge.className = 'conn-badge online';
+          text.textContent = 'Live';
+          return true;
+        }
+      } catch (e) { }
+      badge.className = 'conn-badge offline';
+      text.textContent = 'Offline';
+      return false;
+    }
 
-  // ── Fetch agent data and render cards ──
-  async function loadAgentCards() {
-    const grid = document.getElementById('agentsGrid');
-    const results = await Promise.allSettled(
-      HUB_AGENTS.map(a => fetch(`${API_BASE}/agents/${a.id}/data`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()))
-    );
+    // ── Fetch agent data and render cards ──
+    async function loadAgentCards() {
+      const grid = document.getElementById('agentsGrid');
+      const results = await Promise.allSettled(
+        HUB_AGENTS.map(a => fetch(`${API_BASE}/agents/${a.id}/data`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()))
+      );
 
-    grid.innerHTML = '';
-    HUB_AGENTS.forEach((agent, i) => {
-      const data = results[i].status === 'fulfilled' ? results[i].value : null;
-      const status = data ? (data.status || 'active') : 'offline';
-      const dotClass = status === 'active' ? 'dot-green' : status === 'idle' ? 'dot-amber' : 'dot-gray';
+      grid.innerHTML = '';
+      HUB_AGENTS.forEach((agent, i) => {
+        const data = results[i].status === 'fulfilled' ? results[i].value : null;
+        const status = data ? (data.status || 'active') : 'offline';
+        const dotClass = status === 'active' ? 'dot-green' : status === 'idle' ? 'dot-amber' : 'dot-gray';
 
-      const metricsHtml = agent.metrics.map(m => {
-        const val = data ? (data[m.k] ?? data.metrics?.[m.k] ?? '—') : '—';
-        return `<div class="agent-metric">
+        const metricsHtml = agent.metrics.map(m => {
+          const val = data ? (data[m.k] ?? data.metrics?.[m.k] ?? '—') : '—';
+          return `<div class="agent-metric">
           <span class="agent-metric-label">${m.l}</span>
           <span class="agent-metric-value" style="color:rgb(${agent.color})">${val}</span>
         </div>`;
-      }).join('');
+        }).join('');
 
-      const updated = data ? 'Just now' : 'Offline';
+        const updated = data ? 'Just now' : 'Offline';
 
-      grid.innerHTML += `
+        grid.innerHTML += `
         <a href="${agent.href}" class="agent-summary-card" data-agent="${agent.id}"
            style="--agent-rgb:${agent.color};--agent-color:rgb(${agent.color})">
           <div class="agent-card-header">
@@ -179,139 +197,163 @@
           <div class="agent-card-footer">
             <div class="agent-card-status">
               <span class="dot ${dotClass}"></span>
-              <span>${status.charAt(0).toUpperCase()+status.slice(1)}</span>
+              <span>${status.charAt(0).toUpperCase() + status.slice(1)}</span>
             </div>
             <span class="agent-card-link">Open Dashboard →</span>
           </div>
         </a>`;
-    });
+      });
 
-    // Re-inject icons for newly created elements
-    if (typeof injectIcons === 'function') injectIcons();
-  }
+      // Re-inject icons for newly created elements
+      if (typeof injectIcons === 'function') injectIcons();
+    }
 
-  // ── Hero → Conversation transition ──
-  const heroInput  = document.getElementById('heroInput');
-  const heroSend   = document.getElementById('heroSend');
-  const convInput  = document.getElementById('convInput');
-  const convSend   = document.getElementById('convSend');
-  const hubHero    = document.getElementById('hubHero');
-  const hubAgents  = document.getElementById('hubAgentsSection');
-  const hubConv    = document.getElementById('hubConversation');
-  const convMsgs   = document.getElementById('convMessages');
-  const backBtn    = document.getElementById('backToHubBtn');
+    // ── Hero → Conversation transition ──
+    const heroInput = document.getElementById('heroInput');
+    const heroSend = document.getElementById('heroSend');
+    const convInput = document.getElementById('convInput');
+    const convSend = document.getElementById('convSend');
+    const hubHero = document.getElementById('hubHero');
+    const hubAgents = document.getElementById('hubAgentsSection');
+    const hubConv = document.getElementById('hubConversation');
+    const convMsgs = document.getElementById('convMessages');
+    const backBtn = document.getElementById('backToHubBtn');
 
-  let conversationActive = false;
+    let conversationActive = false;
 
-  function autoGrow(el) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-  }
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
 
-  [heroInput, convInput].forEach(el => {
-    el.addEventListener('input', () => {
-      autoGrow(el);
-      const btn = el === heroInput ? heroSend : convSend;
-      btn.disabled = !el.value.trim();
-    });
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
+    [heroInput, convInput].forEach(el => {
+      el.addEventListener('input', () => {
+        autoGrow(el);
         const btn = el === heroInput ? heroSend : convSend;
-        if (!btn.disabled) btn.click();
-      }
+        btn.disabled = !el.value.trim();
+      });
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const btn = el === heroInput ? heroSend : convSend;
+          if (!btn.disabled) btn.click();
+        }
+      });
     });
-  });
 
-  function addMessage(role, text) {
-    const div = document.createElement('div');
-    div.className = `conv-msg ${role}`;
-    const bubble = document.createElement('div');
-    bubble.className = 'conv-bubble';
-    bubble.textContent = text;
-    div.appendChild(bubble);
-    convMsgs.appendChild(div);
-    convMsgs.scrollTop = convMsgs.scrollHeight;
-  }
+    function addMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `conv-msg ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'conv-bubble';
+      // Render markdown-lite: escape HTML, then convert bold/italic/newlines
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const formatted = escaped
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px;font-family:monospace">$1</code>')
+        .replace(/\n/g, '<br>');
+      bubble.innerHTML = formatted;
+      div.appendChild(bubble);
+      convMsgs.appendChild(div);
+      convMsgs.scrollTop = convMsgs.scrollHeight;
+    }
 
-  function showTyping() {
-    const div = document.createElement('div');
-    div.className = 'conv-msg agent';
-    div.id = 'typingIndicator';
-    div.innerHTML = `<div class="conv-bubble" style="padding:10px 14px">
+    function showTyping() {
+      const div = document.createElement('div');
+      div.className = 'conv-msg agent';
+      div.id = 'typingIndicator';
+      div.innerHTML = `<div class="conv-bubble" style="padding:10px 14px">
       <div style="display:flex;gap:4px;align-items:center">
         <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
       </div>
     </div>`;
-    convMsgs.appendChild(div);
-    convMsgs.scrollTop = convMsgs.scrollHeight;
-  }
-
-  function removeTyping() {
-    const t = document.getElementById('typingIndicator');
-    if (t) t.remove();
-  }
-
-  async function sendMessage(text) {
-    if (!text.trim()) return;
-    if (!conversationActive) {
-      // Transition hero → conversation
-      hubHero.classList.add('hidden');
-      hubAgents.style.display = 'none';
-      hubConv.classList.add('visible');
-      conversationActive = true;
+      convMsgs.appendChild(div);
+      convMsgs.scrollTop = convMsgs.scrollHeight;
     }
-    addMessage('user', text);
-    showTyping();
-    try {
-      const r = await fetch(`${API_BASE}/ecosystem/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-        signal: AbortSignal.timeout(60000)
-      });
-      removeTyping();
-      if (r.ok) {
-        const d = await r.json();
-        addMessage('agent', d.response || d.message || 'The constellation has received your query.');
-      } else {
-        addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
+
+    function removeTyping() {
+      const t = document.getElementById('typingIndicator');
+      if (t) t.remove();
+    }
+
+    async function sendMessage(text) {
+      if (!text.trim()) return;
+      if (!conversationActive) {
+        // Transition hero → conversation
+        hubHero.classList.add('hidden');
+        hubAgents.style.display = 'none';
+        hubConv.classList.add('visible');
+        conversationActive = true;
       }
-    } catch(e) {
-      removeTyping();
-      addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
+      addMessage('user', text);
+      showTyping();
+      try {
+        const r = await fetch(`${API_BASE}/ecosystem/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+          signal: AbortSignal.timeout(60000)
+        });
+        removeTyping();
+        if (r.ok) {
+          const d = await r.json();
+          addMessage('agent', d.response || d.message || 'The constellation has received your query.');
+        } else {
+          addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
+        }
+      } catch (e) {
+        removeTyping();
+        addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
+      } finally {
+        // Re-enable button if there's text in the active input
+        if (conversationActive && convInput.value.trim()) {
+          convSend.disabled = false;
+        } else if (!conversationActive && heroInput.value.trim()) {
+          heroSend.disabled = false;
+        }
+      }
     }
-  }
 
-  heroSend.addEventListener('click', () => {
-    const t = heroInput.value.trim();
-    heroInput.value = '';
-    heroInput.style.height = 'auto';
-    heroSend.disabled = true;
-    sendMessage(t);
-  });
+    heroSend.addEventListener('click', () => {
+      const t = heroInput.value.trim();
+      heroInput.value = '';
+      heroInput.style.height = 'auto';
+      heroSend.disabled = true;
+      sendMessage(t);
+    });
 
-  convSend.addEventListener('click', () => {
-    const t = convInput.value.trim();
-    convInput.value = '';
-    convInput.style.height = 'auto';
-    convSend.disabled = true;
-    sendMessage(t);
-  });
+    convSend.addEventListener('click', () => {
+      const t = convInput.value.trim();
+      convInput.value = '';
+      convInput.style.height = 'auto';
+      convSend.disabled = true;
+      sendMessage(t);
+    });
 
-  backBtn.addEventListener('click', () => {
-    hubConv.classList.remove('visible');
-    hubHero.classList.remove('hidden');
-    hubAgents.style.display = '';
-    conversationActive = false;
-    convMsgs.innerHTML = '';
-  });
+    // Re-enable send button when typing in conversation input
+    convInput.addEventListener('input', () => {
+      autoGrow(convInput);
+      convSend.disabled = !convInput.value.trim();
+    });
 
-  // ── Init ──
-  checkConnection();
-  loadAgentCards();
-  setInterval(loadAgentCards, 60000);
-  setInterval(checkConnection, 30000);
+    backBtn.addEventListener('click', () => {
+      hubConv.classList.remove('visible');
+      hubHero.classList.remove('hidden');
+      hubAgents.style.display = '';
+      conversationActive = false;
+      convMsgs.innerHTML = '';
+    });
+
+    // ── Init ──
+    checkConnection();
+    loadAgentCards();
+    setInterval(loadAgentCards, 60000);
+    setInterval(checkConnection, 30000);
   </script>
 </body>
+
 </html>
