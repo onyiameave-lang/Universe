@@ -195,7 +195,12 @@ class SentinelAgent(BaseAgent):
             g = self.engine.gather(topics=ctx.get("topics"))
             return {"status": "complete", "articles": [
                 {"title": a["title"], "source": a["source"], "credibility": a["credibility"],
-                 "misinformation_risk": a["misinformation_risk"], "misinfo_reasons": a["misinfo_reasons"]}
+                 "misinformation_risk": a["misinformation_risk"], "misinfo_reasons": a["misinfo_reasons"],
+                 # Added for Oracle's News Intelligence (high-impact event detection):
+                 # these were already computed by engine.gather() but previously
+                 # dropped before reaching the caller.
+                 "event_type": a.get("event_type", ""), "sentiment": a.get("sentiment", 0.0),
+                 "published_at": a.get("published_at", ""), "summary": a.get("summary", "")}
                 for a in g["articles"]]}
         return {"status": "error", "message": f"Unknown task: {task}"}
 

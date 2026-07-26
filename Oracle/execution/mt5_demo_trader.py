@@ -51,8 +51,18 @@ for p in (_REPO_ROOT, _ECO_ROOT):
 
 from execution.mt5_broker import MT5Broker  # type: ignore
 from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
+from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
+    TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+)
+from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
+from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
+from intelligence.trade_learning import TradeLearningEngine  # type: ignore  # Demo Trade Learning
+from core.risk import Position as RiskPosition  # type: ignore  # Portfolio Awareness sync (roadmap Phase 2 item 9)
 
 log = logging.getLogger("oracle.demo")
+
+# ── Continuous Trade Manager poll interval ───────────────────────────────────
+_DEFAULT_MANAGE_INTERVAL = 15   # seconds; override with ORACLE_MANAGE_INTERVAL_SEC
 
 # ── TRADER_ID: tags every Chronicle event so cross-script conflicts are visible ──
 # Set TRADER_ID=demo_trader_1 in .env (or leave as default "demo_trader")
@@ -368,6 +378,17 @@ class DemoTrader:
 
         self._sym_mapper = SymbolMapper()
 
+        # ── Continuous Trade Manager ─────────────────────────────────────
+        self._trade_manager = TradeManager(TradeManagerConfig())
+        self._trade_learning = TradeLearningEngine()  # Demo Trade Learning (roadmap Phase 1 item 3)
+        self._managed_positions: Dict[str, Position] = {}
+        self._manage_interval: float = float(
+            os.getenv("ORACLE_MANAGE_INTERVAL_SEC", str(_DEFAULT_MANAGE_INTERVAL))
+        )
+        self._manage_lock = threading.Lock()
+        self._manage_stop_event = threading.Event()
+        self._manage_thread: Optional[threading.Thread] = None
+
         # Boot Oracle + evidence peers (same as live_trader)
         _unload_conflicting_modules()
         self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
@@ -467,144 +488,159 @@ class DemoTrader:
 
         return pos
 
-    def _manage_existing_position(self, symbol: str, broker_sym: str,
-                                  pos: Dict) -> str:
-        """
-        Re-analyse an existing position and decide: HOLD, MODIFY SL/TP, or CLOSE.
+    # ── Continuous Trade Manager ─────────────────────────────────────────────
 
-        Returns one of: "hold", "modified", "closed", "error"
-        """
-        pos_id     = pos.get("ticket") or pos.get("id") or "?"
-        pos_dir    = pos.get("type", "").lower()   # "buy" or "sell"
-        pos_profit = pos.get("profit", 0.0)
-
-        log.info("[%s] existing %s position #%s (P&L %.2f) — re-analysing…",
-                 symbol, pos_dir.upper(), pos_id, pos_profit)
-        print(f"[{symbol}→{broker_sym}] EXISTING {pos_dir.upper()} position "
-              f"#{pos_id}  P&L={pos_profit:+.2f}  — re-analysing…")
-
-        # Ask Oracle for a fresh signal
+    def _register_position(self, symbol: str, direction: str, entry_price: float,
+                            stop: float, target: float, confidence: float,
+                            size: float = 0.0) -> None:
         try:
-            sig, timed_out = _call_with_timeout(
-                lambda sym=symbol: self.oracle.act(
-                    "trade.propose", {"symbol": sym, "_sender": "demo_trader"}
-                ),
-                self._symbol_timeout,
-            )
+            sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "demo_trader"})
+            entry_regime = (sig or {}).get("regime") or "ranging"
         except Exception as exc:
-            log.warning("[%s] ERROR re-analysing existing position: %s", symbol, exc)
-            print(f"[{symbol}] ERROR re-analysing: {exc}  — keeping position")
-            return "error"
+            log.warning("[%s] could not fetch entry regime, defaulting to 'ranging': %s",
+                        symbol, exc)
+            entry_regime = "ranging"
 
-        if timed_out:
-            log.warning("[%s] TIMEOUT re-analysing existing position — keeping", symbol)
-            print(f"[{symbol}] TIMEOUT re-analysing — keeping position")
-            return "hold"
+        entry_streams = dict(self._open_context.get(symbol, {}) or {})
 
-        new_status = (sig or {}).get("status")
-
-        # Defensive: oracle may return a non-dict for "signal" (float, str, None)
-        _raw_signal = (sig or {}).get("signal")
-        if not isinstance(_raw_signal, dict):
-            if _raw_signal is not None:
-                log.warning(
-                    "[%s] unexpected type for 'signal' key: %s (%r) — treating as no signal",
-                    symbol, type(_raw_signal).__name__, _raw_signal,
-                )
-                print(f"[{symbol}] WARNING: oracle returned signal={_raw_signal!r} "
-                      f"(type={type(_raw_signal).__name__}) — expected dict; treating as HOLD")
-            _raw_signal = {}
-        new_signal = _raw_signal
-
-        # Safely coerce direction to str — oracle may put a float/int/None there
-        _raw_dir = new_signal.get("direction", "hold")
-        if not isinstance(_raw_dir, str):
-            log.warning(
-                "[%s] 'direction' is %s (%r) — coercing to str",
-                symbol, type(_raw_dir).__name__, _raw_dir,
+        dir_norm = Direction.BUY if direction in ("long", "buy") else Direction.SELL
+        with self._manage_lock:
+            self._managed_positions[symbol] = Position(
+                symbol=symbol, direction=dir_norm, entry_price=entry_price,
+                initial_stop=stop, initial_target=target,
+                entry_confidence=confidence, entry_regime=entry_regime,
+                entry_streams=entry_streams,
             )
-            print(f"[{symbol}] WARNING: oracle direction={_raw_dir!r} "
-                  f"(type={type(_raw_dir).__name__}) — coercing to str")
-        new_dir  = str(_raw_dir).strip().lower() if _raw_dir is not None else "hold"
-        new_conf = new_signal.get("confidence", 0.0)
-        if not isinstance(new_conf, (int, float)):
-            new_conf = 0.0
 
-        # Map "long"/"short" to "buy"/"sell" for comparison
-        _dir_map = {"long": "buy", "short": "sell", "buy": "buy", "sell": "sell"}
-        new_dir_norm = _dir_map.get(new_dir, new_dir)
-        pos_dir_norm = _dir_map.get(pos_dir, pos_dir)
+        risk_direction = "long" if dir_norm == Direction.BUY else "short"
+        self.oracle.risk.portfolio.remove_by_symbol(symbol)
+        self.oracle.risk.portfolio.positions.append(
+            RiskPosition(symbol, risk_direction, size, entry_price, stop, target))
 
-        # Signal reversed or went neutral → close the position
-        if new_status != "complete" or new_dir_norm in ("hold", "") or \
-                (new_dir_norm and new_dir_norm != pos_dir_norm):
-            reason = (
-                f"signal reversed to {new_dir.upper()}" if new_dir_norm and new_dir_norm != pos_dir_norm
-                else f"signal is now {new_dir.upper() or 'HOLD'}"
-            )
-            log.info("[%s] CLOSE position #%s — %s (conf=%.3f)",
-                     symbol, pos_id, reason, new_conf)
-            print(f"[{symbol}→{broker_sym}] CLOSE position #{pos_id} — {reason}  conf={new_conf:.3f}")
+        log.info("[%s] registered with Continuous Trade Manager: dir=%s entry=%.5f "
+                 "stop=%.5f target=%.5f conf=%.3f regime=%s",
+                 symbol, dir_norm.value, entry_price, stop, target, confidence, entry_regime)
+
+    def _poll_managed_positions(self) -> None:
+        with self._manage_lock:
+            symbols = list(self._managed_positions.keys())
+
+        for symbol in symbols:
+            with self._manage_lock:
+                pos = self._managed_positions.get(symbol)
+            if pos is None:
+                continue
+
+            broker_sym = self._sym_mapper.translate(symbol) or symbol
+            live_pos = self._get_open_position(broker_sym)
+            if live_pos is None:
+                log.info("[%s] no longer open at broker — deregistering from "
+                         "Continuous Trade Manager", symbol)
+                try:
+                    self._trade_learning.record_close(
+                        self.oracle, pos, exit_price=pos.last_price,
+                        exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
+                        exit_reason="closed at broker (SL/TP hit or manual close)")
+                except Exception as exc:
+                    log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
+                self.oracle.risk.portfolio.remove_by_symbol(symbol)
+                with self._manage_lock:
+                    self._managed_positions.pop(symbol, None)
+                continue
+
             try:
-                close_result = self.broker.close_position(pos_id)
-                log.info("[%s] close result: %s", symbol, close_result)
-                print(f"[{symbol}→{broker_sym}] close → {close_result.get('status', close_result)}")
-                # FIX-DEDUP: log close event to Chronicle
-                if close_result.get("status") == "closed":
-                    self._pos_log.log_closed(symbol, broker_sym, pos_id, reason=reason)
-                return "closed"
-            except AttributeError:
-                log.warning("[%s] broker.close_position() not available; "
-                            "position kept (add it to MT5Broker)", symbol)
-                print(f"[{symbol}] WARNING: broker.close_position() not implemented — "
-                      f"position kept. Add close_position(ticket) to MT5Broker.")
-                return "hold"
+                sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "demo_trader"})
             except Exception as exc:
-                log.warning("[%s] ERROR closing position #%s: %s", symbol, pos_id, exc)
-                print(f"[{symbol}] ERROR closing #{pos_id}: {exc}")
-                return "error"
+                log.warning("[%s] Continuous Trade Manager: could not fetch snapshot: %s",
+                            symbol, exc)
+                continue
+            if (sig or {}).get("status") != "complete":
+                continue
 
-        # Signal agrees with position direction → optionally update SL/TP
-        new_plan = (sig or {}).get("plan") or {}
-        new_sl   = new_plan.get("stop_loss")
-        new_tp   = new_plan.get("take_profit")
-        old_sl   = pos.get("sl")
-        old_tp   = pos.get("tp")
+            price = sig.get("last")
+            confidence = (sig.get("signal") or {}).get("confidence", 0.0)
+            regime = sig.get("regime") or pos.entry_regime
+            if price is None:
+                continue
 
-        sl_changed = new_sl is not None and new_sl != old_sl
-        tp_changed = new_tp is not None and new_tp != old_tp
+            news_assessment = assess_news_impact(self.sentinel, symbol)
+            if news_assessment.level != "none":
+                log.info("[%s] news impact: %s — %s", symbol, news_assessment.level,
+                         news_assessment.reason)
+            social_assessment = assess_social_risk(self.pulse, symbol)
+            if social_assessment.level != "none":
+                log.info("[%s] social risk: %s — %s", symbol, social_assessment.level,
+                         social_assessment.reason)
+            snap = MarketSnapshot(price=float(price), confidence=float(confidence), regime=regime,
+                                   news_impact=news_assessment.level,
+                                   social_risk=social_assessment.level)
+            decision = self._trade_manager.evaluate(pos, snap)
 
-        if (sl_changed or tp_changed) and self.broker.status.connected:
-            log.info("[%s] MODIFY position #%s — SL %s→%s  TP %s→%s  conf=%.3f",
-                     symbol, pos_id, old_sl, new_sl, old_tp, new_tp, new_conf)
-            print(f"[{symbol}→{broker_sym}] MODIFY #{pos_id}  "
-                  f"SL {old_sl}→{new_sl}  TP {old_tp}→{new_tp}  conf={new_conf:.3f}")
+            pos_id = live_pos.get("ticket") or live_pos.get("id")
+            if decision.action == Action.HOLD:
+                log.debug("[%s] CTM hold: %s", symbol, decision.reason)
+                continue
+
+            if decision.action == Action.TIGHTEN_STOP:
+                log.info("[%s] CTM tighten stop #%s -> %.5f: %s",
+                         symbol, pos_id, decision.new_stop, decision.reason)
+                print(f"[{symbol}→{broker_sym}] CTM TIGHTEN #{pos_id} "
+                      f"stop->{decision.new_stop:.5f}  {decision.reason}")
+                try:
+                    mod = self.broker.modify_position(pos_id, stop_loss=decision.new_stop)
+                    if mod.get("status") == "modified":
+                        self._pos_log.log_modified(symbol, broker_sym, pos_id,
+                                                    sl=decision.new_stop or 0.0,
+                                                    tp=pos.initial_target)
+                except Exception as exc:
+                    log.warning("[%s] CTM: failed to modify stop for #%s: %s",
+                                symbol, pos_id, exc)
+
+            elif decision.action == Action.CLOSE:
+                log.info("[%s] CTM close #%s: %s", symbol, pos_id, decision.reason)
+                print(f"[{symbol}→{broker_sym}] CTM CLOSE #{pos_id}  {decision.reason}")
+                try:
+                    close_result = self.broker.close_position(pos_id)
+                    if close_result.get("status") == "closed":
+                        self._pos_log.log_closed(symbol, broker_sym, pos_id,
+                                                  reason=decision.reason)
+                        try:
+                            self._trade_learning.record_close(
+                                self.oracle, pos, exit_price=snap.price,
+                                exit_confidence=snap.confidence, exit_regime=snap.regime,
+                                exit_reason=decision.reason)
+                        except Exception as exc:
+                            log.warning("[%s] Demo Trade Learning failed on CTM close: %s",
+                                        symbol, exc)
+                        self.oracle.risk.portfolio.remove_by_symbol(symbol)
+                        with self._manage_lock:
+                            self._managed_positions.pop(symbol, None)
+                except Exception as exc:
+                    log.warning("[%s] CTM: failed to close #%s: %s", symbol, pos_id, exc)
+
+    def _manage_loop(self) -> None:
+        log.info("Continuous Trade Manager thread started (interval=%.0fs)",
+                 self._manage_interval)
+        while not self._manage_stop_event.is_set():
             try:
-                mod_result = self.broker.modify_position(pos_id,
-                                                         stop_loss=new_sl,
-                                                         take_profit=new_tp)
-                print(f"[{symbol}→{broker_sym}] modify → {mod_result.get('status', mod_result)}")
-                # FIX-DEDUP: log modify event to Chronicle
-                if mod_result.get("status") == "modified":
-                    self._pos_log.log_modified(symbol, broker_sym, pos_id,
-                                               sl=new_sl or 0.0, tp=new_tp or 0.0)
-                return "modified"
-            except AttributeError:
-                log.warning("[%s] broker.modify_position() not available; "
-                            "SL/TP not updated (add it to MT5Broker)", symbol)
-                print(f"[{symbol}] WARNING: broker.modify_position() not implemented — "
-                      f"SL/TP not updated. Add modify_position(ticket, sl, tp) to MT5Broker.")
-                return "hold"
+                self._poll_managed_positions()
             except Exception as exc:
-                log.warning("[%s] ERROR modifying position #%s: %s", symbol, pos_id, exc)
-                return "error"
+                log.warning("Continuous Trade Manager poll error: %s", exc)
+            self._manage_stop_event.wait(self._manage_interval)
+        log.info("Continuous Trade Manager thread stopped")
 
-        # Signal agrees, SL/TP unchanged → just hold
-        log.info("[%s] HOLD existing %s position #%s — signal still %s  conf=%.3f",
-                 symbol, pos_dir.upper(), pos_id, new_dir.upper(), new_conf)
-        print(f"[{symbol}→{broker_sym}] HOLD existing {pos_dir.upper()} #{pos_id}  "
-              f"signal={new_dir.upper()}  conf={new_conf:.3f}")
-        return "hold"
+    def start_trade_manager(self) -> None:
+        if self._manage_thread is not None and self._manage_thread.is_alive():
+            return
+        self._manage_stop_event.clear()
+        self._manage_thread = threading.Thread(
+            target=self._manage_loop, name="ctm-poll", daemon=True)
+        self._manage_thread.start()
+
+    def stop_trade_manager(self) -> None:
+        self._manage_stop_event.set()
+        if self._manage_thread is not None:
+            self._manage_thread.join(timeout=5)
 
     # ── the loop ──────────────────────────────────────────────────────────────
 
@@ -617,7 +653,11 @@ class DemoTrader:
         print(f"Account: {status.get('account_type')} | paper={self.broker.paper} "
               f"| allow_live={self.broker.allow_live}")
         print(f"Symbol timeout: {self._symbol_timeout}s | max_trades: {self.max_trades}")
+        print(f"Continuous Trade Manager: polling every {self._manage_interval:.0f}s "
+              f"(independent of the {self.interval}s scan cycle)")
         print("Press Ctrl+C to stop.\n")
+
+        self.start_trade_manager()
 
         cycle = 0
         try:
@@ -693,16 +733,26 @@ class DemoTrader:
             summary["scanned"] += 1
 
             # ── FIX-POS: check for existing position FIRST ────────────────────
+            # The Continuous Trade Manager (background thread) owns
+            # monitoring/trailing/closing for any registered position. The
+            # slow full-symbol scan just avoids opening a duplicate entry.
             existing_pos = self._get_open_position(broker_sym)
             if existing_pos is not None:
-                outcome = self._manage_existing_position(symbol, broker_sym, existing_pos)
                 summary["managed"] += 1
-                if outcome == "hold":
-                    summary["holds"] += 1
-                elif outcome in ("modified", "closed"):
-                    pass   # position managed; don't open a new one this cycle
-                else:
-                    summary["errors"] += 1
+                summary["holds"] += 1
+                if symbol not in self._managed_positions:
+                    log.info("[%s] found pre-existing position not tracked by "
+                             "Continuous Trade Manager — backfilling registration",
+                             symbol)
+                    entry_price = existing_pos.get("price_open") or existing_pos.get("price") or 0.0
+                    direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
+                    sl = existing_pos.get("sl") or (entry_price * (0.995 if direction == "long" else 1.005))
+                    tp = existing_pos.get("tp") or (entry_price * (1.01 if direction == "long" else 0.99))
+                    self._register_position(symbol, direction, entry_price=entry_price,
+                                             stop=sl, target=tp, confidence=0.5,
+                                             size=existing_pos.get("volume", 0.0))
+                log.debug("[%s] position already open — Continuous Trade Manager "
+                          "owns it; skipping new entry this cycle", symbol)
                 continue   # never open a new position on the same symbol this cycle
             # ── end FIX-POS ───────────────────────────────────────────────────
 
@@ -799,6 +849,14 @@ class DemoTrader:
                         sl=plan.get("stop", 0.0),
                         tp=plan.get("target", 0.0),
                     )
+                    self._register_position(
+                        symbol, plan["direction"],
+                        entry_price=result.get("price") or plan.get("entry", 0.0),
+                        stop=plan.get("stop", 0.0),
+                        target=plan.get("target", 0.0),
+                        confidence=s.get("confidence", 0.0),
+                        size=result.get("volume", plan.get("size", 0.0)),
+                    )
                 else:
                     summary["rejects"] += 1
             else:
@@ -848,6 +906,7 @@ class DemoTrader:
         return self.broker.close_all()
 
     def shutdown(self) -> None:
+        self.stop_trade_manager()
         try:
             self.oracle.stop()
         except Exception as exc:

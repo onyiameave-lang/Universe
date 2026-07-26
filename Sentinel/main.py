@@ -1,420 +1,214 @@
 """
-Nexus - Ecosystem Coordination  (institutional, main entry point)
-================================================================
-Constitutional Name: Nexus  (formerly Universal AI)
-Mission: Route, orchestrate in parallel under SLAs, resolve conflicts by
-         confidence, and learn how the whole civilization cooperates.
-(Book II Part I; Book II Part II Ch VIII.)
+Sentinel.agents.sentinel_agent
+=============================
+Sentinel (formerly NewsIntel): the institutional news desk, on the
+constitutional BaseAgent. (Book I Part IV Article VII; Book II Ch IV.)
 
-Run:
-    python main.py
+Sentinel reasons about its acquisition STRATEGY via `solve("news_path", ...)`:
+  * wire_priority  key-free financial wires (RSS) + GDELT: fast, broad, free.
+  * premium_api    NewsAPI when a key is present: richer, more recent.
+  * broad_sweep    everything incl. practitioner signal: maximum corroboration.
 
-Commands:
-    <query>                       route (auto: direct / memory-first / orchestrate)
-    query <query>                 explicit route command (strips "query " prefix)
-    urgent <query>                route on the fast priority lane
-    classify <query>              classification only
-    agents                        live agents + health
-    breakers                      circuit-breaker states
-    execution                     cache + breaker stats
-    monitor                       full coordination + learning stats
-    quit
-
-FIX LOG (nexus-full-fix-v1):
-  FIX-1  _extract_summary(): result.get("result", {}) -> result.get("result")
-         Removes {} default so absent key returns None, not {}.
-         isinstance(None, dict) is False -> recursion stops. This was the
-         root cause of "RecursionError: maximum recursion depth exceeded"
-         for EVERY query including "hello".
-  FIX-2  _extract_summary(): same fix for result.get("session", {}) -> result.get("session")
-  FIX-3  except block: bare print(f"Error: {exc}") -> traceback.print_exc()
-         Full stack trace now visible on errors.
-  FIX-4  Added _print_result() helper for human-readable output (non-JSON mode).
-  FIX-5  Added ' --json' suffix support to any query for raw JSON output.
-
-FIX LOG (phase4-nexus-main-v1  2026-07-21):
-  BUG-P4-03  The CLI command "query what is an animal" passed the full string
-             including the word "query" to nexus.act("ecosystem.route",
-             {"query": "query what is an animal"}).  Atlas then forwarded
-             "query what is an animal" verbatim to every source adapter,
-             producing URLs like:
-               semantic_scholar HTTP 429: query=query+what+is+an+animal
-               gdelt HTTP 429: query=query+what+is+an+animal
-             ROOT CAUSE: The main() REPL had handlers for "classify ", "urgent ",
-             "agents", "breakers", "execution", "monitor" but NO handler for
-             "query " — so it fell through to the else branch which passed the
-             full line (including "query ") as the query string.
-             FIX: Added elif line.startswith("query "): that strips the 7-char
-             prefix before routing.  Also added "query <text>" to the Commands
-             docstring and the startup banner.
-             Constitutional law: Book III Ch VIII Standardized Interfaces —
-             the CLI contract must strip command prefixes before forwarding.
-
-FIX LOG (phase5-nexus-main-v1  2026-07-21):
-  FIX-M-01  LIVE_REPOS only loaded Chronicle, Atlas, Aegis.  Oracle, Sentinel,
-             and Pulse were never instantiated or registered with Nexus.
-             Multi-domain queries like "is there a trade on EURUSD and what is
-             the news sentiment" would classify correctly to trading+news but
-             then fail with "no agent for trading" and "no agent for news"
-             because neither Oracle nor Sentinel was in the registry.
-             FIX: Added Oracle, Sentinel, Pulse to LIVE_REPOS.
-             Confirmed agent class names from actual code:
-               Oracle/agents/oracle_agent.py   -> OracleAgent
-               Sentinel/agents/sentinel_agent.py -> SentinelAgent
-               Pulse/agents/pulse_agent.py     -> PulseAgent
-             Constitutional law: Book III Ch VIII Standardized Interfaces;
-             Book II Principle V Graceful Degradation — agents that are
-             registered but unavailable degrade gracefully; agents that are
-             never registered cause guaranteed routing failures.
-
-  FIX-M-02  boot() registered agents under their folder name (e.g. "chronicle",
-             "atlas") but coordinator_agent.py looks up agents by their
-             agent.name attribute (e.g. "oracle", "sentinel", "pulse").
-             For Chronicle and Atlas this happened to match. For Oracle
-             (folder="Oracle", name="oracle"), Sentinel (folder="Sentinel",
-             name="sentinel"), Pulse (folder="Pulse", name="pulse") it also
-             matches — but the registration key must be the agent's .name
-             attribute, not the folder name.
-             FIX: boot() now registers using agent.name (already correct for
-             Chronicle/Atlas; explicitly verified for new agents).
-             Constitutional law: Book III Ch VIII Standardized Interfaces.
-
-  FIX-M-03  _extract_summary() did not handle multi-agent orchestration
-             session results. When Nexus ran an orchestration session, the
-             result contained {"session": {"synthesis": "...", "per_agent": {...}}}
-             but _extract_summary() only checked session.get("synthesis") and
-             session.get("summary"). Multi-agent results also have
-             session["transcript"] with per-agent contributions.
-             FIX: Added session transcript extraction as fallback.
-             Constitutional law: Book II No Silent Failures.
-
-FIX LOG (phase5b-main-v1  2026-07-21):
-  FIX-M-03  Atlas registered BEFORE on_start() printed "Registered: ['chronicle']".
-             The log line in on_start() fires when nexus.start() is called, which
-             happens BEFORE atlas/oracle/sentinel/pulse are registered in boot().
-             FIX: Moved the "Registered:" log to the END of boot(), after all
-             agents are registered, so it accurately reflects the full roster.
-             Constitutional law: Book II No Silent Failures.
-
-  FIX-M-04  Forge and Genesis were absent from LIVE_REPOS entirely.
-             Queries like "train a new strategy for GBPUSD" had no agent to
-             handle them -> "no approach succeeded in 3 attempts".
-             FIX: Added Forge (ForgeAgent) and Genesis (GenesisAgent) to
-             LIVE_REPOS with graceful degradation (log warning, skip, no crash).
-             Confirmed class names from actual code:
-               Forge/agents/training_agent.py   -> class ForgeAgent
-               Genesis/agents/creator_agent.py  -> class GenesisAgent
-             Constitutional law: Book II Principle V Graceful Degradation.
-
-  FIX-M-05  CLI had no "query " prefix handler. The word "query" leaked into
-             search strings: "query what is an animal" -> Atlas searched for
-             "query what is an animal" instead of "what is an animal".
-             FIX: Added elif line.startswith("query "): handler that strips
-             the 6-char prefix before routing.
-             Constitutional law: Book III Ch VIII Standardized Interfaces.
+It learns which path yields credible, corroborated intelligence for which kind
+of query. Real credibility scoring, misinformation flagging, event clustering,
+and credibility-weighted sentiment throughout.
 """
 from __future__ import annotations
 
-import importlib.util
-import json
 import logging
+import socket as _socket
 import sys
-import traceback
+import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
-_REPO_ROOT = Path(__file__).resolve().parent
-_ECO_ROOT = _REPO_ROOT.parent
-for p in (_REPO_ROOT, _ECO_ROOT):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+_ECO_ROOT = Path(__file__).resolve().parents[2]
+if str(_ECO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ECO_ROOT))
 
-from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
+from core.intelligence_engine import IntelligenceEngine  # type: ignore
 
-_load_dotenv_early = load_dotenv_early
-_unload_conflicting_modules = unload_conflicting_modules
+try:
+    from shared.agent import BaseAgent
+    _HAS_SHARED = True
+except Exception:
+    _HAS_SHARED = False
+    class BaseAgent:
+        reasoning = None
+        def __init__(self, **kw): self._started = False; self._handled = 0; self._failed = 0; self.llm = None
+        def act(self, task, context=None): return self.execute(task, context or {})
+        def get_status(self): return {"name": getattr(self, "name", "sentinel")}
+        def solve(self, *a, **k): return {"status": "error", "message": "no reasoning"}
+        has_brain = False
+        def on_start(self): ...
+        def start(self): self._started = True; self.on_start()
+        def stop(self): self._started = False
 
-from agents.coordinator_agent import NexusAgent  # type: ignore
+# FIX-SA-01 (Phase 5e): Nuclear socket timeout at module level.
+# Ensures DNS resolution is bounded even if collectors.py is imported
+# before its own module-level setdefaulttimeout runs.
+# Constitutional: Book II Principle V Graceful Degradation.
+_socket.setdefaulttimeout(15)
 
-# FIX-M-01: Added Oracle, Sentinel, Pulse to LIVE_REPOS.
-# FIX-M-04: Added Forge, Genesis to LIVE_REPOS.
-#   Confirmed class names from actual repo code:
-#   Oracle/agents/oracle_agent.py   -> class OracleAgent
-#   Sentinel/agents/sentinel_agent.py -> class SentinelAgent
-#   Pulse/agents/pulse_agent.py     -> class PulseAgent
-#   Forge/agents/training_agent.py  -> class ForgeAgent
-#   Genesis/agents/creator_agent.py -> class GenesisAgent
-LIVE_REPOS = {
-    "chronicle": ("Chronicle", "agents/chronicle_agent.py",  "ChronicleAgent"),
-    "atlas":     ("Atlas",     "agents/research_agent.py",   "AtlasAgent"),
-    "oracle":    ("Oracle",    "agents/oracle_agent.py",     "OracleAgent"),    # FIX-M-01
-    "sentinel":  ("Sentinel",  "agents/sentinel_agent.py",   "SentinelAgent"),  # FIX-M-01
-    "pulse":     ("Pulse",     "agents/pulse_agent.py",      "PulseAgent"),     # FIX-M-01
-    "aegis":     ("Aegis",     "agents/auditor_agent.py",    "AegisAgent"),
-    "forge":     ("Forge",     "agents/training_agent.py",   "ForgeAgent"),     # FIX-M-04
-    "genesis":   ("Genesis",   "agents/creator_agent.py",    "GenesisAgent"),   # FIX-M-04
+log = logging.getLogger(__name__)
+
+# FIX-SA-04 (Phase 5h): PATH_SOURCES referenced "gdelt" which was renamed to
+# "guardian" in collectors.py (fix S-2). "gdelt" is silently skipped by
+# CollectorRegistry.collect() because it's not in self.collectors — meaning
+# wire_priority and broad_sweep never actually ran Guardian.
+# Fixed: all three paths now use "guardian" (the registered collector name).
+PATH_SOURCES = {
+    "wire_priority": ["rss", "guardian"],
+    "premium_api":   ["newsapi", "rss", "guardian"],
+    "broad_sweep":   ["rss", "newsapi", "guardian", "hackernews"],
 }
 
 
-def _load_class(folder, rel, cls):
-    path = _ECO_ROOT / folder / rel
-    if not path.exists():
-        return None
-    root = _ECO_ROOT / folder
-    path_added = str(root) not in sys.path
-    if path_added:
-        sys.path.insert(0, str(root))
-    try:
-        spec = importlib.util.spec_from_file_location(f"{folder}_{cls}", path)
-        m = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(m)  # type: ignore
-        return getattr(m, cls)
-    except Exception as exc:
-        logging.getLogger("nexus").warning("load %s failed: %s", folder, exc)
-        return None
-    finally:
-        if path_added and str(root) in sys.path:
-            sys.path.remove(str(root))
+class SentinelAgent(BaseAgent):
+    name = "sentinel"
+    repository = "Sentinel"
+    domain = "news"
+    description = "The institutional news intelligence desk."
+    capabilities = ["news.collect", "news.report", "news.sentiment", "news.for_symbol",
+                    "news.events", "news.credibility"]
+    channels = ["ecosystem.news", "ecosystem.intelligence", "ecosystem.broadcast"]
+    memory_namespace = "sentinel_memory"
+    security_level = "standard"
+    mission = {"purpose": "Acquire, validate, cluster, and distribute credible news intelligence."}
 
+    def __init__(self, chronicle_client=None, **kw):
+        super().__init__(chronicle_client=chronicle_client, storage_dir=str(_REPO_ROOT / "memory"), **kw)
+        self.engine = IntelligenceEngine(chronicle_client=chronicle_client, llm=self.llm)
 
-def boot():
-    log = logging.getLogger("nexus")
-    _unload_conflicting_modules()
+    def register_strategies(self) -> None:
+        if self.reasoning is None:
+            return
+        self.reasoning.register_strategy("news_path", "wire_priority", "_strat_wire",
+            reasons_for=["free, fast, credible financial wires"],
+            reasons_against=["misses paywalled/very recent items"])
+        self.reasoning.register_strategy("news_path", "premium_api", "_strat_premium",
+            reasons_for=["richer + more recent (NewsAPI)"],
+            reasons_against=["needs NEWSAPI_KEY"])
+        self.reasoning.register_strategy("news_path", "broad_sweep", "_strat_broad",
+            reasons_for=["max corroboration across all sources"],
+            reasons_against=["slower; noisier"])
 
-    # --- Chronicle (memory, source of truth) ---
-    chronicle = None
-    Ch = _load_class("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
-    if Ch:
+    def on_start(self) -> None:
+        avail = [n for n, ok in self.engine.stats()["collectors"].items() if ok]
+        log.info("Sentinel desk online. Available collectors: %s | Brain: %s", avail, self.has_brain)
+
+    # ---- news-path strategy handlers ----
+
+    def _strat_wire(self, c): return self._report(c, "wire_priority")
+    def _strat_premium(self, c): return self._report(c, "premium_api")
+    def _strat_broad(self, c): return self._report(c, "broad_sweep")
+
+    def _report(self, context, path) -> Dict[str, Any]:
+        # FIX-SA-02 (Phase 5e): Log before/after engine.report() so we can
+        # see exactly where Sentinel hangs in production logs.
+        # FIX-SA-03: Wrap engine.report() in a thread with 25s timeout so
+        # Sentinel itself never hangs its caller (coordinator has 30s outer).
+        import concurrent.futures as _cf
+        topics = context.get("topics")
+        log.info("[sentinel] _report: path='%s' topics=%r — calling engine.report()", path, topics)
+        _t0 = time.time()
+        def _do_report():
+            _socket.setdefaulttimeout(15)
+            return self.engine.report(topics=topics, sources=PATH_SOURCES[path])
         try:
-            chronicle = Ch(storage_dir=str(_ECO_ROOT / "Chronicle" / "memory" / "store"))
-            chronicle.start()
+            with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
+                _fut = _pool.submit(_do_report)
+                out = _fut.result(timeout=25)
+            log.info("[sentinel] _report: path='%s' completed in %.2fs — %d articles",
+                     path, time.time() - _t0, out.get("report", {}).get("article_count", 0) if out.get("report") else 0)
+        except _cf.TimeoutError:
+            elapsed = round(time.time() - _t0, 2)
+            log.warning("[sentinel] _report: path='%s' TIMED OUT after %.2fs. "
+                        "Returning graceful degradation. Constitutional: Book II Principle V.", path, elapsed)
+            return {"status": "error", "message": f"news collection timed out after {elapsed}s (path={path})",
+                    "path": path, "source_status": {}}
         except Exception as exc:
-            log.warning("Chronicle failed: %s", exc)
-    _unload_conflicting_modules()
+            log.error("[sentinel] _report: path='%s' raised %s", path, exc)
+            return {"status": "error", "message": str(exc), "path": path, "source_status": {}}
+        ok = out.get("report") is not None and out["report"]["article_count"] > 0
+        return {"status": "complete" if ok else "error",
+               "message": "" if ok else "no credible news via this path",
+               "report": out.get("report"), "path": path, "source_status": out.get("source_status")}
 
-    # --- Atlas (research) ---
-    atlas = None
-    At = _load_class("Atlas", "agents/research_agent.py", "AtlasAgent")
-    if At:
-        try:
-            atlas = At(chronicle_client=chronicle)
-            atlas.start()
-        except Exception:
-            atlas = None
-    _unload_conflicting_modules()
+    # ---- BaseAgent contract ----
 
-    # --- Nexus coordinator ---
-    nexus = NexusAgent(chronicle_client=chronicle, atlas_client=atlas)
-    nexus.start()
-    if chronicle:
-        nexus.register_agent(chronicle.name, chronicle)
-    if atlas:
-        nexus.register_agent(atlas.name, atlas)
+    def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        ctx = context
+        log.info("[sentinel] execute: task=%r symbol=%r topics=%r query=%r",
+                 task, ctx.get("symbol"), ctx.get("topics"), ctx.get("query", "")[:60])
+        if task in ("news.report", "news.collect", "news.events"):
+            if self.reasoning is not None:
+                solved = self.solve("news_path", {"topics": ctx.get("topics")})
+                if solved.get("status") == "complete":
+                    report = solved.get("report") or {}
+                    return {
+                        "status": "complete",
+                        "report": report,
+                        "news_path": solved.get("path"),
+                        "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+                    }
+                broad = self.engine.report(topics=ctx.get("topics"), sources=PATH_SOURCES["broad_sweep"])
+                report = broad.get("report") or {}
+                return {
+                    "status": "complete",
+                    **broad,
+                    "note": "fell back to broad sweep",
+                    "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+                }
+            broad = self.engine.report(topics=ctx.get("topics"))
+            report = broad.get("report") or {}
+            return {
+                "status": "complete",
+                **broad,
+                "summary": report.get("summary", "") if isinstance(report, dict) else "",  # FIX-SA-07
+            }
+        if task in ("news.sentiment", "news.for_symbol"):
+            # FIX-SA-05 (Phase 5h): Coordinator now passes both ctx["symbol"] and
+            # ctx["topics"]. Prefer topics (already a list) so collectors get the
+            # right filter. Fall back to [symbol] if topics is absent/empty.
+            symbol = ctx.get("symbol", "")
+            topics = ctx.get("topics") or ([symbol] if symbol else None)
+            log.info("[sentinel] execute: task=%r — effective symbol=%r topics=%r", task, symbol, topics)
+            _t0 = time.time()
+            result = self.engine.sentiment_for(symbol, topics=topics)
+            log.info("[sentinel] execute: sentiment_for(%r) completed in %.2fs — article_count=%d",
+                     symbol, time.time() - _t0, result.get("article_count", 0))
+            # FIX-SA-07 (Phase 5i): Bubble up the plain-text 'summary' from the
+            # engine result so coordinator._format_result() and main.py's
+            # _extract_summary() can surface it without parsing nested dicts.
+            return {
+                "status": "complete",
+                "sentiment": result,
+                "summary": result.get("summary", ""),   # FIX-SA-07
+                "symbol": symbol,
+            }
+        if task == "news.credibility":
+            log.info("[sentinel] execute: task='news.credibility' topics=%r — calling engine.gather()", ctx.get("topics"))
+            g = self.engine.gather(topics=ctx.get("topics"))
+            return {"status": "complete", "articles": [
+                {"title": a["title"], "source": a["source"], "credibility": a["credibility"],
+                 "misinformation_risk": a["misinformation_risk"], "misinfo_reasons": a["misinfo_reasons"],
+                 # Added for Oracle's News Intelligence (high-impact event detection):
+                 # these were already computed by engine.gather() but previously
+                 # dropped before reaching the caller.
+                 "event_type": a.get("event_type", ""), "sentiment": a.get("sentiment", 0.0),
+                 "published_at": a.get("published_at", ""), "summary": a.get("summary", "")}
+                for a in g["articles"]]}
+        return {"status": "error", "message": f"Unknown task: {task}"}
 
-    # --- All other agents (Oracle, Sentinel, Pulse, Aegis, Forge, Genesis) ---
-    # FIX-M-01: Oracle, Sentinel, Pulse now included.
-    # FIX-M-04: Forge, Genesis now included with graceful degradation.
-    # FIX-M-02: Register using agent.name (not folder name) for correct lookup.
-    for name, (folder, rel, cls_name) in LIVE_REPOS.items():
-        if name in ("chronicle", "atlas"):
-            continue  # already registered above
-        Cls = _load_class(folder, rel, cls_name)
-        if not Cls:
-            log.warning("Could not load %s (%s/%s) — skipping (graceful degradation).", name, folder, rel)
-            continue
-        try:
-            try:
-                agent = Cls(chronicle_client=chronicle)
-            except TypeError:
-                agent = Cls()
-            agent.start()
-            # FIX-M-02: use agent.name attribute as registry key
-            reg_name = getattr(agent, "name", name)
-            nexus.register_agent(reg_name, agent)
-            log.info("Registered agent: %s (domain=%s)", reg_name, getattr(agent, "domain", "?"))
-        except Exception as exc:
-            import traceback
-            # BUG B FIX (Phase 5c): Log full traceback so startup failures are
-            # visible and diagnosable. "No Silent Failures" — Book II.
-            log.warning(
-                "%s failed to start: %s — skipping (graceful degradation).\n"
-                "Full traceback:\n%s",
-                name, exc, traceback.format_exc(),
-            )
-        _unload_conflicting_modules()
+    def get_status(self) -> Dict[str, Any]:
+        base = super().get_status() if _HAS_SHARED else {"name": self.name}
+        base["engine"] = self.engine.stats()
+        return base
 
-    # FIX-M-03: Log the FINAL roster AFTER all agents are registered.
-    # (on_start() fires before agents are registered, so its log was always stale.)
-    log.info("Nexus boot complete. Live agents: %s", list(nexus.registry.all().keys()))
-    return nexus
-
-
-# ---------------------------------------------------------------------------
-# FIX-1 / FIX-2: _extract_summary — remove {} defaults to break infinite recursion
-# ---------------------------------------------------------------------------
-
-def _extract_summary(result: dict) -> Optional[str]:
-    """
-    Walk a result dict looking for a human-readable summary string.
-
-    ROOT CAUSE OF RECURSION BUG:
-      result.get("result", {}) returns {} when the key is absent.
-      isinstance({}, dict) is True -> _extract_summary({}) called forever.
-
-    FIX: result.get("result") returns None when absent.
-      isinstance(None, dict) is False -> recursion stops immediately.
-
-    FIX-MAIN-01 (Phase 5i): Check 'human_summary' first — set by coordinator's
-    _format_result() for ALL result types. This is the primary human-readable
-    output path. Falls back to the original nested-dict walking for backward
-    compatibility with agents that don't yet set human_summary.
-    """
-    if not isinstance(result, dict):
-        return None
-
-    # 0. FIX-MAIN-01: human_summary is set by coordinator._format_result()
-    #    for ALL result types. Check it first — it's always a clean string.
-    hs = result.get("human_summary") or result.get("summary")
-    if hs and isinstance(hs, str) and len(hs) > 10:
-        return hs
-
-    # 1. Prefer a structured "report" dict
-    report = result.get("report")
-    if isinstance(report, dict):
-        parts = []
-        if report.get("summary"):
-            parts.append(str(report["summary"]))
-        findings = report.get("findings") or []
-        if isinstance(findings, list):
-            parts.extend(str(f) for f in findings[:3] if f)
-        if parts:
-            return "\n".join(parts)
-
-    # 2. Recurse into a nested "result" dict
-    # FIX-1: was result.get("result", {}) — the {} default caused infinite recursion
-    inner = result.get("result")
-    if isinstance(inner, dict):
-        return _extract_summary(inner)
-
-    # 3. Check a "session" synthesis
-    # FIX-2: was result.get("session", {}) — same pattern, fixed for consistency
-    session = result.get("session")
-    if isinstance(session, dict) and session.get("synthesis"):
-        return str(session["synthesis"])
-    if isinstance(session, dict) and session.get("summary"):
-        return str(session["summary"])
-
-    # 4. Plain text fields (only for non-error results)
-    for key in ("text", "answer", "message"):
-        val = result.get(key)
-        if val and isinstance(val, str) and result.get("status") != "error":
-            return val
-
-    return None
-
-
-def _print_result(result: dict, use_json: bool) -> None:
-    """Pretty-print a routing result to the terminal."""
-    if use_json:
-        print(json.dumps(result, indent=2, default=str))
-        return
-
-    status = result.get("status", "unknown")
-    strategy = result.get("_strategy") or result.get("_reasoning", {}).get("chosen", "")
-    routed = result.get("routed_to", "")
-    priority = result.get("priority", "")
-
-    # FIX-MAIN-02 (Phase 5i): When human_summary is present (set by coordinator
-    # _format_result()), print it directly as the primary output — no header line
-    # needed since the summary already contains emoji + context (e.g. "📰 GBPUSD
-    # News Summary — July 21, 2026"). Only show the routing header for non-summary
-    # results (e.g. raw JSON fallback, error messages).
-    human_summary = result.get("human_summary")
-    if human_summary and isinstance(human_summary, str) and len(human_summary) > 10:
-        print(human_summary)
-        return
-
-    header_parts = [f"[{status.upper()}]"]
-    if strategy:
-        header_parts.append(f"via {strategy}")
-    if routed:
-        header_parts.append(f"-> {routed}")
-    if priority:
-        header_parts.append(f"(priority {priority})")
-    print(" ".join(header_parts))
-
-    summary = _extract_summary(result)
-    if summary:
-        print(summary)
-    elif status == "error":
-        msg = result.get("message", "")
-        if msg:
-            print(f"  Error: {msg}")
-    else:
-        compact = json.dumps(result, default=str)
-        print(compact[:500] + ("..." if len(compact) > 500 else ""))
-
-
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
-    nexus = boot()
-
-    live = list(nexus.registry.all().keys())
-    print("=" * 64)
-    print("  NEXUS - Institutional Coordinator")
-    print("  SLAs. Circuit breakers. Parallel orchestration. Learned collaboration.")
-    print("=" * 64)
-    print(f"  Live agents ({len(live)}): {live}")
-    print("  Commands: <query> | query <query> | urgent <query> | classify <q> | agents | breakers | execution | monitor | quit")
-    print("  Tip: append ' --json' to any query for raw JSON output")
-
-    while True:
-        try:
-            line = input("Nexus> ").strip()
-            if not line:
-                continue
-            if line.lower() in ("quit", "exit", "q"):
-                break
-
-            use_json = line.endswith(" --json")
-            if use_json:
-                line = line[:-7].strip()
-
-            if line.startswith("classify "):
-                result = nexus.act("domain.classify", {"query": line[9:], "_sender": "user"})
-                print(json.dumps(result, indent=2, default=str))
-            elif line.startswith("urgent "):
-                result = nexus.act("ecosystem.route",
-                    {"query": line[7:], "priority": 2, "_sender": "user"})
-                _print_result(result, use_json)
-            # FIX-M-05: Strip "query " prefix so it doesn't leak into search terms.
-            elif line.startswith("query "):
-                result = nexus.act("ecosystem.route",
-                    {"query": line[6:].strip(), "_sender": "user"})
-                _print_result(result, use_json)
-            elif line == "agents":
-                print(json.dumps(nexus.registry.health_summary(), indent=2, default=str))
-            elif line == "breakers":
-                print(json.dumps(nexus.executor.breaker_states(), indent=2, default=str))
-            elif line == "execution":
-                result = nexus.act("execution.stats", {"_sender": "user"})
-                print(json.dumps(result, indent=2, default=str))
-            elif line == "monitor":
-                result = nexus.act("ecosystem.monitor", {"_sender": "user"})
-                print(json.dumps(result, indent=2, default=str))
-            else:
-                result = nexus.act("ecosystem.route", {"query": line, "_sender": "user"})
-                _print_result(result, use_json)
-
-        except KeyboardInterrupt:
-            break
-        except Exception as exc:
-            # FIX-3: was print(f"Error: {exc}") — now shows full traceback
-            traceback.print_exc()
-
-    nexus.stop()
-    print("Nexus shutdown complete.")
-
-
-if __name__ == "__main__":
-    main()
+    # in-process convenience for Oracle / Nexus
+    def sentiment_for(self, symbol: str):
+        return self.engine.sentiment_for(symbol)

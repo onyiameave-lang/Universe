@@ -32,6 +32,7 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
 
 # B-11/12 fix: import shared utilities instead of duplicating them here
 from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
+from benchmarks.trading_benchmark import TradingBenchmark  # type: ignore  # roadmap Phase 1 item 5
 
 # ---------------------------------------------------------------------------
 # Keep local aliases so the rest of this file's call-sites are unchanged
@@ -198,7 +199,7 @@ def main():
     print(f" Paper trading: {agent.risk.paper} | Sentinel:{sentinel is not None} "
           f"Pulse:{pulse is not None} Chronicle:{chronicle is not None}")
     print(" Commands: signal <S> | evolve <S> [gens] | research <S> [gens] | hypotheses <S> |")
-    print("           champion <S> | backtest <S> | propose <S> | learn <S> <+1/-1> | portfolio | status | quit")
+    print("           champion <S> | backtest <S> | propose <S> | learn <S> <+1/-1> | portfolio | status | benchmark | quit")
 
     last_streams = {}
     while True:
@@ -340,6 +341,22 @@ def main():
                         print(f"  Certified: {champ.get('certified_at', 'unknown')}")
                 else:
                     print(f"\n No champion for {parts[1]} yet. Run: evolve {parts[1]}")
+                # Live Champion Confidence (roadmap Phase 1 item 4) — from
+                # real demo/paper trades, separate from the static backtest
+                # numbers above.
+                live = result.get("live_confidence", {})
+                if live:
+                    status = live.get("status", "insufficient_data")
+                    status_note = {
+                        "active": "", "watchlist": "  ⚠ WATCHLIST — consider re-testing",
+                        "retire": "  ⛔ RETIRE — live performance has diverged from backtest",
+                        "insufficient_data": "  (needs more live trades to be meaningful)",
+                    }.get(status, "")
+                    print(f"\n  Live Confidence: {live.get('live_confidence', 0):.0%}  "
+                          f"[{status}]{status_note}")
+                    print(f"  Demo Trades: {live.get('demo_trades', 0)}  "
+                          f"({live.get('wins', 0)}W / {live.get('losses', 0)}L)")
+                    print(f"  Current Drawdown: {live.get('current_drawdown_r', 0):.2f}R")
 
             elif cmd == "backtest" and len(parts) >= 2:
                 print(json.dumps(agent.act("strategy.backtest", {"symbol": parts[1], "_sender": "user"}), indent=2))
@@ -361,6 +378,19 @@ def main():
 
             elif cmd == "status":
                 print(json.dumps(agent.get_status(), indent=2))
+
+            elif cmd == "benchmark":
+                # Trading Benchmark (roadmap Phase 1 item 5) — real trade
+                # outcomes only; separate from strategy.evolve's research
+                # benchmarks (see BENCHMARKS.md for those).
+                tb = TradingBenchmark()
+                print(json.dumps(tb.summary(), indent=2))
+                by_sym = tb.by_symbol_summary()
+                if by_sym:
+                    print("\n By symbol:")
+                    for sym, s in sorted(by_sym.items()):
+                        print(f"  {sym:10s} trades={s['trades']:<4d} "
+                              f"win_rate={s['win_rate']:.0%}  avg_trade={s['avg_trade_r']:+.3f}R")
 
             else:
                 print(" Unknown command. Try: evolve EURUSD 6")

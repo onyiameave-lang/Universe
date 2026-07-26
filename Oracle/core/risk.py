@@ -100,6 +100,13 @@ _CONF_FLOOR_LIVE  = round(_float_env("ORACLE_CONFIDENCE_FLOOR_LIVE",  0.60), 4)
 # Max single-trade notional as a fraction of equity (50% paper / 30% live).
 _MAX_LOT_PCT_PAPER = _float_env("ORACLE_MAX_LOT_PCT",       0.50)
 _MAX_LOT_PCT_LIVE  = _float_env("ORACLE_MAX_LOT_PCT_LIVE",  0.30)
+# Portfolio Awareness (roadmap Phase 2 item 9): cap on NET exposure to any
+# single currency leg across ALL open positions combined (not just one
+# trade) — e.g. long EURUSD + long GBPUSD + short USDCHF are all really
+# "one bet against USD", so this catches that even though each individual
+# trade passes the per-trade max_lot_pct check above.
+_MAX_CURRENCY_PCT_PAPER = _float_env("ORACLE_MAX_CURRENCY_PCT",      0.80)
+_MAX_CURRENCY_PCT_LIVE  = _float_env("ORACLE_MAX_CURRENCY_PCT_LIVE", 0.50)
 
 # Daily loss kill-switch as a fraction of equity (6% paper / 3% live).
 _DAILY_LOSS_PAPER = _float_env("ORACLE_DAILY_LOSS_LIMIT",       0.06)
@@ -144,6 +151,81 @@ class Portfolio:
     def exposure(self) -> float:
         return sum(abs(p.size * p.entry) for p in self.positions)
 
+    def remove_by_symbol(self, symbol: str) -> None:
+        """
+        Removes the tracked position for `symbol`, if any. Was missing
+        entirely before — open_position() had no counterpart, so
+        portfolio.positions could only ever grow. Safe to call even if the
+        symbol isn't tracked (no-op).
+        """
+        self.positions = [p for p in self.positions if p.symbol != symbol]
+
+    # -- Portfolio Awareness (roadmap Phase 2 item 9) -----------------------
+    # "Oracle shouldn't treat trades independently... avoid stacking highly
+    # correlated positions." A long EURUSD + long GBPUSD + short USDCHF are
+    # all really "one bet against USD" — this tracks NET exposure per
+    # currency leg across all open positions, not just per-symbol.
+
+    @staticmethod
+    def _currency_legs(symbol: str) -> tuple:
+        """
+        Splits a 6-character symbol into (base, quote) currency legs —
+        works uniformly for FX (EURUSD -> EUR/USD), metals (XAUUSD ->
+        XAU/USD), and crypto (BTCUSD -> BTC/USD) since they all follow the
+        same 3+3 naming convention. Anything else (indices like "US30",
+        oddly-suffixed broker symbols, etc.) falls back to treating the
+        whole symbol as its own standalone bucket — it still counts toward
+        total exposure, it just won't spuriously correlate with unrelated
+        instruments.
+        """
+        s = symbol.upper().strip()
+        if len(s) == 6 and s.isalpha():
+            return s[:3], s[3:]
+        return s, None
+
+    def currency_exposure(self) -> Dict[str, float]:
+        """Net directional notional per currency leg, across all open
+        positions. Positive = net long that currency, negative = net short."""
+        exposure: Dict[str, float] = {}
+        for p in self.positions:
+            notional = abs(p.size * p.entry)
+            sign = 1.0 if p.direction == "long" else -1.0
+            base, quote = self._currency_legs(p.symbol)
+            exposure[base] = exposure.get(base, 0.0) + sign * notional
+            if quote:
+                exposure[quote] = exposure.get(quote, 0.0) - sign * notional
+        return exposure
+
+    def concentration_warning(self, symbol: str, direction: str, notional: float,
+                               max_currency_pct: float) -> Optional[str]:
+        """
+        Simulates adding a proposed new trade to current currency exposure;
+        returns a human-readable reason if either currency leg would exceed
+        `max_currency_pct` of equity, else None. Called from risk.evaluate()
+        as an additional gate, alongside (not replacing) the existing
+        per-symbol/position-count checks.
+        """
+        if self.equity <= 0:
+            return None
+        base, quote = self._currency_legs(symbol)
+        sign = 1.0 if direction in ("long", "buy") else -1.0
+        current = self.currency_exposure()
+        cap = max_currency_pct * self.equity
+
+        projected_base = current.get(base, 0.0) + sign * notional
+        if abs(projected_base) > cap:
+            return (f"adding {symbol} would push net {base} exposure to "
+                    f"{abs(projected_base)/self.equity:.0%} of equity "
+                    f"(cap {max_currency_pct:.0%}) — too correlated with existing positions")
+
+        if quote:
+            projected_quote = current.get(quote, 0.0) - sign * notional
+            if abs(projected_quote) > cap:
+                return (f"adding {symbol} would push net {quote} exposure to "
+                        f"{abs(projected_quote)/self.equity:.0%} of equity "
+                        f"(cap {max_currency_pct:.0%}) — too correlated with existing positions")
+        return None
+
 
 # ---------------------------------------------------------------------------
 # RiskManager
@@ -180,6 +262,7 @@ class RiskManager:
 
         self.confidence_floor = _CONF_FLOOR_PAPER if self.paper else _CONF_FLOOR_LIVE
         self.max_lot_pct      = _MAX_LOT_PCT_PAPER if self.paper else _MAX_LOT_PCT_LIVE
+        self.max_currency_pct = _MAX_CURRENCY_PCT_PAPER if self.paper else _MAX_CURRENCY_PCT_LIVE
         self.stop_mult        = _STOP_MULT
         self.target_mult      = _TARGET_MULT
         self.reward_risk      = _REWARD_RISK
@@ -266,6 +349,20 @@ class RiskManager:
         if notional > cap:
             size     = round(cap / entry, 4)
             notional = abs(size * entry)
+
+        # Portfolio Awareness (roadmap Phase 2 item 9): this trade might
+        # pass the single-trade cap above yet still push NET exposure to a
+        # shared currency leg too high once combined with what's already
+        # open (e.g. long EURUSD + long GBPUSD + short USDCHF are all
+        # really "one bet against USD"). Checked against the FINAL
+        # (possibly already-capped) notional above.
+        concentration_reason = self.portfolio.concentration_warning(
+            symbol, direction, notional, self.max_currency_pct)
+        if concentration_reason:
+            return {"approved": False, "reasons": [concentration_reason],
+                    "paper_trading": self.paper,
+                    "confidence_floor": self.confidence_floor,
+                    "mode": "paper" if self.paper else "live"}
 
         return {
             "approved":      True,

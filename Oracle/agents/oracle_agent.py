@@ -83,6 +83,25 @@ try:
 except ImportError:
     from Oracle.intelligence.signal_fusion import SignalFusion  # type: ignore
 
+# News Intelligence (Phase 1 roadmap item 2)
+try:
+    from intelligence.news_impact import assess_news_impact  # type: ignore
+except ImportError:
+    from Oracle.intelligence.news_impact import assess_news_impact  # type: ignore
+
+# Social Risk — Pulse manipulation detection (pump/dump-style coordinated activity)
+try:
+    from intelligence.social_risk import assess_social_risk  # type: ignore
+except ImportError:
+    from Oracle.intelligence.social_risk import assess_social_risk  # type: ignore
+
+# Champion Confidence (roadmap Phase 1 item 4) — reads the same live
+# confidence store the Continuous Trade Manager's learning loop writes to.
+try:
+    from intelligence.trade_learning import ChampionConfidenceTracker  # type: ignore
+except ImportError:
+    from Oracle.intelligence.trade_learning import ChampionConfidenceTracker  # type: ignore
+
 try:
     from shared.agent import BaseAgent
     _HAS_SHARED = True
@@ -139,6 +158,13 @@ class OracleAgent(BaseAgent):
             pulse=pulse_client,
             chronicle=chronicle_client,
         )
+        # Champion Confidence (roadmap Phase 1 item 4): reads the same
+        # champion_confidence.json the Continuous Trade Manager's Demo Trade
+        # Learning loop writes to (default path resolves to the same
+        # Oracle/memory/ dir used above). Read-mostly here — this instance
+        # only writes if something calls record_outcome() directly on it,
+        # which nothing in oracle_agent.py currently does.
+        self._champion_confidence = ChampionConfidenceTracker()
 
     def on_start(self) -> None:
         log.info("Oracle scientific research lab online. Paper: %s | champions: %s | Sentinel:%s Pulse:%s",
@@ -256,8 +282,13 @@ class OracleAgent(BaseAgent):
                 if md["status"] == "complete":
                     regime = self.lab.market_context(md["series"])["regime"]
             info = self.evolution.champion_info(symbol, regime) or self.lab.champion_info(symbol, regime)
-            return {"status": "complete", "champion": info} if info else \
-                {"status": "complete", "champion": None,
+            # Champion Confidence (roadmap Phase 1 item 4): live win/loss
+            # record from real (demo/paper) trades, additive to the existing
+            # static backtested `info` — doesn't touch or replace it.
+            live = self._champion_confidence.get(symbol, regime or "ranging")
+            live["status"] = self._champion_confidence.status(symbol, regime or "ranging")
+            return {"status": "complete", "champion": info, "live_confidence": live} if info else \
+                {"status": "complete", "champion": None, "live_confidence": live,
                  "note": "no regime-aware champion yet; run strategy.evolve"}
         if task == "strategy.backtest":
             md = self.data.get(symbol)
@@ -281,14 +312,37 @@ class OracleAgent(BaseAgent):
             s = sig["signal"]
             if s["call"] == "hold":
                 return {"status": "error", "message": "signal is hold", "signal": s}
+
+            # News Intelligence (Phase 1 roadmap item 2): never ignore major
+            # news. A high-impact event drives confidence to 0, which makes
+            # risk.evaluate() below reject the trade outright — reusing the
+            # existing confidence floor instead of a parallel "paused" path.
+            # A medium-impact event dampens confidence/size but doesn't halt.
+            news = assess_news_impact(self.sentinel, symbol)
+            # Social Risk: Pulse-detected coordinated pump/dump-style activity.
+            # Compounds with news multiplicatively — each is an independent
+            # reason to distrust the signal, so both firing should be more
+            # conservative than either alone, not just take the worse of the two.
+            social = assess_social_risk(self.pulse, symbol)
+            effective_confidence = s["confidence"] * news.confidence_multiplier * social.confidence_multiplier
+            if news.level != "none":
+                log.info("[%s] news impact=%s conf %.3f -> %.3f: %s",
+                         symbol, news.level, s["confidence"], effective_confidence, news.reason)
+            if social.level != "none":
+                log.info("[%s] social risk=%s: %s", symbol, social.level, social.reason)
+
             atr = sig["_technicals"].get("atr_14") or (sig["last"] * 0.01)
             direction = "long" if s["call"] == "buy" else "short"
-            plan = self.risk.evaluate(symbol, direction, sig["last"], atr, s["confidence"])
+            plan = self.risk.evaluate(symbol, direction, sig["last"], atr, effective_confidence)
             self._preserve(symbol, sig)
             if not plan["approved"]:
-                return {"status": "error", "message": "risk gate rejected", "risk": plan}
+                return {"status": "error", "message": "risk gate rejected", "risk": plan,
+                        "news_impact": news.level, "news_reason": news.reason,
+                        "social_risk": social.level, "social_reason": social.reason}
             return {"status": "complete", "plan": plan, "signal": s,
                     "using_evolved_champion": sig["using_evolved_champion"],
+                    "news_impact": news.level, "news_reason": news.reason,
+                    "social_risk": social.level, "social_reason": social.reason,
                     "_streams": s["streams"]}
         if task == "trade.execute":
             plan = ctx.get("plan")
