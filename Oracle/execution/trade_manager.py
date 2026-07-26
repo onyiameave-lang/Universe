@@ -85,6 +85,7 @@ class Position:
     entry_time: float = field(default_factory=time.time)
     size: float = 1.0
     entry_streams: Dict[str, Any] = field(default_factory=dict)  # per-source signal breakdown at entry, for fusion.learn
+    entry_atr: Optional[float] = None   # volatility at entry, for Volatility Exit (roadmap Phase 2 item 8)
 
     # Mutable trailing state -- the manager updates these as it runs.
     current_stop: float = field(init=False)
@@ -140,6 +141,21 @@ class TradeManagerConfig:
     # Relative confidence collapse (current / entry) that counts as severe,
     # even if the absolute drop is smaller (protects low-confidence entries).
     confidence_collapse_ratio: float = 0.5
+
+    # -- Multiple Exit Strategies additions (roadmap Phase 2 item 8) --------
+    # Time Exit: a position held longer than this without meaningful profit
+    # is tying up capital for no reason. Default 48h fits typical swing/
+    # day-trade holding windows; set to None to disable entirely.
+    max_holding_sec: Optional[float] = 48 * 3600
+    # "Meaningful profit" threshold below which a stale trade gets closed
+    # rather than left to keep running past max_holding_sec.
+    time_exit_min_r: float = 0.5
+
+    # Volatility Exit: if current ATR has spiked to this many multiples of
+    # the ATR at entry, the market's risk profile has genuinely changed
+    # since the trade was planned (stops/targets were sized for the OLD
+    # volatility) — treated with the same care as a news/social shock.
+    volatility_spike_multiple: float = 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +247,28 @@ class TradeManager:
                     f"high social-manipulation risk detected but position is at "
                     f"{unrealized_r:.2f}R -- locking in gains before the pump unwinds"), **base)
 
-        # ---- 4. Regime change detection ----
+        # ---- 4. Volatility Exit (roadmap Phase 2 item 8): if current ATR
+        #         has spiked well beyond what it was at entry, the stop/
+        #         target sizing done at entry time no longer matches the
+        #         market's actual risk -- treated with the same care as a
+        #         news/social shock. Skipped if we don't have both ATR
+        #         readings (e.g. backfilled/orphaned positions never
+        #         captured an entry_atr). ----
+        if pos.entry_atr and snap.atr and pos.entry_atr > 0:
+            vol_ratio = snap.atr / pos.entry_atr
+            if vol_ratio >= cfg.volatility_spike_multiple:
+                if unrealized_r <= 0:
+                    return ManagedDecision(Action.CLOSE, reason=(
+                        f"volatility spiked {vol_ratio:.1f}x since entry while position is at "
+                        f"{unrealized_r:.2f}R -- stop/target no longer match current risk"), **base)
+                else:
+                    new_stop = self._breakeven_or_better(pos, unrealized_r)
+                    pos.current_stop = new_stop
+                    return ManagedDecision(Action.TIGHTEN_STOP, new_stop=new_stop, reason=(
+                        f"volatility spiked {vol_ratio:.1f}x since entry but position is at "
+                        f"{unrealized_r:.2f}R -- locking in gains before it gets more unpredictable"), **base)
+
+        # ---- 5. Regime change detection ----
         regime_flipped_hostile = snap.regime in _HOSTILE_REGIME[pos.direction]
         regime_changed_at_all = snap.regime != pos.entry_regime
 
@@ -251,7 +288,7 @@ class TradeManager:
                     f"regime flipped hostile ({pos.entry_regime} -> {snap.regime}) "
                     f"but position is at {unrealized_r:.2f}R -- locking in gains"), **base)
 
-        # ---- 5. Confidence drop detection ----
+        # ---- 6. Confidence drop detection ----
         abs_drop = pos.entry_confidence - snap.confidence
         collapsed = (snap.confidence / pos.entry_confidence) < cfg.confidence_collapse_ratio \
             if pos.entry_confidence > 0 else False
@@ -269,7 +306,19 @@ class TradeManager:
                     f"confidence dropped {pos.entry_confidence:.2f} -> {snap.confidence:.2f} "
                     f"but position is at {unrealized_r:.2f}R -- protecting gains"), **base)
 
-        # ---- 6. Ordinary profit trailing ----
+        # ---- 7. Time Exit (roadmap Phase 2 item 8): a position that's been
+        #         open a long time without meaningful profit is tying up
+        #         capital and margin for no clear reason. Only closes if it
+        #         genuinely isn't working (unrealized_r below the minimum)
+        #         -- a big winner that's just taking a while is left alone. ----
+        if cfg.max_holding_sec is not None:
+            held_sec = time.time() - pos.entry_time
+            if held_sec >= cfg.max_holding_sec and unrealized_r < cfg.time_exit_min_r:
+                return ManagedDecision(Action.CLOSE, reason=(
+                    f"time exit: held {held_sec/3600:.1f}h (limit {cfg.max_holding_sec/3600:.0f}h) "
+                    f"at only {unrealized_r:.2f}R -- freeing up capital"), **base)
+
+        # ---- 8. Ordinary profit trailing ----
         if unrealized_r >= cfg.trail_activation_r:
             trailed_stop = self._trailing_stop(pos, cfg)
             moved = (
@@ -282,7 +331,7 @@ class TradeManager:
                     f"trailing stop: {unrealized_r:.2f}R in profit, "
                     f"ratcheting stop to {trailed_stop:.5f}"), **base)
 
-        # ---- 7. Nothing to do ----
+        # ---- 9. Nothing to do ----
         note = " (regime changed but not hostile)" if regime_changed_at_all else ""
         return ManagedDecision(Action.HOLD, reason=(
             f"holding: {unrealized_r:.2f}R, confidence {snap.confidence:.2f}"

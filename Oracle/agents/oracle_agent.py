@@ -235,9 +235,11 @@ class OracleAgent(BaseAgent):
             return market
         streams = self._streams(symbol, market["technicals"])
         fused = self.fusion.fuse(symbol, streams)
+        atr = market["technicals"].get("atr_14") or (market["last"] * 0.01)
         return {"status": "complete", "symbol": symbol, "signal": fused,
                 "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
                 "using_evolved_champion": streams["technical"].get("source") == "evolved_champion",
+                "atr": atr,
                 "_technicals": market["technicals"]}
 
     # ---- BaseAgent contract ----
@@ -343,6 +345,7 @@ class OracleAgent(BaseAgent):
                     "using_evolved_champion": sig["using_evolved_champion"],
                     "news_impact": news.level, "news_reason": news.reason,
                     "social_risk": social.level, "social_reason": social.reason,
+                    "atr": atr,
                     "_streams": s["streams"]}
         if task == "trade.execute":
             plan = ctx.get("plan")

@@ -32,7 +32,10 @@ for p in (_REPO_ROOT, _REPO_ROOT.parent):
 
 # B-11/12 fix: import shared utilities instead of duplicating them here
 from shared.startup import load_dotenv_early, unload_conflicting_modules  # noqa: E402
-from benchmarks.trading_benchmark import TradingBenchmark  # type: ignore  # roadmap Phase 1 item 5
+# FIX: Use a more explicit, unambiguous import path for TradingBenchmark.
+# The original `from benchmarks.trading_benchmark...` can fail with an
+# ImportError depending on sys.path state and other conflicting 'benchmarks' modules.
+from Oracle.benchmarks.trading_benchmark import TradingBenchmark  # type: ignore
 
 # ---------------------------------------------------------------------------
 # Keep local aliases so the rest of this file's call-sites are unchanged

@@ -572,10 +572,12 @@ class LiveTrader:
         try:
             sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "live_trader"})
             entry_regime = (sig or {}).get("regime") or "ranging"
+            entry_atr = (sig or {}).get("atr")
         except Exception as exc:
             log.warning("[%s] could not fetch entry regime, defaulting to 'ranging': %s",
                         symbol, exc)
             entry_regime = "ranging"
+            entry_atr = None
 
         # Entry streams (per-source signal breakdown) were already captured
         # in _tick()'s fill branch for a different purpose; reuse them here
@@ -590,7 +592,7 @@ class LiveTrader:
                 symbol=symbol, direction=dir_norm, entry_price=entry_price,
                 initial_stop=stop, initial_target=target,
                 entry_confidence=confidence, entry_regime=entry_regime,
-                entry_streams=entry_streams,
+                entry_streams=entry_streams, entry_atr=entry_atr,
             )
 
         risk_direction = "long" if dir_norm == Direction.BUY else "short"
@@ -650,6 +652,7 @@ class LiveTrader:
             price = sig.get("last")
             confidence = (sig.get("signal") or {}).get("confidence", 0.0)
             regime = sig.get("regime") or pos.entry_regime
+            current_atr = sig.get("atr")
             if price is None:
                 continue
 
@@ -663,7 +666,8 @@ class LiveTrader:
                          social_assessment.reason)
             snap = MarketSnapshot(price=float(price), confidence=float(confidence), regime=regime,
                                    news_impact=news_assessment.level,
-                                   social_risk=social_assessment.level)
+                                   social_risk=social_assessment.level,
+                                   atr=current_atr)
             decision = self._trade_manager.evaluate(pos, snap)
 
             pos_id = live_pos.get("ticket") or live_pos.get("id")

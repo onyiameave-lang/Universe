@@ -269,9 +269,41 @@ class RiskManager:
 
     # ---- sizing ----
 
-    def size_position(self, entry: float, stop: float) -> float:
-        """Risk a fixed fraction of equity; size so (entry-stop) loss == risk budget."""
-        risk_budget   = self.portfolio.equity * self.risk_per_trade
+    # Dynamic Position Sizing (roadmap Phase 2 item 7): scales position
+    # size with signal confidence instead of a flat risk_per_trade for any
+    # trade that clears the confidence floor. Anchor points straight from
+    # the roadmap's own example table (95% -> full, 75% -> half,
+    # 55% -> quarter); linearly interpolated between them for smooth
+    # scaling rather than jarring step-changes at exact thresholds.
+    # Confidence at/below the confidence FLOOR never reaches this at all —
+    # evaluate() already rejects those before sizing is ever computed.
+    _SIZE_CONFIDENCE_TIERS = (
+        (0.55, 0.25),
+        (0.75, 0.50),
+        (0.95, 1.00),
+    )
+
+    def _confidence_size_multiplier(self, confidence: float) -> float:
+        tiers = self._SIZE_CONFIDENCE_TIERS
+        if confidence <= tiers[0][0]:
+            return tiers[0][1]
+        if confidence >= tiers[-1][0]:
+            return tiers[-1][1]
+        for (c_lo, m_lo), (c_hi, m_hi) in zip(tiers, tiers[1:]):
+            if c_lo <= confidence <= c_hi:
+                frac = (confidence - c_lo) / (c_hi - c_lo)
+                return m_lo + frac * (m_hi - m_lo)
+        return tiers[-1][1]   # unreachable given the bounds checks above
+
+    def size_position(self, entry: float, stop: float,
+                       confidence: Optional[float] = None) -> float:
+        """Risk a fixed fraction of equity; size so (entry-stop) loss == risk
+        budget. If `confidence` is given, the risk budget itself is scaled
+        by _confidence_size_multiplier() first (Dynamic Position Sizing) —
+        omit it (or pass None) to get the old flat-risk_per_trade behavior."""
+        risk_budget = self.portfolio.equity * self.risk_per_trade
+        if confidence is not None:
+            risk_budget *= self._confidence_size_multiplier(confidence)
         per_unit_risk = abs(entry - stop)
         if per_unit_risk <= 0:
             return 0.0
@@ -341,7 +373,7 @@ class RiskManager:
                     "mode": "paper" if self.paper else "live"}
 
         st   = self.stop_target(entry, direction, atr)
-        size = self.size_position(entry, st["stop"])
+        size = self.size_position(entry, st["stop"], confidence)
 
         # exposure cap: single trade notional <= max_lot_pct of equity
         notional = abs(size * entry)
