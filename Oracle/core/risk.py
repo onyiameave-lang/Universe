@@ -45,6 +45,7 @@ BOUNDARY BUG FIX (2026-07-17):
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -107,6 +108,12 @@ _MAX_LOT_PCT_LIVE  = _float_env("ORACLE_MAX_LOT_PCT_LIVE",  0.30)
 # trade passes the per-trade max_lot_pct check above.
 _MAX_CURRENCY_PCT_PAPER = _float_env("ORACLE_MAX_CURRENCY_PCT",      0.80)
 _MAX_CURRENCY_PCT_LIVE  = _float_env("ORACLE_MAX_CURRENCY_PCT_LIVE", 0.50)
+# Reduce Overtrading (roadmap Phase 2 item 6): frequency/discipline limits,
+# separate from the confidence floor above.
+_LOSS_COOLDOWN_SEC_PAPER = _float_env("ORACLE_LOSS_COOLDOWN_SEC",      1800)   # 30 min
+_LOSS_COOLDOWN_SEC_LIVE  = _float_env("ORACLE_LOSS_COOLDOWN_SEC_LIVE", 7200)   # 2 hours
+_MAX_TRADES_PER_SYMBOL_PER_DAY_PAPER = int(_float_env("ORACLE_MAX_TRADES_PER_SYMBOL_DAY",      5))
+_MAX_TRADES_PER_SYMBOL_PER_DAY_LIVE  = int(_float_env("ORACLE_MAX_TRADES_PER_SYMBOL_DAY_LIVE",  3))
 
 # Daily loss kill-switch as a fraction of equity (6% paper / 3% live).
 _DAILY_LOSS_PAPER = _float_env("ORACLE_DAILY_LOSS_LIMIT",       0.06)
@@ -159,6 +166,42 @@ class Portfolio:
         symbol isn't tracked (no-op).
         """
         self.positions = [p for p in self.positions if p.symbol != symbol]
+
+    # -- Reduce Overtrading (roadmap Phase 2 item 6) ------------------------
+    # "Instead of: 'I found a signal.' Think: 'Is this signal worth risking
+    # capital?'" — Dynamic Position Sizing already shrinks low-confidence
+    # trades toward near-nothing, so this isn't about raising the
+    # confidence bar again; it's about FREQUENCY/discipline: don't
+    # immediately re-enter a symbol right after getting stopped out
+    # (revenge trading), and don't chase an unlimited number of entries on
+    # the same symbol in one day even if each one individually clears the
+    # confidence floor.
+
+    last_loss_at: Dict[str, float] = field(default_factory=dict)
+    trades_today: Dict[str, int] = field(default_factory=dict)
+    trades_today_date: str = ""
+
+    def record_trade_opened(self, symbol: str) -> None:
+        """Call once per fill (any outcome) — feeds the daily trade cap."""
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if self.trades_today_date != today:
+            self.trades_today = {}
+            self.trades_today_date = today
+        self.trades_today[symbol] = self.trades_today.get(symbol, 0) + 1
+
+    def record_loss(self, symbol: str) -> None:
+        """Call once per losing close — feeds the post-loss cooldown."""
+        self.last_loss_at[symbol] = time.time()
+
+    def seconds_since_last_loss(self, symbol: str) -> Optional[float]:
+        last = self.last_loss_at.get(symbol)
+        return (time.time() - last) if last is not None else None
+
+    def trades_opened_today(self, symbol: str) -> int:
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if self.trades_today_date != today:
+            return 0   # stale counts from a previous day — treat as reset
+        return self.trades_today.get(symbol, 0)
 
     # -- Portfolio Awareness (roadmap Phase 2 item 9) -----------------------
     # "Oracle shouldn't treat trades independently... avoid stacking highly
@@ -263,6 +306,9 @@ class RiskManager:
         self.confidence_floor = _CONF_FLOOR_PAPER if self.paper else _CONF_FLOOR_LIVE
         self.max_lot_pct      = _MAX_LOT_PCT_PAPER if self.paper else _MAX_LOT_PCT_LIVE
         self.max_currency_pct = _MAX_CURRENCY_PCT_PAPER if self.paper else _MAX_CURRENCY_PCT_LIVE
+        self.loss_cooldown_sec = _LOSS_COOLDOWN_SEC_PAPER if self.paper else _LOSS_COOLDOWN_SEC_LIVE
+        self.max_trades_per_symbol_per_day = (
+            _MAX_TRADES_PER_SYMBOL_PER_DAY_PAPER if self.paper else _MAX_TRADES_PER_SYMBOL_PER_DAY_LIVE)
         self.stop_mult        = _STOP_MULT
         self.target_mult      = _TARGET_MULT
         self.reward_risk      = _REWARD_RISK
@@ -352,6 +398,23 @@ class RiskManager:
         # per-symbol duplication
         if any(p.symbol == symbol for p in self.portfolio.positions):
             rejections.append(f"already holding {symbol}")
+
+        # Reduce Overtrading (roadmap Phase 2 item 6): post-loss cooldown —
+        # don't immediately re-enter a symbol right after getting stopped
+        # out of it (revenge trading is a classic overtrading pattern).
+        since_loss = self.portfolio.seconds_since_last_loss(symbol)
+        if since_loss is not None and since_loss < self.loss_cooldown_sec:
+            rejections.append(
+                f"{symbol} lost a trade {since_loss/60:.0f}min ago — "
+                f"cooldown is {self.loss_cooldown_sec/60:.0f}min (reduce overtrading)")
+
+        # Reduce Overtrading: daily cap on new entries per symbol, even if
+        # each one individually clears the confidence floor.
+        opened_today = self.portfolio.trades_opened_today(symbol)
+        if opened_today >= self.max_trades_per_symbol_per_day:
+            rejections.append(
+                f"{symbol} already opened {opened_today} trades today "
+                f"(cap {self.max_trades_per_symbol_per_day}/day — reduce overtrading)")
 
         # confidence floor — BOUNDARY FIX: >= so exactly-at-floor values pass
         conf_rounded = round(confidence, 4)

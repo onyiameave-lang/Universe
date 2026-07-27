@@ -1,44 +1,44 @@
 # Oracle V1 Benchmarks
 
 > Auto-generated. Do not edit manually.
-> Last updated: 2026-07-15T21:41:18Z
+> Last updated: 2026-07-26T09:52:54Z
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
 | Oracle Version | 1.0.0 |
-| Total Experiments | 139 |
+| Total Experiments | 140 |
 | Accepted | 18 |
-| Rejected | 121 |
+| Rejected | 122 |
 | Champions Promoted | 18 |
-| Promotion Rate | 13.0% |
+| Promotion Rate | 12.9% |
 
 ## Performance
 
 | Metric | Value |
 |--------|-------|
-| Avg IS Return | 0.0459 |
+| Avg IS Return | 0.0458 |
 | Avg OOS Return | 0.0006 |
-| Avg Sharpe | -2.323 |
-| Avg Drawdown | 0.0204 |
-| Avg Trades | 6.0 |
-| Avg Fitness | 7.0314 |
+| Avg Sharpe | -2.314 |
+| Avg Drawdown | 0.0203 |
+| Avg Trades | 5.9 |
+| Avg Fitness | 7.0342 |
 | Best Fitness Ever | 15.9707 |
-| Generalization Score | 0.1270 |
+| Generalization Score | 0.0494 |
 
 ## Oracle Intelligence Score (OIS)
 
 | Component | Score |
 |-----------|-------|
-| **Overall** | **20.6 / 100** |
-| Research Quality | 25.9 |
+| **Overall** | **19.6 / 100** |
+| Research Quality | 25.7 |
 | Champion Quality | 0.0 |
-| Knowledge Growth | 25.9 |
-| Generalization | 6.3 |
+| Knowledge Growth | 25.7 |
+| Generalization | 2.5 |
 | Evolution Efficiency | 0.0 |
-| Scientific Confidence | 59.5 |
-| Learning Progress | 56.4 |
+| Scientific Confidence | 59.2 |
+| Learning Progress | 55.1 |
 
 ## Research Insights
 
@@ -48,8 +48,8 @@
 | Best Regime | trending_up (9 champions, fitness=6.645) |
 | Best Strategy Family | sma_crossover (4 champions, fitness=6.150) |
 | Best Trend Indicator | sma_crossover (4 champions, fitness=6.150) |
-| Best Momentum Indicator | williams_r (6 champions, fitness=5.935) |
-| Most Used Indicator | williams_r (37 uses) |
+| Best Momentum Indicator | williams_r (6 champions, fitness=5.974) |
+| Most Used Indicator | williams_r (38 uses) |
 
 ## Knowledge
 
@@ -57,8 +57,8 @@
 |--------|-------|
 | Knowledge Items | 18 |
 | Chronicle Entries | 18 |
-| Failure Database | 121 |
-| Hypotheses Generated | 278 |
+| Failure Database | 122 |
+| Hypotheses Generated | 280 |
 
 ## Runtime
 

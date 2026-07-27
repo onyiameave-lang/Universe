@@ -44,6 +44,7 @@ from intelligence.credibility import (credibility_score, misinformation_risk,   
                                       compute_corroboration)
 from intelligence.analysis import (extract_symbols, classify_event, sentiment,       # type: ignore
                                    EventClusterer)
+from intelligence.deep_analysis import deep_analyze                                 # type: ignore
 
 # How old (seconds) a Chronicle-cached news report can be before we bypass it
 # and fetch fresh data.  Default: 15 minutes.
@@ -187,8 +188,25 @@ class IntelligenceEngine:
         # enrich
         for a in articles:
             a["symbols"] = extract_symbols(a["title"], a.get("summary", ""))
+            # Lexical event_type/sentiment stay as the fast, always-available
+            # fallback (this codebase's own graceful-degradation principle).
             a["event_type"] = classify_event(a["title"], a.get("summary", ""))
             a["sentiment"] = sentiment(a["title"], a.get("summary", ""), llm=self.llm)
+            # Deep Analysis (structured event understanding, not word-counting):
+            # only activates when a real LLM client is available. When it
+            # succeeds, its event_type/economic sentiment REPLACE the lexical
+            # ones above for downstream consumers (it understands negation,
+            # word order, and event context that keyword matching can't) —
+            # but the raw lexical values are preserved under distinct keys so
+            # nothing is silently lost, and everything still degrades
+            # gracefully to the lexical path when no LLM is available.
+            deep = deep_analyze(a["title"], a.get("summary", ""), self.llm)
+            a["deep_analysis"] = deep
+            if deep is not None:
+                a["lexical_event_type"] = a["event_type"]
+                a["lexical_sentiment"] = a["sentiment"]
+                a["event_type"] = deep["event_type"]
+                a["sentiment"] = deep["sentiment"]["economic"]
         # corroboration then credibility + misinfo
         compute_corroboration(articles)
         for a in articles:

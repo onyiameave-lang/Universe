@@ -80,7 +80,23 @@ class SentinelAgent(BaseAgent):
     mission = {"purpose": "Acquire, validate, cluster, and distribute credible news intelligence."}
 
     def __init__(self, chronicle_client=None, **kw):
-        super().__init__(chronicle_client=chronicle_client, storage_dir=str(_REPO_ROOT / "memory"), **kw)
+        # Sentinel gets its OWN Gemini key (SENTINEL_GEMINI_API_KEY), separate
+        # from the shared get_llm() singleton (GEMINI_API_KEY) that other
+        # agents use, and separate from Nexus's own NEXUS_GEMINI_KEY (a
+        # different variable for a different purpose — Nexus's local-model
+        # routing). This only affects Sentinel; every other agent keeps
+        # using the shared singleton exactly as before. Falls back to
+        # Ollama automatically (if OLLAMA_MODEL is set) or to the caller-
+        # supplied llm= kwarg, same provider-order logic as everywhere else.
+        sentinel_llm = kw.pop("llm", None)
+        if sentinel_llm is None:
+            try:
+                from shared.llm import LLMClient
+                sentinel_llm = LLMClient(gemini_env_var="SENTINEL_GEMINI_API_KEY")
+            except Exception:
+                sentinel_llm = None   # falls through to BaseAgent's own get_llm() default
+        super().__init__(chronicle_client=chronicle_client, llm=sentinel_llm,
+                          storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.engine = IntelligenceEngine(chronicle_client=chronicle_client, llm=self.llm)
 
     def register_strategies(self) -> None:

@@ -539,10 +539,12 @@ class DemoTrader:
                 log.info("[%s] no longer open at broker — deregistering from "
                          "Continuous Trade Manager", symbol)
                 try:
-                    self._trade_learning.record_close(
+                    outcome = self._trade_learning.record_close(
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual close)")
+                    if not outcome.won:
+                        self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -609,10 +611,12 @@ class DemoTrader:
                         self._pos_log.log_closed(symbol, broker_sym, pos_id,
                                                   reason=decision.reason)
                         try:
-                            self._trade_learning.record_close(
+                            outcome = self._trade_learning.record_close(
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
+                            if not outcome.won:
+                                self.oracle.risk.portfolio.record_loss(symbol)
                         except Exception as exc:
                             log.warning("[%s] Demo Trade Learning failed on CTM close: %s",
                                         symbol, exc)
@@ -861,6 +865,7 @@ class DemoTrader:
                         confidence=s.get("confidence", 0.0),
                         size=result.get("volume", plan.get("size", 0.0)),
                     )
+                    self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:
                     summary["rejects"] += 1
             else:

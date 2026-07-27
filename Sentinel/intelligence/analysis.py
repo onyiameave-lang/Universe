@@ -220,7 +220,12 @@ def sentiment(title: str, body: str, llm=None) -> float:
     text = f"{title} {body}".lower()
     b = sum(1 for w in BULLISH if w in text)
     r = sum(1 for w in BEARISH if w in text)
-    lexical = (b - r) / (b + r) if (b + r) else 0.0
+    # Tier 0: negation-aware and reliability-weighted (see
+    # intelligence.term_reliability) — replaces the old flat keyword count,
+    # which was blind to negation (see that module's docstring for the
+    # specific real bug this fixes, and the one hard case it still can't).
+    from intelligence.term_reliability import negation_aware_sentiment, get_tracker  # type: ignore
+    lexical = negation_aware_sentiment(title, body, tracker=get_tracker())
 
     if llm is not None and getattr(llm, "has_any", False) and (b + r) == 0:
         try:
@@ -332,6 +337,18 @@ class EventClusterer:
             avg_sent = sum(a.get("sentiment", 0) for a in arts) / len(arts)
             avg_cred = sum(a.get("credibility", 0.5) for a in arts) / len(arts)
             sources = list({a.get("source") for a in arts})
+
+            # Contradiction detection (Stage 7): don't just average away
+            # disagreement. If sources genuinely diverge on direction for
+            # the SAME event, an averaged sentiment near zero looks like
+            # "nobody has a strong opinion" when the truth is "sources
+            # actively disagree" — a meaningfully different, more useful
+            # signal (e.g. "is inflation slowing or persistent?").
+            sentiments = [a.get("sentiment", 0) for a in arts]
+            bullish_sources = [a.get("source") for a in arts if a.get("sentiment", 0) > 0.2]
+            bearish_sources = [a.get("source") for a in arts if a.get("sentiment", 0) < -0.2]
+            contradiction = bool(bullish_sources) and bool(bearish_sources)
+
             events.append({
                 "event_id":        f"evt-{group[0]}",
                 "article_count":   len(arts),
@@ -344,6 +361,11 @@ class EventClusterer:
                 "avg_credibility": round(avg_cred, 3),
                 "sources":         sources,
                 "cross_source":    len(sources) > 1,
+                "contradiction":   contradiction,
+                "contradiction_detail": ({
+                    "bullish_sources": bullish_sources,
+                    "bearish_sources": bearish_sources,
+                } if contradiction else None),
                 "importance":      round(
                     len(arts) * avg_cred * (1 + len(sources)) / 5.0, 3
                 ),

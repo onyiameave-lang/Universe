@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,11 @@ PRIOR_WIN_RATE = 0.5
 MIN_TRADES_FOR_STATUS = 10
 WATCHLIST_THRESHOLD = 0.40   # live_confidence below this -> watchlist
 RETIRE_THRESHOLD = 0.25      # live_confidence below this -> retire
+# Stage 1 auto re-evolution: minimum time between automatic re-evolve
+# triggers for the SAME (symbol, regime), so a champion stuck in "retire"
+# doesn't kick off a fresh evolution cycle on every single subsequent loss.
+REEVOLVE_COOLDOWN_SEC = 24 * 3600
+REEVOLVE_GENERATIONS = 6   # matches the CLI's own "evolve <S> [gens]" default-ish usage
 
 
 @dataclass
@@ -149,10 +155,9 @@ class ChampionConfidenceTracker:
         """
         Champion Retirement classification (roadmap Phase 1 item 4):
         "active" | "watchlist" | "retire" | "insufficient_data".
-        This only FLAGS a champion for review -- it doesn't automatically
-        replace it. Actually retesting/replacing is a separate step (ties
-        into evolution.py's promotion pipeline) left for a deliberate
-        follow-up rather than automatic mutation here.
+        This only FLAGS a champion for review — see
+        maybe_trigger_reevolution() below for the Stage 1 follow-up that
+        actually acts on a "retire" flag.
         """
         rec = self.get(symbol, regime)
         if rec["demo_trades"] < MIN_TRADES_FOR_STATUS:
@@ -162,6 +167,58 @@ class ChampionConfidenceTracker:
         if rec["live_confidence"] < WATCHLIST_THRESHOLD:
             return "watchlist"
         return "active"
+
+    def maybe_trigger_reevolution(self, oracle_agent, symbol: str, regime: str) -> bool:
+        """
+        Champion Retirement, Stage 1 (roadmap): when a champion has
+        genuinely earned "retire" status (enough real trades, sustained
+        poor live performance), automatically kick off a fresh
+        strategy.evolve cycle for it — "Oracle should come back to the
+        strategy" rather than silently keep trading a champion that's
+        already been flagged as stale.
+
+        Deliberately NOT the causal/ablation analysis discussed separately
+        (which needs much more trade volume to trust) — this just re-runs
+        the same evolution/backtest process a human would trigger manually
+        via `evolve <symbol>`, automatically, with a cooldown so a
+        persistently-retired champion doesn't re-trigger this on every
+        single subsequent loss.
+
+        Runs the actual evolution in a background thread (daemon, fire-
+        and-forget) so it never blocks the Continuous Trade Manager's poll
+        loop, which is what calls this. Returns True if a re-evolution was
+        actually triggered (False if skipped due to cooldown or wrong status).
+        """
+        if self.status(symbol, regime) != "retire":
+            return False
+
+        key = self._key(symbol, regime)
+        rec = self._data.get(key, {})
+        last_triggered = rec.get("last_reevolve_triggered_at")
+        if last_triggered and (time.time() - last_triggered) < REEVOLVE_COOLDOWN_SEC:
+            return False   # already triggered recently — don't spam re-evolution
+
+        rec["last_reevolve_triggered_at"] = time.time()
+        self._data[key] = rec
+        self._save()
+
+        log.warning("[%s::%s] champion RETIRED (live_confidence=%.0f%%, %d demo trades) "
+                    "— auto-triggering strategy.evolve", symbol, regime,
+                    rec.get("live_confidence", 0.0) * 100, rec.get("demo_trades", 0))
+
+        def _run_evolution():
+            try:
+                result = oracle_agent.act("strategy.evolve", {
+                    "symbol": symbol, "generations": REEVOLVE_GENERATIONS,
+                    "_sender": "trade_learning_auto_reevolve",
+                })
+                log.info("[%s] auto re-evolution finished: status=%s",
+                         symbol, (result or {}).get("status"))
+            except Exception as exc:
+                log.warning("[%s] auto re-evolution failed: %s", symbol, exc)
+
+        threading.Thread(target=_run_evolution, name=f"auto-reevolve-{symbol}", daemon=True).start()
+        return True
 
 
 class TradeLearningEngine:
@@ -205,6 +262,10 @@ class TradeLearningEngine:
 
         # 2. Update live champion confidence for this (symbol, entry regime).
         conf_rec = self.confidence.record_outcome(pos.symbol, pos.entry_regime, won, pnl_r)
+        # Champion Retirement, Stage 1: if this outcome pushed the champion
+        # into "retire" status, kick off a fresh evolution cycle for it
+        # (cooldown-limited — see maybe_trigger_reevolution's docstring).
+        self.confidence.maybe_trigger_reevolution(oracle_agent, pos.symbol, pos.entry_regime)
 
         # 3. Build a plain-language lesson. Deliberately descriptive rather
         #    than causal (root-cause inference is the roadmap's V2 "Causal

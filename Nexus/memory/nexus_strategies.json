@@ -839,7 +839,10 @@
         "fastest; single clear specialist"
       ],
       "reasons_against": [
-        "misses multi-domain nuance"
+        "misses multi-domain nuance",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.0362. SLA breach: sentinel exceeded 3.0s",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.3057. multi-domain; not direct",
+        "memory: Strategy 'direct_specialist' for routing failed. Confidence now 0.2666. multi-domain; not direct"
       ],
       "attempts": 0,
       "successes": 0,
@@ -849,7 +852,7 @@
       "status": "candidate",
       "created_at": 1784809444.8907683,
       "lineage": null,
-      "researched": false,
+      "researched": true,
       "confidence": 0.0
     },
     {
@@ -860,10 +863,13 @@
       "handler": "_strat_memory_first",
       "params": {},
       "reasons_for": [
-        "grounded in prior knowledge"
+        "grounded in prior knowledge",
+        "memory: Strategy 'memory_first' for routing worked. Confidence now 0.0945. ok"
       ],
       "reasons_against": [
-        "slightly slower"
+        "slightly slower",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for training (repository=forge)",
+        "memory: Strategy 'memory_first' for routing failed. Confidence now 0.0. no agent for news (repository=sentinel)"
       ],
       "attempts": 0,
       "successes": 0,
@@ -873,7 +879,7 @@
       "status": "candidate",
       "created_at": 1784809444.8943489,
       "lineage": null,
-      "researched": false,
+      "researched": true,
       "confidence": 0.0
     },
     {
@@ -884,21 +890,24 @@
       "handler": "_strat_orchestrate",
       "params": {},
       "reasons_for": [
-        "required for multi-domain queries; parallel + SLA-bounded"
+        "required for multi-domain queries; parallel + SLA-bounded",
+        "memory: Strategy 'orchestrate' for routing worked. Confidence now 0.3. ok",
+        "memory: Strategy 'orchestrate' for routing worked. Confidence now 0.0945. ok",
+        "memory: Strategy 'orchestrate' for routing worked. Confidence now 0.0945. ok"
       ],
       "reasons_against": [
         "uses several agents"
       ],
-      "attempts": 0,
-      "successes": 0,
+      "attempts": 1,
+      "successes": 1,
       "failures": 0,
-      "last_outcome": "",
-      "last_used": 0.0,
+      "last_outcome": "success",
+      "last_used": 1785060172.7120237,
       "status": "candidate",
       "created_at": 1784809444.8978035,
       "lineage": null,
-      "researched": false,
-      "confidence": 0.0
+      "researched": true,
+      "confidence": 0.2065
     }
   ]
 }

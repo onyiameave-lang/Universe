@@ -326,8 +326,8 @@ class OpenAIProvider(_Provider):
 class GeminiProvider(_Provider):
     name = "gemini"
 
-    def __init__(self):
-        self._key = os.getenv("GEMINI_API_KEY", "").strip()
+    def __init__(self, env_var: str = "GEMINI_API_KEY"):
+        self._key = os.getenv(env_var, "").strip()
         self._client = None
         if _HAS_GEMINI and self._key:
             try:
@@ -482,12 +482,12 @@ class LLMClient:
     """
 
     def __init__(self, preferred_order: Optional[List[str]] = None,
-                 max_retries: int = _MAX_RETRIES):
+                 max_retries: int = _MAX_RETRIES, gemini_env_var: str = "GEMINI_API_KEY"):
         self.max_retries = max_retries
         self._providers: Dict[str, _Provider] = {
             "anthropic": AnthropicProvider(),
             "openai":    OpenAIProvider(),
-            "gemini":    GeminiProvider(),
+            "gemini":    GeminiProvider(env_var=gemini_env_var),
             "ollama":    OllamaProvider(),   # local LLM — first when OLLAMA_MODEL is set
         }
         # Default order: Ollama first (free, local, no rate limits) when configured,
