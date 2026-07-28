@@ -73,7 +73,7 @@ class SentinelAgent(BaseAgent):
     domain = "news"
     description = "The institutional news intelligence desk."
     capabilities = ["news.collect", "news.report", "news.sentiment", "news.for_symbol",
-                    "news.events", "news.credibility"]
+                    "news.events", "news.credibility", "news.record_term_outcomes"]
     channels = ["ecosystem.news", "ecosystem.intelligence", "ecosystem.broadcast"]
     memory_namespace = "sentinel_memory"
     security_level = "standard"
@@ -209,6 +209,7 @@ class SentinelAgent(BaseAgent):
         if task == "news.credibility":
             log.info("[sentinel] execute: task='news.credibility' topics=%r — calling engine.gather()", ctx.get("topics"))
             g = self.engine.gather(topics=ctx.get("topics"))
+            from intelligence.term_reliability import get_matched_terms  # type: ignore
             return {"status": "complete", "articles": [
                 {"title": a["title"], "source": a["source"], "credibility": a["credibility"],
                  "misinformation_risk": a["misinformation_risk"], "misinfo_reasons": a["misinfo_reasons"],
@@ -216,8 +217,34 @@ class SentinelAgent(BaseAgent):
                  # these were already computed by engine.gather() but previously
                  # dropped before reaching the caller.
                  "event_type": a.get("event_type", ""), "sentiment": a.get("sentiment", 0.0),
-                 "published_at": a.get("published_at", ""), "summary": a.get("summary", "")}
+                 "published_at": a.get("published_at", ""), "summary": a.get("summary", ""),
+                 # Added for term-reliability grading (Tier 0 self-improvement):
+                 # which specific terms fired, so Oracle can later report back
+                 # whether each one's implied direction matched reality.
+                 "matched_terms": get_matched_terms(a["title"], a.get("summary", ""))}
                 for a in g["articles"]]}
+
+        if task == "news.record_term_outcomes":
+            # Called by Oracle's TradeLearningEngine after a trade closes,
+            # once the real outcome is known — grades each term that fired
+            # in the news that informed the trade against what price
+            # actually did. This is the ONLY thing that makes Tier 0
+            # evolve over time; without callers using this task, term
+            # weights simply stay at their default (1.0, identical to the
+            # old unweighted behavior) forever.
+            from intelligence.term_reliability import get_tracker  # type: ignore
+            outcomes = ctx.get("outcomes", [])
+            tracker = get_tracker()
+            updated = []
+            for item in outcomes:
+                term = item.get("term")
+                correct = item.get("predicted_correctly")
+                if not isinstance(term, str) or not isinstance(correct, bool):
+                    continue
+                rec = tracker.record_outcome(term, correct)
+                updated.append({"term": term, "reliability": rec.get("reliability"),
+                                 "observations": rec.get("observations")})
+            return {"status": "complete", "updated": updated}
         return {"status": "error", "message": f"Unknown task: {task}"}
 
     def get_status(self) -> Dict[str, Any]:

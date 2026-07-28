@@ -586,6 +586,22 @@ class LiveTrader:
         # positions (we never saw their original entry).
         entry_streams = dict(self._open_context.get(symbol, {}) or {})
 
+        # Capture which Sentinel news terms were live at entry (one call,
+        # not repeated every poll) so Demo Trade Learning can later report
+        # each term's real-world accuracy back to Sentinel's term
+        # reliability tracker (Tier 0 self-improvement). Best-effort —
+        # empty dict if Sentinel is unavailable or returns nothing.
+        entry_term_evidence = {"bullish": [], "bearish": []}
+        try:
+            news = self.sentinel.act("news.credibility", {"topics": [symbol], "_sender": "live_trader"}) \
+                if self.sentinel else None
+            for a in (news or {}).get("articles", []):
+                mt = a.get("matched_terms") or {}
+                entry_term_evidence["bullish"].extend(mt.get("bullish", []))
+                entry_term_evidence["bearish"].extend(mt.get("bearish", []))
+        except Exception as exc:
+            log.warning("[%s] could not capture entry term evidence: %s", symbol, exc)
+
         dir_norm = Direction.BUY if direction in ("long", "buy") else Direction.SELL
         with self._manage_lock:
             self._managed_positions[symbol] = Position(
@@ -593,6 +609,7 @@ class LiveTrader:
                 initial_stop=stop, initial_target=target,
                 entry_confidence=confidence, entry_regime=entry_regime,
                 entry_streams=entry_streams, entry_atr=entry_atr,
+                entry_term_evidence=entry_term_evidence,
             )
 
         risk_direction = "long" if dir_norm == Direction.BUY else "short"

@@ -225,11 +225,15 @@ class TradeLearningEngine:
     """
     Ties a closed position's realized outcome back into:
       1. Adaptive fusion weights (oracle_agent.act("fusion.learn", ...))
-      2. Live champion confidence (ChampionConfidenceTracker above)
-      3. Trading benchmark stats (roadmap item 5 — win rate, profit factor,
+      2. Sentinel's Tier 0 term reliability (news.record_term_outcomes) —
+         grades individual news terms against real price movement, so
+         Sentinel's lexical sentiment scoring improves over months
+         (see Sentinel/intelligence/term_reliability.py)
+      3. Live champion confidence (ChampionConfidenceTracker above)
+      4. Trading benchmark stats (roadmap item 5 — win rate, profit factor,
          Sharpe, drawdown, avg trade, avg holding time, consecutive losses,
          recovery factor — see benchmarks/trading_benchmark.py)
-      4. A structured, human-readable lesson (for Chronicle / logs)
+      5. A structured, human-readable lesson (for Chronicle / logs)
     """
 
     def __init__(self, confidence_tracker: Optional[ChampionConfidenceTracker] = None,
@@ -260,14 +264,35 @@ class TradeLearningEngine:
         except Exception as exc:
             log.warning("[%s] fusion.learn failed: %s", pos.symbol, exc)
 
-        # 2. Update live champion confidence for this (symbol, entry regime).
+        # 2. Grade Sentinel's news terms (Tier 0 self-improvement) against
+        #    what price ACTUALLY did between entry and exit — independent
+        #    of whether this particular trade won (a bullish term is
+        #    "correct" if price rose, regardless of whether the overall
+        #    fused decision happened to go short and lose anyway; grading
+        #    against raw price direction is more direct than grading
+        #    against the trade's own win/loss).
+        evidence = getattr(pos, "entry_term_evidence", None) or {}
+        outcomes = []
+        price_rose = exit_price > pos.entry_price
+        for term in evidence.get("bullish", []):
+            outcomes.append({"term": term, "predicted_correctly": price_rose})
+        for term in evidence.get("bearish", []):
+            outcomes.append({"term": term, "predicted_correctly": not price_rose})
+        if outcomes and oracle_agent.sentinel is not None:
+            try:
+                oracle_agent.sentinel.act("news.record_term_outcomes", {
+                    "outcomes": outcomes, "_sender": "trade_learning"})
+            except Exception as exc:
+                log.warning("[%s] news.record_term_outcomes failed: %s", pos.symbol, exc)
+
+        # 3. Update live champion confidence for this (symbol, entry regime).
         conf_rec = self.confidence.record_outcome(pos.symbol, pos.entry_regime, won, pnl_r)
         # Champion Retirement, Stage 1: if this outcome pushed the champion
         # into "retire" status, kick off a fresh evolution cycle for it
         # (cooldown-limited — see maybe_trigger_reevolution's docstring).
         self.confidence.maybe_trigger_reevolution(oracle_agent, pos.symbol, pos.entry_regime)
 
-        # 3. Build a plain-language lesson. Deliberately descriptive rather
+        # 4. Build a plain-language lesson. Deliberately descriptive rather
         #    than causal (root-cause inference is the roadmap's V2 "Causal
         #    Analysis Engine" -- this stays at the level of "what happened").
         regime_note = (f"regime held ({pos.entry_regime})" if exit_regime == pos.entry_regime
@@ -293,7 +318,7 @@ class TradeLearningEngine:
             duration_sec=round(duration_sec, 1), lesson=lesson,
         )
 
-        # 4. Benchmark Everything (roadmap Phase 1 item 5): saved
+        # 5. Benchmark Everything (roadmap Phase 1 item 5): saved
         #    incrementally on every close, not just "per session" — with
         #    intermittent runtime there's no clean session boundary, so
         #    saving on every trade is strictly more robust.

@@ -42,7 +42,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from intelligence.analysis import BULLISH, BEARISH   # the static term sets stay untouched
+from intelligence.analysis import BULLISH, BEARISH, EVENT_TYPES   # the static term sets stay untouched
 
 log = logging.getLogger("sentinel.term_reliability")
 
@@ -104,6 +104,7 @@ class TermReliabilityTracker:
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self._data: Dict[str, Dict[str, Any]] = self._load()
         self._suggestions: List[Dict[str, Any]] = self._data.get("_suggestions", [])
+        self._approved: Dict[str, List[str]] = self._data.get("_approved", {})
 
     def _load(self) -> Dict[str, Any]:
         if self.store_path.exists():
@@ -117,6 +118,7 @@ class TermReliabilityTracker:
         try:
             out = dict(self._data)
             out["_suggestions"] = self._suggestions
+            out["_approved"] = self._approved
             self.store_path.write_text(json.dumps(out, indent=2, sort_keys=True))
         except OSError as exc:
             log.warning("could not persist term_reliability.json: %s", exc)
@@ -176,6 +178,30 @@ class TermReliabilityTracker:
         self._suggestions = [s for s in self._suggestions if s["term"] != term.lower().strip()]
         self._save()
 
+    def approve_suggestion(self, term: str) -> Optional[Dict[str, Any]]:
+        """
+        Promotes a queued suggestion into the persistent approved-keywords
+        store (a separate layer from the static EVENT_TYPES code in
+        intelligence.analysis, which is never mutated — see
+        classify_event()'s use of get_approved_keywords()). Removes it
+        from the suggestion queue. Returns the approved entry, or None if
+        no matching suggestion was found.
+        """
+        term = term.lower().strip()
+        match = next((s for s in self._suggestions if s["term"] == term), None)
+        if match is None:
+            return None
+        event_type = match["event_type"]
+        self._approved.setdefault(event_type, [])
+        if term not in self._approved[event_type]:
+            self._approved[event_type].append(term)
+        self._suggestions = [s for s in self._suggestions if s["term"] != term]
+        self._save()
+        return match
+
+    def get_approved_keywords(self) -> Dict[str, List[str]]:
+        return dict(self._approved)
+
 
 _tracker_singleton: Optional[TermReliabilityTracker] = None
 
@@ -190,6 +216,114 @@ def get_tracker() -> TermReliabilityTracker:
     return _tracker_singleton
 
 
+def get_approved_keywords() -> Dict[str, List[str]]:
+    """Convenience wrapper so intelligence.analysis.classify_event() doesn't
+    need to manage a tracker instance itself."""
+    return get_tracker().get_approved_keywords()
+
+
+def _matched_terms_with_polarity(title: str, body: str) -> List[Tuple[str, str, float]]:
+    """
+    Shared core: finds every BULLISH/BEARISH term present, with its
+    EFFECTIVE polarity after negation-flip is applied ("bullish"/"bearish"
+    — the term's own listed category may differ from its effective one if
+    negation flipped it), and a signed magnitude (+1.0/-1.0, unweighted).
+    Both negation_aware_sentiment() and get_matched_terms() build on this
+    single source of truth so the matching logic only exists once.
+    """
+    text = f"{title} {body}"
+    tokens = _tokenize(text)
+    if not tokens:
+        return []
+    spans = _find_negation_spans(tokens)
+    joined = " ".join(tokens)
+    matches: List[Tuple[str, str, float]] = []
+
+    for category, terms, base_polarity in (("bullish", BULLISH, 1.0), ("bearish", BEARISH, -1.0)):
+        for term in terms:
+            term_tokens = term.split()
+            if len(term_tokens) == 1:
+                for i, tok in enumerate(tokens):
+                    # startswith (not exact ==) restores the old substring-
+                    # style recall for plurals/inflections ("cuts" matches
+                    # "cut", "surges" matches "surge") while still giving us
+                    # a token index to check against negation spans.
+                    if tok.startswith(term):
+                        negated = _in_any_span(i, spans)
+                        signed = -base_polarity if negated else base_polarity
+                        matches.append((term, "bullish" if signed > 0 else "bearish", signed))
+            elif term in joined:
+                idx = len(joined[:joined.find(term)].split())
+                negated = _in_any_span(idx, spans)
+                signed = -base_polarity if negated else base_polarity
+                matches.append((term, "bullish" if signed > 0 else "bearish", signed))
+    return matches
+
+
+_STOPWORDS = frozenset((
+    "the", "a", "an", "is", "are", "was", "were", "to", "of", "in", "on", "for",
+    "and", "but", "with", "as", "at", "by", "from", "this", "that", "its", "it",
+    "despite", "amid", "after", "before", "new", "says", "said", "will", "would",
+    "has", "have", "had", "be", "been", "being", "than", "into", "over", "more",
+))
+
+
+def candidate_keywords_from_miss(title: str, event_type: str) -> List[str]:
+    """
+    LLM-as-teacher vocabulary discovery (Tier 0 mechanism 2): when the
+    lexical classify_event() misses an article entirely (falls through to
+    "general") but Deep Analysis confidently classifies it as something
+    real, this extracts candidate bigrams that might be the missing
+    pattern -- e.g. "cuts rates" or "signals hikes" for the Fed headline
+    that classify_event() missed because it only recognizes the exact
+    phrase "rate cut"/"rate hike".
+
+    Deliberately conservative: skips stopwords, skips bigrams where BOTH
+    words are already part of some existing category's keyword list (not
+    a new pattern), and returns at most 3 candidates. These are meant for
+    a human to review via get_suggested_terms() -- never auto-added.
+    """
+    tokens = _tokenize(title)
+    if len(tokens) < 2:
+        return []
+
+    known_words = set()
+    for terms in EVENT_TYPES.values():
+        for t in terms:
+            known_words.update(t.split())
+
+    candidates: List[str] = []
+    for i in range(len(tokens) - 1):
+        w1, w2 = tokens[i], tokens[i + 1]
+        if w1 in _STOPWORDS or w2 in _STOPWORDS:
+            continue
+        if w1 in known_words and w2 in known_words:
+            continue   # both words already recognized somewhere -- not a new gap
+        candidates.append(f"{w1} {w2}")
+
+    seen = set()
+    out = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out[:3]
+
+
+def get_matched_terms(title: str, body: str) -> Dict[str, List[str]]:
+    """
+    Returns {"bullish": [...], "bearish": [...]} -- the terms that
+    actually fired, using their EFFECTIVE (post-negation) polarity. This is
+    what a caller (Oracle) should capture at trade-entry time, so that
+    later, once the trade closes and the real outcome is known, each term
+    can be graded against reality via record_outcome().
+    """
+    out: Dict[str, List[str]] = {"bullish": [], "bearish": []}
+    for term, effective_category, _signed in _matched_terms_with_polarity(title, body):
+        out[effective_category].append(term)
+    return out
+
+
 def negation_aware_sentiment(title: str, body: str, tracker: Optional[TermReliabilityTracker] = None) -> float:
     """
     Tier 0 sentiment: same bullish/bearish term sets as before, but now
@@ -198,41 +332,10 @@ def negation_aware_sentiment(title: str, body: str, tracker: Optional[TermReliab
     1.0 -- identical to the old unweighted behavior -- until real outcomes
     accumulate via record_outcome()).
     """
-    text = f"{title} {body}"
-    tokens = _tokenize(text)
-    if not tokens:
-        return 0.0
-    spans = _find_negation_spans(tokens)
-
     score = 0.0
-    joined = " ".join(tokens)
-    for term in BULLISH:
-        term_tokens = term.split()
-        if len(term_tokens) == 1:
-            for i, tok in enumerate(tokens):
-                if tok == term:
-                    polarity = -1.0 if _in_any_span(i, spans) else 1.0
-                    w = tracker.weight(term) if tracker else 1.0
-                    score += polarity * w
-        elif term in joined:
-            idx = len(joined[:joined.find(term)].split())
-            polarity = -1.0 if _in_any_span(idx, spans) else 1.0
-            w = tracker.weight(term) if tracker else 1.0
-            score += polarity * w
-
-    for term in BEARISH:
-        term_tokens = term.split()
-        if len(term_tokens) == 1:
-            for i, tok in enumerate(tokens):
-                if tok == term:
-                    polarity = 1.0 if _in_any_span(i, spans) else -1.0
-                    w = tracker.weight(term) if tracker else 1.0
-                    score += polarity * w
-        elif term in joined:
-            idx = len(joined[:joined.find(term)].split())
-            polarity = 1.0 if _in_any_span(idx, spans) else -1.0
-            w = tracker.weight(term) if tracker else 1.0
-            score += polarity * w
+    for term, _effective_category, signed in _matched_terms_with_polarity(title, body):
+        w = tracker.weight(term) if tracker else 1.0
+        score += signed * w
 
     if score == 0.0:
         return 0.0

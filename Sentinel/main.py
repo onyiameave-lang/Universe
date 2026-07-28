@@ -63,6 +63,21 @@ def _try_chronicle():
 
         _unload_conflicting_modules()
 
+        # FIX: sys.modules gets purged above, but chron_root itself was
+        # never removed from sys.path — it would sit there for the rest of
+        # the process, permanently ahead of Sentinel's own directory. Any
+        # LATER deferred/lazy import of a name in CONFLICTING_MODULES
+        # (e.g. "intelligence", "core") would then incorrectly resolve
+        # against Chronicle's directory instead of Sentinel's own, since
+        # sys.path order — unlike sys.modules — was never restored. This
+        # is exactly what broke Sentinel's own "intelligence.term_reliability"
+        # import after Chronicle loaded. Removing it here restores
+        # Sentinel's own directory as the effective "home" for imports.
+        try:
+            sys.path.remove(str(chron_root))
+        except ValueError:
+            pass
+
         return c
     except Exception:
         return None
@@ -82,7 +97,7 @@ def main():
     print("=" * 64)
     print(f"  Chronicle: {chronicle is not None} | Brain: {agent.has_brain}")
     print("  Commands: report [topics] | sentiment <symbol> | events [topics] |")
-    print("            credibility [topics] | status | quit")
+    print("            credibility [topics] | status | suggestions | approve <i> | dismiss <i> | quit")
 
     while True:
         try:
@@ -112,6 +127,52 @@ def main():
 
             elif cmd == "status":
                 print(json.dumps(agent.get_status(), indent=2))
+
+            elif cmd == "suggestions":
+                # Tier 0 mechanism 2 (LLM-as-teacher vocabulary discovery):
+                # review candidate keywords queued when Deep Analysis caught
+                # something the lexical classifier missed. Never
+                # auto-applied — approve/dismiss explicitly below.
+                from intelligence.term_reliability import get_tracker  # type: ignore
+                pending = get_tracker().get_suggested_terms()
+                if not pending:
+                    print(" No pending suggestions.")
+                else:
+                    print(f"\n {len(pending)} pending suggestion(s):")
+                    for i, s in enumerate(pending):
+                        print(f"  [{i}] {s['term']!r} -> {s['event_type']}   "
+                              f"(from: \"{s['example'][:70]}\")")
+                    print(" Use: approve <index>  |  dismiss <index>")
+
+            elif cmd == "approve" and len(parts) >= 2:
+                from intelligence.term_reliability import get_tracker  # type: ignore
+                tracker = get_tracker()
+                pending = tracker.get_suggested_terms()
+                try:
+                    idx = int(parts[1])
+                    term = pending[idx]["term"]
+                except (ValueError, IndexError):
+                    print(f" No suggestion at index {parts[1]!r}. Run 'suggestions' to see valid indices.")
+                else:
+                    approved = tracker.approve_suggestion(term)
+                    if approved:
+                        print(f" Approved {term!r} for event_type={approved['event_type']!r}. "
+                              f"classify_event() will now recognize it.")
+                    else:
+                        print(f" Could not find suggestion {term!r} (already handled?).")
+
+            elif cmd == "dismiss" and len(parts) >= 2:
+                from intelligence.term_reliability import get_tracker  # type: ignore
+                tracker = get_tracker()
+                pending = tracker.get_suggested_terms()
+                try:
+                    idx = int(parts[1])
+                    term = pending[idx]["term"]
+                except (ValueError, IndexError):
+                    print(f" No suggestion at index {parts[1]!r}. Run 'suggestions' to see valid indices.")
+                else:
+                    tracker.dismiss_suggestion(term)
+                    print(f" Dismissed {term!r}.")
 
             else:
                 print(" Unknown command. Try: report EURUSD inflation")

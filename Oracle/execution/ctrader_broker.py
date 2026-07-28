@@ -190,9 +190,46 @@ class CTraderBroker:
         # Pull the symbol list once — needed to translate symbol name <-> id.
         self._load_symbols(ProtoOASymbolsListReq)
 
+        # Pull real account balance/equity/currency. This was previously
+        # imported (ProtoOATraderReq) but never actually sent — a real bug
+        # found on first live connection: balance/equity/currency always
+        # stayed at their 0.0/"" defaults despite a successful connection.
+        balance, equity, currency = 0.0, 0.0, ""
+        try:
+            trader = None
+            for attempt in (1, 2):
+                trader_req = ProtoOATraderReq()
+                trader_req.ctidTraderAccountId = self._account_id
+                trader_payload = self._send_and_wait(trader_req, timeout=_DEFAULT_TIMEOUT_SEC)
+                trader = getattr(trader_payload, "trader", None) if trader_payload is not None else None
+                if trader is not None:
+                    break
+                if attempt == 1:
+                    log.info("cTrader: account info fetch timed out on first attempt, retrying once...")
+                    time.sleep(1.0)
+            if trader is not None:
+                money_digits = getattr(trader, "moneyDigits", 2) or 2
+                scale = 10 ** money_digits
+                raw_balance = getattr(trader, "balance", 0)
+                balance = raw_balance / scale
+                equity = balance   # no open positions' floating P&L folded in yet — see note below
+                # CORRECTED based on real diagnostic output: ProtoOATrader
+                # has depositAssetId (a numeric asset ID, e.g. 15) — NOT a
+                # depositCurrency string as first guessed. Resolving asset
+                # ID -> currency code (e.g. 15 -> "USD") needs a separate
+                # ProtoOAAssetListReq lookup, not yet built. Storing the raw
+                # ID for now rather than pretending we have the currency code.
+                deposit_asset_id = getattr(trader, "depositAssetId", None)
+                currency = f"asset_id:{deposit_asset_id}" if deposit_asset_id is not None else ""
+            else:
+                log.warning("cTrader: account info fetch timed out twice; balance/equity will show 0.0")
+        except Exception as exc:
+            log.warning("cTrader: could not fetch account balance/equity: %s", exc)
+
         self.status = BrokerStatus(connected=True,
                                     account_type="demo" if self._use_demo else "live",
-                                    login=self._account_id)
+                                    login=self._account_id,
+                                    balance=balance, equity=equity, currency=currency)
         log.info("cTrader connected: account %s (%s)", self._account_id,
                  "demo" if self._use_demo else "live")
         return self.status.to_dict()
@@ -223,15 +260,24 @@ class CTraderBroker:
         self._update_cache_from_payload(payload)
 
     def _load_symbols(self, ProtoOASymbolsListReq) -> None:
-        req = ProtoOASymbolsListReq()
-        req.ctidTraderAccountId = self._account_id
-        payload = self._send_and_wait(req, timeout=_DEFAULT_TIMEOUT_SEC)
-        if payload is None:
-            log.warning("cTrader: symbol list fetch timed out; symbol translation will fail")
-            return
-        for sym in getattr(payload, "symbol", []):
-            self._symbol_id_by_name[sym.symbolName.upper()] = sym.symbolId
-            self._symbol_name_by_id[sym.symbolId] = sym.symbolName
+        # Retry once: found on first live connection that the FIRST request
+        # sent right after auth completes is more prone to timing out than
+        # ones sent slightly later (likely a brief server-side settle delay
+        # right after ProtoOAAccountAuthRes) — a genuine timing issue, not a
+        # schema problem, confirmed by a manual retry succeeding fine.
+        for attempt in (1, 2):
+            req = ProtoOASymbolsListReq()
+            req.ctidTraderAccountId = self._account_id
+            payload = self._send_and_wait(req, timeout=_DEFAULT_TIMEOUT_SEC)
+            if payload is not None:
+                for sym in getattr(payload, "symbol", []):
+                    self._symbol_id_by_name[sym.symbolName.upper()] = sym.symbolId
+                    self._symbol_name_by_id[sym.symbolId] = sym.symbolName
+                return
+            if attempt == 1:
+                log.info("cTrader: symbol list fetch timed out on first attempt, retrying once...")
+                time.sleep(1.0)
+        log.warning("cTrader: symbol list fetch timed out twice; symbol translation will fail")
 
     # ── the sync bridge ───────────────────────────────────────────────────
 

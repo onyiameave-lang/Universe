@@ -205,6 +205,18 @@ class IntelligenceEngine:
             if deep is not None:
                 a["lexical_event_type"] = a["event_type"]
                 a["lexical_sentiment"] = a["sentiment"]
+                # LLM-as-teacher vocabulary discovery (Tier 0 mechanism 2):
+                # if the lexical path missed this entirely ("general") but
+                # Deep Analysis confidently classifies it as something
+                # real, queue candidate keywords for human review — never
+                # auto-added to the live classify_event() vocabulary.
+                if (a["lexical_event_type"] == "general" and deep["event_type"] != "general"
+                        and deep["confidence"] >= 0.6):
+                    from intelligence.term_reliability import (          # type: ignore
+                        candidate_keywords_from_miss, get_tracker,
+                    )
+                    for cand in candidate_keywords_from_miss(a["title"], deep["event_type"]):
+                        get_tracker().suggest_term(cand, deep["event_type"], a["title"])
                 a["event_type"] = deep["event_type"]
                 a["sentiment"] = deep["sentiment"]["economic"]
         # corroboration then credibility + misinfo

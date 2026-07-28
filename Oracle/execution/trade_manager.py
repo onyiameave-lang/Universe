@@ -85,6 +85,7 @@ class Position:
     entry_time: float = field(default_factory=time.time)
     size: float = 1.0
     entry_streams: Dict[str, Any] = field(default_factory=dict)  # per-source signal breakdown at entry, for fusion.learn
+    entry_term_evidence: Dict[str, list] = field(default_factory=dict)  # {"bullish":[...],"bearish":[...]} terms live at entry — for Sentinel's term-reliability grading
     entry_atr: Optional[float] = None   # volatility at entry, for Volatility Exit (roadmap Phase 2 item 8)
 
     # Mutable trailing state -- the manager updates these as it runs.

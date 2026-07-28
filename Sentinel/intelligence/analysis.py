@@ -195,10 +195,22 @@ def classify_event(title: str, body: str) -> str:
     S-5b: uses priority-ordered list. First type with ≥1 hit wins.
     This prevents "cut" (OPEC production cuts) from matching monetary_policy
     before commodity gets a chance.
+
+    Also checks human-approved keywords (see intelligence.term_reliability's
+    suggest_term()/approve_suggestion() — LLM-as-teacher vocabulary
+    discovery) for each event type, in the SAME pass as that type's static
+    terms — so approved additions only add matching options within their
+    own category, never disturbing priority order across categories.
     """
     text = f"{title} {body}".lower()
+    try:
+        from intelligence.term_reliability import get_approved_keywords  # type: ignore
+        approved = get_approved_keywords()
+    except Exception:
+        approved = {}
     for etype, terms in _PRIORITY_EVENT_TYPES:
-        if any(t in text for t in terms):
+        combined = list(terms) + approved.get(etype, [])
+        if any(t in text for t in combined):
             return etype
     return "general"
 
