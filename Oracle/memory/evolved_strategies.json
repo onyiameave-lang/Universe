@@ -5852,13 +5852,13 @@
     "symbol": "GBPJPY",
     "regime": "trending_up",
     "genome": {
-      "genome_id": "mut-d6cd5f",
-      "generation": 28,
+      "genome_id": "mut-e6e38b",
+      "generation": 56,
       "parents": [
-        "xov-3e348b"
+        "xov-80309e"
       ],
       "fitness": 4.6575,
-      "backtests": 15,
+      "backtests": 30,
       "best_return": 0.0036,
       "best_sharpe": 0.0,
       "modules": {
@@ -5876,38 +5876,39 @@
         "trend": {
           "logic_type": "market_structure",
           "params": {
-            "lookback": 20,
-            "slow": 47
+            "lookback": 22,
+            "slow": 40
           }
         },
         "momentum": {
-          "logic_type": "stochastic",
+          "logic_type": "cci",
           "params": {
-            "k_period": 16,
-            "d_period": 3,
-            "upper": 81,
-            "lower": 20
+            "period": 20,
+            "upper": 85,
+            "lower": 15
           }
         },
         "volatility": {
-          "logic_type": "atr_expansion",
+          "logic_type": "atr_contraction",
           "params": {
             "period": 14,
-            "expansion_ratio": 1.2
+            "contraction_ratio": 0.7
           }
         },
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.15
+            "base_threshold": 0.187,
+            "regime_bonus": 0.15,
+            "threshold": 0.5
           }
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "time_exit",
           "params": {
-            "sl_mult": 1.5,
-            "tp_mult": 4.0
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "risk": {
@@ -5936,21 +5937,21 @@
       "status": "complete",
       "trades": 2,
       "win_rate": 1.0,
-      "total_return": 0.0229,
-      "final_equity": 10229.5,
+      "total_return": 0.0234,
+      "final_equity": 10233.98,
       "profit_factor": null,
       "max_drawdown": 0.0,
-      "sharpe_proxy": 3.255,
+      "sharpe_proxy": 3.544,
       "sortino_proxy": 0.0,
       "recovery_factor": 0.0,
-      "expectancy": 114.75,
+      "expectancy": 116.99,
       "consistency": 1.0,
-      "avg_pnl": 114.75
+      "avg_pnl": 116.99
     },
-    "certified_at": 1785235176.9093206,
-    "generation": 28,
+    "certified_at": 1785260307.1083846,
+    "generation": 56,
     "parents": [
-      "xov-3e348b"
+      "xov-80309e"
     ]
   },
   "FTSE::trending_up": {
