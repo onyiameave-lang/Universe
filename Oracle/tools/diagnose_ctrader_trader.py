@@ -1,33 +1,25 @@
-import time
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import os
 from execution.ctrader_broker import CTraderBroker
-from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAReconcileReq
 
 broker = CTraderBroker()
-print("Connecting...")
-print(broker.connect())
+result = broker.connect()
+print("connect() result:", result)
 print()
 
-plan = {"approved": True, "symbol": "EURUSD", "direction": "long", "size": 1000}
-print("Placing a fresh test order:", plan)
-result = broker.place_order(plan)
-print("place_order() result:", result)
-print()
+# Manually send the trader request again and print the RAW payload,
+# so we can see the actual field names instead of guessing.
+from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOATraderReq
 
-print("Waiting 3 seconds before reconciling...")
-time.sleep(3)
-
-req = ProtoOAReconcileReq()
+req = ProtoOATraderReq()
 req.ctidTraderAccountId = broker._account_id
-payload = broker._send_and_wait(req)
+payload = broker._send_and_wait(req, timeout=10)
 
-print("Raw ReconcileRes payload type:", type(payload))
+print("Raw payload type:", type(payload))
 print()
-print("Raw ReconcileRes contents:")
+print("Raw payload contents:")
 print(payload)
 print()
-if payload is not None:
-    print("Top-level fields available:", [f.name for f, _ in payload.ListFields()])
-
-print()
-print("!!! IMPORTANT: a position may still be open on your account after this !!!")
-print("!!! Check your cTrader app and close it manually if needed.            !!!")
+print("Top-level fields available:", [f.name for f, _ in payload.ListFields()])

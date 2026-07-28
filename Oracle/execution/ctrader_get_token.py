@@ -14,6 +14,13 @@ the token, not exercising every API command.
 Prerequisites:
   pip install ctrader-open-api --break-system-packages
 
+  NOTE: If you see an `AttributeError` from `OpenSSL.crypto` on first run
+  (e.g., `module 'lib' has no attribute 'GEN_EMAIL'`), it's likely due to
+  an incompatible version of the `cryptography` package. This can typically
+  be fixed by running:
+    `pip install --upgrade --force-reinstall cryptography pyOpenSSL`
+
+
 Before running, make sure your app on connect.spotware.com has a
 Redirect URI registered — for a personal/sandbox setup, something like
 http://localhost is standard (check what you registered under app "Universe").

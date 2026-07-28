@@ -17,6 +17,13 @@ connection -- this sandbox has no network access and cannot install the
 real output the first time this actually runs on your machine/VPS,
 the same way we caught real bugs elsewhere in this codebase by running it.
 
+**Dependency note:** The `ctrader-open-api` package relies on `twisted`,
+which in turn uses `pyOpenSSL`. If you see an `AttributeError` from
+`OpenSSL.crypto` on first run (e.g., `module 'lib' has no attribute 'GEN_EMAIL'`),
+it's likely due to an incompatible version of the `cryptography` package.
+This can typically be fixed by running:
+  `pip install --upgrade --force-reinstall cryptography pyOpenSSL`
+
 Why this needs a background thread
 ------------------------------------
 cTrader's official Python SDK is built on Twisted (an async/event-loop
@@ -310,17 +317,28 @@ class CTraderBroker:
 
     def _update_cache_from_payload(self, payload) -> None:
         """ProtoOAReconcileReq's response and ProtoOAExecutionEvent both
-        carry ProtoOAPosition entries (directly, or nested under .position
-        for execution events) -- normalize whichever shows up into our
-        cache using the same dict shape MT5Broker.positions() returns."""
+        carry a field literally named "position" -- but with DIFFERENT
+        cardinality: ProtoOAReconcileRes's is a REPEATED field (a list of
+        every open position), while ProtoOAExecutionEvent's is a single
+        message (the one position that event is about). Confirmed via a
+        real diagnostic dump on first live connection -- the old code
+        assumed .position was always a single object, so for
+        ProtoOAReconcileRes it was silently calling getattr(list, ...)
+        instead of reading a real position, leaving the cache empty even
+        with a genuinely open position on the account.
+        """
+        raw = getattr(payload, "position", None)
         positions = []
-        if hasattr(payload, "position") and not hasattr(payload, "positions"):
-            # A single position, e.g. inside a ProtoOAExecutionEvent.
-            pos = payload.position
-            if pos and getattr(pos, "positionId", None):
-                positions = [pos]
-        elif hasattr(payload, "position") and hasattr(payload, "positions"):
-            positions = list(payload.positions)   # ProtoOAReconcileRes-style plural field
+        if raw is not None:
+            try:
+                # Repeated field (ProtoOAReconcileRes case): iterating a
+                # singular protobuf Message raises TypeError, so this only
+                # succeeds for the actual list-like repeated-field case.
+                positions = [p for p in raw if getattr(p, "positionId", None)]
+            except TypeError:
+                # Singular field (ProtoOAExecutionEvent case).
+                if getattr(raw, "positionId", None):
+                    positions = [raw]
 
         with self._cache_lock:
             for pos in positions:
@@ -337,11 +355,6 @@ class CTraderBroker:
                     "profit": 0.0,   # unrealized P&L needs a separate PnL request; left 0 here
                     "ticket": pos.positionId,
                 }
-            # An execution event closing a position removes it.
-            if hasattr(payload, "executionType") and getattr(payload, "executionType", None) == 3:
-                # 3 == ORDER_FILLED for a closing order in some SDK versions;
-                # safer check: position no longer present in a fresh reconcile.
-                pass
 
     # ── public interface matching MT5Broker ──────────────────────────────
 
@@ -425,6 +438,14 @@ class CTraderBroker:
         with self._cache_lock:
             pos = self._positions_cache.get(ticket)
         if pos is None:
+            # Cache might just be empty because nothing has called
+            # positions() yet in this session -- refresh once before
+            # concluding the position doesn't exist, rather than relying
+            # on the caller having called positions() first.
+            self.positions()
+            with self._cache_lock:
+                pos = self._positions_cache.get(ticket)
+        if pos is None:
             return {"status": "error", "reason": f"position {ticket} not found"}
 
         req = ProtoOAClosePositionReq()
@@ -452,6 +473,10 @@ class CTraderBroker:
 
         with self._cache_lock:
             pos = self._positions_cache.get(ticket)
+        if pos is None:
+            self.positions()
+            with self._cache_lock:
+                pos = self._positions_cache.get(ticket)
         if pos is None:
             return {"status": "error", "reason": f"position {ticket} not found"}
 
