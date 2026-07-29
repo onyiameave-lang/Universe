@@ -1,0 +1,54 @@
+# Oracle cTrader Demo Trader — systemd service
+# ================================================
+# Keeps ctrader_demo_trader.py running continuously: auto-starts on VPS
+# boot, auto-restarts if it crashes, logs to the system journal.
+#
+# Install (as root or with sudo):
+#   1. Edit the paths/user below to match your actual VPS setup.
+#   2. sudo cp oracle-ctrader.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable oracle-ctrader   # start on every boot
+#   5. sudo systemctl start oracle-ctrader    # start it now
+#
+# Check on it:
+#   sudo systemctl status oracle-ctrader      # is it running?
+#   sudo journalctl -u oracle-ctrader -f      # live logs (Ctrl+C to stop watching)
+#   sudo systemctl restart oracle-ctrader     # restart manually
+#   sudo systemctl stop oracle-ctrader        # stop it
+#
+# This is what turns "I have to run this every day" into "it just runs" —
+# once enabled, it survives VPS reboots and crashes on its own.
+
+[Unit]
+Description=Oracle cTrader Demo Trader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# CHANGE THIS to the actual user you'll run under (not root, for safety):
+User=oracle
+# CHANGE THIS to wherever you cloned/copied the repo on the VPS:
+WorkingDirectory=/home/oracle/Universe/Universal_AI/Oracle
+# CHANGE THIS to your venv's python if using one (recommended):
+ExecStart=/home/oracle/Universe/Universal_AI/Oracle/venv/bin/python execution/ctrader_demo_trader.py --preset live
+
+# .env file with CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET / etc. — systemd
+# reads this directly, no need for the script itself to call load_dotenv().
+EnvironmentFile=/home/oracle/Universe/Universal_AI/Oracle/.env
+
+# Auto-restart on crash, but not in a tight loop if something is
+# fundamentally broken (e.g. bad credentials) — waits 30s between restarts,
+# gives up after 5 failures within 10 minutes so it doesn't spam-hammer
+# cTrader's servers with bad auth attempts.
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Logs go to the systemd journal automatically (see journalctl command above)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -40,11 +40,42 @@ try:
     from core.collectors import CollectorRegistry, _topic_matches_article             # type: ignore
 except ImportError:
     from Sentinel.core.collectors import CollectorRegistry, _topic_matches_article     # type: ignore
-from intelligence.credibility import (credibility_score, misinformation_risk,        # type: ignore
-                                      compute_corroboration)
-from intelligence.analysis import (extract_symbols, classify_event, sentiment,       # type: ignore
-                                   EventClusterer)
-from intelligence.deep_analysis import deep_analyze                                 # type: ignore
+try:
+    from intelligence.credibility import (credibility_score, misinformation_risk,    # type: ignore
+                                          compute_corroboration)
+except ImportError:
+    from Sentinel.intelligence.credibility import (credibility_score, misinformation_risk,  # type: ignore
+                                                    compute_corroboration)
+try:
+    from intelligence.analysis import (extract_symbols, classify_event, sentiment,   # type: ignore
+                                       EventClusterer)
+except ImportError:
+    from Sentinel.intelligence.analysis import (extract_symbols, classify_event,     # type: ignore
+                                                 sentiment, EventClusterer)
+try:
+    from intelligence.deep_analysis import deep_analyze                             # type: ignore
+except ImportError:
+    from Sentinel.intelligence.deep_analysis import deep_analyze                    # type: ignore
+# Module-level import (not deferred) is deliberate: this runs while
+# Sentinel's own directory is still on sys.path (during _load()'s
+# exec_module() call when Oracle loads Sentinel as a peer). That caches
+# intelligence.term_reliability in sys.modules permanently — every later
+# DEFERRED import of it elsewhere (in intelligence.analysis, in
+# sentinel_agent.py's task handlers) then resolves instantly from that
+# cache, regardless of sys.path state at that later point. Without this,
+# those deferred imports fail once _load() pops Sentinel's directory from
+# sys.path after construction — a real bug found and fixed this session.
+# UPDATE: this alone wasn't sufficient either — a LATER _unload_conflicting_
+# modules() call (made before loading the NEXT peer, e.g. Pulse) wipes this
+# cache again, and the next peer's own "intelligence" package can then take
+# over the bare name permanently. The actual fix is the dual-import fallback
+# pattern now applied at every deferred call site (see analysis.py,
+# sentinel_agent.py, and this file's own imports above) — this module-level
+# import is kept as a harmless first line of defense, not the real fix.
+try:
+    import intelligence.term_reliability                                            # type: ignore  # noqa: F401
+except ImportError:
+    import Sentinel.intelligence.term_reliability                                   # type: ignore  # noqa: F401
 
 # How old (seconds) a Chronicle-cached news report can be before we bypass it
 # and fetch fresh data.  Default: 15 minutes.
@@ -212,9 +243,14 @@ class IntelligenceEngine:
                 # auto-added to the live classify_event() vocabulary.
                 if (a["lexical_event_type"] == "general" and deep["event_type"] != "general"
                         and deep["confidence"] >= 0.6):
-                    from intelligence.term_reliability import (          # type: ignore
-                        candidate_keywords_from_miss, get_tracker,
-                    )
+                    try:
+                        from intelligence.term_reliability import (          # type: ignore
+                            candidate_keywords_from_miss, get_tracker,
+                        )
+                    except ImportError:
+                        from Sentinel.intelligence.term_reliability import (  # type: ignore
+                            candidate_keywords_from_miss, get_tracker,
+                        )
                     for cand in candidate_keywords_from_miss(a["title"], deep["event_type"]):
                         get_tracker().suggest_term(cand, deep["event_type"], a["title"])
                 a["event_type"] = deep["event_type"]

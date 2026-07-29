@@ -42,7 +42,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from intelligence.analysis import BULLISH, BEARISH, EVENT_TYPES   # the static term sets stay untouched
+try:
+    from intelligence.analysis import BULLISH, BEARISH, EVENT_TYPES   # the static term sets stay untouched
+except ImportError:
+    from Sentinel.intelligence.analysis import BULLISH, BEARISH, EVENT_TYPES   # type: ignore
 
 log = logging.getLogger("sentinel.term_reliability")
 

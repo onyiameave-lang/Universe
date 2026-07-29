@@ -17,13 +17,6 @@ connection -- this sandbox has no network access and cannot install the
 real output the first time this actually runs on your machine/VPS,
 the same way we caught real bugs elsewhere in this codebase by running it.
 
-**Dependency note:** The `ctrader-open-api` package relies on `twisted`,
-which in turn uses `pyOpenSSL`. If you see an `AttributeError` from
-`OpenSSL.crypto` on first run (e.g., `module 'lib' has no attribute 'GEN_EMAIL'`),
-it's likely due to an incompatible version of the `cryptography` package.
-This can typically be fixed by running:
-  `pip install --upgrade --force-reinstall cryptography pyOpenSSL`
-
 Why this needs a background thread
 ------------------------------------
 cTrader's official Python SDK is built on Twisted (an async/event-loop
@@ -63,7 +56,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("oracle.ctrader")
 
@@ -197,41 +190,7 @@ class CTraderBroker:
         # Pull the symbol list once — needed to translate symbol name <-> id.
         self._load_symbols(ProtoOASymbolsListReq)
 
-        # Pull real account balance/equity/currency. This was previously
-        # imported (ProtoOATraderReq) but never actually sent — a real bug
-        # found on first live connection: balance/equity/currency always
-        # stayed at their 0.0/"" defaults despite a successful connection.
-        balance, equity, currency = 0.0, 0.0, ""
-        try:
-            trader = None
-            for attempt in (1, 2):
-                trader_req = ProtoOATraderReq()
-                trader_req.ctidTraderAccountId = self._account_id
-                trader_payload = self._send_and_wait(trader_req, timeout=_DEFAULT_TIMEOUT_SEC)
-                trader = getattr(trader_payload, "trader", None) if trader_payload is not None else None
-                if trader is not None:
-                    break
-                if attempt == 1:
-                    log.info("cTrader: account info fetch timed out on first attempt, retrying once...")
-                    time.sleep(1.0)
-            if trader is not None:
-                money_digits = getattr(trader, "moneyDigits", 2) or 2
-                scale = 10 ** money_digits
-                raw_balance = getattr(trader, "balance", 0)
-                balance = raw_balance / scale
-                equity = balance   # no open positions' floating P&L folded in yet — see note below
-                # CORRECTED based on real diagnostic output: ProtoOATrader
-                # has depositAssetId (a numeric asset ID, e.g. 15) — NOT a
-                # depositCurrency string as first guessed. Resolving asset
-                # ID -> currency code (e.g. 15 -> "USD") needs a separate
-                # ProtoOAAssetListReq lookup, not yet built. Storing the raw
-                # ID for now rather than pretending we have the currency code.
-                deposit_asset_id = getattr(trader, "depositAssetId", None)
-                currency = f"asset_id:{deposit_asset_id}" if deposit_asset_id is not None else ""
-            else:
-                log.warning("cTrader: account info fetch timed out twice; balance/equity will show 0.0")
-        except Exception as exc:
-            log.warning("cTrader: could not fetch account balance/equity: %s", exc)
+        balance, equity, currency = self._fetch_balance(ProtoOATraderReq)
 
         self.status = BrokerStatus(connected=True,
                                     account_type="demo" if self._use_demo else "live",
@@ -498,4 +457,59 @@ class CTraderBroker:
         return {"status": "modified", "ticket": ticket}
 
     def account(self) -> Dict[str, Any]:
+        """
+        Refreshes REAL balance from the server on every call, instead of
+        returning a frozen snapshot from connect() time (a real bug found
+        this session — a kill-switch loss check reading a value that never
+        updates can never actually trigger, since equity would always
+        equal its own starting value).
+
+        Honest remaining limitation: this refreshes BALANCE (realized
+        P&L — e.g. a closed trade's profit/loss), but not intra-trade
+        floating P&L from currently-open positions, which needs a separate
+        ProtoOAGetPositionUnrealizedPnLReq call not yet built. So a
+        kill-switch check using this WILL catch realized losses correctly,
+        but won't see an open position's floating drawdown until it closes.
+        """
+        if not self.status.connected:
+            return self.status.to_dict()
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOATraderReq
+        except ImportError:
+            return self.status.to_dict()
+        balance, equity, currency = self._fetch_balance(ProtoOATraderReq)
+        self.status.balance = balance
+        self.status.equity = equity
+        self.status.currency = currency
         return self.status.to_dict()
+
+    def _fetch_balance(self, ProtoOATraderReq) -> Tuple[float, float, str]:
+        """Shared by connect() and account() -- sends ProtoOATraderReq and
+        returns (balance, equity, currency). See account()'s docstring for
+        the honest limitation on what "equity" actually reflects here."""
+        balance, equity, currency = 0.0, 0.0, ""
+        try:
+            trader = None
+            for attempt in (1, 2):
+                trader_req = ProtoOATraderReq()
+                trader_req.ctidTraderAccountId = self._account_id
+                trader_payload = self._send_and_wait(trader_req, timeout=_DEFAULT_TIMEOUT_SEC)
+                trader = getattr(trader_payload, "trader", None) if trader_payload is not None else None
+                if trader is not None:
+                    break
+                if attempt == 1:
+                    log.info("cTrader: account info fetch timed out on first attempt, retrying once...")
+                    time.sleep(1.0)
+            if trader is not None:
+                money_digits = getattr(trader, "moneyDigits", 2) or 2
+                scale = 10 ** money_digits
+                raw_balance = getattr(trader, "balance", 0)
+                balance = raw_balance / scale
+                equity = balance   # no open positions' floating P&L folded in yet — see docstring above
+                deposit_asset_id = getattr(trader, "depositAssetId", None)
+                currency = f"asset_id:{deposit_asset_id}" if deposit_asset_id is not None else ""
+            else:
+                log.warning("cTrader: account info fetch timed out twice; balance/equity will show 0.0")
+        except Exception as exc:
+            log.warning("cTrader: could not fetch account balance/equity: %s", exc)
+        return balance, equity, currency

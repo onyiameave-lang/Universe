@@ -204,7 +204,10 @@ def classify_event(title: str, body: str) -> str:
     """
     text = f"{title} {body}".lower()
     try:
-        from intelligence.term_reliability import get_approved_keywords  # type: ignore
+        try:
+            from intelligence.term_reliability import get_approved_keywords  # type: ignore
+        except ImportError:
+            from Sentinel.intelligence.term_reliability import get_approved_keywords  # type: ignore
         approved = get_approved_keywords()
     except Exception:
         approved = {}
@@ -236,7 +239,10 @@ def sentiment(title: str, body: str, llm=None) -> float:
     # intelligence.term_reliability) — replaces the old flat keyword count,
     # which was blind to negation (see that module's docstring for the
     # specific real bug this fixes, and the one hard case it still can't).
-    from intelligence.term_reliability import negation_aware_sentiment, get_tracker  # type: ignore
+    try:
+        from intelligence.term_reliability import negation_aware_sentiment, get_tracker  # type: ignore
+    except ImportError:
+        from Sentinel.intelligence.term_reliability import negation_aware_sentiment, get_tracker  # type: ignore
     lexical = negation_aware_sentiment(title, body, tracker=get_tracker())
 
     if llm is not None and getattr(llm, "has_any", False) and (b + r) == 0:

@@ -3,6 +3,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import os
 from execution.ctrader_broker import CTraderBroker
+from dotenv import load_dotenv
+load_dotenv()
+
 # ...rest of the script stays the same
 
 # CTraderBroker() with no arguments automatically reads CTRADER_CLIENT_ID,

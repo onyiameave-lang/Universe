@@ -134,6 +134,7 @@ def main():
                 # something the lexical classifier missed. Never
                 # auto-applied — approve/dismiss explicitly below.
                 from intelligence.term_reliability import get_tracker  # type: ignore
+                from intelligence.term_reliabiliity import get_tracker  # type: ignore
                 pending = get_tracker().get_suggested_terms()
                 if not pending:
                     print(" No pending suggestions.")
@@ -146,6 +147,7 @@ def main():
 
             elif cmd == "approve" and len(parts) >= 2:
                 from intelligence.term_reliability import get_tracker  # type: ignore
+                from intelligence.term_reliabiliity import get_tracker  # type: ignore
                 tracker = get_tracker()
                 pending = tracker.get_suggested_terms()
                 try:
@@ -163,6 +165,7 @@ def main():
 
             elif cmd == "dismiss" and len(parts) >= 2:
                 from intelligence.term_reliability import get_tracker  # type: ignore
+                from intelligence.term_reliabiliity import get_tracker  # type: ignore
                 tracker = get_tracker()
                 pending = tracker.get_suggested_terms()
                 try:

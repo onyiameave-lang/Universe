@@ -4,7 +4,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import os
 from execution.ctrader_broker import CTraderBroker
 import time
-from execution.ctrader_broker import CTraderBroker
+
+from dotenv import load_dotenv
+load_dotenv()
+
 
 broker = CTraderBroker()
 print("Connecting...")
