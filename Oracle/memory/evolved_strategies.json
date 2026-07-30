@@ -7095,5 +7095,111 @@
     "certified_at": 1785321891.8670652,
     "generation": 0,
     "parents": []
+  },
+  "XAUUSD::ranging": {
+    "symbol": "XAUUSD",
+    "regime": "ranging",
+    "genome": {
+      "genome_id": "mut-6fa33a",
+      "generation": 28,
+      "parents": [
+        "xov-93f9f1"
+      ],
+      "fitness": 7.2665,
+      "backtests": 15,
+      "best_return": 0.0232,
+      "best_sharpe": 0.553,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "ichimoku_cloud",
+          "params": {
+            "tenkan": 9,
+            "kijun": 28,
+            "slow": 45
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 13,
+            "upper": 60,
+            "lower": 17
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.31,
+            "regime_bonus": 0.106
+          }
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 2.759
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "in_sample": {
+      "return": 0.0232,
+      "fitness": 7.2665
+    },
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 3,
+      "win_rate": 0.667,
+      "total_return": 0.0232,
+      "final_equity": 10232.3,
+      "profit_factor": 4.321,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 0.743,
+      "sortino_proxy": 1.917,
+      "recovery_factor": 0.0,
+      "expectancy": 77.43,
+      "consistency": 0.667,
+      "avg_pnl": 77.43
+    },
+    "certified_at": 1785407315.1494973,
+    "generation": 28,
+    "parents": [
+      "xov-93f9f1"
+    ]
   }
 }
