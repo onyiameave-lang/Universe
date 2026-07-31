@@ -7182,5 +7182,109 @@
     "parents": [
       "xov-93f9f1"
     ]
+  },
+  "XAUUSD::trending_down": {
+    "symbol": "XAUUSD",
+    "regime": "trending_down",
+    "genome": {
+      "genome_id": "mut-c180d7",
+      "generation": 24,
+      "parents": [
+        "xov-48df4b"
+      ],
+      "fitness": 6.1789,
+      "backtests": 15,
+      "best_return": 0.0289,
+      "best_sharpe": 0.705,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 20,
+            "slow": 45
+          }
+        },
+        "momentum": {
+          "logic_type": "stochastic",
+          "params": {
+            "k_period": 14,
+            "d_period": 3,
+            "upper": 80,
+            "lower": 20
+          }
+        },
+        "volatility": {
+          "logic_type": "atr_contraction",
+          "params": {
+            "period": 14,
+            "contraction_ratio": 0.7
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.3,
+            "regime_bonus": 0.15
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 1.5
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "in_sample": {
+      "return": 0.0289,
+      "fitness": 6.1789
+    },
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 3,
+      "win_rate": 0.667,
+      "total_return": 0.0243,
+      "final_equity": 10242.89,
+      "profit_factor": 5.092,
+      "max_drawdown": 0.0,
+      "sharpe_proxy": 0.816,
+      "sortino_proxy": 2.362,
+      "recovery_factor": 0.0,
+      "expectancy": 80.96,
+      "consistency": 0.667,
+      "avg_pnl": 80.96
+    },
+    "certified_at": 1785494596.5614965,
+    "generation": 24,
+    "parents": [
+      "xov-48df4b"
+    ]
   }
 }
