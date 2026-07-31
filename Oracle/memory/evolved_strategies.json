@@ -3012,15 +3012,15 @@
     "symbol": "MSFT",
     "regime": "high_volatility",
     "genome": {
-      "genome_id": "mut-ad0f70",
-      "generation": 34,
+      "genome_id": "mut-955852",
+      "generation": 52,
       "parents": [
-        "xov-367b5b"
+        "xov-59dade"
       ],
-      "fitness": 6.9258,
-      "backtests": 30,
-      "best_return": 0.0213,
-      "best_sharpe": 0.505,
+      "fitness": 7.5033,
+      "backtests": 15,
+      "best_return": 0.0234,
+      "best_sharpe": 0.565,
       "modules": {
         "market_regime": {
           "logic_type": "default",
@@ -3036,37 +3036,37 @@
         "trend": {
           "logic_type": "hma_slope",
           "params": {
-            "period": 14,
-            "slow": 44
+            "period": 15,
+            "slow": 43
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "roc",
           "params": {
-            "lookback": 10
+            "period": 12,
+            "threshold": 15
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "atr_expansion",
           "params": {
             "period": 14,
-            "contraction_ratio": 0.7
+            "expansion_ratio": 1.2
           }
         },
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.169,
-            "regime_bonus": 0.1,
-            "threshold": 0.169
+            "base_threshold": 0.35,
+            "regime_bonus": 0.094
           }
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "time_exit",
           "params": {
+            "max_bars": 20,
             "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "tp_mult": 3.0
           }
         },
         "risk": {
@@ -3088,28 +3088,28 @@
       }
     },
     "in_sample": {
-      "return": 0.0213,
-      "fitness": 6.9258
+      "return": 0.0234,
+      "fitness": 7.5033
     },
     "out_of_sample": {
       "status": "complete",
-      "trades": 6,
-      "win_rate": 0.667,
-      "total_return": 0.0367,
-      "final_equity": 10366.75,
-      "profit_factor": 2.789,
+      "trades": 5,
+      "win_rate": 0.8,
+      "total_return": 0.0398,
+      "final_equity": 10397.6,
+      "profit_factor": 4.859,
       "max_drawdown": 0.01,
-      "sharpe_proxy": 0.526,
-      "sortino_proxy": 1.033,
-      "recovery_factor": 3.667,
-      "expectancy": 61.13,
-      "consistency": 0.667,
-      "avg_pnl": 61.13
+      "sharpe_proxy": 0.794,
+      "sortino_proxy": 1.726,
+      "recovery_factor": 3.976,
+      "expectancy": 79.52,
+      "consistency": 0.8,
+      "avg_pnl": 79.52
     },
-    "certified_at": 1784230939.7517087,
-    "generation": 34,
+    "certified_at": 1785519867.5357225,
+    "generation": 52,
     "parents": [
-      "xov-367b5b"
+      "xov-59dade"
     ]
   },
   "AMZN::high_volatility": {
@@ -7187,61 +7187,62 @@
     "symbol": "XAUUSD",
     "regime": "trending_down",
     "genome": {
-      "genome_id": "mut-c180d7",
-      "generation": 24,
+      "genome_id": "mut-cf25fd",
+      "generation": 44,
       "parents": [
-        "xov-48df4b"
+        "xov-b1a538"
       ],
-      "fitness": 6.1789,
-      "backtests": 15,
-      "best_return": 0.0289,
-      "best_sharpe": 0.705,
+      "fitness": 4.1568,
+      "backtests": 30,
+      "best_return": 0.0145,
+      "best_sharpe": 0.258,
       "modules": {
         "market_regime": {
           "logic_type": "default",
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
+              "trending_down",
+              "ranging",
+              "high_volatility"
             ]
           }
         },
         "trend": {
           "logic_type": "sma_crossover",
           "params": {
-            "fast": 20,
-            "slow": 45
+            "fast": 22,
+            "slow": 43
           }
         },
         "momentum": {
-          "logic_type": "stochastic",
+          "logic_type": "roc",
           "params": {
-            "k_period": 14,
-            "d_period": 3,
-            "upper": 80,
-            "lower": 20
+            "period": 13,
+            "threshold": 16
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "historical_vol",
           "params": {
-            "period": 14,
-            "contraction_ratio": 0.7
+            "period": 20,
+            "threshold": 15.0
           }
         },
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.15
+            "base_threshold": 0.12,
+            "regime_bonus": 0.15,
+            "threshold": 0.5
           }
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "time_exit",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "max_bars": 21,
+            "sl_mult": 1.989,
+            "tp_mult": 3.49
           }
         },
         "risk": {
@@ -7263,28 +7264,28 @@
       }
     },
     "in_sample": {
-      "return": 0.0289,
-      "fitness": 6.1789
+      "return": 0.0145,
+      "fitness": 4.1568
     },
     "out_of_sample": {
       "status": "complete",
       "trades": 3,
       "win_rate": 0.667,
-      "total_return": 0.0243,
-      "final_equity": 10242.89,
-      "profit_factor": 5.092,
+      "total_return": 0.0244,
+      "final_equity": 10244.45,
+      "profit_factor": 5.229,
       "max_drawdown": 0.0,
-      "sharpe_proxy": 0.816,
-      "sortino_proxy": 2.362,
+      "sharpe_proxy": 0.827,
+      "sortino_proxy": 2.442,
       "recovery_factor": 0.0,
-      "expectancy": 80.96,
+      "expectancy": 81.48,
       "consistency": 0.667,
-      "avg_pnl": 80.96
+      "avg_pnl": 81.48
     },
-    "certified_at": 1785494596.5614965,
-    "generation": 24,
+    "certified_at": 1785519765.5542407,
+    "generation": 44,
     "parents": [
-      "xov-48df4b"
+      "xov-b1a538"
     ]
   }
 }
