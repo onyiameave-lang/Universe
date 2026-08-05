@@ -6795,13 +6795,13 @@
     "symbol": "CAC40",
     "regime": "trending_up",
     "genome": {
-      "genome_id": "mut-675d23",
-      "generation": 72,
+      "genome_id": "mut-020287",
+      "generation": 26,
       "parents": [
-        "xov-b4f5b1"
+        "xov-8a3b5c"
       ],
       "fitness": 9.3575,
-      "backtests": 15,
+      "backtests": 6,
       "best_return": 0.0376,
       "best_sharpe": 0.732,
       "modules": {
@@ -6828,7 +6828,7 @@
           "logic_type": "williams_r",
           "params": {
             "period": 14,
-            "upper": 68,
+            "upper": 60,
             "lower": 15
           }
         },
@@ -6841,17 +6841,16 @@
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.209,
-            "regime_bonus": 0.102,
-            "threshold": 0.5
+            "base_threshold": 0.228,
+            "regime_bonus": 0.15,
+            "threshold": 0.228
           }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "atr_stops",
           "params": {
-            "lookback": 10,
-            "tp_mult": 3.0,
-            "sl_mult": 2.0
+            "sl_mult": 2.5,
+            "tp_mult": 5.0
           }
         },
         "risk": {
@@ -6879,22 +6878,22 @@
     "out_of_sample": {
       "status": "complete",
       "trades": 3,
-      "win_rate": 0.333,
-      "total_return": 0.0047,
-      "final_equity": 10046.66,
-      "profit_factor": 1.458,
+      "win_rate": 0.667,
+      "total_return": 0.005,
+      "final_equity": 10049.83,
+      "profit_factor": 1.498,
       "max_drawdown": 0.01,
-      "sharpe_proxy": 0.152,
-      "sortino_proxy": 0.269,
-      "recovery_factor": 0.467,
-      "expectancy": 15.55,
-      "consistency": 0.333,
-      "avg_pnl": 15.55
+      "sharpe_proxy": 0.163,
+      "sortino_proxy": 0.288,
+      "recovery_factor": 0.498,
+      "expectancy": 16.61,
+      "consistency": 0.667,
+      "avg_pnl": 16.61
     },
-    "certified_at": 1785926454.4261465,
-    "generation": 72,
+    "certified_at": 1785951851.8377867,
+    "generation": 26,
     "parents": [
-      "xov-b4f5b1"
+      "xov-8a3b5c"
     ]
   },
   "MSFT::ranging": {
