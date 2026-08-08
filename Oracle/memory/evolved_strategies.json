@@ -7815,5 +7815,108 @@
     "certified_at": 1786153872.2105956,
     "generation": 0,
     "parents": []
+  },
+  "GBPUSD::trending_up": {
+    "symbol": "GBPUSD",
+    "regime": "trending_up",
+    "genome": {
+      "genome_id": "mut-5e0487",
+      "generation": 24,
+      "parents": [
+        "xov-bf0245"
+      ],
+      "fitness": 4.336,
+      "backtests": 15,
+      "best_return": 0.0099,
+      "best_sharpe": 0.318,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 17,
+            "slow": 48
+          }
+        },
+        "momentum": {
+          "logic_type": "price_action",
+          "params": {
+            "lookback": 10
+          }
+        },
+        "volatility": {
+          "logic_type": "keltner_squeeze",
+          "params": {
+            "period": 20
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.182,
+            "regime_bonus": 0.15,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 10,
+            "tp_mult": 3.0,
+            "sl_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "in_sample": {
+      "return": 0.0099,
+      "fitness": 4.336
+    },
+    "out_of_sample": {
+      "status": "complete",
+      "trades": 4,
+      "win_rate": 0.5,
+      "total_return": 0.0017,
+      "final_equity": 10016.71,
+      "profit_factor": 1.084,
+      "max_drawdown": 0.0199,
+      "sharpe_proxy": 0.039,
+      "sortino_proxy": 0.059,
+      "recovery_factor": 0.084,
+      "expectancy": 4.18,
+      "consistency": 0.5,
+      "avg_pnl": 4.18
+    },
+    "certified_at": 1786207036.534394,
+    "generation": 24,
+    "parents": [
+      "xov-bf0245"
+    ]
   }
 }
