@@ -51,6 +51,7 @@ Known cTrader Open API quirks accounted for here
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -61,6 +62,7 @@ from typing import Any, Dict, List, Optional, Tuple
 log = logging.getLogger("oracle.ctrader")
 
 _DEFAULT_TIMEOUT_SEC = 15.0
+_AUTH_TIMEOUT_SEC = 45.0
 
 
 @dataclass
@@ -109,8 +111,10 @@ class CTraderBroker:
         self._client = None                 # ctrader_open_api.Client, set in connect()
         self._symbol_id_by_name: Dict[str, int] = {}
         self._symbol_name_by_id: Dict[int, str] = {}
-        self._positions_cache: Dict[int, Dict[str, Any]] = {}   # positionId -> our dict shape
+        self._symbol_constraints: Dict[int, Dict[str, int]] = {}
+        self._positions_cache: Dict[int, Dict[str, Any]] = {}
         self._cache_lock = threading.Lock()
+        self._constraints_lock = threading.Lock()
 
         # clientMsgId -> {"event": threading.Event, "result": [payload_or_None]}
         self._pending: Dict[str, Dict[str, Any]] = {}
@@ -146,24 +150,37 @@ class CTraderBroker:
         self._client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
 
         connected_ok = threading.Event()
+        auth_failure = threading.Event()
         auth_error: List[str] = []
 
         def on_connected(client):
+            log.info("cTrader transport connected, sending application auth")
             req = ProtoOAApplicationAuthReq()
             req.clientId = self._client_id
             req.clientSecret = self._client_secret
             d = client.send(req)
-            d.addErrback(lambda f: auth_error.append(str(f)))
+            def _app_auth_err(f):
+                auth_error.append(str(f))
+                auth_failure.set()
+            d.addErrback(_app_auth_err)
 
         def on_message(client, message):
+            payload_type = getattr(message, "payloadType", None)
+            client_msg_id = getattr(message, "clientMsgId", None)
+            log.debug("cTrader message received payloadType=%s clientMsgId=%s", payload_type, client_msg_id)
             self._dispatch_message(message)
-            if message.payloadType == 2101:  # ProtoOAApplicationAuthRes payloadType
+            if payload_type == 2101:  # ProtoOAApplicationAuthRes payloadType
+                log.info("cTrader application auth accepted, sending account auth")
                 acc_req = ProtoOAAccountAuthReq()
                 acc_req.ctidTraderAccountId = self._account_id
                 acc_req.accessToken = self._access_token
                 d = client.send(acc_req)
-                d.addErrback(lambda f: auth_error.append(str(f)))
-            elif message.payloadType == 2103:  # ProtoOAAccountAuthRes payloadType
+                def _acc_auth_err(f):
+                    auth_error.append(str(f))
+                    auth_failure.set()
+                d.addErrback(_acc_auth_err)
+            elif payload_type == 2103:  # ProtoOAAccountAuthRes payloadType
+                log.info("cTrader account auth successful")
                 connected_ok.set()
 
         def on_disconnected(client, reason):
@@ -182,7 +199,16 @@ class CTraderBroker:
 
         self._reactor.callFromThread(self._client.startService)
 
-        if not connected_ok.wait(timeout=_DEFAULT_TIMEOUT_SEC):
+        start_time = time.time()
+        while True:
+            if connected_ok.wait(timeout=0.5):
+                break
+            if auth_failure.is_set():
+                break
+            if time.time() - start_time >= _AUTH_TIMEOUT_SEC:
+                break
+
+        if not connected_ok.is_set():
             reason = auth_error[0] if auth_error else "timed out waiting for auth"
             self.status = BrokerStatus(connected=False, reason=reason)
             return self.status.to_dict()
@@ -271,6 +297,65 @@ class CTraderBroker:
             log.warning("cTrader: request timed out after %.1fs (clientMsgId=%s)", timeout, msg_id)
             return None
         return slot["result"][0]
+
+    def _volume_to_cents(self, raw_volume: float) -> int:
+        """Convert actual lots/units to cTrader cent volume with safe rounding."""
+        return int(max(0, round(raw_volume * 100)))
+
+    def _get_symbol_constraints(self, symbol_id: int, symbol_name: str) -> Dict[str, int]:
+        with self._constraints_lock:
+            if symbol_id in self._symbol_constraints:
+                return self._symbol_constraints[symbol_id]
+
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASymbolByIdReq
+        except ImportError:
+            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+
+        req = ProtoOASymbolByIdReq()
+        req.ctidTraderAccountId = self._account_id
+        req.symbolId.append(symbol_id)
+        payload = self._send_and_wait(req)
+        if payload is None:
+            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+
+        syms = getattr(payload, "symbol", [])
+        sym = None
+        try:
+            sym = next(iter(syms), None)
+        except TypeError:
+            sym = syms
+        if sym is None:
+            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+
+        constraints = {
+            "minVolume": max(1, getattr(sym, "minVolume", 1)),
+            "maxVolume": max(1, getattr(sym, "maxVolume", 10_000_000)),
+            "stepVolume": max(1, getattr(sym, "stepVolume", 1)),
+        }
+        with self._constraints_lock:
+            self._symbol_constraints[symbol_id] = constraints
+        return constraints
+
+    def _clamp_volume(self, raw_volume: float, symbol_id: int, symbol_name: str) -> int:
+        cents = self._volume_to_cents(raw_volume)
+        if cents <= 0:
+            return 0
+
+        constraints = self._get_symbol_constraints(symbol_id, symbol_name)
+        min_vol = constraints["minVolume"]
+        max_vol = constraints["maxVolume"]
+        step_vol = constraints["stepVolume"]
+        if step_vol <= 0:
+            step_vol = 1
+
+        steps = round(cents / step_vol)
+        clamped = max(min_vol, min(max_vol, steps * step_vol))
+        if clamped != cents:
+            log.info(
+                "cTrader: symbol %s volume adjusted from %d to %d cents (min=%d max=%d step=%d)",
+                symbol_name, cents, clamped, min_vol, max_vol, step_vol)
+        return clamped
 
     # ── position cache ────────────────────────────────────────────────────
 
@@ -361,12 +446,21 @@ class CTraderBroker:
             return {"status": "error", "reason": f"symbol {symbol_name} not found in cTrader symbol list"}
 
         is_buy = plan["direction"] in ("long", "buy")
+        try:
+            raw_volume = float(plan["size"])
+        except (TypeError, ValueError):
+            return {"status": "rejected", "reason": "invalid order size"}
+        if raw_volume <= 0:
+            return {"status": "rejected", "reason": "invalid order size"}
+
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = self._account_id
         req.symbolId = symbol_id
         req.orderType = ProtoOAOrderType.MARKET
         req.tradeSide = ProtoOATradeSide.BUY if is_buy else ProtoOATradeSide.SELL
-        req.volume = int(round(float(plan["size"]) * 100))   # cTrader volume is in cents
+        req.volume = self._clamp_volume(raw_volume, symbol_id, symbol_name)
+        if req.volume <= 0:
+            return {"status": "rejected", "reason": "order volume too small for cTrader"}
         if plan.get("stop") is not None:
             req.stopLoss = float(plan["stop"])
         if plan.get("target") is not None:

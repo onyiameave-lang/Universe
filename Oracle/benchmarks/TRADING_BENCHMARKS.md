@@ -1,28 +1,28 @@
 # Oracle Trading Benchmark
 
 > Auto-generated from real (paper/demo) trade outcomes. Do not edit manually.
-> Last updated: 2026-07-28T17:25:57Z
+> Last updated: 2026-07-29T20:52:30Z
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total Trades | 4 |
-| Wins / Losses | 3 / 1 |
-| Win Rate | 75.0% |
-| Profit Factor | 48.00 |
-| Sharpe (per-trade proxy) | 1.30 |
-| Average Trade | +0.082R |
-| Average Holding Time | 167.5 min |
-| Max Consecutive Losses | 1 |
+| Total Trades | 6 |
+| Wins / Losses | 3 / 3 |
+| Win Rate | 50.0% |
+| Profit Factor | 1.10 |
+| Sharpe (per-trade proxy) | 0.04 |
+| Average Trade | +0.005R |
+| Average Holding Time | 118.0 min |
+| Max Consecutive Losses | 2 |
 | Max Consecutive Wins | 3 |
-| Equity (cumulative) | +0.329R |
-| Max Drawdown | 0.007R |
-| Recovery Factor | 47.00 |
+| Equity (cumulative) | +0.032R |
+| Max Drawdown | 0.297R |
+| Recovery Factor | 0.11 |
 
 ## By Symbol
 
 | Symbol | Trades | Win Rate | Avg Trade |
 |--------|--------|----------|-----------|
-| USDJPY | 3 | 66.7% | +0.092 |
-| XAUUSD | 1 | 100.0% | +0.052 |
+| USDJPY | 4 | 50.0% | +0.049 |
+| XAUUSD | 2 | 50.0% | -0.083 |

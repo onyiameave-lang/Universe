@@ -175,6 +175,23 @@ class AtlasAgent(BaseAgent):
 
             query = ctx.get("query", "")
             domain = ctx.get("domain", "general")
+
+            # Deep research mode: for callers with no live-trading deadline
+            # to respect (e.g. Chronicle's nightly Research Director) --
+            # bypasses self.solve()'s fast-strategy picker entirely and
+            # calls the engine directly with a much larger time budget and
+            # multiple rounds, so the citation-chasing depth escalation
+            # (previously dead code at the default max_rounds=1) can
+            # actually run. Every existing caller is completely unaffected
+            # unless it explicitly passes deep_research=True.
+            if ctx.get("deep_research"):
+                report = self.engine.investigate(
+                    query, domain=domain, depth="deep",
+                    max_rounds=ctx.get("max_rounds", 3),
+                    deadline_sec=ctx.get("deadline_sec", 120.0))
+                self._remember_best_effort(report, domain)
+                return {"status": "complete", "report": report, "research_path": "deep_research"}
+
             if self._is_explanatory_query(query) and not self._needs_fresh_evidence(query):
                 fallback_report = self._best_effort_report(query, domain)
                 self._remember_best_effort(fallback_report, domain)

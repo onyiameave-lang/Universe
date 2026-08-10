@@ -452,7 +452,8 @@ class LiveTrader:
 
         # boot Oracle + its evidence peers
         _unload_conflicting_modules()
-        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
+        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
+                               storage_dir=str(_ECO_ROOT / "Chronicle" / "memory" / "store"))
         _unload_conflicting_modules()
         self.sentinel = _load("Sentinel", "agents/sentinel_agent.py", "SentinelAgent",
                             chronicle_client=self.chronicle)
@@ -558,7 +559,8 @@ class LiveTrader:
 
     def _register_position(self, symbol: str, direction: str, entry_price: float,
                             stop: float, target: float, confidence: float,
-                            size: float = 0.0) -> None:
+                            size: float = 0.0, news_level: str = "none", news_reason: str = "",
+                            social_level: str = "none", social_reason: str = "") -> None:
         """
         Call this once, right after a fill, so the background poll thread
         knows this position exists and what Oracle believed at entry.
@@ -611,6 +613,10 @@ class LiveTrader:
                 entry_streams=entry_streams, entry_atr=entry_atr,
                 entry_term_evidence=entry_term_evidence,
             )
+            self._managed_positions[symbol].journal_id = self.oracle.trade_journal.log_entry(
+                symbol, direction, confidence, entry_regime,
+                news_level, news_reason, social_level, social_reason,
+                entry_streams, size)
 
         risk_direction = "long" if dir_norm == Direction.BUY else "short"
         self.oracle.risk.portfolio.remove_by_symbol(symbol)   # replace, don't duplicate, on re-registration
@@ -694,6 +700,10 @@ class LiveTrader:
             pos_id = live_pos.get("ticket") or live_pos.get("id")
             if decision.action == Action.HOLD:
                 log.debug("[%s] CTM hold: %s", symbol, decision.reason)
+                if decision.reason != pos.last_journaled_hold_reason:
+                    self.oracle.trade_journal.log_hold(
+                        symbol, decision.reason, decision.current_confidence, decision.current_regime)
+                    pos.last_journaled_hold_reason = decision.reason
                 continue
 
             if decision.action == Action.TIGHTEN_STOP:
@@ -1001,6 +1011,10 @@ class LiveTrader:
                         target=plan.get("target", 0.0),
                         confidence=s.get("confidence", 0.0),
                         size=result.get("volume", plan.get("size", 0.0)),
+                        news_level=sig.get("news_impact", "none"),
+                        news_reason=sig.get("news_reason", ""),
+                        social_level=sig.get("social_risk", "none"),
+                        social_reason=sig.get("social_reason", ""),
                     )
                     # Reduce Overtrading (roadmap Phase 2 item 6): only count
                     # genuinely NEW fills toward the daily cap — not

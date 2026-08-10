@@ -102,6 +102,13 @@ try:
 except ImportError:
     from Oracle.intelligence.trade_learning import ChampionConfidenceTracker  # type: ignore
 
+# Trade Journal (roadmap Phase 3 groundwork: Trade Explainability) —
+# entry/hold/rejection reasons + outcomes, wired to Chronicle.
+try:
+    from intelligence.trade_journal import TradeJournal  # type: ignore
+except ImportError:
+    from Oracle.intelligence.trade_journal import TradeJournal  # type: ignore
+
 try:
     from shared.agent import BaseAgent
     _HAS_SHARED = True
@@ -150,6 +157,7 @@ class OracleAgent(BaseAgent):
         self.sentinel = sentinel_client
         self.pulse = pulse_client
         self.chronicle = chronicle_client
+        self.trade_journal = TradeJournal(chronicle_client=chronicle_client)
         # FIX O-3: instantiate SignalFusion with the same sub-agent clients.
         # SignalFusion builds rich stream dicts; AdaptiveFusion fuses them with
         # learned weights. They are complementary, not duplicates.
@@ -338,6 +346,8 @@ class OracleAgent(BaseAgent):
             plan = self.risk.evaluate(symbol, direction, sig["last"], atr, effective_confidence)
             self._preserve(symbol, sig)
             if not plan["approved"]:
+                self.trade_journal.log_rejection(
+                    symbol, direction, effective_confidence, plan.get("reasons", []))
                 return {"status": "error", "message": "risk gate rejected", "risk": plan,
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason}

@@ -391,7 +391,8 @@ class DemoTrader:
 
         # Boot Oracle + evidence peers (same as live_trader)
         _unload_conflicting_modules()
-        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
+        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
+                               storage_dir=str(_ECO_ROOT / "Chronicle" / "memory" / "store"))
         _unload_conflicting_modules()
         self.sentinel = _load("Sentinel", "agents/sentinel_agent.py", "SentinelAgent",
                               chronicle_client=self.chronicle)
@@ -492,7 +493,8 @@ class DemoTrader:
 
     def _register_position(self, symbol: str, direction: str, entry_price: float,
                             stop: float, target: float, confidence: float,
-                            size: float = 0.0) -> None:
+                            size: float = 0.0, news_level: str = "none", news_reason: str = "",
+                            social_level: str = "none", social_reason: str = "") -> None:
         try:
             sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "demo_trader"})
             entry_regime = (sig or {}).get("regime") or "ranging"
@@ -525,6 +527,10 @@ class DemoTrader:
                 entry_streams=entry_streams, entry_atr=entry_atr,
                 entry_term_evidence=entry_term_evidence,
             )
+            self._managed_positions[symbol].journal_id = self.oracle.trade_journal.log_entry(
+                symbol, direction, confidence, entry_regime,
+                news_level, news_reason, social_level, social_reason,
+                entry_streams, size)
 
         risk_direction = "long" if dir_norm == Direction.BUY else "short"
         self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -597,6 +603,10 @@ class DemoTrader:
             pos_id = live_pos.get("ticket") or live_pos.get("id")
             if decision.action == Action.HOLD:
                 log.debug("[%s] CTM hold: %s", symbol, decision.reason)
+                if decision.reason != pos.last_journaled_hold_reason:
+                    self.oracle.trade_journal.log_hold(
+                        symbol, decision.reason, decision.current_confidence, decision.current_regime)
+                    pos.last_journaled_hold_reason = decision.reason
                 continue
 
             if decision.action == Action.TIGHTEN_STOP:
@@ -876,6 +886,10 @@ class DemoTrader:
                         target=plan.get("target", 0.0),
                         confidence=s.get("confidence", 0.0),
                         size=result.get("volume", plan.get("size", 0.0)),
+                        news_level=sig.get("news_impact", "none"),
+                        news_reason=sig.get("news_reason", ""),
+                        social_level=sig.get("social_risk", "none"),
+                        social_reason=sig.get("social_reason", ""),
                     )
                     self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:

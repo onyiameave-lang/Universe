@@ -87,6 +87,8 @@ class Position:
     entry_streams: Dict[str, Any] = field(default_factory=dict)  # per-source signal breakdown at entry, for fusion.learn
     entry_term_evidence: Dict[str, list] = field(default_factory=dict)  # {"bullish":[...],"bearish":[...]} terms live at entry — for Sentinel's term-reliability grading
     entry_atr: Optional[float] = None   # volatility at entry, for Volatility Exit (roadmap Phase 2 item 8)
+    journal_id: Optional[str] = None    # links this position's Trade Journal entry to its eventual outcome
+    last_journaled_hold_reason: Optional[str] = None   # dedup: only journal a hold when the reason changes
 
     # Mutable trailing state -- the manager updates these as it runs.
     current_stop: float = field(init=False)

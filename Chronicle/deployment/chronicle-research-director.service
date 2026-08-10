@@ -1,0 +1,28 @@
+# Chronicle Research Director — systemd service (triggered by the .timer)
+#
+# Install alongside the other services:
+#   sudo cp chronicle-research-director.service /etc/systemd/system/
+#   sudo cp chronicle-research-director.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now chronicle-research-director.timer
+#
+# Check on it:
+#   systemctl list-timers chronicle-research-director.timer   # when's it next due?
+#   sudo journalctl -u chronicle-research-director -n 100      # last run's output
+#   sudo systemctl start chronicle-research-director           # run it right now, manually
+
+[Unit]
+Description=Chronicle Research Director (Chronicle + Forge + Atlas)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# CHANGE THESE to match your actual VPS setup:
+User=oracle
+WorkingDirectory=/home/oracle/Universe/Universal_AI/Chronicle
+ExecStart=/home/oracle/Universe/Universal_AI/Oracle/venv/bin/python tools/research_director.py
+EnvironmentFile=/home/oracle/Universe/Universal_AI/Oracle/.env
+
+StandardOutput=journal
+StandardError=journal

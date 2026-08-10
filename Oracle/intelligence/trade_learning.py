@@ -33,9 +33,46 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("oracle.trade_learning")
+
+# Structured experiment log (see record_close()'s step 7 for why this
+# exists) -- a minimal, append-only JSONL file, separate from both
+# TradingBenchmark (aggregate-only) and the Trade Journal (prose, in
+# Chronicle). One line per closed trade: symbol, entry_streams, won, pnl_r.
+_EXPERIMENT_LOG_PATH = Path(__file__).resolve().parents[1] / "memory" / "trade_experiment_log.jsonl"
+_experiment_log_lock = threading.Lock()
+
+
+def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
+                            won: bool, pnl_r: float) -> None:
+    _EXPERIMENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    record = {"symbol": symbol, "entry_streams": entry_streams or {}, "won": won,
+              "pnl_r": pnl_r, "timestamp": time.time()}
+    with _experiment_log_lock:
+        with _EXPERIMENT_LOG_PATH.open("a") as f:
+            f.write(json.dumps(record) + "\n")
+
+
+def load_experiment_log(path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Reads the full structured trade log back -- what Forge's experiment
+    templates (via the Chronicle Research Director) actually consume.
+    Tolerates a corrupted/partial last line (e.g. a write interrupted
+    mid-append) by skipping just that line rather than failing entirely."""
+    p = path or _EXPERIMENT_LOG_PATH
+    if not p.exists():
+        return []
+    records = []
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            log.warning("skipping corrupted line in trade_experiment_log.jsonl")
+    return records
 
 try:
     from benchmarks.trading_benchmark import TradingBenchmark  # type: ignore
@@ -326,5 +363,32 @@ class TradeLearningEngine:
             self.benchmark.record_trade(outcome)
         except Exception as exc:
             log.warning("[%s] trading benchmark update failed: %s", pos.symbol, exc)
+
+        # 6. Trade Journal (roadmap Phase 3 groundwork: Trade Explainability):
+        #    links back to the original entry via journal_id, so the win/
+        #    loss outcome is reviewable alongside the reasons that led to
+        #    the trade in the first place.
+        journal_id = getattr(pos, "journal_id", None)
+        if journal_id:
+            try:
+                oracle_agent.trade_journal.log_outcome(
+                    journal_id, pos.symbol, won, outcome.pnl_r, exit_reason, lesson)
+            except Exception as exc:
+                log.warning("[%s] trade journal outcome logging failed: %s", pos.symbol, exc)
+
+        # 7. Structured experiment log (Forge's Evidence Engine needs this):
+        #    TradingBenchmark only keeps running AGGREGATE counters, never
+        #    individual trades; the Trade Journal writes human prose to
+        #    Chronicle, not structured numeric data. Neither has both
+        #    entry_streams and the outcome together in queryable form --
+        #    a real gap found while building the Chronicle Research
+        #    Director. This is a minimal, append-only JSONL log purpose-
+        #    built to feed Forge's experiment templates (e.g. "does the
+        #    news stream actually predict wins?"), without duplicating or
+        #    replacing either of the above.
+        try:
+            _append_experiment_log(pos.symbol, pos.entry_streams, won, outcome.pnl_r)
+        except Exception as exc:
+            log.warning("[%s] experiment log write failed: %s", pos.symbol, exc)
 
         return outcome

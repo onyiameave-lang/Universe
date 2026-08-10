@@ -93,6 +93,42 @@ You genuinely don't need to run anything manually again after this setup —
 just check in via `journalctl` or the Telegram notifier (from earlier in
 this conversation) whenever you want a status update.
 
+## Chronicle Research Director (Chronicle + Forge + Atlas, once a day)
+
+**This replaces an earlier, abandoned version** (`oracle-nightly-research` —
+if you deployed that already, remove it: `sudo systemctl disable --now
+oracle-nightly-research.timer`). The old version had Oracle asking
+research questions about itself, which got the direction backwards.
+
+The real version lives in `Chronicle/deploy/` and `Chronicle/tools/`:
+Chronicle collects the day's trades, registers a hypothesis for each
+signal stream ("does the news stream actually predict wins?") in Forge's
+Hypothesis Queue, Forge runs a Sensitivity Analysis experiment against the
+real data, and Chronicle stores the conclusion — with a strict rule that
+nothing gets marked "confirmed" or "rejected" until at least 30 trades of
+evidence exist, no matter how convincing a smaller sample looks. Atlas
+adds qualitative context, best-effort, but the loop doesn't depend on it.
+
+Install:
+```bash
+cd Chronicle/deploy
+sudo cp chronicle-research-director.service /etc/systemd/system/
+sudo cp chronicle-research-director.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chronicle-research-director.timer
+```
+
+Check on it:
+```bash
+systemctl list-timers chronicle-research-director.timer   # when's it next due?
+sudo journalctl -u chronicle-research-director -n 100      # last run's output
+sudo systemctl start chronicle-research-director           # run it right now, manually
+```
+
+This deliberately never auto-applies anything — it's a report for you to
+read, same "human stays in the loop" principle as Tier 0's suggestion
+queue and Champion Retirement.
+
 ## Updating the code later
 
 When you make changes (like the bug fixes from this session):

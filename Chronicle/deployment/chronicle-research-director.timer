@@ -1,0 +1,18 @@
+# Chronicle Research Director — systemd timer
+# Runs once a day, AFTER the nightly trading activity has settled, so
+# there's a full day's worth of trades to actually analyze. 03:00 server
+# time is chosen to run after oracle-nightly-research's old 02:00 slot
+# (now retired) — adjust if your trading hours suggest a better time.
+#
+# See chronicle-research-director.service for install instructions.
+
+[Unit]
+Description=Run Chronicle Research Director once a day
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

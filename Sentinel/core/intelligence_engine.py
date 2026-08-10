@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import concurrent.futures as _cf
 import logging
+import os
 import socket as _socket
 import sys
 import time
@@ -80,6 +81,20 @@ except ImportError:
 # How old (seconds) a Chronicle-cached news report can be before we bypass it
 # and fetch fresh data.  Default: 15 minutes.
 CHRONICLE_CACHE_TTL_SEC = int(900)
+
+# Deep Analysis runs an LLM call PER ARTICLE (see the enrichment loop
+# below), each bounded by OLLAMA_TIMEOUT (default 25s) or the equivalent
+# cloud-provider timeout. Without a cap, up to `limit` articles (default 8)
+# could each hit that ceiling -- worst case 8 x 25s = 200s, which blows
+# straight through a caller's own per-symbol timeout budget (e.g. Oracle's
+# trade.propose is commonly wrapped in a 60s watchdog). This was a real bug
+# found this session -- symbols were silently getting skipped whenever
+# enough slow articles came back for that symbol's news search, especially
+# noticeable with a larger/slower local Ollama model. Capping to the first
+# few articles (already the most relevant/recent, per collectors' own
+# ordering) bounds worst-case latency to a fraction of the full article
+# count while still getting Deep Analysis's value on what matters most.
+MAX_DEEP_ANALYSIS_ARTICLES = int(os.getenv("SENTINEL_MAX_DEEP_ANALYSIS_ARTICLES", "3"))
 
 # FIX-IE-02 (Phase 5e): Nuclear socket timeout — bounds DNS resolution which
 # urllib timeout= does NOT cover. Set here so it applies even if collectors.py
@@ -217,7 +232,7 @@ class IntelligenceEngine:
                  len(raw.get("articles", [])), time.time() - started)
         articles = [a.to_dict() for a in raw["articles"]]
         # enrich
-        for a in articles:
+        for i, a in enumerate(articles):
             a["symbols"] = extract_symbols(a["title"], a.get("summary", ""))
             # Lexical event_type/sentiment stay as the fast, always-available
             # fallback (this codebase's own graceful-degradation principle).
@@ -231,7 +246,15 @@ class IntelligenceEngine:
             # but the raw lexical values are preserved under distinct keys so
             # nothing is silently lost, and everything still degrades
             # gracefully to the lexical path when no LLM is available.
-            deep = deep_analyze(a["title"], a.get("summary", ""), self.llm)
+            #
+            # Capped to the first MAX_DEEP_ANALYSIS_ARTICLES articles (a real
+            # bug found this session: an LLM call per article, each bounded
+            # by OLLAMA_TIMEOUT, with no cap could blow past a caller's own
+            # per-symbol timeout budget once enough articles came back —
+            # symbols were silently getting skipped). Articles beyond the
+            # cap just keep their lexical event_type/sentiment above.
+            deep = deep_analyze(a["title"], a.get("summary", ""), self.llm) \
+                if i < MAX_DEEP_ANALYSIS_ARTICLES else None
             a["deep_analysis"] = deep
             if deep is not None:
                 a["lexical_event_type"] = a["event_type"]

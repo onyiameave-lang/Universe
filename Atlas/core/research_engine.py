@@ -59,11 +59,25 @@ FIX LOG (phase4-atlas-engine-v1  2026-07-21):
 """
 from __future__ import annotations
 
+import logging
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Fixes a real, previously-undiscovered bug: two log.info(...) calls inside
+# investigate() (see below) assumed this module-level logger existed, but
+# every other logging call in this file does its own local "import logging"
+# + logging.getLogger("atlas.engine") instead. Those two bare `log` calls
+# raised NameError every time they were reached -- silently caught by the
+# surrounding strategy-selection layer's exception handling and converted
+# into a generic "could not gather evidence" response, making genuine
+# research crashes indistinguishable from Atlas legitimately finding
+# nothing. Confirmed via direct testing: even with real, substantial
+# evidence supplied, investigate() crashed here before ever reaching
+# synthesis.
+log = logging.getLogger("atlas.engine")
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -90,7 +104,8 @@ class ResearchEngine:
     # ---- primary: investigate with automatic depth escalation ----
 
     def investigate(self, query: str, domain: str = "general", depth: str = "standard",
-                   sources: Optional[List[str]] = None, max_rounds: int = 1) -> Dict[str, Any]:
+                   sources: Optional[List[str]] = None, max_rounds: int = 1,
+                   deadline_sec: float = 20.0) -> Dict[str, Any]:
         # FIX-ENG-V3-01: max_rounds default changed from 3 -> 1.
         # The old default of 3 rounds caused 3 sequential gather() calls, each
         # hitting Chronicle memories 3 times (logged as "Chronicle returned 3 prior
@@ -109,7 +124,19 @@ class ResearchEngine:
         # Total: ~25s, well under the 28s executor budget.
         # The 20s deadline for investigate() leaves 8s for synthesis + overhead.
         # Constitutional law: Book II Principle V Graceful Degradation.
-        _investigate_deadline = started + 20.0  # FIX-ENG-V6-01: 20s (was 25s)
+        #
+        # deadline_sec is now an explicit parameter (default 20.0, unchanged
+        # from before) rather than hardcoded -- found this session that the
+        # citation-chasing "depth escalation" a few lines down could never
+        # actually run with the default max_rounds=1 (round_idx < max_rounds-1
+        # is always False), meaning genuinely deep research was impossible
+        # regardless of how much real time a caller had available. Live/
+        # embedded callers (Oracle mid-trade) keep the tight 20s/1-round
+        # default; a caller with no live-trading deadline to respect (e.g.
+        # Chronicle's nightly Research Director) can pass a much larger
+        # deadline_sec + max_rounds explicitly to get genuinely deeper
+        # research out of the SAME engine, no rewrite needed.
+        _investigate_deadline = started + deadline_sec
         report_id = f"rpt-{uuid.uuid4().hex[:10]}"
         
         # FIX-ENG-V4-01: Timing instrumentation
@@ -218,13 +245,22 @@ class ResearchEngine:
             def _do_synthesize():
                 return self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
                                         chronicle_memories=prior)
+            # Scales with whatever's left of deadline_sec, not a fixed 8s --
+            # a deep-research caller (large deadline_sec) should get a
+            # correspondingly larger synthesis budget too, or a longer
+            # gather phase just leaves less room for the LLM to actually
+            # think about what it gathered. Never below 8.0 (today's
+            # unchanged default behavior) or above 60.0 (a sane ceiling
+            # so a stuck call can't run away indefinitely).
+            _synth_timeout = max(8.0, min(60.0, _investigate_deadline - time.time() - 2.0))
             try:
                 with _cf.ThreadPoolExecutor(max_workers=1) as _sp:
                     _sfut = _sp.submit(_do_synthesize)
-                    summary = _sfut.result(timeout=8.0)
+                    summary = _sfut.result(timeout=_synth_timeout)
             except _cf.TimeoutError:
-                log.warning("atlas.engine: synthesis LLM call exceeded 8s — using extractive fallback. "
-                            "FIX-ENG-V6-02. Constitutional: Book II Principle V Graceful Degradation.")
+                log.warning("atlas.engine: synthesis LLM call exceeded %.0fs — using extractive fallback. "
+                            "FIX-ENG-V6-02. Constitutional: Book II Principle V Graceful Degradation.",
+                            _synth_timeout)
                 # Extractive fallback: one sentence per document (fast, no LLM)
                 summary = self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
                                            chronicle_memories=None)

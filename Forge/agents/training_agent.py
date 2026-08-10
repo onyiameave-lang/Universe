@@ -37,6 +37,15 @@ from core.extra_backends import discovery_backends, predict_with                
 from core.model_registry import ModelRegistry                                        # type: ignore
 from intelligence.optimizer import BackendSelector, HyperparameterOptimizer          # type: ignore
 from intelligence.method_discovery import MethodDiscovery                            # type: ignore
+# Evidence Engine -- Forge's ecosystem-wide role (Hypothesis Queue +
+# Experiment Templates), not just ML training. Bare import matches this
+# file's existing convention; NOTE this file's own "intelligence"/"core"
+# imports carry the same cross-repo module-collision risk found and fixed
+# elsewhere this session if Forge is ever loaded as a peer AFTER another
+# repo with its own "intelligence" package -- untested here, worth
+# revisiting with the dual-import fallback pattern if that scenario comes up.
+from intelligence.hypothesis_queue import HypothesisQueue                            # type: ignore
+from intelligence.experiment_templates import run_template                          # type: ignore
 
 try:
     from shared.agent import BaseAgent
@@ -65,7 +74,8 @@ class ForgeAgent(BaseAgent):
     capabilities = ["training.run", "training.from_csv", "training.evolve", "data.validate",
                     "method.discover", "benchmark.execute", "model.register", "model.promote",
                     "model.leaderboard", "model.predict", "model.drift",
-                    "hyperparameter.optimize", "backends.catalog"]
+                    "hyperparameter.optimize", "backends.catalog",
+                    "experiment.run", "hypothesis.add", "hypothesis.list"]
     channels = ["ecosystem.training", "ecosystem.optimization", "ecosystem.broadcast"]
     memory_namespace = "forge_memory"
     security_level = "elevated"
@@ -85,6 +95,9 @@ class ForgeAgent(BaseAgent):
         # core backends + discoverable extra backends, unified
         self._backends = {b.name: b for b in all_backends()}
         self._backends.update(discovery_backends())
+        # Evidence Engine (Hypothesis Queue + Experiment Templates) --
+        # Forge's ecosystem-wide role, not just ML training.
+        self.hypothesis_queue = HypothesisQueue()
 
     def on_start(self) -> None:
         log.info("Forge self-improving platform online. Backends: %s | Atlas: %s",
@@ -218,6 +231,44 @@ class ForgeAgent(BaseAgent):
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
+        if task == "hypothesis.add":
+            statement = ctx.get("statement")
+            proposed_by = ctx.get("proposed_by", "unknown")
+            if not statement:
+                return {"status": "error", "message": "statement is required"}
+            h = self.hypothesis_queue.add(statement, proposed_by, ctx.get("hypothesis_id"))
+            return {"status": "complete", "hypothesis": h.to_dict()}
+
+        if task == "hypothesis.list":
+            status_filter = ctx.get("status")
+            hyps = self.hypothesis_queue.all()
+            if status_filter:
+                hyps = [h for h in hyps if h.status == status_filter]
+            return {"status": "complete", "hypotheses": [h.to_dict() for h in hyps]}
+
+        if task == "experiment.run":
+            # Runs one Experiment Template (currently: sensitivity_analysis)
+            # against caller-supplied data -- Forge doesn't know or care
+            # which agent's data this is or what it means; that's the whole
+            # point of the generalized (value, outcome) interface.
+            template_name = ctx.get("template")
+            hypothesis_id = ctx.get("hypothesis_id")
+            template_kwargs = ctx.get("template_kwargs", {})
+            if not template_name:
+                return {"status": "error", "message": "template is required"}
+            result = run_template(template_name, **template_kwargs)
+            response: Dict[str, Any] = {"status": "complete", "result": result}
+            if hypothesis_id:
+                try:
+                    self.hypothesis_queue.mark_testing(hypothesis_id)
+                    updated = self.hypothesis_queue.record_evidence(
+                        hypothesis_id, template_name, result,
+                        sample_size=result.get("sample_size", 0))
+                    response["hypothesis"] = updated.to_dict()
+                except KeyError as exc:
+                    response["hypothesis_error"] = str(exc)
+            return response
+
         if task == "backends.catalog":
             return {"status": "complete",
                    "catalog": {n: b.describe() for n, b in self._backends.items()}}

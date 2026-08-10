@@ -54,6 +54,10 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]   # Oracle/
 _ECO_ROOT  = _REPO_ROOT.parent                     # Universe/ (ecosystem root)
 for p in (_REPO_ROOT, _ECO_ROOT):
@@ -333,7 +337,8 @@ class CTraderDemoTrader:
         self._manage_thread: Optional[threading.Thread] = None
 
         _unload_conflicting_modules()
-        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent")
+        self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
+                               storage_dir=str(_ECO_ROOT / "Chronicle" / "memory" / "store"))
         _unload_conflicting_modules()
         self.sentinel = _load("Sentinel", "agents/sentinel_agent.py", "SentinelAgent",
                               chronicle_client=self.chronicle)
@@ -393,7 +398,8 @@ class CTraderDemoTrader:
             return None
         return positions[0]
 
-    def _register_position(self, symbol, direction, entry_price, stop, target, confidence, size=0.0):
+    def _register_position(self, symbol, direction, entry_price, stop, target, confidence, size=0.0,
+                            news_level="none", news_reason="", social_level="none", social_reason=""):
         try:
             sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "ctrader_demo"})
             entry_regime = (sig or {}).get("regime") or "ranging"
@@ -420,6 +426,13 @@ class CTraderDemoTrader:
                 initial_stop=stop, initial_target=target, entry_confidence=confidence,
                 entry_regime=entry_regime, entry_streams=entry_streams, entry_atr=entry_atr,
                 entry_term_evidence=entry_term_evidence)
+            # Trade Journal (roadmap Phase 3 groundwork): reasons for
+            # entering this trade, wired to Chronicle, linked to its
+            # eventual win/loss outcome via the returned journal_id.
+            self._managed_positions[symbol].journal_id = self.oracle.trade_journal.log_entry(
+                symbol, direction, confidence, entry_regime,
+                news_level, news_reason, social_level, social_reason,
+                entry_streams, size)
         risk_direction = "long" if dir_norm == Direction.BUY else "short"
         self.oracle.risk.portfolio.remove_by_symbol(symbol)
         self.oracle.risk.portfolio.positions.append(
@@ -472,6 +485,10 @@ class CTraderDemoTrader:
             decision = self._trade_manager.evaluate(pos, snap)
             pos_id = live_pos.get("ticket") or live_pos.get("id")
             if decision.action == Action.HOLD:
+                if decision.reason != pos.last_journaled_hold_reason:
+                    self.oracle.trade_journal.log_hold(
+                        symbol, decision.reason, decision.current_confidence, decision.current_regime)
+                    pos.last_journaled_hold_reason = decision.reason
                 continue
             if decision.action == Action.TIGHTEN_STOP:
                 log.info("[%s] CTM tighten #%s -> %.5f: %s",
@@ -676,7 +693,11 @@ class CTraderDemoTrader:
                         entry_price=result.get("price") or plan.get("entry", 0.0),
                         stop=plan.get("stop", 0.0), target=plan.get("target", 0.0),
                         confidence=s.get("confidence", 0.0),
-                        size=result.get("volume", plan.get("size", 0.0)))
+                        size=result.get("volume", plan.get("size", 0.0)),
+                        news_level=sig.get("news_impact", "none"),
+                        news_reason=sig.get("news_reason", ""),
+                        social_level=sig.get("social_risk", "none"),
+                        social_reason=sig.get("social_reason", ""))
                     self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:
                     summary["rejects"] += 1
