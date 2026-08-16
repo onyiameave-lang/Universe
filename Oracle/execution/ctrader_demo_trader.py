@@ -54,10 +54,6 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]   # Oracle/
 _ECO_ROOT  = _REPO_ROOT.parent                     # Universe/ (ecosystem root)
 for p in (_REPO_ROOT, _ECO_ROOT):
@@ -353,6 +349,7 @@ class CTraderDemoTrader:
             chronicle_client=self.chronicle, sentinel_client=self.sentinel,
             pulse_client=self.pulse, atlas_client=self.atlas)
         self.oracle.start()
+        self._trade_learning.confidence = self.oracle._champion_confidence
 
         self._pos_log = ChroniclePositionLog(
             chronicle_agent=self.chronicle, trader_id=_TRADER_ID)

@@ -24,7 +24,9 @@ RELATION_TYPES = {
 
 
 class KnowledgeGraph:
-    def __init__(self, storage_dir: str = "memory_store"):
+    def __init__(self, storage_dir: Optional[str] = None):
+        if storage_dir is None:
+            storage_dir = str(Path(__file__).resolve().parents[1] / "memory" / "store")
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._path = self.storage_dir / "knowledge_graph.json"

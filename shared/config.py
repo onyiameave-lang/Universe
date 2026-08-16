@@ -10,10 +10,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_CHRONICLE_MEMORY = str(_ROOT / "Chronicle" / "memory" / "store")
+
 try:
     from dotenv import load_dotenv
     # Load .env from the root of the Universal_AI directory
-    _ROOT = Path(__file__).resolve().parent.parent
     if (_ROOT / ".env").exists():
         load_dotenv(_ROOT / ".env")
 except ImportError:
@@ -40,7 +42,7 @@ def _list(name, default=None, sep=","):
 @dataclass(frozen=True)
 class EcosystemConfig:
     ecosystem_root: str = field(default_factory=lambda: os.getenv("ECOSYSTEM_ROOT", os.getcwd()))
-    memory_path: str = field(default_factory=lambda: os.getenv("MEMORY_PATH", "memory_store"))
+    memory_path: str = field(default_factory=lambda: os.getenv("MEMORY_PATH", _DEFAULT_CHRONICLE_MEMORY))
     logs_path: str = field(default_factory=lambda: os.getenv("LOGS_PATH", "logs"))
     models_path: str = field(default_factory=lambda: os.getenv("MODELS_PATH", "models"))
     protocol_version: str = "1.0.0"

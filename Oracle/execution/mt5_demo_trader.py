@@ -410,6 +410,7 @@ class DemoTrader:
             atlas_client=self.atlas,
         )
         self.oracle.start()
+        self._trade_learning.confidence = self.oracle._champion_confidence
 
         # FIX-DEDUP: Chronicle position log — cross-script duplicate prevention
         self._pos_log = ChroniclePositionLog(

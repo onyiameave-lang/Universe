@@ -46,13 +46,27 @@ _experiment_log_lock = threading.Lock()
 
 
 def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
-                            won: bool, pnl_r: float) -> None:
+                            won: bool, pnl_r: float, chronicle_client=None) -> None:
     _EXPERIMENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {"symbol": symbol, "entry_streams": entry_streams or {}, "won": won,
               "pnl_r": pnl_r, "timestamp": time.time()}
     with _experiment_log_lock:
         with _EXPERIMENT_LOG_PATH.open("a") as f:
             f.write(json.dumps(record) + "\n")
+    # Incremental push to Chronicle -- same shape as scientific_journal.json's
+    # sync (one episodic memory per new entry, not a rewritten blob), best-
+    # effort so a Chronicle hiccup never blocks the local write above.
+    if chronicle_client is not None:
+        try:
+            result = "won" if won else "lost"
+            chronicle_client.act("memory.store", {
+                "content": f"Trade experiment: {symbol} {result} ({pnl_r:+.2f}R). "
+                           f"Entry streams: {entry_streams or {}}",
+                "pillar": "episodic", "domain": "trading",
+                "summary": f"{symbol} {result} {pnl_r:+.2f}R",
+                "tags": ["trade_experiment_log", symbol, result], "_sender": "oracle"})
+        except Exception as exc:
+            log.warning("[%s] could not push experiment log entry to Chronicle: %s", symbol, exc)
 
 
 def load_experiment_log(path: Optional[Path] = None) -> List[Dict[str, Any]]:
@@ -127,24 +141,30 @@ class ChampionConfidenceTracker:
     response to real (paper or demo) trade outcomes.
     """
 
-    def __init__(self, store_path: Optional[Path] = None):
+    def __init__(self, store_path: Optional[Path] = None, chronicle_client=None):
+        # Chronicle is now the source of truth for champion history (per
+        # architecture discussion this session) -- store_path becomes the
+        # local, disposable, offline-fallback cache, not a second source of
+        # truth. chronicle_client=None preserves today's exact behavior
+        # (local-file-only) for any existing caller that doesn't pass one.
+        try:
+            from shared.chronicle_sync import ChronicleBackedStore  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "shared.chronicle_sync not importable -- is the ecosystem root on sys.path? "
+                "(shared/ lives at Universe-oracle-v1/, a sibling of Oracle/, not nested "
+                "inside it)"
+            ) from exc
         self.store_path = store_path or DEFAULT_CONFIDENCE_STORE
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        self._data: Dict[str, Dict[str, Any]] = self._load()
+        self._store = ChronicleBackedStore(
+            chronicle_client, "champion_confidence", self.store_path, owner="oracle")
 
-    def _load(self) -> Dict[str, Dict[str, Any]]:
-        if self.store_path.exists():
-            try:
-                return json.loads(self.store_path.read_text())
-            except (json.JSONDecodeError, OSError) as exc:
-                log.warning("champion_confidence.json unreadable (%s); starting fresh", exc)
-        return {}
+    @property
+    def _data(self) -> Dict[str, Dict[str, Any]]:
+        return self._store.data()
 
     def _save(self) -> None:
-        try:
-            self.store_path.write_text(json.dumps(self._data, indent=2, sort_keys=True))
-        except OSError as exc:
-            log.warning("could not persist champion_confidence.json: %s", exc)
+        self._store.save()
 
     @staticmethod
     def _key(symbol: str, regime: str) -> str:
@@ -387,7 +407,8 @@ class TradeLearningEngine:
         #    news stream actually predict wins?"), without duplicating or
         #    replacing either of the above.
         try:
-            _append_experiment_log(pos.symbol, pos.entry_streams, won, outcome.pnl_r)
+            _append_experiment_log(pos.symbol, pos.entry_streams, won, outcome.pnl_r,
+                                    chronicle_client=getattr(oracle_agent, "chronicle", None))
         except Exception as exc:
             log.warning("[%s] experiment log write failed: %s", pos.symbol, exc)
 

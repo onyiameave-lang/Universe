@@ -36,7 +36,9 @@ from typing import Any, Dict, List, Optional, Tuple
 class AnticipationEngine:
     """Learns per-repository knowledge needs and predicts them ahead of time."""
 
-    def __init__(self, store, storage_dir: str = "memory_store"):
+    def __init__(self, store, storage_dir: Optional[str] = None):
+        if storage_dir is None:
+            storage_dir = str(Path(__file__).resolve().parents[1] / "memory" / "store")
         self.store = store
         self._lock = threading.RLock()
         self._path = Path(storage_dir) / "access_patterns.json"

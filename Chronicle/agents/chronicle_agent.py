@@ -86,7 +86,7 @@ class ChronicleAgent(BaseAgent):
     domain = "memory"
     description = "Institutional, self-correcting memory and knowledge base."
     capabilities = ["memory.store", "memory.retrieve", "memory.search", "memory.answer",
-                    "memory.feedback",
+                    "memory.feedback", "state.set", "state.get", "state.delete", "state.list",
                     "memory.evolve", "memory.validate", "knowledge_graph.connect",
                     "knowledge_graph.query", "contradiction.detect", "contradiction.adjudicate",
                     "belief.revise", "provenance.trace", "memory.rebalance",
@@ -97,11 +97,22 @@ class ChronicleAgent(BaseAgent):
     security_level = "critical"
     mission = {"purpose": "Preserve, anticipate, reconcile, and evolve the ecosystem's knowledge."}
 
-    def __init__(self, storage_dir: str = "memory_store", atlas_client: Any = None, **kw):
+    def __init__(self, storage_dir: Optional[str] = None, atlas_client: Any = None, **kw):
+        if storage_dir is None:
+            storage_dir = str(_REPO_ROOT / "memory" / "store")
         super().__init__(chronicle_client=None, atlas_client=atlas_client,
                         storage_dir=storage_dir, **kw)
         self.embedder = get_embedding_model()
         self.store = VectorStore(storage_dir=storage_dir)
+        # State Store: upsert-by-key, for frequently-updated STATE (champion
+        # confidence, term reliability weights, hypothesis status) as opposed
+        # to episodic memory (the VectorStore above). See core/state_store.py
+        # for why these need to be separate mechanisms.
+        try:
+            from core.state_store import StateStore  # type: ignore
+        except ImportError:
+            from Chronicle.core.state_store import StateStore  # type: ignore
+        self.state = StateStore(storage_dir=storage_dir)
         self.graph = KnowledgeGraph(storage_dir=storage_dir)
         self.retrieval = RetrievalEngine(self.store, self.graph)
         # FIX-CH-FB-01: let retrieval consult stored negative feedback so a memory
@@ -375,8 +386,27 @@ class ChronicleAgent(BaseAgent):
         # FIX-CH-01 (Phase 5f): Re-set socket timeout at start of execute() to ensure
         # it's active even if other code has changed it. This is a defense-in-depth measure.
         socket.setdefaulttimeout(8)
-        
+
         ctx = context
+
+        if task == "state.set":
+            key = ctx.get("key")
+            if not key:
+                return {"status": "error", "message": "key is required"}
+            return self.state.set(key, ctx.get("value"), owner=ctx.get("_sender", ""))
+        if task == "state.get":
+            key = ctx.get("key")
+            if not key:
+                return {"status": "error", "message": "key is required"}
+            value = self.state.get(key)
+            return {"status": "complete", "key": key, "value": value, "found": value is not None}
+        if task == "state.delete":
+            key = ctx.get("key")
+            if not key:
+                return {"status": "error", "message": "key is required"}
+            return self.state.delete(key)
+        if task == "state.list":
+            return {"status": "complete", "keys": self.state.list_keys(ctx.get("prefix", ""))}
         sender = ctx.get("_sender", "unknown")
         
         # FIX-CH-02 (Phase 5f): Debug logging for observability

@@ -467,6 +467,11 @@ class LiveTrader:
         self.oracle = OracleAgent(chronicle_client=self.chronicle, sentinel_client=self.sentinel,
                                  pulse_client=self.pulse, atlas_client=self.atlas)
         self.oracle.start()
+        # Use the ONE Chronicle-wired champion confidence tracker OracleAgent
+        # already built, instead of TradeLearningEngine's own separate,
+        # non-Chronicle-wired duplicate constructed above — a real bug found
+        # this session: two independent trackers silently diverging.
+        self._trade_learning.confidence = self.oracle._champion_confidence
 
         # FIX-DEDUP: Chronicle position log — cross-script duplicate prevention
         self._pos_log = ChroniclePositionLog(

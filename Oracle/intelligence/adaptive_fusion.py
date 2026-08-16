@@ -27,26 +27,32 @@ LR = 0.08  # learning rate for weight updates
 
 
 class AdaptiveFusion:
-    def __init__(self, storage_dir: str = "memory"):
+    def __init__(self, storage_dir: str = "memory", chronicle_client=None):
+        # Chronicle is now the source of truth for fusion weights (per
+        # architecture discussion this session) -- the local file becomes
+        # the offline-fallback cache, not a second source of truth.
+        # chronicle_client=None preserves today's exact local-file-only
+        # behavior for any existing caller that doesn't pass one.
+        try:
+            from shared.chronicle_sync import ChronicleBackedStore  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "shared.chronicle_sync not importable -- is the ecosystem root on sys.path? "
+                "(shared/ lives at Universe-oracle-v1/, a sibling of Oracle/, not nested "
+                "inside it)"
+            ) from exc
         self._path = Path(storage_dir) / "fusion_weights.json"
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        # per-symbol weights + entry threshold + per-stream hit stats
-        self._state: Dict[str, Dict[str, Any]] = {}
-        self._load()
+        self._store = ChronicleBackedStore(
+            chronicle_client, "fusion_weights", self._path, owner="oracle")
 
-    def _load(self):
-        if self._path.exists():
-            try:
-                self._state = json.loads(self._path.read_text(encoding="utf-8"))
-            except Exception:
-                self._state = {}
+    @property
+    def _state(self) -> Dict[str, Dict[str, Any]]:
+        return self._store.data()
 
     def _persist(self):
-        try:
-            self._path.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
-        except Exception:
-            pass  # aegis:allow-silent
+        with self._lock:
+            self._store.save()
 
     def _sym(self, symbol: str) -> Dict[str, Any]:
         with self._lock:

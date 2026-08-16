@@ -50,12 +50,49 @@ class ScientificResearchLab:
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._journal_path = self._dir / "scientific_journal.json"
+        self._journal: List[Dict[str, Any]] = self._load_list(self._journal_path)
+        # champion_library.json (current champion per symbol/regime) and
+        # champion_history.json (capped rolling history) are genuinely
+        # bounded state -- Chronicle is now their source of truth, the
+        # local file is the offline-fallback cache. scientific_journal.json
+        # stays as-is above: it already syncs to Chronicle separately, one
+        # entry at a time, via _store_to_chronicle() (confirmed working) --
+        # a different mechanism because it's an unbounded, ever-growing log,
+        # not bounded state.
+        try:
+            from shared.chronicle_sync import ChronicleBackedStore  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "shared.chronicle_sync not importable -- is the ecosystem root on sys.path?"
+            ) from exc
         self._champions_path = self._dir / "champion_library.json"
         self._history_path = self._dir / "champion_history.json"
-        self._journal: List[Dict[str, Any]] = self._load_list(self._journal_path)
-        self._champions: Dict[str, Dict[str, Any]] = self._load_dict(self._champions_path)
-        self._champion_history: List[Dict[str, Any]] = self._load_list(self._history_path)
+        self._champions_store = ChronicleBackedStore(
+            chronicle, "champion_library", self._champions_path, owner="oracle")
+        self._history_store = ChronicleBackedStore(
+            chronicle, "champion_history", self._history_path, owner="oracle")
         self.benchmark = BenchmarkEngine(storage_dir=str(self._dir.parent / "benchmarks"))
+
+    @property
+    def _champions(self) -> Dict[str, Dict[str, Any]]:
+        return self._champions_store.data()
+
+    @property
+    def _champion_history(self) -> List[Dict[str, Any]]:
+        # ChronicleBackedStore holds a dict internally; the list itself
+        # lives under one key so it round-trips through Chronicle's state
+        # store (which is key->value, not natively list-shaped).
+        data = self._history_store.data()
+        if isinstance(data, list):
+            # A real bug found via testing: existing local
+            # champion_history.json files were written in the OLD format
+            # (a bare JSON list) before this migration -- ChronicleBackedStore's
+            # local-cache fallback loads that old shape as-is. Adopt it into
+            # the new dict-wrapped shape in place rather than crashing.
+            wrapped: Dict[str, Any] = {"entries": data}
+            self._history_store._data = wrapped
+            return wrapped["entries"]
+        return data.setdefault("entries", [])
 
     def _load_list(self, path):
         try:
@@ -74,8 +111,13 @@ class ScientificResearchLab:
     def _persist(self):
         try:
             self._journal_path.write_text(json.dumps(self._journal[-250:], indent=2), encoding="utf-8")
-            self._champions_path.write_text(json.dumps(self._champions, indent=2), encoding="utf-8")
-            self._history_path.write_text(json.dumps(self._champion_history[-100:], indent=2), encoding="utf-8")
+            self._champions_store.save()
+            # Keep the same [-100:] cap that existed before -- Chronicle
+            # sync doesn't change the retention policy, just where the
+            # authoritative copy lives.
+            hist = self._history_store.data()
+            hist["entries"] = hist.get("entries", [])[-100:]
+            self._history_store.save(hist)
         except Exception as exc:
             log.error("Persist failed: %s", exc)
 
@@ -496,9 +538,20 @@ class ScientificResearchLab:
         if not self.atlas: return {"status": "unavailable", "query": query}
         try:
             if hasattr(self.atlas, "act"):
+                # FIX (found via a real bug report): "financial_markets" was never
+                # a recognized domain in Atlas's DOMAIN_SOURCES -- it silently fell
+                # back to "general", which includes semantic_scholar (an ACADEMIC
+                # paper search engine). Confirmed root cause of real, reproducible
+                # garbage in scientific_journal.json: a GBPUSD/NASDAQ trading query
+                # returned an unrelated ecology dissertation about a national park,
+                # stored as if it were legitimate research, across 4 separate
+                # experiments. "trading" is the real recognized key, mapping to
+                # gdelt/hackernews/wikipedia -- no academic-paper source at all.
+                # Also fixed: "institutional" wasn't a recognized depth either
+                # (silently fell back to a reasonable default, but still wrong).
                 return self.atlas.act("research.investigate", {
-                    "query": query, "domain": "financial_markets",
-                    "depth": "institutional", "stagnation": stagnation, "_sender": "oracle"})
+                    "query": query, "domain": "trading",
+                    "depth": "standard", "stagnation": stagnation, "_sender": "oracle"})
         except Exception as exc:
             return {"status": "error", "message": str(exc)}
         return {"status": "error"}

@@ -153,7 +153,7 @@ class OracleAgent(BaseAgent):
                                      storage_dir=str(_REPO_ROOT / "memory"))
         self.lab = ScientificResearchLab(chronicle=chronicle_client, atlas=atlas_client,
                                         storage_dir=str(_REPO_ROOT / "memory"))
-        self.fusion = AdaptiveFusion(storage_dir=str(_REPO_ROOT / "memory"))
+        self.fusion = AdaptiveFusion(storage_dir=str(_REPO_ROOT / "memory"), chronicle_client=chronicle_client)
         self.sentinel = sentinel_client
         self.pulse = pulse_client
         self.chronicle = chronicle_client
@@ -172,7 +172,7 @@ class OracleAgent(BaseAgent):
         # Oracle/memory/ dir used above). Read-mostly here — this instance
         # only writes if something calls record_outcome() directly on it,
         # which nothing in oracle_agent.py currently does.
-        self._champion_confidence = ChampionConfidenceTracker()
+        self._champion_confidence = ChampionConfidenceTracker(chronicle_client=chronicle_client)
 
     def on_start(self) -> None:
         log.info("Oracle scientific research lab online. Paper: %s | champions: %s | Sentinel:%s Pulse:%s",

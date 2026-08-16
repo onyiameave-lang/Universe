@@ -348,19 +348,24 @@ class EvolutionLab:
         self.validator = GenomeValidator()
         self.auditor = CertificationAuditor(backtester=self.backtester)
         self.stagnation = StagnationDetector()
+        # Chronicle is now the source of truth for evolved_strategies.json
+        # (per architecture discussion this session) -- the local file
+        # becomes the offline-fallback cache, not a second source of truth.
+        try:
+            from shared.chronicle_sync import ChronicleBackedStore  # type: ignore
+        except ImportError as exc:
+            raise ImportError(
+                "shared.chronicle_sync not importable -- is the ecosystem root on sys.path?"
+            ) from exc
         self._path = Path(storage_dir) / "evolved_strategies.json"
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._champions: Dict[str, Dict[str, Any]] = {}
-        self._load()
+        self._store = ChronicleBackedStore(chronicle, "evolved_strategies", self._path, owner="oracle")
 
-    def _load(self):
-        if self._path.exists():
-            try: self._champions = json.loads(self._path.read_text(encoding="utf-8"))
-            except Exception: self._champions = {}
+    @property
+    def _champions(self) -> Dict[str, Dict[str, Any]]:
+        return self._store.data()
 
     def _persist(self):
-        try: self._path.write_text(json.dumps(self._champions, indent=2), encoding="utf-8")
-        except Exception: pass
+        self._store.save()
 
     def _regime_for(self, series):
         try: return (analyze(series).get("regime") or {}).get("regime", "unknown")
