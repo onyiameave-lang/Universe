@@ -6981,22 +6981,21 @@
     "symbol": "USDCAD"
   },
   "USDCAD::trending_down": {
-    "certified_at": 1786929953.926994,
-    "generation": 88,
+    "certified_at": 1786956420.9301782,
+    "generation": 28,
     "genome": {
-      "backtests": 45,
-      "best_return": 0.0148,
-      "best_sharpe": 0.182,
-      "fitness": 3.4409,
-      "generation": 88,
-      "genome_id": "mut-161c42",
+      "backtests": 15,
+      "best_return": -0.0052,
+      "best_sharpe": -0.148,
+      "fitness": 0.9139,
+      "generation": 28,
+      "genome_id": "mean_r-3dc72c",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.247,
-            "regime_bonus": 0.1,
-            "threshold": 0.247
+            "base_threshold": 0.35,
+            "regime_bonus": 0.15
           }
         },
         "execution": {
@@ -7004,30 +7003,28 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "atr_stops",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "sl_mult": 1.6,
+            "tp_mult": 2.2
           }
         },
         "market_regime": {
           "logic_type": "default",
           "params": {
             "allowed_regimes": [
-              "trending_up",
-              "trending_down",
               "ranging",
-              "high_volatility"
+              "trending_up",
+              "trending_down"
             ]
           }
         },
         "momentum": {
-          "logic_type": "cci",
+          "logic_type": "williams_r",
           "params": {
             "lower": 15,
-            "period": 20,
-            "upper": 85
+            "period": 14,
+            "upper": 60
           }
         },
         "position": {
@@ -7043,44 +7040,45 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ema_slope",
+          "logic_type": "vwap_trend",
           "params": {
-            "period": 13,
-            "slow": 35
+            "period": 20,
+            "slow": 47
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "bollinger_width",
           "params": {
-            "period": 20
+            "period": 20,
+            "threshold": 15.0
           }
         }
       },
       "parents": [
-        "xov-ed5e6d"
+        "xov-5bcba7"
       ]
     },
     "in_sample": {
-      "fitness": 3.4409,
-      "return": 0.0148
+      "fitness": 0.9139,
+      "return": -0.0052
     },
     "out_of_sample": {
-      "avg_pnl": 62.7,
-      "consistency": 0.667,
-      "expectancy": 62.7,
-      "final_equity": 10188.1,
-      "max_drawdown": 0.01,
-      "profit_factor": 2.853,
-      "recovery_factor": 1.881,
-      "sharpe_proxy": 0.54,
-      "sortino_proxy": 1.07,
+      "avg_pnl": 145.22,
+      "consistency": 1.0,
+      "expectancy": 145.22,
+      "final_equity": 10290.44,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 30.381,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0188,
-      "trades": 3,
-      "win_rate": 0.667
+      "total_return": 0.029,
+      "trades": 2,
+      "win_rate": 1.0
     },
     "parents": [
-      "xov-ed5e6d"
+      "xov-5bcba7"
     ],
     "regime": "trending_down",
     "symbol": "USDCAD"
