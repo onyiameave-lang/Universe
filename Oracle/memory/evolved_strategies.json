@@ -3225,6 +3225,109 @@
     "regime": "trending_down",
     "symbol": "EURUSD"
   },
+  "EURUSD::trending_up": {
+    "certified_at": 1787042410.494208,
+    "generation": 30,
+    "genome": {
+      "backtests": 15,
+      "best_return": -0.0015,
+      "best_sharpe": -0.08,
+      "fitness": 0.9764,
+      "generation": 30,
+      "genome_id": "mut-9504db",
+      "modules": {
+        "entry": {
+          "logic_type": "default",
+          "params": {
+            "confirmation_required": 1,
+            "threshold": 0.34
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 10,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "cci",
+          "params": {
+            "lower": 15,
+            "period": 20,
+            "upper": 85
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 26,
+            "slow": 45
+          }
+        },
+        "volatility": {
+          "logic_type": "atr_contraction",
+          "params": {
+            "contraction_ratio": 0.7,
+            "period": 14
+          }
+        }
+      },
+      "parents": [
+        "xov-572982"
+      ]
+    },
+    "in_sample": {
+      "fitness": 0.9764,
+      "return": -0.0015
+    },
+    "out_of_sample": {
+      "avg_pnl": 31.09,
+      "consistency": 0.667,
+      "expectancy": 31.09,
+      "final_equity": 10093.27,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.919,
+      "recovery_factor": 0.933,
+      "sharpe_proxy": 0.301,
+      "sortino_proxy": 0.531,
+      "status": "complete",
+      "total_return": 0.0093,
+      "trades": 3,
+      "win_rate": 0.667
+    },
+    "parents": [
+      "xov-572982"
+    ],
+    "regime": "trending_up",
+    "symbol": "EURUSD"
+  },
   "FTSE::ranging": {
     "certified_at": 1783887611.8882253,
     "generation": 26,
