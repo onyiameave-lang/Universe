@@ -5938,15 +5938,15 @@
     "symbol": "NZDUSD"
   },
   "NZDUSD::trending_up": {
-    "certified_at": 1785897925.9572012,
-    "generation": 22,
+    "certified_at": 1787016159.6892376,
+    "generation": 30,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0096,
-      "best_sharpe": 0.31,
-      "fitness": 4.4792,
-      "generation": 22,
-      "genome_id": "mut-9fdf67",
+      "best_return": 0.023,
+      "best_sharpe": 0.554,
+      "fitness": 7.3934,
+      "generation": 30,
+      "genome_id": "mut-517e66",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -5960,10 +5960,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "time_exit",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "max_bars": 20,
+            "sl_mult": 2.207,
+            "tp_mult": 3.164
           }
         },
         "market_regime": {
@@ -5978,16 +5979,16 @@
           }
         },
         "momentum": {
-          "logic_type": "williams_r",
+          "logic_type": "price_action",
           "params": {
-            "lower": 15,
-            "period": 14,
-            "upper": 60
+            "lookback": 10
           }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "fixed_fractional",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "risk": {
           "logic_type": "default",
@@ -5998,45 +5999,46 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "hma_slope",
+          "logic_type": "adx_trend",
           "params": {
             "period": 14,
-            "slow": 48
+            "slow": 46,
+            "threshold": 25
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "bollinger_width",
           "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
+            "period": 20,
+            "threshold": 15.0
           }
         }
       },
       "parents": [
-        "xov-a6b49f"
+        "xov-273a6b"
       ]
     },
     "in_sample": {
-      "fitness": 4.4792,
-      "return": 0.0096
+      "fitness": 7.3934,
+      "return": 0.023
     },
     "out_of_sample": {
-      "avg_pnl": 44.87,
-      "consistency": 0.5,
-      "expectancy": 44.87,
-      "final_equity": 10179.49,
+      "avg_pnl": 64.05,
+      "consistency": 0.75,
+      "expectancy": 64.05,
+      "final_equity": 10256.2,
       "max_drawdown": 0.01,
-      "profit_factor": 2.48,
-      "recovery_factor": 1.795,
-      "sharpe_proxy": 0.41,
-      "sortino_proxy": 0.868,
+      "profit_factor": 3.524,
+      "recovery_factor": 2.562,
+      "sharpe_proxy": 0.622,
+      "sortino_proxy": 1.262,
       "status": "complete",
-      "total_return": 0.0179,
+      "total_return": 0.0256,
       "trades": 4,
-      "win_rate": 0.5
+      "win_rate": 0.75
     },
     "parents": [
-      "xov-a6b49f"
+      "xov-273a6b"
     ],
     "regime": "trending_up",
     "symbol": "NZDUSD"
