@@ -57,7 +57,21 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# Ensure this broker always sees the root .env before reading CTRADER_* vars.
+try:
+    from shared.startup import load_dotenv_early  # type: ignore
+    load_dotenv_early(__file__)
+except Exception:
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        env_path = Path(__file__).resolve().parents[2] / ".env"
+        if env_path.exists():
+            load_dotenv(dotenv_path=str(env_path), override=False)
+    except Exception:
+        pass
 
 log = logging.getLogger("oracle.ctrader")
 

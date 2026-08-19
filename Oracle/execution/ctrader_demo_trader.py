@@ -54,6 +54,13 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Make sure the project .env is loaded before any broker credentials are read.
+try:
+    from shared.startup import load_dotenv_early  # type: ignore
+    load_dotenv_early(__file__)
+except Exception:
+    pass
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]   # Oracle/
 _ECO_ROOT  = _REPO_ROOT.parent                     # Universe/ (ecosystem root)
 for p in (_REPO_ROOT, _ECO_ROOT):
