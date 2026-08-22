@@ -8130,33 +8130,35 @@
     "symbol": "VIX"
   },
   "XAUUSD::high_volatility": {
-    "certified_at": 1784888561.9697459,
-    "generation": 18,
+    "certified_at": 1787387636.1183329,
+    "generation": 40,
     "genome": {
-      "backtests": 10,
-      "best_return": 0.0056,
-      "best_sharpe": 0.0,
-      "fitness": 6.7255,
-      "generation": 18,
-      "genome_id": "mut-aef8ad",
+      "backtests": 15,
+      "best_return": 0.034,
+      "best_sharpe": 0.782,
+      "fitness": 10.2964,
+      "generation": 40,
+      "genome_id": "mut-a06ddc",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.335,
-            "regime_bonus": 0.15
+            "base_threshold": 0.344,
+            "regime_bonus": 0.145
           }
         },
         "execution": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "slippage_pips": 0.7888870282222005
+          }
         },
         "exit": {
           "logic_type": "swing_stops",
           "params": {
             "lookback": 10,
-            "sl_mult": 1.983,
-            "tp_mult": 2.751
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -8171,10 +8173,10 @@
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "adx_strength",
           "params": {
-            "period": 10,
-            "threshold": 15
+            "period": 14,
+            "threshold": 20
           }
         },
         "position": {
@@ -8193,42 +8195,41 @@
           "logic_type": "market_structure",
           "params": {
             "lookback": 19,
-            "slow": 45
+            "slow": 43
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-818ef9"
+        "xov-0069ac"
       ]
     },
     "in_sample": {
-      "fitness": 6.7255,
-      "return": 0.0056
+      "fitness": 10.2964,
+      "return": 0.034
     },
     "out_of_sample": {
-      "avg_pnl": 114.97,
+      "avg_pnl": 117.19,
       "consistency": 1.0,
-      "expectancy": 114.97,
-      "final_equity": 10229.95,
+      "expectancy": 117.19,
+      "final_equity": 10234.37,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 3.283,
+      "sharpe_proxy": 3.571,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.023,
+      "total_return": 0.0234,
       "trades": 2,
       "win_rate": 1.0
     },
     "parents": [
-      "xov-818ef9"
+      "xov-0069ac"
     ],
     "regime": "high_volatility",
     "symbol": "XAUUSD"
