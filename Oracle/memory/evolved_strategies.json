@@ -3115,22 +3115,22 @@
     "symbol": "EURUSD"
   },
   "FTSE::ranging": {
-    "certified_at": 1783887611.8882253,
-    "generation": 26,
+    "certified_at": 1787561611.2564232,
+    "generation": 0,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0393,
-      "best_sharpe": 0.487,
-      "fitness": 7.1301,
-      "generation": 26,
-      "genome_id": "mut-13c6ca",
+      "backtests": 6,
+      "best_return": 0.0079,
+      "best_sharpe": 0.257,
+      "fitness": 3.9431,
+      "generation": 0,
+      "genome_id": "imm-a8e343",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.167,
-            "regime_bonus": 0.096,
-            "threshold": 0.5
+            "base_threshold": 0.229,
+            "regime_bonus": 0.1,
+            "threshold": 0.229
           }
         },
         "execution": {
@@ -3138,11 +3138,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "trailing_atr",
           "params": {
-            "max_bars": 20,
             "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "tp_mult": 5.0,
+            "trail_mult": 1.5
           }
         },
         "market_regime": {
@@ -3159,8 +3159,8 @@
         "momentum": {
           "logic_type": "roc",
           "params": {
-            "period": 13,
-            "threshold": 17
+            "period": 14,
+            "threshold": 15
           }
         },
         "position": {
@@ -3178,44 +3178,38 @@
         "trend": {
           "logic_type": "adx_trend",
           "params": {
-            "period": 15,
+            "period": 14,
             "slow": 45,
-            "threshold": 19
+            "threshold": 22
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
-          "params": {
-            "period": 20
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
-      "parents": [
-        "xov-084aef"
-      ]
+      "parents": []
     },
     "in_sample": {
-      "fitness": 7.1301,
-      "return": 0.0393
+      "fitness": 3.9431,
+      "return": 0.0079
     },
     "out_of_sample": {
-      "avg_pnl": 12.67,
-      "consistency": 0.333,
-      "expectancy": 12.67,
-      "final_equity": 10038.0,
-      "max_drawdown": 0.01,
-      "profit_factor": 1.339,
-      "recovery_factor": 0.38,
-      "sharpe_proxy": 0.122,
-      "sortino_proxy": 0.215,
+      "avg_pnl": 84.81,
+      "consistency": 1.0,
+      "expectancy": 84.81,
+      "final_equity": 10169.62,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 1.301,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0038,
-      "trades": 3,
-      "win_rate": 0.333
+      "total_return": 0.017,
+      "trades": 2,
+      "win_rate": 1.0
     },
-    "parents": [
-      "xov-084aef"
-    ],
+    "parents": [],
     "regime": "ranging",
     "symbol": "FTSE"
   },
@@ -4155,6 +4149,110 @@
       "xov-d5cc96"
     ],
     "regime": "high_volatility",
+    "symbol": "HSI"
+  },
+  "HSI::ranging": {
+    "certified_at": 1787561631.3510911,
+    "generation": 16,
+    "genome": {
+      "backtests": 15,
+      "best_return": 0.015,
+      "best_sharpe": 1.0,
+      "fitness": 8.8217,
+      "generation": 16,
+      "genome_id": "mut-f50096",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.35,
+            "regime_bonus": 0.15
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "cci",
+          "params": {
+            "lower": 16,
+            "period": 18,
+            "upper": 85
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "price_above_sma",
+          "params": {
+            "period": 50,
+            "slow": 37
+          }
+        },
+        "volatility": {
+          "logic_type": "historical_vol",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        }
+      },
+      "parents": [
+        "xov-48d5aa"
+      ]
+    },
+    "in_sample": {
+      "fitness": 8.8217,
+      "return": 0.015
+    },
+    "out_of_sample": {
+      "avg_pnl": 5.33,
+      "consistency": 0.333,
+      "expectancy": 5.33,
+      "final_equity": 10015.99,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.121,
+      "recovery_factor": 0.16,
+      "sharpe_proxy": 0.051,
+      "sortino_proxy": 0.088,
+      "status": "complete",
+      "total_return": 0.0016,
+      "trades": 3,
+      "win_rate": 0.333
+    },
+    "parents": [
+      "xov-48d5aa"
+    ],
+    "regime": "ranging",
     "symbol": "HSI"
   },
   "HSI::trending_up": {
@@ -7054,7 +7152,8 @@
         "trend": {
           "logic_type": "ema_slope",
           "params": {
-            "period": 19
+            "period": 19,
+            "slow": 48
           }
         },
         "volatility": {
