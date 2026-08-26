@@ -5949,22 +5949,22 @@
     "symbol": "NZDUSD"
   },
   "NZDUSD::trending_up": {
-    "certified_at": 1787676048.5369813,
-    "generation": 66,
+    "certified_at": 1787707701.5168276,
+    "generation": 0,
     "genome": {
-      "backtests": 30,
-      "best_return": 0.0265,
-      "best_sharpe": 0.644,
-      "fitness": 8.3139,
-      "generation": 66,
-      "genome_id": "mut-03210a",
+      "backtests": 3,
+      "best_return": 0.0026,
+      "best_sharpe": 0.0,
+      "fitness": 3.7145,
+      "generation": 0,
+      "genome_id": "imm-4ac40a",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.141,
-            "regime_bonus": 0.11,
-            "threshold": 0.5
+            "base_threshold": 0.249,
+            "regime_bonus": 0.15,
+            "threshold": 0.249
           }
         },
         "execution": {
@@ -5972,11 +5972,10 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "atr_stops",
           "params": {
-            "max_bars": 20,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "sl_mult": 1.5,
+            "tp_mult": 2.0
           }
         },
         "market_regime": {
@@ -5984,14 +5983,18 @@
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
+              "trending_down",
+              "ranging",
+              "high_volatility"
             ]
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "rsi",
           "params": {
-            "lookback": 10
+            "lower": 30,
+            "period": 7,
+            "upper": 70
           }
         },
         "position": {
@@ -6007,11 +6010,9 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "adx_trend",
+          "logic_type": "vwap_trend",
           "params": {
-            "period": 14,
-            "slow": 48,
-            "threshold": 21
+            "period": 20
           }
         },
         "volatility": {
@@ -6022,32 +6023,28 @@
           }
         }
       },
-      "parents": [
-        "xov-3faebb"
-      ]
+      "parents": []
     },
     "in_sample": {
-      "fitness": 8.3139,
-      "return": 0.0265
+      "fitness": 3.7145,
+      "return": 0.0026
     },
     "out_of_sample": {
-      "avg_pnl": 56.97,
+      "avg_pnl": 58.74,
       "consistency": 0.667,
-      "expectancy": 56.97,
-      "final_equity": 10170.91,
+      "expectancy": 58.74,
+      "final_equity": 10176.23,
       "max_drawdown": 0.01,
-      "profit_factor": 2.709,
-      "recovery_factor": 1.709,
-      "sharpe_proxy": 0.511,
-      "sortino_proxy": 0.987,
+      "profit_factor": 2.762,
+      "recovery_factor": 1.762,
+      "sharpe_proxy": 0.522,
+      "sortino_proxy": 1.017,
       "status": "complete",
-      "total_return": 0.0171,
+      "total_return": 0.0176,
       "trades": 3,
       "win_rate": 0.667
     },
-    "parents": [
-      "xov-3faebb"
-    ],
+    "parents": [],
     "regime": "trending_up",
     "symbol": "NZDUSD"
   },
@@ -6267,21 +6264,22 @@
     "symbol": "RUT"
   },
   "SENSEX::ranging": {
-    "certified_at": 1787330404.6033175,
-    "generation": 106,
+    "certified_at": 1787707807.4314823,
+    "generation": 136,
     "genome": {
-      "backtests": 30,
-      "best_return": 0.0109,
-      "best_sharpe": 0.349,
-      "fitness": 5.0076,
-      "generation": 106,
-      "genome_id": "mut-e9e96a",
+      "backtests": 45,
+      "best_return": 0.0098,
+      "best_sharpe": 0.319,
+      "fitness": 4.3864,
+      "generation": 136,
+      "genome_id": "mut-561a32",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.25,
-            "regime_bonus": 0.15
+            "base_threshold": 0.312,
+            "regime_bonus": 0.109,
+            "threshold": 0.5
           }
         },
         "execution": {
@@ -6289,10 +6287,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "sl_mult": 1.5,
-            "tp_mult": 4.9
+            "sl_mult": 2.067,
+            "tp_mult": 6.0,
+            "trail_mult": 1.32
           }
         },
         "market_regime": {
@@ -6307,11 +6306,10 @@
           }
         },
         "momentum": {
-          "logic_type": "rsi",
+          "logic_type": "adx_strength",
           "params": {
-            "lower": 30,
             "period": 14,
-            "upper": 70
+            "threshold": 25
           }
         },
         "position": {
@@ -6333,42 +6331,40 @@
         "trend": {
           "logic_type": "sma_crossover",
           "params": {
-            "fast": 20,
-            "slow": 43
+            "fast": 22,
+            "slow": 42
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
-          "params": {
-            "period": 20
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
       "parents": [
-        "xov-e0d343"
+        "xov-551f78"
       ]
     },
     "in_sample": {
-      "fitness": 5.0076,
-      "return": 0.0109
+      "fitness": 4.3864,
+      "return": 0.0098
     },
     "out_of_sample": {
-      "avg_pnl": 24.51,
-      "consistency": 0.6,
-      "expectancy": 24.51,
-      "final_equity": 10122.56,
+      "avg_pnl": 28.12,
+      "consistency": 0.667,
+      "expectancy": 28.12,
+      "final_equity": 10084.35,
       "max_drawdown": 0.01,
-      "profit_factor": 1.607,
-      "recovery_factor": 1.226,
-      "sharpe_proxy": 0.219,
-      "sortino_proxy": 0.384,
+      "profit_factor": 1.843,
+      "recovery_factor": 0.844,
+      "sharpe_proxy": 0.277,
+      "sortino_proxy": 0.487,
       "status": "complete",
-      "total_return": 0.0123,
-      "trades": 5,
-      "win_rate": 0.6
+      "total_return": 0.0084,
+      "trades": 3,
+      "win_rate": 0.667
     },
     "parents": [
-      "xov-e0d343"
+      "xov-551f78"
     ],
     "regime": "ranging",
     "symbol": "SENSEX"
