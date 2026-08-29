@@ -7097,6 +7097,107 @@
     "regime": "high_volatility",
     "symbol": "TSLA"
   },
+  "TSLA::ranging": {
+    "certified_at": 1787984442.5891361,
+    "generation": 26,
+    "genome": {
+      "backtests": 4,
+      "best_return": 0.0132,
+      "best_sharpe": 0.233,
+      "fitness": 3.97,
+      "generation": 26,
+      "genome_id": "mut-bd9e3e",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.312,
+            "regime_bonus": 0.149
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 11,
+            "sl_mult": 2.155,
+            "tp_mult": 3.396
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "ranging",
+              "trending_up",
+              "trending_down"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "lower": 15,
+            "period": 12,
+            "upper": 61
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "vwap_trend",
+          "params": {
+            "period": 21,
+            "slow": 40
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        }
+      },
+      "parents": [
+        "xov-ede5d2"
+      ]
+    },
+    "in_sample": {
+      "fitness": 3.97,
+      "return": 0.0132
+    },
+    "out_of_sample": {
+      "avg_pnl": 24.25,
+      "consistency": 0.5,
+      "expectancy": 24.25,
+      "final_equity": 10048.5,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.478,
+      "recovery_factor": 0.485,
+      "sharpe_proxy": 0.193,
+      "sortino_proxy": 0.338,
+      "status": "complete",
+      "total_return": 0.0049,
+      "trades": 2,
+      "win_rate": 0.5
+    },
+    "parents": [
+      "xov-ede5d2"
+    ],
+    "regime": "ranging",
+    "symbol": "TSLA"
+  },
   "USDCAD::ranging": {
     "certified_at": 1784124334.4320092,
     "generation": 140,
