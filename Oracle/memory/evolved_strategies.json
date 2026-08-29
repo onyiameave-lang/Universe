@@ -511,6 +511,110 @@
     "regime": "high_volatility",
     "symbol": "AMZN"
   },
+  "ASX200::ranging": {
+    "certified_at": 1788031219.227762,
+    "generation": 26,
+    "genome": {
+      "backtests": 15,
+      "best_return": 0.0163,
+      "best_sharpe": 0.22,
+      "fitness": 4.0572,
+      "generation": 26,
+      "genome_id": "mut-25e90a",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.141,
+            "regime_bonus": 0.141,
+            "threshold": 0.141
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 10,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "stochastic",
+          "params": {
+            "d_period": 3,
+            "k_period": 14,
+            "lower": 20,
+            "upper": 80
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 20,
+            "slow": 45
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        }
+      },
+      "parents": [
+        "xov-005bf3"
+      ]
+    },
+    "in_sample": {
+      "fitness": 4.0572,
+      "return": 0.0163
+    },
+    "out_of_sample": {
+      "avg_pnl": 15.25,
+      "consistency": 0.4,
+      "expectancy": 15.25,
+      "final_equity": 10076.23,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.342,
+      "recovery_factor": 0.762,
+      "sharpe_proxy": 0.134,
+      "sortino_proxy": 0.236,
+      "status": "complete",
+      "total_return": 0.0076,
+      "trades": 5,
+      "win_rate": 0.4
+    },
+    "parents": [
+      "xov-005bf3"
+    ],
+    "regime": "ranging",
+    "symbol": "ASX200"
+  },
   "AUDUSD::ranging": {
     "certified_at": 1785345504.775803,
     "generation": 168,
