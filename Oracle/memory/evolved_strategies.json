@@ -4372,21 +4372,22 @@
     "symbol": "HSI"
   },
   "HSI::ranging": {
-    "certified_at": 1787734210.7850134,
-    "generation": 2,
+    "certified_at": 1788320356.1970658,
+    "generation": 26,
     "genome": {
-      "backtests": 9,
-      "best_return": 0.0223,
-      "best_sharpe": 2.892,
-      "fitness": 13.1739,
-      "generation": 2,
-      "genome_id": "market-bddb92",
+      "backtests": 15,
+      "best_return": 0.028,
+      "best_sharpe": 0.685,
+      "fitness": 8.7191,
+      "generation": 26,
+      "genome_id": "mut-db7f56",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.15
+            "base_threshold": 0.187,
+            "regime_bonus": 0.102,
+            "threshold": 0.5
           }
         },
         "execution": {
@@ -4394,11 +4395,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 10,
             "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "tp_mult": 6.0,
+            "trail_mult": 1.5
           }
         },
         "market_regime": {
@@ -4406,15 +4407,16 @@
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
+              "trending_down",
+              "ranging",
+              "high_volatility"
             ]
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "price_action",
           "params": {
-            "period": 10,
-            "threshold": 15
+            "lookback": 10
           }
         },
         "position": {
@@ -4432,8 +4434,8 @@
         "trend": {
           "logic_type": "market_structure",
           "params": {
-            "lookback": 18,
-            "slow": 43
+            "lookback": 28,
+            "slow": 40
           }
         },
         "volatility": {
@@ -4442,30 +4444,30 @@
         }
       },
       "parents": [
-        "xov-da6770"
+        "xov-87db6c"
       ]
     },
     "in_sample": {
-      "fitness": 13.1739,
-      "return": 0.0223
+      "fitness": 8.7191,
+      "return": 0.028
     },
     "out_of_sample": {
-      "avg_pnl": 10.39,
-      "consistency": 0.333,
-      "expectancy": 10.39,
-      "final_equity": 10031.16,
-      "max_drawdown": 0.01,
-      "profit_factor": 1.266,
-      "recovery_factor": 0.312,
-      "sharpe_proxy": 0.101,
-      "sortino_proxy": 0.177,
+      "avg_pnl": 77.51,
+      "consistency": 1.0,
+      "expectancy": 77.51,
+      "final_equity": 10155.02,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 1.069,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0031,
-      "trades": 3,
-      "win_rate": 0.333
+      "total_return": 0.0155,
+      "trades": 2,
+      "win_rate": 1.0
     },
     "parents": [
-      "xov-da6770"
+      "xov-87db6c"
     ],
     "regime": "ranging",
     "symbol": "HSI"
