@@ -67,6 +67,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import urllib.request
 import urllib.error
@@ -251,7 +252,11 @@ class ChroniclePositionLog:
                 self._chronicle.act("memory.store", {
                     "key":     f"position_event:{payload.get('symbol','?')}:{payload['ts']:.0f}",
                     "value":   json.dumps(payload),
+                    "content": json.dumps(payload),
                     "summary": summary,
+                    "domain":  "trading",
+                    "pillar":  "episodic",
+                    "tags":    ["position_event", payload["event"], payload.get("symbol", "")],
                     "_sender": self._trader_id,
                 })
                 log.debug("_write: stored via chronicle_agent: %s", summary)
@@ -361,13 +366,47 @@ class ChroniclePositionLog:
             except (json.JSONDecodeError, ValueError):
                 pass
 
+        def _try_parse_summary(text: str) -> None:
+            """Recover older position events that were stored as summary only."""
+            match = re.search(
+                r"\[POSITION EVENT\]\s+POSITION_(OPENED|CLOSED|MODIFIED)\s+"
+                r"symbol=(\S+)\s+ticket=(\d+)\s+trader=(\S+)\s+ts=([0-9.]+)"
+                r"(?:\s+direction=(\S+))?(?:\s+reason=(.*))?",
+                text.strip(),
+            )
+            if not match:
+                return
+            event_kind, ev_symbol, ticket, trader_id, ts, direction, reason = match.groups()
+            if ev_symbol.upper() != symbol_up:
+                return
+            try:
+                ts_val = float(ts)
+            except ValueError:
+                ts_val = 0.0
+            if ts_val < cutoff:
+                return
+            ev = {
+                "event": f"position_{event_kind.lower()}",
+                "symbol": ev_symbol,
+                "ticket": int(ticket),
+                "trader_id": trader_id,
+                "ts": ts_val,
+            }
+            if direction:
+                ev["direction"] = direction
+            if reason:
+                ev["reason"] = reason
+            events.append(ev)
+
         if isinstance(raw, list):
             for item in raw:
                 if isinstance(item, dict):
                     _try_parse(item.get("value", ""))
                     _try_parse(item.get("content", ""))
+                    _try_parse_summary(item.get("summary", ""))
                 elif isinstance(item, str):
                     _try_parse(item)
+                    _try_parse_summary(item)
         elif isinstance(raw, dict):
             for key in ("memories", "results", "items", "data"):
                 sub = raw.get(key)
@@ -375,14 +414,21 @@ class ChroniclePositionLog:
                     for item in sub:
                         if isinstance(item, dict):
                             _try_parse(item.get("value", ""))
+                            _try_parse(item.get("content", ""))
+                            _try_parse_summary(item.get("summary", ""))
                         elif isinstance(item, str):
                             _try_parse(item)
+                            _try_parse_summary(item)
             # Also try the top-level "text" or "response" key
             _try_parse(raw.get("text", ""))
             _try_parse(raw.get("response", ""))
+            _try_parse_summary(raw.get("summary", ""))
+            _try_parse_summary(raw.get("text", ""))
+            _try_parse_summary(raw.get("response", ""))
         elif isinstance(raw, str):
             # Chronicle returned a plain text reply — scan for JSON blobs
             for line in raw.splitlines():
                 _try_parse(line)
+                _try_parse_summary(line)
 
         return events

@@ -150,7 +150,8 @@ class CTraderBroker:
             from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
             from ctrader_open_api.messages.OpenApiMessages_pb2 import (
                 ProtoOAApplicationAuthReq, ProtoOAAccountAuthReq, ProtoOASymbolsListReq,
-                ProtoOATraderReq,
+                ProtoOATraderReq, ProtoOAApplicationAuthRes, ProtoOAAccountAuthRes,
+                ProtoOAErrorRes,
             )
         except ImportError as exc:
             self.status = BrokerStatus(connected=False, reason=f"ctrader-open-api not installed: {exc}")
@@ -166,6 +167,9 @@ class CTraderBroker:
         connected_ok = threading.Event()
         auth_failure = threading.Event()
         auth_error: List[str] = []
+        application_auth_payload_type = ProtoOAApplicationAuthRes().payloadType
+        account_auth_payload_type = ProtoOAAccountAuthRes().payloadType
+        error_payload_type = ProtoOAErrorRes().payloadType
 
         def on_connected(client):
             log.info("cTrader transport connected, sending application auth")
@@ -183,7 +187,16 @@ class CTraderBroker:
             client_msg_id = getattr(message, "clientMsgId", None)
             log.debug("cTrader message received payloadType=%s clientMsgId=%s", payload_type, client_msg_id)
             self._dispatch_message(message)
-            if payload_type == 2101:  # ProtoOAApplicationAuthRes payloadType
+            if payload_type == error_payload_type:
+                try:
+                    error = self._Protobuf.extract(message)
+                    detail = getattr(error, "description", "") or getattr(error, "errorCode", "")
+                except Exception:
+                    detail = "unknown cTrader authentication error"
+                auth_error.append(str(detail))
+                log.error("cTrader authentication rejected: %s", detail)
+                auth_failure.set()
+            elif payload_type == application_auth_payload_type:
                 log.info("cTrader application auth accepted, sending account auth")
                 acc_req = ProtoOAAccountAuthReq()
                 acc_req.ctidTraderAccountId = self._account_id
@@ -193,7 +206,7 @@ class CTraderBroker:
                     auth_error.append(str(f))
                     auth_failure.set()
                 d.addErrback(_acc_auth_err)
-            elif payload_type == 2103:  # ProtoOAAccountAuthRes payloadType
+            elif payload_type == account_auth_payload_type:
                 log.info("cTrader account auth successful")
                 connected_ok.set()
 

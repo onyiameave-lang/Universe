@@ -86,7 +86,9 @@ class ChronicleAgent(BaseAgent):
     domain = "memory"
     description = "Institutional, self-correcting memory and knowledge base."
     capabilities = ["memory.store", "memory.retrieve", "memory.search", "memory.answer",
-                    "memory.feedback", "state.set", "state.get", "state.delete", "state.list",
+                    "memory.feedback", "state.set", "state.get", "state.history",
+                    "state.delete", "state.list",
+                    "state.history",
                     "memory.evolve", "memory.validate", "knowledge_graph.connect",
                     "knowledge_graph.query", "contradiction.detect", "contradiction.adjudicate",
                     "belief.revise", "provenance.trace", "memory.rebalance",
@@ -407,6 +409,12 @@ class ChronicleAgent(BaseAgent):
             return self.state.delete(key)
         if task == "state.list":
             return {"status": "complete", "keys": self.state.list_keys(ctx.get("prefix", ""))}
+        if task == "state.history":
+            key = ctx.get("key")
+            if not key:
+                return {"status": "error", "message": "key is required"}
+            return {"status": "complete", "key": key,
+                    "history": self.state.get_history(key, include_current=ctx.get("include_current", True))}
         sender = ctx.get("_sender", "unknown")
         
         # FIX-CH-02 (Phase 5f): Debug logging for observability

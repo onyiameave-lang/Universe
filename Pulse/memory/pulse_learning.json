@@ -10,9 +10,30 @@
       "confidence": 0.4,
       "repeated": false,
       "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "social.manipulation",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'social.manipulation' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "social.manipulation",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'social.manipulation' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
     }
   ],
   "failure_signatures": {
-    "social_path::all attempts failed": 1
+    "social_path::all attempts failed": 1,
+    "social.manipulation::cannot schedule new futures after interpreter shutdown": 2
   }
 }

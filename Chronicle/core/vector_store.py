@@ -68,7 +68,23 @@ class VectorStore:
 
     def _persist(self) -> None:
         """FIX-VS-V8-01: Windows-safe atomic write with retry fallback."""
-        data = [r.to_dict(include_embedding=True) for r in self._records.values()]
+        merged = dict(self._records)
+        if self._path.exists():
+            try:
+                for item in json.loads(self._path.read_text(encoding="utf-8")):
+                    disk_rec = MemoryRecord.from_dict(item)
+                    current = merged.get(disk_rec.memory_id)
+                    if current is None:
+                        merged[disk_rec.memory_id] = disk_rec
+                        continue
+                    disk_updated = getattr(disk_rec, "updated_at", 0) or 0
+                    current_updated = getattr(current, "updated_at", 0) or 0
+                    if disk_updated > current_updated:
+                        merged[disk_rec.memory_id] = disk_rec
+                self._records = merged
+            except Exception:
+                log.warning("could not merge existing records.json before persist", exc_info=True)
+        data = [r.to_dict(include_embedding=True) for r in merged.values()]
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data), encoding="utf-8")
         if sys.platform == "win32":
