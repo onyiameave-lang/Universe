@@ -470,7 +470,7 @@ class EvolutionLab:
 
         # Get current champion genome (for SEEDING only, not evaluation)
         incumbent = self._champions.get(champion_key)
-        champion_genome = incumbent.get("genome") if incumbent else None
+        champion_genome = incumbent.get("genome") if isinstance(incumbent, dict) else None
 
         # Build population (champion becomes parent material with fresh IDs)
         seed_genomes = []
@@ -611,7 +611,10 @@ class EvolutionLab:
             "in_sample_return": best.best_return,
             "out_of_sample": oos_result,
             "promoted_new_champion": promoted,
-            "champion": self._champions.get(champion_key, {}).get("genome", {}).get("genome_id"),
+            "champion": (self._champions.get(champion_key, {}).get("genome", {}).get("genome_id")
+                         if isinstance(self._champions.get(champion_key), dict)
+                         and isinstance(self._champions.get(champion_key).get("genome"), dict)
+                         else None),
             "champion_comparison": comparison,
             "validation_summary": self._build_summary(all_reports, promoted).to_dict(),
             "diversity_final": round(population_diversity(population), 3),
@@ -632,20 +635,26 @@ class EvolutionLab:
 
     def champion(self, symbol, regime=None):
         rec = self.champion_info(symbol, regime)
-        return StrategyGenome.from_dict(rec["genome"]) if rec else None
+        if not isinstance(rec, dict) or not isinstance(rec.get("genome"), dict):
+            return None
+        return StrategyGenome.from_dict(rec["genome"])
 
     def champion_info(self, symbol, regime=None):
         symbol = symbol.upper()
         if regime: return self._champions.get(self._champion_key(symbol, regime))
-        candidates = [c for c in self._champions.values() if c.get("symbol", "").upper() == symbol]
+        candidates = [c for c in self._champions.values()
+                  if isinstance(c, dict) and c.get("symbol", "").upper() == symbol]
         if not candidates: return self._champions.get(symbol)
-        return max(candidates, key=lambda c: c.get("out_of_sample", {}).get("total_return", -999))
+        return max(candidates,
+               key=lambda c: (c.get("out_of_sample") or {}).get("total_return", -999)
+               if isinstance(c.get("out_of_sample"), dict) else -999)
 
     def stats(self):
         return {"champion_keys": list(self._champions.keys()),
-                "champions": {s: {"id": c.get("genome", {}).get("genome_id"),
-                                   "return": c.get("out_of_sample", {}).get("total_return")}
-                              for s, c in self._champions.items()},
+            "champions": {s: {"id": (c.get("genome") or {}).get("genome_id"),
+                       "return": (c.get("out_of_sample") or {}).get("total_return")}
+                      for s, c in self._champions.items()
+                      if isinstance(c, dict)},
                 "mutation_pressure": round(self.stagnation.mutation_pressure, 2)}
 
 
