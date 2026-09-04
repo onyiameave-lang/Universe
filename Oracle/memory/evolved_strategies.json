@@ -2909,22 +2909,21 @@
     "symbol": "EURGBP"
   },
   "EURJPY::ranging": {
-    "certified_at": 1785122908.0481284,
-    "generation": 56,
+    "certified_at": 1788525356.1729925,
+    "generation": 30,
     "genome": {
-      "backtests": 30,
-      "best_return": 0.0162,
-      "best_sharpe": 0.364,
-      "fitness": 5.2488,
-      "generation": 56,
-      "genome_id": "mut-74bdf5",
+      "backtests": 15,
+      "best_return": 0.0082,
+      "best_sharpe": 0.146,
+      "fitness": 1.5873,
+      "generation": 30,
+      "genome_id": "mut-008f57",
       "modules": {
         "entry": {
-          "logic_type": "adaptive",
+          "logic_type": "default",
           "params": {
-            "base_threshold": 0.23,
-            "regime_bonus": 0.122,
-            "threshold": 0.5
+            "confirmation_required": false,
+            "threshold": 0.34
           }
         },
         "execution": {
@@ -2932,35 +2931,35 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "atr_stops",
           "params": {
-            "lookback": 11,
-            "sl_mult": 1.66,
-            "tp_mult": 3.572
+            "sl_mult": 2.5,
+            "tp_mult": 5.0
           }
         },
         "market_regime": {
-          "logic_type": "default",
+          "logic_type": "strict",
           "params": {
             "allowed_regimes": [
-              "high_volatility",
-              "ranging",
               "trending_up",
               "trending_down"
-            ]
+            ],
+            "volatility_limit": 1.0
           }
         },
         "momentum": {
           "logic_type": "williams_r",
           "params": {
-            "lower": 16,
-            "period": 18,
-            "upper": 60
+            "lower": 15,
+            "period": 12,
+            "upper": 69
           }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "volatility_adjusted",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "risk": {
           "logic_type": "default",
@@ -2971,10 +2970,10 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "ema",
           "params": {
-            "lookback": 16,
-            "slow": 33
+            "fast": 9,
+            "slow": 49
           }
         },
         "volatility": {
@@ -2986,30 +2985,30 @@
         }
       },
       "parents": [
-        "xov-5e93a4"
+        "xov-a15880"
       ]
     },
     "in_sample": {
-      "fitness": 5.2488,
-      "return": 0.0162
+      "fitness": 1.5873,
+      "return": 0.0082
     },
     "out_of_sample": {
-      "avg_pnl": 24.25,
-      "consistency": 0.5,
-      "expectancy": 24.25,
-      "final_equity": 10048.5,
+      "avg_pnl": 19.45,
+      "consistency": 0.4,
+      "expectancy": 19.45,
+      "final_equity": 10097.24,
       "max_drawdown": 0.01,
-      "profit_factor": 1.478,
-      "recovery_factor": 0.485,
-      "sharpe_proxy": 0.193,
-      "sortino_proxy": 0.338,
+      "profit_factor": 1.485,
+      "recovery_factor": 0.972,
+      "sharpe_proxy": 0.174,
+      "sortino_proxy": 0.307,
       "status": "complete",
-      "total_return": 0.0049,
-      "trades": 2,
-      "win_rate": 0.5
+      "total_return": 0.0097,
+      "trades": 5,
+      "win_rate": 0.4
     },
     "parents": [
-      "xov-5e93a4"
+      "xov-a15880"
     ],
     "regime": "ranging",
     "symbol": "EURJPY"
