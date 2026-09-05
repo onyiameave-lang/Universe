@@ -4568,7 +4568,104 @@
     "regime": "high_volatility",
     "symbol": "JPM"
   },
-  "JPM::ranging": null,
+  "JPM::ranging": {
+    "certified_at": 1788579623.4864168,
+    "generation": 0,
+    "genome": {
+      "backtests": 4,
+      "best_return": 0.0314,
+      "best_sharpe": 0.748,
+      "fitness": 9.6193,
+      "generation": 0,
+      "genome_id": "imm-2da175",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.243,
+            "regime_bonus": 0.1,
+            "threshold": 0.243
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "adx_strength",
+          "params": {
+            "period": 14,
+            "threshold": 20
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "donchian_trend",
+          "params": {
+            "period": 22,
+            "slow": 46
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        }
+      },
+      "parents": []
+    },
+    "in_sample": {
+      "fitness": 9.6193,
+      "return": 0.0314
+    },
+    "out_of_sample": {
+      "avg_pnl": 78.96,
+      "consistency": 1.0,
+      "expectancy": 78.96,
+      "final_equity": 10157.92,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 1.111,
+      "sortino_proxy": 0.0,
+      "status": "complete",
+      "total_return": 0.0158,
+      "trades": 2,
+      "win_rate": 1.0
+    },
+    "parents": [],
+    "regime": "ranging",
+    "symbol": "JPM"
+  },
   "JPM::trending_up": {
     "certified_at": 1784776603.1924407,
     "generation": 58,
