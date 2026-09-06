@@ -829,15 +829,15 @@
     "symbol": "AUDUSD"
   },
   "AUDUSD::trending_up": {
-    "certified_at": 1788492986.9708478,
-    "generation": 16,
+    "certified_at": 1788665960.7425723,
+    "generation": 42,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0048,
+      "backtests": 30,
+      "best_return": 0.0052,
       "best_sharpe": 0.0,
-      "fitness": 5.8729,
-      "generation": 16,
-      "genome_id": "mut-cc177d",
+      "fitness": 3.4352,
+      "generation": 42,
+      "genome_id": "mut-2a23c3",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -852,9 +852,8 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "atr_stops",
           "params": {
-            "max_bars": 20,
             "sl_mult": 2.0,
             "tp_mult": 3.0
           }
@@ -871,10 +870,9 @@
           }
         },
         "momentum": {
-          "logic_type": "adx_strength",
+          "logic_type": "volume_momentum",
           "params": {
-            "period": 14,
-            "threshold": 20
+            "period": 20
           }
         },
         "position": {
@@ -890,14 +888,14 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "sma_crossover",
+          "logic_type": "ichimoku_cloud",
           "params": {
-            "fast": 24,
-            "slow": 49
+            "kijun": 26,
+            "tenkan": 9
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "bollinger_width",
           "params": {
             "period": 20,
             "threshold": 15.0
@@ -905,30 +903,30 @@
         }
       },
       "parents": [
-        "xov-3ee111"
+        "xov-f95688"
       ]
     },
     "in_sample": {
-      "fitness": 5.8729,
-      "return": 0.0048
+      "fitness": 3.4352,
+      "return": 0.0052
     },
     "out_of_sample": {
-      "avg_pnl": 48.56,
-      "consistency": 0.667,
-      "expectancy": 48.56,
-      "final_equity": 10145.69,
-      "max_drawdown": 0.01,
-      "profit_factor": 2.457,
-      "recovery_factor": 1.457,
-      "sharpe_proxy": 0.453,
-      "sortino_proxy": 0.841,
+      "avg_pnl": 109.89,
+      "consistency": 1.0,
+      "expectancy": 109.89,
+      "final_equity": 10329.68,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 1.884,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0146,
+      "total_return": 0.033,
       "trades": 3,
-      "win_rate": 0.667
+      "win_rate": 1.0
     },
     "parents": [
-      "xov-3ee111"
+      "xov-f95688"
     ],
     "regime": "trending_up",
     "symbol": "AUDUSD"
