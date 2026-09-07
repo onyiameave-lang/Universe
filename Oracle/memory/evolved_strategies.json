@@ -1036,22 +1036,22 @@
     "symbol": "AUDUSD=X"
   },
   "BNBUSD::high_volatility": {
-    "certified_at": 1787878132.7518513,
-    "generation": 28,
+    "certified_at": 1788752381.0828018,
+    "generation": 58,
     "genome": {
-      "backtests": 15,
-      "best_return": -0.0131,
-      "best_sharpe": -0.127,
-      "fitness": 0.9996,
-      "generation": 28,
-      "genome_id": "mut-3c741f",
+      "backtests": 30,
+      "best_return": 0.0107,
+      "best_sharpe": 0.091,
+      "fitness": 1.4124,
+      "generation": 58,
+      "genome_id": "mut-28a152",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.186,
-            "regime_bonus": 0.1,
-            "threshold": 0.186
+            "base_threshold": 0.193,
+            "regime_bonus": 0.091,
+            "threshold": 0.5
           }
         },
         "execution": {
@@ -1059,11 +1059,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "swing_stops",
           "params": {
-            "sl_mult": 1.597,
-            "tp_mult": 5.765,
-            "trail_mult": 1.75
+            "lookback": 11,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -1078,11 +1078,10 @@
           }
         },
         "momentum": {
-          "logic_type": "cci",
+          "logic_type": "roc",
           "params": {
-            "lower": 15,
-            "period": 20,
-            "upper": 85
+            "period": 12,
+            "threshold": 17
           }
         },
         "position": {
@@ -1100,43 +1099,40 @@
         "trend": {
           "logic_type": "adx_trend",
           "params": {
-            "period": 14,
-            "threshold": 25
+            "period": 17,
+            "threshold": 24
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
-          "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
       "parents": [
-        "xov-925ba2"
+        "xov-451d3b"
       ]
     },
     "in_sample": {
-      "fitness": 0.9996,
-      "return": -0.0131
+      "fitness": 1.4124,
+      "return": 0.0107
     },
     "out_of_sample": {
-      "avg_pnl": 91.05,
-      "consistency": 0.8,
-      "expectancy": 91.05,
-      "final_equity": 10455.26,
-      "max_drawdown": 0.01,
-      "profit_factor": 5.553,
-      "recovery_factor": 4.553,
-      "sharpe_proxy": 0.936,
-      "sortino_proxy": 2.036,
+      "avg_pnl": 133.8,
+      "consistency": 1.0,
+      "expectancy": 133.8,
+      "final_equity": 10669.01,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 3.406,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0455,
+      "total_return": 0.0669,
       "trades": 5,
-      "win_rate": 0.8
+      "win_rate": 1.0
     },
     "parents": [
-      "xov-925ba2"
+      "xov-451d3b"
     ],
     "regime": "high_volatility",
     "symbol": "BNBUSD"
