@@ -84,7 +84,7 @@ _DEFAULT_MANAGE_INTERVAL = 15   # seconds
 _TRADER_ID: str = os.getenv("TRADER_ID", "ctrader_demo")
 _DEFAULT_SYMBOL_TIMEOUT = 60
 
-# ── 41-symbol default watchlist ───────────────────────────────────────────────
+# ── Shared evolution + execution watchlist ────────────────────────────────────
 DEFAULT_SYMBOLS: List[str] = [
     # Major forex
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
@@ -98,6 +98,10 @@ DEFAULT_SYMBOLS: List[str] = [
     "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
     # Indices
     "US30", "US500", "NAS100", "GER40", "UK100", "JPN225", "AUS200",
+    "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
+    "NIKKEI", "HSI", "SENSEX", "ASX200",
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRKB",
+    "LLY", "V", "JPM",
 ]
 
 _LIVE_PRESET: List[str] = [
@@ -110,12 +114,23 @@ MAX_POSITIONS_PER_SYMBOL: int = 1
 
 # ── cTrader-specific broker symbol overrides ──────────────────────────────────
 _CTRADER_BROKER_MAP: Dict[str, str] = {
-    "USOIL":   "USOIL.cash",
-    "UKOIL":   "UKOIL.cash",
+    "USOIL":   "WTOIL-PERP",
+    "UKOIL":   "BRENTOIL-PERP",
     "NATGAS":  "NATGAS.cash",
     "NAS100":  "US100",
     "GER40":   "DE40",
     "JPN225":  "JP225",
+    "SPX":     "US500",
+    "NASDAQ":  "US100",
+    "DJI":     "US30",
+    "FTSE":    "UK100",
+    "DAX":     "DE40",
+    "NIKKEI":  "JP225",
+    "HSI":     "HK50",
+    "SENSEX":  "IN50",
+    "ASX200":  "ASX.AU",
+    "BRKB":    "BRK.B.US",
+    "V":       "V.US",
 }
 
 # ── Fallback aliases for fuzzy matching ───────────────────────────────────────
@@ -133,6 +148,18 @@ _FALLBACK_ALIASES: Dict[str, List[str]] = {
     "AUS200":  ["AUS200", "ASX200"],
     "US30":    ["US30", "DJ30"],
     "US500":   ["US500", "SPX500"],
+    "SPX":     ["US500", "SPX500", "SPX"],
+    "NASDAQ":  ["US100", "NAS100", "USTEC", "NASDAQ"],
+    "DJI":     ["US30", "DJ30", "DJI"],
+    "RUT":     ["RUS2000", "US2000", "RUT"],
+    "VIX":     ["VIX", "VIXY"],
+    "FTSE":    ["UK100", "FTSE100", "FTSE"],
+    "DAX":     ["DE40", "GER40", "DAX40", "DAX"],
+    "CAC40":   ["FR40", "CAC40"],
+    "NIKKEI":  ["JP225", "JPN225", "NIKKEI"],
+    "HSI":     ["HK50", "HSI"],
+    "SENSEX":  ["IN50", "SENSEX"],
+    "ASX200":  ["AU200", "ASX200"],
     "EURUSD":  ["EURUSD", "EUR/USD"],
     "GBPUSD":  ["GBPUSD", "GBP/USD"],
     "USDJPY":  ["USDJPY", "USD/JPY"],
@@ -155,6 +182,17 @@ _FALLBACK_ALIASES: Dict[str, List[str]] = {
     "AUDCAD":  ["AUDCAD", "AUD/CAD"],
     "AUDCHF":  ["AUDCHF", "AUD/CHF"],
     "AUDNZD":  ["AUDNZD", "AUD/NZD"],
+    "AAPL":    ["AAPL"],
+    "MSFT":    ["MSFT"],
+    "NVDA":    ["NVDA"],
+    "GOOGL":   ["GOOGL", "GOOG"],
+    "AMZN":    ["AMZN"],
+    "META":    ["META", "FB"],
+    "TSLA":    ["TSLA"],
+    "BRKB":    ["BRKB", "BRK.B"],
+    "LLY":     ["LLY"],
+    "V":       ["V"],
+    "JPM":     ["JPM"],
 }
 
 # ── Module conflict management ────────────────────────────────────────────────
@@ -758,7 +796,7 @@ class CTraderDemoTrader:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
-    ap = argparse.ArgumentParser(description="Oracle demo trader on cTrader (41 symbols)")
+    ap = argparse.ArgumentParser(description="Oracle demo trader on cTrader (63 symbols)")
     ap.add_argument("--symbols", nargs="+", default=None)
     ap.add_argument("--preset", choices=["all", "live"], default="all")
     ap.add_argument("--interval", type=int, default=300, help="seconds between cycles")
@@ -786,7 +824,7 @@ def main():
             print(f"  {sym}: promoted={out.get('promoted_new_champion')} "
                   f"oos_return={(out.get('out_of_sample') or {}).get('total_return')}")
     print("=" * 64)
-    print("  ORACLE DEMO TRADER (cTrader — 41 symbols)")
+    print(f"  ORACLE DEMO TRADER (cTrader — {len(symbols)} symbols)")
     print("  Same pipeline as mt5_demo_trader: champions + agent correlation.")
     print("  Uses cTrader Open API via CTraderBroker adapter.")
     print("  ALWAYS use a DEMO account for initial testing!")

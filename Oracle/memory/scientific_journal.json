@@ -51127,5 +51127,1255 @@
       "top_reports": []
     },
     "certification_audit": {}
+  },
+  {
+    "experiment_id": "exp-d7e231ea",
+    "created_at": 1788432520.2491467,
+    "symbol": "EURUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-e4d57532",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-601ae3a1",
+        "symbol": "EURUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 0.616,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 2,
+        "win_rate": 0.5,
+        "total_return": -0.0093,
+        "final_equity": 9906.59,
+        "profit_factor": 0.066,
+        "max_drawdown": 0.01,
+        "sharpe_proxy": -0.876,
+        "sortino_proxy": -0.661,
+        "recovery_factor": -0.934,
+        "expectancy": -46.7,
+        "consistency": 0.5,
+        "avg_pnl": -46.7
+      },
+      "criteria": {
+        "return": -0.0093,
+        "trades": 2
+      }
+    },
+    "best_genome": {
+      "genome_id": "init-5f436f",
+      "generation": 0,
+      "parents": [],
+      "fitness": 1.6506,
+      "backtests": 1,
+      "best_return": 0.0049,
+      "best_sharpe": 0.158,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "vwap_trend",
+          "params": {
+            "period": 20,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "period": 14,
+            "upper": 60,
+            "lower": 15
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.224,
+            "regime_bonus": 0.15,
+            "threshold": 0.224
+          }
+        },
+        "exit": {
+          "logic_type": "atr_stops",
+          "params": {
+            "sl_mult": 1.9,
+            "tp_mult": 1.9
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432526.0051727,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 1.6506"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-d0260ad5",
+    "created_at": 1788432546.7388368,
+    "symbol": "GBPUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-5a3a33c4",
+        "symbol": "GBPUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-3636ffab",
+        "symbol": "GBPUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": -78.6697,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 2,
+        "win_rate": 0.0,
+        "total_return": -0.0199,
+        "final_equity": 9801.0,
+        "profit_factor": 0.0,
+        "max_drawdown": 0.0199,
+        "sharpe_proxy": -199.0,
+        "sortino_proxy": -1.0,
+        "recovery_factor": -1.0,
+        "expectancy": -99.5,
+        "consistency": 0.0,
+        "avg_pnl": -99.5
+      },
+      "criteria": {
+        "return": -0.0199,
+        "trades": 2
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-233804",
+      "generation": 100,
+      "parents": [
+        "seed-f54ee0"
+      ],
+      "fitness": 2.7598,
+      "backtests": 31,
+      "best_return": 0.0049,
+      "best_sharpe": 0.158,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "market_structure",
+          "params": {
+            "lookback": 20,
+            "slow": 46
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "lower": 15,
+            "period": 14,
+            "upper": 64
+          }
+        },
+        "volatility": {
+          "logic_type": "historical_vol",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.35,
+            "regime_bonus": 0.136
+          }
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 18,
+      "backtested_genomes": 20,
+      "certified_candidates": 2,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432550.7893426,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 2.7598"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-d69f8d0d",
+    "created_at": 1788432574.1885293,
+    "symbol": "USDJPY",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-3559d6f3",
+        "symbol": "USDJPY",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-e7fa0cb6",
+        "symbol": "USDJPY",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 0.8352,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 4,
+        "win_rate": 0.25,
+        "total_return": -0.0117,
+        "final_equity": 9883.39,
+        "profit_factor": 0.563,
+        "max_drawdown": 0.0199,
+        "sharpe_proxy": -0.279,
+        "sortino_proxy": -0.372,
+        "recovery_factor": -0.586,
+        "expectancy": -29.15,
+        "consistency": 0.25,
+        "avg_pnl": -29.15
+      },
+      "criteria": {
+        "return": -0.0117,
+        "trades": 4
+      }
+    },
+    "best_genome": {
+      "genome_id": "init-1bd932",
+      "generation": 0,
+      "parents": [],
+      "fitness": 1.3295,
+      "backtests": 1,
+      "best_return": 0.0013,
+      "best_sharpe": 0.029,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 20,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "adx_strength",
+          "params": {
+            "period": 14,
+            "threshold": 20
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.271,
+            "regime_bonus": 0.1,
+            "threshold": 0.271
+          }
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432578.1015716,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 1.3295"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-d7e649e6",
+    "created_at": 1788432602.4673302,
+    "symbol": "AUDUSD",
+    "regime": "trending_up",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-2e70445b",
+        "symbol": "AUDUSD",
+        "regime": "trending_up",
+        "family": "trend_continuation_atr",
+        "statement": "Trend continuation improves when entries require ATR-confirmed momentum.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-9c884ef4",
+        "symbol": "AUDUSD",
+        "regime": "trending_up",
+        "family": "pullback_momentum",
+        "statement": "Bull trend pullbacks with momentum recovery outperform blind breakout entries.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 1.0966,
+      "verdict": "accepted",
+      "metrics": {
+        "status": "complete",
+        "trades": 3,
+        "win_rate": 0.667,
+        "total_return": 0.0074,
+        "final_equity": 10073.56,
+        "profit_factor": 1.736,
+        "max_drawdown": 0.01,
+        "sharpe_proxy": 0.242,
+        "sortino_proxy": 0.425,
+        "recovery_factor": 0.736,
+        "expectancy": 24.52,
+        "consistency": 0.667,
+        "avg_pnl": 24.52
+      },
+      "criteria": {
+        "return": 0.0074,
+        "trades": 3
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-708f45",
+      "generation": 8,
+      "parents": [
+        "seed-b2d658"
+      ],
+      "fitness": 1.1071,
+      "backtests": 6,
+      "best_return": 0.0005,
+      "best_sharpe": 0.0,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "market_structure",
+          "params": {
+            "lookback": 17,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "roc",
+          "params": {
+            "period": 10,
+            "threshold": 15
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.126,
+            "regime_bonus": 0.1,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 4.467,
+            "trail_mult": 1.296
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": true,
+    "champion_comparison": {
+      "candidate_score": 9.2227,
+      "incumbent_score": 1.7084,
+      "candidate_metrics": {
+        "return": 0.0074,
+        "sharpe": 0.242,
+        "trades": 3,
+        "win_rate": 0.667,
+        "drawdown": 0.01
+      },
+      "incumbent_metrics": {
+        "return": 0.0009,
+        "sharpe": 0.014,
+        "trades": 5,
+        "win_rate": 0.4,
+        "drawdown": 0.0199
+      },
+      "decision": "promote",
+      "reason": "Candidate score 9.2227 > incumbent 1.7084"
+    },
+    "champion_version": 2,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 3,
+      "backtested_genomes": 20,
+      "certified_candidates": 17,
+      "champion_promoted": true,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432606.3148897,
+      "insights": [
+        "Champion certified for AUDUSD (trending_up)",
+        "Trend: market_structure, Momentum: roc",
+        "OOS: return=0.0074, trades=3, sharpe=0.242",
+        "Generalization: excellent generalization (OOS closely matches IS)"
+      ],
+      "directives": [
+        "Seed future populations from this champion's DNA",
+        "Store winning module combination in Chronicle"
+      ],
+      "conclusion": "The winning strategy uses market_structure trend detection with roc momentum confirmation. It achieved 0.0074 return over 3 OOS trades (Sharpe=0.242), indicating excellent generalization (OOS closely matches IS). This genome should serve as the reference for future trending_up evolution."
+    }
+  },
+  {
+    "experiment_id": "exp-91e361be",
+    "created_at": 1788432638.3836408,
+    "symbol": "USDCAD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-8da116aa",
+        "symbol": "USDCAD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-c751358e",
+        "symbol": "USDCAD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 1.193,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 4,
+        "win_rate": 0.5,
+        "total_return": 0.0184,
+        "final_equity": 10184.42,
+        "profit_factor": 2.606,
+        "max_drawdown": 0.01,
+        "sharpe_proxy": 0.428,
+        "sortino_proxy": 0.912,
+        "recovery_factor": 1.844,
+        "expectancy": 46.1,
+        "consistency": 0.5,
+        "avg_pnl": 46.1
+      },
+      "criteria": {
+        "return": 0.0184,
+        "trades": 4
+      }
+    },
+    "best_genome": {
+      "genome_id": "init-e11a8f",
+      "generation": 0,
+      "parents": [],
+      "fitness": 11.6264,
+      "backtests": 1,
+      "best_return": 0.0302,
+      "best_sharpe": 1.414,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "price_above_sma",
+          "params": {
+            "period": 50,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "rsi",
+          "params": {
+            "period": 12,
+            "upper": 75,
+            "lower": 25
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.157,
+            "regime_bonus": 0.15,
+            "threshold": 0.157
+          }
+        },
+        "exit": {
+          "logic_type": "atr_stops",
+          "params": {
+            "sl_mult": 1.5,
+            "tp_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432646.531971,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 11.6264"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-e7ea1d65",
+    "created_at": 1788432668.5971997,
+    "symbol": "USDCHF",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-be3a2d75",
+        "symbol": "USDCHF",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-5e6cb355",
+        "symbol": "USDCHF",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 0.3401,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 5,
+        "win_rate": 0.2,
+        "total_return": -0.0358,
+        "final_equity": 9642.5,
+        "profit_factor": 0.093,
+        "max_drawdown": 0.0394,
+        "sharpe_proxy": -1.323,
+        "sortino_proxy": -0.811,
+        "recovery_factor": -0.907,
+        "expectancy": -71.5,
+        "consistency": 0.2,
+        "avg_pnl": -71.5
+      },
+      "criteria": {
+        "return": -0.0358,
+        "trades": 5
+      }
+    },
+    "best_genome": {
+      "genome_id": "init-8edac9",
+      "generation": 0,
+      "parents": [],
+      "fitness": 7.8227,
+      "backtests": 1,
+      "best_return": 0.0067,
+      "best_sharpe": 0.0,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "donchian_trend",
+          "params": {
+            "period": 16,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "adx_strength",
+          "params": {
+            "period": 14,
+            "threshold": 20
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.129,
+            "regime_bonus": 0.1,
+            "threshold": 0.129
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432672.8916874,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 7.8227"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-ebe8184a",
+    "created_at": 1788432701.9070027,
+    "symbol": "NZDUSD",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-fefcdb36",
+        "symbol": "NZDUSD",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-31f7d8fb",
+        "symbol": "NZDUSD",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 0.95,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 3,
+        "win_rate": 0.333,
+        "total_return": -0.0025,
+        "final_equity": 9974.95,
+        "profit_factor": 0.856,
+        "max_drawdown": 0.01,
+        "sharpe_proxy": -0.075,
+        "sortino_proxy": -0.117,
+        "recovery_factor": -0.25,
+        "expectancy": -8.35,
+        "consistency": 0.333,
+        "avg_pnl": -8.35
+      },
+      "criteria": {
+        "return": -0.0025,
+        "trades": 3
+      }
+    },
+    "best_genome": {
+      "genome_id": "init-1b8b65",
+      "generation": 0,
+      "parents": [],
+      "fitness": 0.4639,
+      "backtests": 1,
+      "best_return": -0.0181,
+      "best_sharpe": -1.097,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "donchian_trend",
+          "params": {
+            "period": 29,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "adx_strength",
+          "params": {
+            "period": 14,
+            "threshold": 20
+          }
+        },
+        "volatility": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.257,
+            "regime_bonus": 0.1,
+            "threshold": 0.257
+          }
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 2.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 0,
+      "backtested_genomes": 20,
+      "certified_candidates": 20,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {},
+    "reflection": {
+      "timestamp": 1788432706.3706431,
+      "insights": [
+        "Failed certification: unknown",
+        "In-sample fitness: 0.4639"
+      ],
+      "directives": [
+        "Investigate OOS data quality and length",
+        "Consider regime shift between IS and OOS periods"
+      ],
+      "conclusion": "Candidate was profitable in-sample but failed OOS certification. Rejection: unknown. The strategy may be overfit or the validation dataset insufficient."
+    }
+  },
+  {
+    "experiment_id": "exp-6f9161f8",
+    "created_at": 1788432728.9088354,
+    "symbol": "EURGBP",
+    "regime": "ranging",
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp-6e66eebf",
+        "symbol": "EURGBP",
+        "regime": "ranging",
+        "family": "range_reversion_rsi",
+        "statement": "RSI reversal performs better inside ranging markets than trend following.",
+        "source": "oracle_regime_memory"
+      },
+      {
+        "hypothesis_id": "hyp-e2be3b19",
+        "symbol": "EURGBP",
+        "regime": "ranging",
+        "family": "bollinger_mean_reversion",
+        "statement": "Bollinger extremes revert more reliably when volatility is contained.",
+        "source": "oracle_regime_memory"
+      }
+    ],
+    "stagnation": {
+      "stagnant": false,
+      "reasons": []
+    },
+    "research": null,
+    "evidence": {
+      "score": 1.0572,
+      "verdict": "rejected",
+      "metrics": {
+        "status": "complete",
+        "trades": 3,
+        "win_rate": 0.333,
+        "total_return": 0.0049,
+        "final_equity": 10048.5,
+        "profit_factor": 1.478,
+        "max_drawdown": 0.01,
+        "sharpe_proxy": 0.156,
+        "sortino_proxy": 0.276,
+        "recovery_factor": 0.485,
+        "expectancy": 16.17,
+        "consistency": 0.333,
+        "avg_pnl": 16.17
+      },
+      "criteria": {
+        "return": 0.0049,
+        "trades": 3
+      }
+    },
+    "best_genome": {
+      "genome_id": "mut-534688",
+      "generation": 74,
+      "parents": [
+        "seed-b3174b"
+      ],
+      "fitness": 0.909,
+      "backtests": 16,
+      "best_return": -0.0032,
+      "best_sharpe": -0.188,
+      "modules": {
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 20,
+            "slow": 49
+          }
+        },
+        "momentum": {
+          "logic_type": "roc",
+          "params": {
+            "period": 12,
+            "threshold": 15
+          }
+        },
+        "volatility": {
+          "logic_type": "keltner_squeeze",
+          "params": {
+            "period": 20
+          }
+        },
+        "entry": {
+          "logic_type": "default",
+          "params": {
+            "confirmation_required": 1,
+            "threshold": 0.5
+          }
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 10,
+            "sl_mult": 1.804,
+            "tp_mult": 3.0
+          }
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        }
+      }
+    },
+    "promoted_new_champion": false,
+    "champion_comparison": null,
+    "champion_version": null,
+    "validation_summary": {
+      "total_genomes": 20,
+      "valid_genomes": 0,
+      "rejected_structure": 0,
+      "rejected_compilation": 0,
+      "rejected_zero_trades": 0,
+      "rejected_low_fitness": 15,
+      "backtested_genomes": 20,
+      "certified_candidates": 5,
+      "champion_promoted": false,
+      "elimination_stage": "",
+      "top_reports": []
+    },
+    "certification_audit": {}
   }
 ]

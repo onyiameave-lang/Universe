@@ -287,41 +287,43 @@
     "version": 1
   },
   "AUDUSD::trending_up": {
-    "ancestor_chain": [],
-    "certified_at": 1783503809.9899848,
+    "ancestor_chain": [
+      "mut-a28f7b"
+    ],
+    "certified_at": 1788432602.0501475,
     "evidence": {
       "criteria": {
-        "return": 0.0009,
-        "trades": 5
+        "return": 0.0074,
+        "trades": 3
       },
       "metrics": {
-        "avg_pnl": 1.7,
-        "consistency": 0.4,
-        "expectancy": 1.7,
-        "final_equity": 10008.52,
-        "max_drawdown": 0.0199,
-        "profit_factor": 1.029,
-        "recovery_factor": 0.043,
-        "sharpe_proxy": 0.014,
-        "sortino_proxy": 0.022,
+        "avg_pnl": 24.52,
+        "consistency": 0.667,
+        "expectancy": 24.52,
+        "final_equity": 10073.56,
+        "max_drawdown": 0.01,
+        "profit_factor": 1.736,
+        "recovery_factor": 0.736,
+        "sharpe_proxy": 0.242,
+        "sortino_proxy": 0.425,
         "status": "complete",
-        "total_return": 0.0009,
-        "trades": 5,
-        "win_rate": 0.4
+        "total_return": 0.0074,
+        "trades": 3,
+        "win_rate": 0.667
       },
-      "score": 0.9776,
+      "score": 1.0966,
       "verdict": "accepted"
     },
-    "experiment_id": "exp-a89db2fa",
-    "fitness": 8.23,
-    "generation": 6,
+    "experiment_id": "exp-d7e649e6",
+    "fitness": 1.1071,
+    "generation": 8,
     "genome": {
-      "backtests": 5,
-      "best_return": 0.0688,
-      "best_sharpe": 1.026,
-      "fitness": 8.23,
-      "generation": 6,
-      "genome_id": "mut-a28f7b",
+      "backtests": 6,
+      "best_return": 0.0005,
+      "best_sharpe": 0.0,
+      "fitness": 1.1071,
+      "generation": 8,
+      "genome_id": "mut-708f45",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -340,7 +342,7 @@
           "params": {
             "sl_mult": 2.0,
             "tp_mult": 4.467,
-            "trail_mult": 1.517
+            "trail_mult": 1.296
           }
         },
         "market_regime": {
@@ -376,7 +378,8 @@
         "trend": {
           "logic_type": "market_structure",
           "params": {
-            "lookback": 17
+            "lookback": 17,
+            "slow": 49
           }
         },
         "volatility": {
@@ -385,14 +388,14 @@
         }
       },
       "parents": [
-        "xov-fa8af6"
+        "seed-b2d658"
       ]
     },
-    "genome_id": "mut-a28f7b",
+    "genome_id": "mut-708f45",
     "hypotheses": [
       {
         "family": "trend_continuation_atr",
-        "hypothesis_id": "hyp-d9b117ca",
+        "hypothesis_id": "hyp-2e70445b",
         "regime": "trending_up",
         "source": "oracle_regime_memory",
         "statement": "Trend continuation improves when entries require ATR-confirmed momentum.",
@@ -400,34 +403,34 @@
       },
       {
         "family": "pullback_momentum",
-        "hypothesis_id": "hyp-8f8fc8a5",
+        "hypothesis_id": "hyp-9c884ef4",
         "regime": "trending_up",
         "source": "oracle_regime_memory",
         "statement": "Bull trend pullbacks with momentum recovery outperform blind breakout entries.",
         "symbol": "AUDUSD"
       }
     ],
-    "in_sample": 0.0688,
+    "in_sample": 0.0005,
     "out_of_sample": {
-      "avg_pnl": 1.7,
-      "consistency": 0.4,
-      "expectancy": 1.7,
-      "final_equity": 10008.52,
-      "max_drawdown": 0.0199,
-      "profit_factor": 1.029,
-      "recovery_factor": 0.043,
-      "sharpe_proxy": 0.014,
-      "sortino_proxy": 0.022,
+      "avg_pnl": 24.52,
+      "consistency": 0.667,
+      "expectancy": 24.52,
+      "final_equity": 10073.56,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.736,
+      "recovery_factor": 0.736,
+      "sharpe_proxy": 0.242,
+      "sortino_proxy": 0.425,
       "status": "complete",
-      "total_return": 0.0009,
-      "trades": 5,
-      "win_rate": 0.4
+      "total_return": 0.0074,
+      "trades": 3,
+      "win_rate": 0.667
     },
-    "parent_champion_id": null,
-    "parent_version": 0,
+    "parent_champion_id": "mut-a28f7b",
+    "parent_version": 1,
     "regime": "trending_up",
     "symbol": "AUDUSD",
-    "version": 1
+    "version": 2
   },
   "AUDUSD=X::trending_down": {
     "ancestor_chain": [],

@@ -30,7 +30,7 @@ jobs:
           pip install --upgrade pip
           pip install numpy pandas yfinance python-dotenv requests certifi
 
-      - name: Run demo trader — paper mode, 1 cycle, all 41 symbols
+      - name: Run demo trader — paper mode, 1 cycle, all configured symbols
         # NOTE: MetaTrader 5 (mt5 Python package) requires Windows + MT5 terminal.
         # On GitHub Actions (ubuntu-latest) MT5 is unavailable, so the trader
         # automatically falls back to PAPER MODE — it generates signals, applies

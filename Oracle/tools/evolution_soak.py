@@ -41,14 +41,18 @@ for p in (_REPO_ROOT, _ECO_ROOT):
 DEFAULT_SYMBOLS = [
     # FX majors + crosses
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
-    "EURGBP", "EURJPY", "GBPJPY",
+    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY",
+    "EURAUD", "EURCAD", "EURCHF", "GBPAUD", "GBPCAD", "GBPCHF",
+    "AUDCAD", "AUDCHF", "AUDNZD",
     # metals / commodities
-    "XAUUSD", "USOIL",
+    "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
     # crypto
     "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
     # indices
     "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
     "NIKKEI", "HSI", "SENSEX", "ASX200",
+    # cTrader execution aliases also evaluated as canonical instruments
+    "US30", "US500", "NAS100", "GER40", "UK100", "JPN225", "AUS200",
     # mega-cap stocks
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRKB",
     "LLY", "V", "JPM",
