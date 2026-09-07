@@ -2903,21 +2903,21 @@
     "symbol": "EURGBP"
   },
   "EURJPY::ranging": {
-    "certified_at": 1788525356.1729925,
-    "generation": 30,
+    "certified_at": 1788789934.1569126,
+    "generation": 58,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0082,
-      "best_sharpe": 0.146,
-      "fitness": 1.5873,
-      "generation": 30,
-      "genome_id": "mut-008f57",
+      "backtests": 30,
+      "best_return": 0.0155,
+      "best_sharpe": 0.275,
+      "fitness": 4.4714,
+      "generation": 58,
+      "genome_id": "mut-4f236d",
       "modules": {
         "entry": {
           "logic_type": "default",
           "params": {
-            "confirmation_required": false,
-            "threshold": 0.34
+            "confirmation_required": 1,
+            "threshold": 0.5
           }
         },
         "execution": {
@@ -2925,35 +2925,35 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "sl_mult": 2.5,
-            "tp_mult": 5.0
+            "sl_mult": 2.617,
+            "tp_mult": 5.486,
+            "trail_mult": 1.572
           }
         },
         "market_regime": {
-          "logic_type": "strict",
+          "logic_type": "default",
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
-            ],
-            "volatility_limit": 1.0
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
           }
         },
         "momentum": {
           "logic_type": "williams_r",
           "params": {
             "lower": 15,
-            "period": 12,
-            "upper": 69
+            "period": 14,
+            "upper": 76
           }
         },
         "position": {
-          "logic_type": "volatility_adjusted",
-          "params": {
-            "base_risk": 0.01
-          }
+          "logic_type": "default",
+          "params": {}
         },
         "risk": {
           "logic_type": "default",
@@ -2967,11 +2967,11 @@
           "logic_type": "ema",
           "params": {
             "fast": 9,
-            "slow": 49
+            "slow": 44
           }
         },
         "volatility": {
-          "logic_type": "bollinger_width",
+          "logic_type": "historical_vol",
           "params": {
             "period": 20,
             "threshold": 15.0
@@ -2979,30 +2979,30 @@
         }
       },
       "parents": [
-        "xov-a15880"
+        "xov-9acb4c"
       ]
     },
     "in_sample": {
-      "fitness": 1.5873,
-      "return": 0.0082
+      "fitness": 4.4714,
+      "return": 0.0155
     },
     "out_of_sample": {
-      "avg_pnl": 19.45,
-      "consistency": 0.4,
-      "expectancy": 19.45,
-      "final_equity": 10097.24,
+      "avg_pnl": 30.99,
+      "consistency": 0.6,
+      "expectancy": 30.99,
+      "final_equity": 10154.95,
       "max_drawdown": 0.01,
-      "profit_factor": 1.485,
-      "recovery_factor": 0.972,
-      "sharpe_proxy": 0.174,
-      "sortino_proxy": 0.307,
+      "profit_factor": 1.773,
+      "recovery_factor": 1.549,
+      "sharpe_proxy": 0.276,
+      "sortino_proxy": 0.489,
       "status": "complete",
-      "total_return": 0.0097,
+      "total_return": 0.0155,
       "trades": 5,
-      "win_rate": 0.4
+      "win_rate": 0.6
     },
     "parents": [
-      "xov-a15880"
+      "xov-9acb4c"
     ],
     "regime": "ranging",
     "symbol": "EURJPY"
@@ -6452,6 +6452,112 @@
       "xov-65bdc4"
     ],
     "regime": "ranging",
+    "symbol": "SENSEX"
+  },
+  "SENSEX::trending_down": {
+    "certified_at": 1788790050.7505348,
+    "generation": 26,
+    "genome": {
+      "backtests": 15,
+      "best_return": -0.0138,
+      "best_sharpe": -0.185,
+      "fitness": 0.9319,
+      "generation": 26,
+      "genome_id": "mut-224586",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.199,
+            "regime_bonus": 0.14,
+            "threshold": 0.5
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "time_exit",
+          "params": {
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "cci",
+          "params": {
+            "lower": 15,
+            "period": 20,
+            "upper": 85
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "market_structure",
+          "params": {
+            "lookback": 14,
+            "slow": 42
+          }
+        },
+        "volatility": {
+          "logic_type": "historical_vol",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        }
+      },
+      "parents": [
+        "xov-4b6010"
+      ]
+    },
+    "in_sample": {
+      "fitness": 0.9319,
+      "return": -0.0138
+    },
+    "out_of_sample": {
+      "avg_pnl": 84.42,
+      "consistency": 1.0,
+      "expectancy": 84.42,
+      "final_equity": 10084.42,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 0.0,
+      "sortino_proxy": 0.0,
+      "status": "complete",
+      "total_return": 0.0084,
+      "trades": 1,
+      "win_rate": 1.0
+    },
+    "parents": [
+      "xov-4b6010"
+    ],
+    "regime": "trending_down",
     "symbol": "SENSEX"
   },
   "SENSEX::trending_up": {
