@@ -3008,21 +3008,21 @@
     "symbol": "EURJPY"
   },
   "EURJPY::trending_down": {
-    "certified_at": 1788925715.583488,
-    "generation": 24,
+    "certified_at": 1788980971.2523298,
+    "generation": 26,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0018,
-      "best_sharpe": 0.042,
-      "fitness": 1.4868,
-      "generation": 24,
-      "genome_id": "mut-fade0d",
+      "best_return": 0.0097,
+      "best_sharpe": 0.194,
+      "fitness": 3.563,
+      "generation": 26,
+      "genome_id": "mut-e7dc5d",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.133
+            "base_threshold": 0.35,
+            "regime_bonus": 0.089
           }
         },
         "execution": {
@@ -3030,11 +3030,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 11,
-            "sl_mult": 2.299,
-            "tp_mult": 2.379
+            "sl_mult": 2.052,
+            "tp_mult": 5.0,
+            "trail_mult": 1.907
           }
         },
         "market_regime": {
@@ -3042,7 +3042,9 @@
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
+              "trending_down",
+              "ranging",
+              "high_volatility"
             ]
           }
         },
@@ -3050,7 +3052,7 @@
           "logic_type": "williams_r",
           "params": {
             "lower": 15,
-            "period": 13,
+            "period": 14,
             "upper": 60
           }
         },
@@ -3067,10 +3069,10 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ema_slope",
+          "logic_type": "market_structure",
           "params": {
-            "period": 8,
-            "slow": 49
+            "lookback": 13,
+            "slow": 33
           }
         },
         "volatility": {
@@ -3079,30 +3081,30 @@
         }
       },
       "parents": [
-        "xov-6916f9"
+        "xov-349c74"
       ]
     },
     "in_sample": {
-      "fitness": 1.4868,
-      "return": 0.0018
+      "fitness": 3.563,
+      "return": 0.0097
     },
     "out_of_sample": {
-      "avg_pnl": 44.36,
-      "consistency": 0.6,
-      "expectancy": 44.36,
-      "final_equity": 10221.79,
+      "avg_pnl": 53.19,
+      "consistency": 0.667,
+      "expectancy": 53.19,
+      "final_equity": 10159.57,
       "max_drawdown": 0.01,
-      "profit_factor": 2.106,
-      "recovery_factor": 2.218,
-      "sharpe_proxy": 0.375,
-      "sortino_proxy": 0.7,
+      "profit_factor": 2.572,
+      "recovery_factor": 1.596,
+      "sharpe_proxy": 0.481,
+      "sortino_proxy": 0.908,
       "status": "complete",
-      "total_return": 0.0222,
-      "trades": 5,
-      "win_rate": 0.6
+      "total_return": 0.016,
+      "trades": 3,
+      "win_rate": 0.667
     },
     "parents": [
-      "xov-6916f9"
+      "xov-349c74"
     ],
     "regime": "trending_down",
     "symbol": "EURJPY"
@@ -4763,22 +4765,22 @@
     "symbol": "JPM"
   },
   "JPM::ranging": {
-    "certified_at": 1788895415.0217457,
-    "generation": 10,
+    "certified_at": 1788981181.2125247,
+    "generation": 16,
     "genome": {
-      "backtests": 15,
+      "backtests": 10,
       "best_return": 0.0352,
       "best_sharpe": 0.677,
       "fitness": 8.8056,
-      "generation": 10,
-      "genome_id": "mut-333683",
+      "generation": 16,
+      "genome_id": "mut-39c117",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.148,
-            "regime_bonus": 0.1,
-            "threshold": 0.5
+            "base_threshold": 0.128,
+            "regime_bonus": 0.15,
+            "threshold": 0.128
           }
         },
         "execution": {
@@ -4786,11 +4788,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "time_exit",
           "params": {
+            "max_bars": 20,
             "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 2.487
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -4805,11 +4807,12 @@
           }
         },
         "momentum": {
-          "logic_type": "cci",
+          "logic_type": "stochastic",
           "params": {
-            "lower": 15,
-            "period": 20,
-            "upper": 81
+            "d_period": 3,
+            "k_period": 7,
+            "lower": 20,
+            "upper": 80
           }
         },
         "position": {
@@ -4825,22 +4828,20 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "price_above_sma",
+          "logic_type": "supertrend",
           "params": {
-            "period": 50,
+            "multiplier": 3.0,
+            "period": 10,
             "slow": 46
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
-          "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
       "parents": [
-        "xov-c1a025"
+        "xov-8f64d6"
       ]
     },
     "in_sample": {
@@ -4848,22 +4849,22 @@
       "return": 0.0352
     },
     "out_of_sample": {
-      "avg_pnl": 68.42,
+      "avg_pnl": 72.22,
       "consistency": 0.5,
-      "expectancy": 68.42,
-      "final_equity": 10136.85,
+      "expectancy": 72.22,
+      "final_equity": 10144.43,
       "max_drawdown": 0.0,
-      "profit_factor": 11.407,
+      "profit_factor": 26.93,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 0.839,
-      "sortino_proxy": 7.359,
+      "sharpe_proxy": 0.928,
+      "sortino_proxy": 18.335,
       "status": "complete",
-      "total_return": 0.0137,
+      "total_return": 0.0144,
       "trades": 2,
       "win_rate": 0.5
     },
     "parents": [
-      "xov-c1a025"
+      "xov-8f64d6"
     ],
     "regime": "ranging",
     "symbol": "JPM"
