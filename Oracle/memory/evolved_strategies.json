@@ -1677,21 +1677,21 @@
     "symbol": "BTCUSD"
   },
   "BTCUSD::trending_up": {
-    "certified_at": 1783887441.895322,
-    "generation": 10,
+    "certified_at": 1788958211.8978841,
+    "generation": 38,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0688,
-      "best_sharpe": 1.026,
-      "fitness": 11.9929,
-      "generation": 10,
-      "genome_id": "mut-0124fb",
+      "backtests": 5,
+      "best_return": 0.0442,
+      "best_sharpe": 0.904,
+      "fitness": 10.8039,
+      "generation": 38,
+      "genome_id": "mut-90a926",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.149,
-            "regime_bonus": 0.123,
+            "base_threshold": 0.132,
+            "regime_bonus": 0.089,
             "threshold": 0.5
           }
         },
@@ -1702,9 +1702,9 @@
         "exit": {
           "logic_type": "swing_stops",
           "params": {
-            "lookback": 11,
-            "sl_mult": 2.056,
-            "tp_mult": 3.398
+            "lookback": 10,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -1712,16 +1712,16 @@
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down",
-              "ranging",
-              "high_volatility"
+              "trending_down"
             ]
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "williams_r",
           "params": {
-            "lookback": 10
+            "lower": 15,
+            "period": 14,
+            "upper": 60
           }
         },
         "position": {
@@ -1739,41 +1739,42 @@
         "trend": {
           "logic_type": "market_structure",
           "params": {
-            "lookback": 17
+            "lookback": 15
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "bollinger_width",
           "params": {
-            "period": 20
+            "period": 20,
+            "threshold": 15.0
           }
         }
       },
       "parents": [
-        "xov-1478f5"
+        "xov-d618f6"
       ]
     },
     "in_sample": {
-      "fitness": 11.9929,
-      "return": 0.0688
+      "fitness": 10.8039,
+      "return": 0.0442
     },
     "out_of_sample": {
-      "avg_pnl": 1.7,
-      "consistency": 0.4,
-      "expectancy": 1.7,
-      "final_equity": 10008.52,
-      "max_drawdown": 0.0199,
-      "profit_factor": 1.029,
-      "recovery_factor": 0.043,
-      "sharpe_proxy": 0.014,
-      "sortino_proxy": 0.022,
+      "avg_pnl": 114.26,
+      "consistency": 1.0,
+      "expectancy": 114.26,
+      "final_equity": 10342.79,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 2.192,
+      "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0009,
-      "trades": 5,
-      "win_rate": 0.4
+      "total_return": 0.0343,
+      "trades": 3,
+      "win_rate": 1.0
     },
     "parents": [
-      "xov-1478f5"
+      "xov-d618f6"
     ],
     "regime": "trending_up",
     "symbol": "BTCUSD"
@@ -6662,22 +6663,22 @@
     "symbol": "SENSEX"
   },
   "SENSEX::trending_down": {
-    "certified_at": 1788871490.4684293,
-    "generation": 0,
+    "certified_at": 1788958341.1239214,
+    "generation": 20,
     "genome": {
-      "backtests": 2,
+      "backtests": 15,
       "best_return": -0.0105,
       "best_sharpe": -0.208,
       "fitness": 0.9325,
-      "generation": 0,
-      "genome_id": "imm-c2020b",
+      "generation": 20,
+      "genome_id": "mut-665022",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.212,
-            "regime_bonus": 0.1,
-            "threshold": 0.212
+            "base_threshold": 0.134,
+            "regime_bonus": 0.144,
+            "threshold": 0.17
           }
         },
         "execution": {
@@ -6685,11 +6686,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "swing_stops",
           "params": {
+            "lookback": 11,
             "sl_mult": 2.0,
-            "tp_mult": 5.0,
-            "trail_mult": 1.5
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -6704,10 +6705,9 @@
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "volume_momentum",
           "params": {
-            "period": 12,
-            "threshold": 15
+            "period": 20
           }
         },
         "position": {
@@ -6723,39 +6723,46 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "sma_crossover",
+          "logic_type": "market_structure",
           "params": {
-            "fast": 11,
-            "slow": 51
+            "lookback": 30,
+            "slow": 41
           }
         },
         "volatility": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "atr_contraction",
+          "params": {
+            "contraction_ratio": 0.7,
+            "period": 14
+          }
         }
       },
-      "parents": []
+      "parents": [
+        "xov-08f236"
+      ]
     },
     "in_sample": {
       "fitness": 0.9325,
       "return": -0.0105
     },
     "out_of_sample": {
-      "avg_pnl": 114.63,
-      "consistency": 1.0,
-      "expectancy": 114.63,
-      "final_equity": 10114.63,
+      "avg_pnl": 75.0,
+      "consistency": 0.5,
+      "expectancy": 75.0,
+      "final_equity": 10150.0,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 0.0,
+      "sharpe_proxy": 1.0,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0115,
-      "trades": 1,
-      "win_rate": 1.0
+      "total_return": 0.015,
+      "trades": 2,
+      "win_rate": 0.5
     },
-    "parents": [],
+    "parents": [
+      "xov-08f236"
+    ],
     "regime": "trending_down",
     "symbol": "SENSEX"
   },
