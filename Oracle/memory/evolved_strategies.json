@@ -3845,34 +3845,36 @@
     "symbol": "GBPJPY"
   },
   "GBPUSD::ranging": {
-    "certified_at": 1787878050.4386637,
-    "generation": 0,
+    "certified_at": 1789066836.8285208,
+    "generation": 12,
     "genome": {
-      "backtests": 3,
-      "best_return": 0.0067,
-      "best_sharpe": 0.217,
-      "fitness": 3.5021,
-      "generation": 0,
-      "genome_id": "imm-bcc7e5",
+      "backtests": 15,
+      "best_return": 0.0095,
+      "best_sharpe": 0.0,
+      "fitness": 10.6393,
+      "generation": 12,
+      "genome_id": "mut-fe729a",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
             "base_threshold": 0.215,
-            "regime_bonus": 0.15,
-            "threshold": 0.215
+            "regime_bonus": 0.143,
+            "threshold": 0.5
           }
         },
         "execution": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "slippage_pips": 1.2697598405030686
+          }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "default",
           "params": {
-            "lookback": 10,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "atr_override": null,
+            "sl_mult": 2.266,
+            "tp_mult": 8.0
           }
         },
         "market_regime": {
@@ -3887,10 +3889,11 @@
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "rsi",
           "params": {
-            "period": 10,
-            "threshold": 15
+            "lower": 28,
+            "period": 7,
+            "upper": 72
           }
         },
         "position": {
@@ -3902,43 +3905,53 @@
           "params": {}
         },
         "trade_management": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "trailing_stop",
+          "params": {
+            "activate_at_r": 1.4,
+            "trail_mult": 2.6
+          }
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "sma_crossover",
           "params": {
-            "lookback": 22,
+            "fast": 20,
             "slow": 49
           }
         },
         "volatility": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "atr_expansion",
+          "params": {
+            "expansion_ratio": 1.2,
+            "period": 14
+          }
         }
       },
-      "parents": []
+      "parents": [
+        "xov-32acf8"
+      ]
     },
     "in_sample": {
-      "fitness": 3.5021,
-      "return": 0.0067
+      "fitness": 10.6393,
+      "return": 0.0095
     },
     "out_of_sample": {
-      "avg_pnl": 47.92,
-      "consistency": 0.667,
-      "expectancy": 47.92,
-      "final_equity": 10143.75,
+      "avg_pnl": 45.37,
+      "consistency": 0.5,
+      "expectancy": 45.37,
+      "final_equity": 10181.47,
       "max_drawdown": 0.01,
-      "profit_factor": 2.416,
-      "recovery_factor": 1.438,
-      "sharpe_proxy": 0.444,
-      "sortino_proxy": 0.818,
+      "profit_factor": 2.541,
+      "recovery_factor": 1.815,
+      "sharpe_proxy": 0.419,
+      "sortino_proxy": 0.893,
       "status": "complete",
-      "total_return": 0.0144,
-      "trades": 3,
-      "win_rate": 0.667
+      "total_return": 0.0181,
+      "trades": 4,
+      "win_rate": 0.5
     },
-    "parents": [],
+    "parents": [
+      "xov-32acf8"
+    ],
     "regime": "ranging",
     "symbol": "GBPUSD"
   },
