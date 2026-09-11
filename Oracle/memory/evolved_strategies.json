@@ -8055,15 +8055,15 @@
     "symbol": "USDJPY"
   },
   "USDJPY::trending_down": {
-    "certified_at": 1789098224.001924,
-    "generation": 18,
+    "certified_at": 1789153342.7260647,
+    "generation": 20,
     "genome": {
-      "backtests": 15,
+      "backtests": 30,
       "best_return": 0.0238,
       "best_sharpe": 0.574,
       "fitness": 7.5921,
-      "generation": 18,
-      "genome_id": "mut-d01584",
+      "generation": 20,
+      "genome_id": "mut-78c29c",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -8082,7 +8082,7 @@
           "params": {
             "lookback": 10,
             "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "tp_mult": 2.818
           }
         },
         "market_regime": {
@@ -8097,7 +8097,7 @@
         "momentum": {
           "logic_type": "roc",
           "params": {
-            "period": 10,
+            "period": 11,
             "threshold": 15
           }
         },
@@ -8129,7 +8129,7 @@
         }
       },
       "parents": [
-        "xov-820e7d"
+        "seed-4140b4"
       ]
     },
     "in_sample": {
@@ -8137,22 +8137,22 @@
       "return": 0.0238
     },
     "out_of_sample": {
-      "avg_pnl": 44.25,
+      "avg_pnl": 48.18,
       "consistency": 0.625,
-      "expectancy": 44.25,
-      "final_equity": 10354.01,
+      "expectancy": 48.18,
+      "final_equity": 10385.45,
       "max_drawdown": 0.0297,
-      "profit_factor": 2.14,
-      "recovery_factor": 1.192,
-      "sharpe_proxy": 0.373,
-      "sortino_proxy": 0.698,
+      "profit_factor": 2.241,
+      "recovery_factor": 1.298,
+      "sharpe_proxy": 0.404,
+      "sortino_proxy": 0.76,
       "status": "complete",
-      "total_return": 0.0354,
+      "total_return": 0.0385,
       "trades": 8,
       "win_rate": 0.625
     },
     "parents": [
-      "xov-820e7d"
+      "seed-4140b4"
     ],
     "regime": "trending_down",
     "symbol": "USDJPY"
