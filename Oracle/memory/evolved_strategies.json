@@ -891,6 +891,7 @@
           "logic_type": "ichimoku_cloud",
           "params": {
             "kijun": 26,
+            "slow": 49,
             "tenkan": 9
           }
         },
@@ -3008,21 +3009,21 @@
     "symbol": "EURJPY"
   },
   "EURJPY::trending_down": {
-    "certified_at": 1789098273.0672839,
-    "generation": 84,
+    "certified_at": 1789130531.9281087,
+    "generation": 104,
     "genome": {
-      "backtests": 45,
+      "backtests": 60,
       "best_return": 0.0136,
       "best_sharpe": 0.242,
-      "fitness": 3.9007,
-      "generation": 84,
-      "genome_id": "mut-dd32f4",
+      "fitness": 4.0591,
+      "generation": 104,
+      "genome_id": "mut-8f7ae8",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.323,
-            "regime_bonus": 0.078
+            "base_threshold": 0.341,
+            "regime_bonus": 0.075
           }
         },
         "execution": {
@@ -3030,29 +3031,30 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "time_exit",
           "params": {
-            "sl_mult": 2.095,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
-          "logic_type": "strict",
+          "logic_type": "default",
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down"
-            ],
-            "volatility_limit": 1.0
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
           }
         },
         "momentum": {
           "logic_type": "williams_r",
           "params": {
-            "lower": 15,
-            "period": 22,
-            "upper": 60
+            "lower": 17,
+            "period": 26,
+            "upper": 61
           }
         },
         "position": {
@@ -3074,43 +3076,42 @@
         "trend": {
           "logic_type": "ema",
           "params": {
-            "fast": 21,
+            "fast": 24,
             "slow": 49
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-8fd287"
+        "xov-7f52eb"
       ]
     },
     "in_sample": {
-      "fitness": 3.9007,
+      "fitness": 4.0591,
       "return": 0.0136
     },
     "out_of_sample": {
-      "avg_pnl": 88.25,
+      "avg_pnl": 96.75,
       "consistency": 0.8,
-      "expectancy": 88.25,
-      "final_equity": 10441.27,
+      "expectancy": 96.75,
+      "final_equity": 10483.74,
       "max_drawdown": 0.01,
-      "profit_factor": 5.283,
-      "recovery_factor": 4.413,
-      "sharpe_proxy": 0.894,
-      "sortino_proxy": 1.916,
+      "profit_factor": 5.696,
+      "recovery_factor": 4.837,
+      "sharpe_proxy": 0.966,
+      "sortino_proxy": 2.1,
       "status": "complete",
-      "total_return": 0.0441,
+      "total_return": 0.0484,
       "trades": 5,
       "win_rate": 0.8
     },
     "parents": [
-      "xov-8fd287"
+      "xov-7f52eb"
     ],
     "regime": "trending_down",
     "symbol": "EURJPY"
@@ -6687,21 +6688,21 @@
     "symbol": "SENSEX"
   },
   "SENSEX::trending_down": {
-    "certified_at": 1788958341.1239214,
-    "generation": 20,
+    "certified_at": 1789130651.6253552,
+    "generation": 42,
     "genome": {
       "backtests": 15,
-      "best_return": -0.0105,
-      "best_sharpe": -0.208,
-      "fitness": 0.9325,
-      "generation": 20,
-      "genome_id": "mut-665022",
+      "best_return": -0.0057,
+      "best_sharpe": -0.141,
+      "fitness": 0.9194,
+      "generation": 42,
+      "genome_id": "mut-babc6f",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
             "base_threshold": 0.134,
-            "regime_bonus": 0.144,
+            "regime_bonus": 0.136,
             "threshold": 0.17
           }
         },
@@ -6714,7 +6715,7 @@
           "params": {
             "lookback": 11,
             "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "tp_mult": 3.028
           }
         },
         "market_regime": {
@@ -6729,9 +6730,10 @@
           }
         },
         "momentum": {
-          "logic_type": "volume_momentum",
+          "logic_type": "roc",
           "params": {
-            "period": 20
+            "period": 10,
+            "threshold": 15
           }
         },
         "position": {
@@ -6747,45 +6749,46 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "ichimoku_cloud",
           "params": {
-            "lookback": 30,
-            "slow": 41
+            "kijun": 30,
+            "slow": 45,
+            "tenkan": 10
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "bollinger_width",
           "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
+            "period": 20,
+            "threshold": 15.0
           }
         }
       },
       "parents": [
-        "xov-08f236"
+        "xov-2190ff"
       ]
     },
     "in_sample": {
-      "fitness": 0.9325,
-      "return": -0.0105
+      "fitness": 0.9194,
+      "return": -0.0057
     },
     "out_of_sample": {
-      "avg_pnl": 75.0,
+      "avg_pnl": 49.43,
       "consistency": 0.5,
-      "expectancy": 75.0,
-      "final_equity": 10150.0,
-      "max_drawdown": 0.0,
-      "profit_factor": null,
-      "recovery_factor": 0.0,
-      "sharpe_proxy": 1.0,
-      "sortino_proxy": 0.0,
+      "expectancy": 49.43,
+      "final_equity": 10197.73,
+      "max_drawdown": 0.01,
+      "profit_factor": 2.948,
+      "recovery_factor": 1.977,
+      "sharpe_proxy": 0.466,
+      "sortino_proxy": 0.989,
       "status": "complete",
-      "total_return": 0.015,
-      "trades": 2,
+      "total_return": 0.0198,
+      "trades": 4,
       "win_rate": 0.5
     },
     "parents": [
-      "xov-08f236"
+      "xov-2190ff"
     ],
     "regime": "trending_down",
     "symbol": "SENSEX"
