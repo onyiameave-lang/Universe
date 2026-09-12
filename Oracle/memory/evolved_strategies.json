@@ -3009,15 +3009,15 @@
     "symbol": "EURJPY"
   },
   "EURJPY::trending_down": {
-    "certified_at": 1789130531.9281087,
-    "generation": 104,
+    "certified_at": 1789214589.2285447,
+    "generation": 128,
     "genome": {
-      "backtests": 60,
+      "backtests": 15,
       "best_return": 0.0136,
       "best_sharpe": 0.242,
       "fitness": 4.0591,
-      "generation": 104,
-      "genome_id": "mut-8f7ae8",
+      "generation": 128,
+      "genome_id": "mut-c43cf9",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -3031,11 +3031,10 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "atr_stops",
           "params": {
-            "max_bars": 20,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "sl_mult": 1.5,
+            "tp_mult": 4.0
           }
         },
         "market_regime": {
@@ -3052,9 +3051,9 @@
         "momentum": {
           "logic_type": "williams_r",
           "params": {
-            "lower": 17,
-            "period": 26,
-            "upper": 61
+            "lower": 16,
+            "period": 31,
+            "upper": 63
           }
         },
         "position": {
@@ -3063,11 +3062,7 @@
         },
         "risk": {
           "logic_type": "default",
-          "params": {
-            "max_correlated_positions": 3,
-            "max_dd_limit": 0.15,
-            "risk_per_trade": 0.01
-          }
+          "params": {}
         },
         "trade_management": {
           "logic_type": "default",
@@ -3076,7 +3071,7 @@
         "trend": {
           "logic_type": "ema",
           "params": {
-            "fast": 24,
+            "fast": 27,
             "slow": 49
           }
         },
@@ -3088,7 +3083,7 @@
         }
       },
       "parents": [
-        "xov-7f52eb"
+        "xov-516383"
       ]
     },
     "in_sample": {
@@ -3096,22 +3091,22 @@
       "return": 0.0136
     },
     "out_of_sample": {
-      "avg_pnl": 96.75,
+      "avg_pnl": 98.49,
       "consistency": 0.8,
-      "expectancy": 96.75,
-      "final_equity": 10483.74,
+      "expectancy": 98.49,
+      "final_equity": 10492.45,
       "max_drawdown": 0.01,
-      "profit_factor": 5.696,
-      "recovery_factor": 4.837,
-      "sharpe_proxy": 0.966,
-      "sortino_proxy": 2.1,
+      "profit_factor": 5.78,
+      "recovery_factor": 4.925,
+      "sharpe_proxy": 0.977,
+      "sortino_proxy": 2.138,
       "status": "complete",
-      "total_return": 0.0484,
+      "total_return": 0.0492,
       "trades": 5,
       "win_rate": 0.8
     },
     "parents": [
-      "xov-7f52eb"
+      "xov-516383"
     ],
     "regime": "trending_down",
     "symbol": "EURJPY"
