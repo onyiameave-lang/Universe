@@ -8051,22 +8051,22 @@
     "symbol": "USDJPY"
   },
   "USDJPY::trending_down": {
-    "certified_at": 1789153342.7260647,
-    "generation": 20,
+    "certified_at": 1789324635.0702233,
+    "generation": 28,
     "genome": {
-      "backtests": 30,
+      "backtests": 45,
       "best_return": 0.0238,
       "best_sharpe": 0.574,
       "fitness": 7.5921,
-      "generation": 20,
-      "genome_id": "mut-78c29c",
+      "generation": 28,
+      "genome_id": "mut-114b7d",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.21,
-            "regime_bonus": 0.106,
-            "threshold": 0.5
+            "base_threshold": 0.244,
+            "regime_bonus": 0.1,
+            "threshold": 0.244
           }
         },
         "execution": {
@@ -8078,7 +8078,7 @@
           "params": {
             "lookback": 10,
             "sl_mult": 2.0,
-            "tp_mult": 2.818
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -8091,10 +8091,10 @@
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "adx_strength",
           "params": {
-            "period": 11,
-            "threshold": 15
+            "period": 14,
+            "threshold": 20
           }
         },
         "position": {
@@ -8117,7 +8117,7 @@
           }
         },
         "volatility": {
-          "logic_type": "bollinger_width",
+          "logic_type": "historical_vol",
           "params": {
             "period": 20,
             "threshold": 15.0
@@ -8125,7 +8125,7 @@
         }
       },
       "parents": [
-        "seed-4140b4"
+        "xov-f48949"
       ]
     },
     "in_sample": {
@@ -8133,22 +8133,22 @@
       "return": 0.0238
     },
     "out_of_sample": {
-      "avg_pnl": 48.18,
+      "avg_pnl": 49.21,
       "consistency": 0.625,
-      "expectancy": 48.18,
-      "final_equity": 10385.45,
+      "expectancy": 49.21,
+      "final_equity": 10393.69,
       "max_drawdown": 0.0297,
-      "profit_factor": 2.241,
-      "recovery_factor": 1.298,
-      "sharpe_proxy": 0.404,
-      "sortino_proxy": 0.76,
+      "profit_factor": 2.268,
+      "recovery_factor": 1.325,
+      "sharpe_proxy": 0.411,
+      "sortino_proxy": 0.776,
       "status": "complete",
-      "total_return": 0.0385,
+      "total_return": 0.0394,
       "trades": 8,
       "win_rate": 0.625
     },
     "parents": [
-      "seed-4140b4"
+      "xov-f48949"
     ],
     "regime": "trending_down",
     "symbol": "USDJPY"
