@@ -93,7 +93,7 @@ fi
 
 # ---- 6. systemd service ----
 echo "[6/6] Installing the systemd service (keeps the bot running forever)..."
-SERVICE_SRC="/home/oracle/Universe/Universal_AI/Oracle/deploy/oracle-ctrader.service"
+SERVICE_SRC="/home/oracle/Universe/Universal_AI/Oracle/deployment/oracle-ctrader.service"
 if [ -f "$SERVICE_SRC" ]; then
     sudo cp "$SERVICE_SRC" /etc/systemd/system/oracle-ctrader.service
     sudo systemctl daemon-reload
