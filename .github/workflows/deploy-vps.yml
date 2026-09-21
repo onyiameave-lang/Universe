@@ -109,6 +109,7 @@ jobs:
             trap - ERR
             echo "Deployment failed; restoring ${previous_sha}"
             git reset --hard "$previous_sha"
+            sudo -n systemctl reset-failed "$VPS_SERVICE"
             sudo -n systemctl restart "$VPS_SERVICE"
             sudo -n systemctl is-active --quiet "$VPS_SERVICE"
           }
@@ -131,6 +132,8 @@ jobs:
             Oracle/execution/ctrader_broker.py \
             Oracle/execution/mt5_broker.py
 
+          # Clear a prior crash-loop start limit before launching the repaired service.
+          sudo -n systemctl reset-failed "$VPS_SERVICE"
           sudo -n systemctl restart "$VPS_SERVICE"
           sudo -n systemctl is-active --quiet "$VPS_SERVICE"
 
