@@ -113,6 +113,17 @@ from core.risk import Position as RiskPosition  # type: ignore  # Portfolio Awar
 
 log = logging.getLogger("oracle.live")
 
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        log.warning("Invalid integer for %s=%r; using %d", name, raw, default)
+        return default
+
 # ── Continuous Trade Manager poll interval ───────────────────────────────────
 # Independent of self.interval (the full symbol-scan cycle, default 300s).
 # Open positions get checked this often regardless of how slow the full scan is.
@@ -412,8 +423,8 @@ class LiveTrader:
         self.symbols   = [s.upper() for s in symbols]
         self.interval  = interval_sec
         self.session_max_loss_pct = session_max_loss_pct
-        self.max_trades   = max_trades if max_trades is not None else int(
-            os.getenv("ORACLE_MAX_TRADES_PER_SESSION", "10"))
+        self.max_trades   = max_trades if max_trades is not None else _env_int(
+            "ORACLE_MAX_TRADES_PER_SESSION", 10)
         self.confirm_live = confirm_live
         self.broker = MT5Broker()
         self._trades_this_session = 0
