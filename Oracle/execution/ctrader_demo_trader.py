@@ -346,11 +346,12 @@ class CTraderDemoTrader:
     """Demo trader for cTrader. Same pipeline as DemoTrader, CTraderBroker adapter."""
 
     def __init__(self, symbols, interval_sec=300, session_max_loss_pct=0.05,
-                 max_trades=10, confirm_live=False):
+                 max_trades=None, confirm_live=False):
         self.symbols = [s.upper() for s in symbols]
         self.interval = interval_sec
         self.session_max_loss_pct = session_max_loss_pct
-        self.max_trades = max_trades
+        self.max_trades = max_trades if max_trades is not None else int(
+            os.getenv("ORACLE_MAX_TRADES_PER_SESSION", "10"))
         self.confirm_live = confirm_live
         self.broker = CTraderBroker()
         self._trades_this_session = 0
@@ -495,7 +496,8 @@ class CTraderDemoTrader:
             if live_pos is None:
                 log.info("[%s] no longer open — deregistering from CTM", symbol)
                 try:
-                    outcome = self._trade_learning.record_close(
+                    outcome = self._trade_learning.record_close_once(
+                        f"{symbol}:{pos.entry_time}:broker-close",
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual)")
@@ -552,7 +554,8 @@ class CTraderDemoTrader:
                     if close_result.get("status") == "closed":
                         self._pos_log.log_closed(symbol, broker_sym, pos_id, reason=decision.reason)
                         try:
-                            outcome = self._trade_learning.record_close(
+                            outcome = self._trade_learning.record_close_once(
+                                f"{symbol}:{pos_id}:manager-close",
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
@@ -610,7 +613,7 @@ class CTraderDemoTrader:
         print(f"\ncTrader demo trader started. Symbols={self.symbols} interval={self.interval}s")
         print(f"Account: {status.get('account_type')} | login={status.get('login')} | "
               f"currency={status.get('currency', '?')}")
-        print(f"Symbol timeout: {self._symbol_timeout}s | max_trades: {self.max_trades}")
+        print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades}")
         print(f"CTM: polling every {self._manage_interval:.0f}s")
         print("Press Ctrl+C to stop.\n")
         self.start_trade_manager()
@@ -632,9 +635,6 @@ class CTraderDemoTrader:
                     print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
                     print(self._close_all_positions())
                     break
-                if self._trades_this_session >= self.max_trades:
-                    print("Max trades for session reached. Stopping new entries.")
-                    break
                 if cycles is None or cycle < cycles:
                     print(f"Sleeping {self.interval}s until next cycle...")
                     time.sleep(self.interval)
@@ -651,8 +651,6 @@ class CTraderDemoTrader:
             if self._kill_switch_check():
                 summary["kill_switch"] = True
                 return summary
-            if self._trades_this_session >= self.max_trades:
-                break
             broker_sym = self._sym_mapper.translate(symbol)
             if broker_sym is None:
                 print(f"[{symbol}] UNMAPPED — add BROKER_SYMBOL_MAP={symbol}:<name> to .env")
@@ -671,6 +669,10 @@ class CTraderDemoTrader:
                     self._register_position(symbol, direction, entry_price=entry_price,
                                              stop=sl, target=tp, confidence=0.5,
                                              size=existing_pos.get("volume", 0.0))
+                continue
+            if len(self._managed_positions) >= self.max_trades:
+                log.info("[%s] new entry skipped — max open positions reached; "
+                         "existing positions remain monitored", symbol)
                 continue
             if self._pos_log.has_open_position(symbol, broker_sym):
                 print(f"[{symbol}->{broker_sym}] DEDUP: Chronicle shows open position")
@@ -801,7 +803,7 @@ def main():
     ap.add_argument("--preset", choices=["all", "live"], default="all")
     ap.add_argument("--interval", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--cycles", type=int, default=None, help="stop after N cycles")
-    ap.add_argument("--max-trades", type=int, default=10)
+    ap.add_argument("--max-trades", type=int, default=None)
     ap.add_argument("--session-max-loss", type=float, default=0.05)
     ap.add_argument("--confirm-live", action="store_true")
     ap.add_argument("--evolve-first", action="store_true")

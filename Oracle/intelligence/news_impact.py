@@ -101,8 +101,14 @@ class NewsImpactClassifier:
         scored = []
         for a in articles:
             age = self._age(a.get("published_at", ""), now)
-            if age is not None and age > self.config.recency_window:
-                continue   # stale, no longer "current" news
+            if age is None:
+                collected_at = a.get("collected_at")
+                try:
+                    age = now - datetime.fromtimestamp(float(collected_at), tz=timezone.utc)
+                except (TypeError, ValueError, OSError, OverflowError):
+                    age = None
+            if age is None or age < timedelta(0) or age > self.config.recency_window:
+                continue   # unknown or stale articles cannot affect a trade
             score = self._score_article(a)
             if score > 0:
                 scored.append((score, a))

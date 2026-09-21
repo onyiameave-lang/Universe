@@ -79,6 +79,8 @@ except Exception:
 
 _UA = "SentinelNewsAI/1.0 (AI Ecosystem news intelligence)"
 _TIMEOUT = 12
+_RATE_LIMIT_COOLDOWN_SEC = float(os.getenv("SENTINEL_RATE_LIMIT_COOLDOWN_SEC", "900"))
+_rate_limited_until: Dict[str, float] = {}
 
 # FIX-SC-01 (Phase 5e): Set socket-level default timeout at module load time.
 # urllib's timeout= parameter only covers the READ phase of an HTTP connection.
@@ -189,11 +191,18 @@ class Article:
             "source": self.source,
             "url": self.url,
             "published_at": self.published_at,
+            "collected_at": self.collected_at,
             "summary": self.summary[:400],
         }
 
 
 def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
+    host = urllib.parse.urlparse(url).netloc or url
+    cooldown_until = _rate_limited_until.get(host, 0.0)
+    if time.time() < cooldown_until:
+        log.info("[sentinel.collectors] source %s cooling down after HTTP 429 for %.0fs",
+                 host, cooldown_until - time.time())
+        return None
     req = urllib.request.Request(url, headers={"User-Agent": _UA, **(headers or {})})
     # FIX-SC-02 (Phase 5e): Log each HTTP fetch attempt so we can see exactly
     # which URL hangs in production logs. Constitutional: Book II No Silent Failures.
@@ -216,6 +225,10 @@ def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
             err_body = exc.read().decode("utf-8", errors="replace")
         except Exception:
             err_body = ""
+        if exc.code == 429:
+            _rate_limited_until[host] = time.time() + _RATE_LIMIT_COOLDOWN_SEC
+            log.warning("[sentinel.collectors] source %s rate-limited; cooling down %.0fs",
+                        host, _RATE_LIMIT_COOLDOWN_SEC)
         log.warning("[sentinel.collectors] _get: HTTP %d %s in %.2fs — %s — body=%r",
                     exc.code, exc.reason, time.time() - _t0, url[:60], err_body[:200])
         return err_body if err_body else None

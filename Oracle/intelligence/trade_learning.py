@@ -42,7 +42,9 @@ log = logging.getLogger("oracle.trade_learning")
 # TradingBenchmark (aggregate-only) and the Trade Journal (prose, in
 # Chronicle). One line per closed trade: symbol, entry_streams, won, pnl_r.
 _EXPERIMENT_LOG_PATH = Path(__file__).resolve().parents[1] / "memory" / "trade_experiment_log.jsonl"
+_CLOSED_TRADE_KEYS_PATH = Path(__file__).resolve().parents[1] / "memory" / "learned_closed_trades.json"
 _experiment_log_lock = threading.Lock()
+_closed_trade_keys_lock = threading.Lock()
 
 
 def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
@@ -297,6 +299,39 @@ class TradeLearningEngine:
                  benchmark: Optional[TradingBenchmark] = None):
         self.confidence = confidence_tracker or ChampionConfidenceTracker()
         self.benchmark = benchmark or TradingBenchmark()
+
+    @staticmethod
+    def _load_closed_trade_keys() -> set:
+        if not _CLOSED_TRADE_KEYS_PATH.exists():
+            return set()
+        try:
+            data = json.loads(_CLOSED_TRADE_KEYS_PATH.read_text(encoding="utf-8"))
+            return set(data if isinstance(data, list) else [])
+        except (OSError, json.JSONDecodeError):
+            log.warning("could not read learned closed-trade ledger; starting empty")
+            return set()
+
+    @staticmethod
+    def _save_closed_trade_keys(keys: set) -> None:
+        _CLOSED_TRADE_KEYS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _CLOSED_TRADE_KEYS_PATH.write_text(
+            json.dumps(sorted(keys), indent=2), encoding="utf-8")
+
+    def record_close_once(self, close_key: str, oracle_agent, pos, exit_price: float,
+                          exit_confidence: float, exit_regime: str,
+                          exit_reason: str) -> Optional[TradeOutcome]:
+        """Record one broker close once, even if reconciliation sees it again."""
+        with _closed_trade_keys_lock:
+            keys = self._load_closed_trade_keys()
+            if close_key in keys:
+                log.debug("[%s] close %s already learned", pos.symbol, close_key)
+                return None
+            outcome = self.record_close(
+                oracle_agent, pos, exit_price, exit_confidence,
+                exit_regime, exit_reason)
+            keys.add(close_key)
+            self._save_closed_trade_keys(keys)
+            return outcome
 
     def record_close(self, oracle_agent, pos, exit_price: float, exit_confidence: float,
                       exit_regime: str, exit_reason: str) -> TradeOutcome:
