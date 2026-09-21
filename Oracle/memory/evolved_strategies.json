@@ -1,21 +1,21 @@
 {
   "AAPL::high_volatility": {
-    "certified_at": 1785811782.91854,
-    "generation": 30,
+    "certified_at": 1790002891.1798751,
+    "generation": 0,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0258,
-      "best_sharpe": 0.309,
-      "fitness": 5.0695,
-      "generation": 30,
-      "genome_id": "mut-3c43e6",
+      "backtests": 2,
+      "best_return": 0.0295,
+      "best_sharpe": 0.438,
+      "fitness": 6.5053,
+      "generation": 0,
+      "genome_id": "imm-5e2caa",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.12,
-            "regime_bonus": 0.11,
-            "threshold": 0.5
+            "base_threshold": 0.169,
+            "regime_bonus": 0.1,
+            "threshold": 0.169
           }
         },
         "execution": {
@@ -23,11 +23,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 10,
             "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "tp_mult": 5.0,
+            "trail_mult": 1.5
           }
         },
         "market_regime": {
@@ -42,11 +42,10 @@
           }
         },
         "momentum": {
-          "logic_type": "williams_r",
+          "logic_type": "adx_strength",
           "params": {
-            "lower": 15,
             "period": 14,
-            "upper": 60
+            "threshold": 30
           }
         },
         "position": {
@@ -62,46 +61,39 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "adx_trend",
+          "logic_type": "sma_crossover",
           "params": {
-            "period": 13,
-            "slow": 35,
-            "threshold": 20
+            "fast": 12,
+            "slow": 56
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
-          "params": {
-            "period": 20
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
-      "parents": [
-        "xov-90829e"
-      ]
+      "parents": []
     },
     "in_sample": {
-      "fitness": 5.0695,
-      "return": 0.0258
+      "fitness": 6.5053,
+      "return": 0.0295
     },
     "out_of_sample": {
-      "avg_pnl": 26.3,
-      "consistency": 0.6,
-      "expectancy": 26.3,
-      "final_equity": 10131.47,
+      "avg_pnl": 57.91,
+      "consistency": 0.75,
+      "expectancy": 57.91,
+      "final_equity": 10231.64,
       "max_drawdown": 0.01,
-      "profit_factor": 1.646,
-      "recovery_factor": 1.315,
-      "sharpe_proxy": 0.233,
-      "sortino_proxy": 0.409,
+      "profit_factor": 3.317,
+      "recovery_factor": 2.316,
+      "sharpe_proxy": 0.562,
+      "sortino_proxy": 1.158,
       "status": "complete",
-      "total_return": 0.0131,
-      "trades": 5,
-      "win_rate": 0.6
+      "total_return": 0.0232,
+      "trades": 4,
+      "win_rate": 0.75
     },
-    "parents": [
-      "xov-90829e"
-    ],
+    "parents": [],
     "regime": "high_volatility",
     "symbol": "AAPL"
   },
@@ -3095,7 +3087,7 @@
           "logic_type": "sma_crossover",
           "params": {
             "fast": 18,
-            "slow": 49
+            "slow": 48
           }
         },
         "volatility": {
