@@ -125,10 +125,15 @@ jobs:
 
           # Keep the existing VPS environment aligned with the checked-in
           # runtime dependencies before restarting the trader.
-          test -x "$VPS_REPO_DIR/Oracle/venv/bin/pip"
-          "$VPS_REPO_DIR/Oracle/venv/bin/pip" install --disable-pip-version-check \
+          service_exec="$(sudo -n systemctl show "$VPS_SERVICE" -p ExecStart --value)"
+          service_python="$(printf '%s\n' "$service_exec" | sed -n 's/.*path=\([^ ;]*python[^ ;]*\).*/\1/p' | head -n 1)"
+          test -n "$service_python"
+          test -x "$service_python"
+          service_venv="$(dirname "$service_python")"
+          test -x "$service_venv/pip"
+          "$service_venv/pip" install --disable-pip-version-check \
             --requirement requirements.txt
-          "$VPS_REPO_DIR/Oracle/venv/bin/python" -c \
+          "$service_python" -c \
             "import ctrader_open_api; print('ctrader-open-api import OK')"
 
           python3 -m py_compile \
