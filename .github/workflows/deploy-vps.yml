@@ -123,6 +123,12 @@ jobs:
           # overwritten by GitHub Actions and are excluded from repository sync.
           test -f Oracle/.env
 
+          # Keep the existing VPS environment aligned with the checked-in
+          # runtime dependencies before restarting the trader.
+          test -x "$VPS_REPO_DIR/Oracle/venv/bin/pip"
+          "$VPS_REPO_DIR/Oracle/venv/bin/pip" install --disable-pip-version-check \
+            --requirement requirements.txt
+
           python3 -m py_compile \
             shared/trading_runtime.py \
             Oracle/execution/trade_manager.py \
