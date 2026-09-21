@@ -1,0 +1,41 @@
+name: Install VPS Operator Key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Load VPS deployment key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Configure known host
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VPS_KNOWN_HOSTS }}' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Install operator public key
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          OPERATOR_KEY: ${{ secrets.VPS_OPERATOR_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$OPERATOR_KEY"
+
+          printf '%s\n' "$OPERATOR_KEY" | ssh \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'set -e; umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; key=$(cat); grep -qxF "$key" "$HOME/.ssh/authorized_keys" || printf "%s\n" "$key" >> "$HOME/.ssh/authorized_keys"; chmod 600 "$HOME/.ssh/authorized_keys"'
