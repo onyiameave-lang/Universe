@@ -128,6 +128,8 @@ jobs:
           test -x "$VPS_REPO_DIR/Oracle/venv/bin/pip"
           "$VPS_REPO_DIR/Oracle/venv/bin/pip" install --disable-pip-version-check \
             --requirement requirements.txt
+          "$VPS_REPO_DIR/Oracle/venv/bin/python" -c \
+            "import ctrader_open_api; print('ctrader-open-api import OK')"
 
           python3 -m py_compile \
             shared/trading_runtime.py \
