@@ -11186,22 +11186,22 @@
     "symbol": "USDJPY"
   },
   "USDJPY::trending_down": {
-    "certified_at": 1789324635.0702233,
-    "generation": 28,
+    "certified_at": 1790082774.2874901,
+    "generation": 10,
     "genome": {
-      "backtests": 45,
-      "best_return": 0.0238,
-      "best_sharpe": 0.574,
-      "fitness": 7.5921,
-      "generation": 28,
-      "genome_id": "mut-114b7d",
+      "backtests": 15,
+      "best_return": 0.0474,
+      "best_sharpe": 0.96,
+      "fitness": 11.4906,
+      "generation": 10,
+      "genome_id": "mut-495326",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.244,
-            "regime_bonus": 0.1,
-            "threshold": 0.244
+            "base_threshold": 0.164,
+            "regime_bonus": 0.101,
+            "threshold": 0.164
           }
         },
         "execution": {
@@ -11209,9 +11209,8 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "atr_stops",
           "params": {
-            "lookback": 10,
             "sl_mult": 2.0,
             "tp_mult": 3.0
           }
@@ -11220,16 +11219,20 @@
           "logic_type": "default",
           "params": {
             "allowed_regimes": [
+              "trending_up",
+              "trending_down",
               "ranging",
-              "trending_up"
+              "high_volatility"
             ]
           }
         },
         "momentum": {
-          "logic_type": "adx_strength",
+          "logic_type": "stochastic",
           "params": {
-            "period": 14,
-            "threshold": 20
+            "d_period": 3,
+            "k_period": 14,
+            "lower": 20,
+            "upper": 80
           }
         },
         "position": {
@@ -11245,45 +11248,45 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "hma_slope",
+          "logic_type": "sma_crossover",
           "params": {
-            "period": 15,
-            "slow": 39
+            "fast": 21,
+            "slow": 46
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "atr_contraction",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "contraction_ratio": 0.7,
+            "period": 14
           }
         }
       },
       "parents": [
-        "xov-f48949"
+        "xov-f187d5"
       ]
     },
     "in_sample": {
-      "fitness": 7.5921,
-      "return": 0.0238
+      "fitness": 11.4906,
+      "return": 0.0474
     },
     "out_of_sample": {
-      "avg_pnl": 49.21,
+      "avg_pnl": 65.91,
       "consistency": 0.625,
-      "expectancy": 49.21,
-      "final_equity": 10393.69,
-      "max_drawdown": 0.0297,
-      "profit_factor": 2.268,
-      "recovery_factor": 1.325,
-      "sharpe_proxy": 0.411,
-      "sortino_proxy": 0.776,
+      "expectancy": 65.91,
+      "final_equity": 10527.27,
+      "max_drawdown": 0.01,
+      "profit_factor": 3.175,
+      "recovery_factor": 5.273,
+      "sharpe_proxy": 0.57,
+      "sortino_proxy": 1.222,
       "status": "complete",
-      "total_return": 0.0394,
+      "total_return": 0.0527,
       "trades": 8,
       "win_rate": 0.625
     },
     "parents": [
-      "xov-f48949"
+      "xov-f187d5"
     ],
     "regime": "trending_down",
     "symbol": "USDJPY"
