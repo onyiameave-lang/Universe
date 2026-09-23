@@ -5824,6 +5824,110 @@
     "regime": "ranging",
     "symbol": "GBPCAD"
   },
+  "GBPCAD::trending_down": {
+    "certified_at": 1790192081.6369293,
+    "generation": 24,
+    "genome": {
+      "backtests": 15,
+      "best_return": 0.0306,
+      "best_sharpe": 1.462,
+      "fitness": 11.8368,
+      "generation": 24,
+      "genome_id": "mut-087662",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.259,
+            "regime_bonus": 0.15,
+            "threshold": 0.5
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "swing_stops",
+          "params": {
+            "lookback": 11,
+            "sl_mult": 1.823,
+            "tp_mult": 3.118
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "volume_momentum",
+          "params": {
+            "period": 22
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "ema_slope",
+          "params": {
+            "period": 20,
+            "slow": 49
+          }
+        },
+        "volatility": {
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
+        }
+      },
+      "parents": [
+        "xov-be0121"
+      ]
+    },
+    "in_sample": {
+      "fitness": 11.8368,
+      "return": 0.0306
+    },
+    "out_of_sample": {
+      "avg_pnl": 74.46,
+      "consistency": 1.0,
+      "expectancy": 74.46,
+      "final_equity": 10074.46,
+      "max_drawdown": 0.0,
+      "profit_factor": null,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 0.0,
+      "sortino_proxy": 0.0,
+      "status": "complete",
+      "total_return": 0.0074,
+      "trades": 1,
+      "win_rate": 1.0
+    },
+    "parents": [
+      "xov-be0121"
+    ],
+    "regime": "trending_down",
+    "symbol": "GBPCAD"
+  },
   "GBPCHF::ranging": {
     "certified_at": 1789673905.8824468,
     "generation": 30,
