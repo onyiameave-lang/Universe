@@ -5512,15 +5512,15 @@
     "symbol": "FTSE"
   },
   "GBPAUD::ranging": {
-    "certified_at": 1790135884.160352,
-    "generation": 38,
+    "certified_at": 1790170179.0284572,
+    "generation": 42,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0271,
-      "best_sharpe": 0.658,
-      "fitness": 8.4756,
-      "generation": 38,
-      "genome_id": "mut-7b740d",
+      "backtests": 30,
+      "best_return": 0.0293,
+      "best_sharpe": 0.708,
+      "fitness": 9.0712,
+      "generation": 42,
+      "genome_id": "mut-657498",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -5555,8 +5555,8 @@
         "momentum": {
           "logic_type": "adx_strength",
           "params": {
-            "period": 15,
-            "threshold": 22
+            "period": 14,
+            "threshold": 20
           }
         },
         "position": {
@@ -5572,9 +5572,9 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "hma_slope",
+          "logic_type": "sma_crossover",
           "params": {
-            "period": 14,
+            "fast": 20,
             "slow": 49
           }
         },
@@ -5587,30 +5587,30 @@
         }
       },
       "parents": [
-        "xov-81674a"
+        "xov-0f61a8"
       ]
     },
     "in_sample": {
-      "fitness": 8.4756,
-      "return": 0.0271
+      "fitness": 9.0712,
+      "return": 0.0293
     },
     "out_of_sample": {
-      "avg_pnl": 75.53,
-      "consistency": 1.0,
-      "expectancy": 75.53,
-      "final_equity": 10151.05,
+      "avg_pnl": 65.03,
+      "consistency": 0.5,
+      "expectancy": 65.03,
+      "final_equity": 10130.06,
       "max_drawdown": 0.0,
-      "profit_factor": null,
+      "profit_factor": 7.523,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 1.014,
-      "sortino_proxy": 0.0,
+      "sharpe_proxy": 0.765,
+      "sortino_proxy": 4.612,
       "status": "complete",
-      "total_return": 0.0151,
+      "total_return": 0.013,
       "trades": 2,
-      "win_rate": 1.0
+      "win_rate": 0.5
     },
     "parents": [
-      "xov-81674a"
+      "xov-0f61a8"
     ],
     "regime": "ranging",
     "symbol": "GBPAUD"
