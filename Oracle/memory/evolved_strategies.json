@@ -2915,20 +2915,20 @@
     "symbol": "CAC40"
   },
   "CAC40::trending_down": {
-    "certified_at": 1789397599.5058844,
-    "generation": 20,
+    "certified_at": 1790279784.6203196,
+    "generation": 46,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0031,
-      "best_sharpe": 0.07,
-      "fitness": 1.9074,
-      "generation": 20,
-      "genome_id": "mut-27b530",
+      "best_return": 0.0055,
+      "best_sharpe": 0.181,
+      "fitness": 3.0833,
+      "generation": 46,
+      "genome_id": "mut-f04514",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.205,
+            "base_threshold": 0.255,
             "regime_bonus": 0.15
           }
         },
@@ -2937,11 +2937,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "trailing_atr",
           "params": {
-            "lookback": 10,
-            "sl_mult": 1.986,
-            "tp_mult": 3.167
+            "sl_mult": 2.0,
+            "tp_mult": 6.0,
+            "trail_mult": 1.5
           }
         },
         "market_regime": {
@@ -2949,18 +2949,14 @@
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down",
-              "ranging",
-              "high_volatility"
+              "trending_down"
             ]
           }
         },
         "momentum": {
-          "logic_type": "williams_r",
+          "logic_type": "price_action",
           "params": {
-            "lower": 15,
-            "period": 15,
-            "upper": 62
+            "lookback": 10
           }
         },
         "position": {
@@ -2976,45 +2972,44 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "hma_slope",
+          "logic_type": "market_structure",
           "params": {
-            "period": 17,
-            "slow": 44
+            "lookback": 17,
+            "slow": 42
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-1bc0ab"
+        "xov-f74cb5"
       ]
     },
     "in_sample": {
-      "fitness": 1.9074,
-      "return": 0.0031
+      "fitness": 3.0833,
+      "return": 0.0055
     },
     "out_of_sample": {
-      "avg_pnl": 82.8,
-      "consistency": 0.75,
-      "expectancy": 82.8,
-      "final_equity": 10331.2,
+      "avg_pnl": 74.84,
+      "consistency": 0.8,
+      "expectancy": 74.84,
+      "final_equity": 10374.21,
       "max_drawdown": 0.01,
-      "profit_factor": 4.263,
-      "recovery_factor": 3.312,
-      "sharpe_proxy": 0.776,
-      "sortino_proxy": 1.632,
+      "profit_factor": 4.687,
+      "recovery_factor": 3.742,
+      "sharpe_proxy": 0.738,
+      "sortino_proxy": 1.649,
       "status": "complete",
-      "total_return": 0.0331,
-      "trades": 4,
-      "win_rate": 0.75
+      "total_return": 0.0374,
+      "trades": 5,
+      "win_rate": 0.8
     },
     "parents": [
-      "xov-1bc0ab"
+      "xov-f74cb5"
     ],
     "regime": "trending_down",
     "symbol": "CAC40"
@@ -8850,22 +8845,21 @@
     "symbol": "NASDAQ"
   },
   "NATGAS::high_volatility": {
-    "certified_at": 1789703644.0549102,
-    "generation": 0,
+    "certified_at": 1790279695.6747837,
+    "generation": 20,
     "genome": {
-      "backtests": 11,
-      "best_return": -0.0168,
-      "best_sharpe": -0.912,
-      "fitness": 0.5349,
-      "generation": 0,
-      "genome_id": "imm-4fdcde",
+      "backtests": 15,
+      "best_return": 0.0172,
+      "best_sharpe": 0.513,
+      "fitness": 7.2462,
+      "generation": 20,
+      "genome_id": "mut-223f76",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.111,
-            "regime_bonus": 0.1,
-            "threshold": 0.111
+            "base_threshold": 0.2,
+            "regime_bonus": 0.111
           }
         },
         "execution": {
@@ -8873,9 +8867,9 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "time_exit",
+          "logic_type": "swing_stops",
           "params": {
-            "max_bars": 20,
+            "lookback": 10,
             "sl_mult": 2.0,
             "tp_mult": 3.0
           }
@@ -8892,11 +8886,11 @@
           }
         },
         "momentum": {
-          "logic_type": "cci",
+          "logic_type": "williams_r",
           "params": {
             "lower": 15,
-            "period": 20,
-            "upper": 85
+            "period": 14,
+            "upper": 60
           }
         },
         "position": {
@@ -8912,9 +8906,9 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "vwap_trend",
+          "logic_type": "hma_slope",
           "params": {
-            "period": 20,
+            "period": 12,
             "slow": 46
           }
         },
@@ -8926,28 +8920,32 @@
           }
         }
       },
-      "parents": []
+      "parents": [
+        "xov-4701e5"
+      ]
     },
     "in_sample": {
-      "fitness": 0.5349,
-      "return": -0.0168
+      "fitness": 7.2462,
+      "return": 0.0172
     },
     "out_of_sample": {
-      "avg_pnl": 17.17,
-      "consistency": 1.0,
-      "expectancy": 17.17,
-      "final_equity": 10017.17,
-      "max_drawdown": 0.0,
-      "profit_factor": null,
-      "recovery_factor": 0.0,
-      "sharpe_proxy": 0.0,
-      "sortino_proxy": 0.0,
+      "avg_pnl": 16.17,
+      "consistency": 0.333,
+      "expectancy": 16.17,
+      "final_equity": 10048.5,
+      "max_drawdown": 0.01,
+      "profit_factor": 1.485,
+      "recovery_factor": 0.485,
+      "sharpe_proxy": 0.158,
+      "sortino_proxy": 0.28,
       "status": "complete",
-      "total_return": 0.0017,
-      "trades": 1,
-      "win_rate": 1.0
+      "total_return": 0.0049,
+      "trades": 3,
+      "win_rate": 0.333
     },
-    "parents": [],
+    "parents": [
+      "xov-4701e5"
+    ],
     "regime": "high_volatility",
     "symbol": "NATGAS"
   },
