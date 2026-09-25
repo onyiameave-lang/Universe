@@ -207,8 +207,11 @@ class SentinelAgent(BaseAgent):
                 "symbol": symbol,
             }
         if task == "news.credibility":
-            log.info("[sentinel] execute: task='news.credibility' topics=%r — calling engine.gather()", ctx.get("topics"))
-            g = self.engine.gather(topics=ctx.get("topics"))
+            topics = ctx.get("topics") or []
+            symbol = ctx.get("symbol") or (topics[0] if topics else "")
+            log.debug("[sentinel] execute: task='news.credibility' symbol=%r", symbol)
+            g = self.engine.articles_for_symbol(symbol) if symbol else {
+                "articles": [], "source_status": {}, "snapshot_age_sec": None}
             try:
                 from intelligence.term_reliability import get_matched_terms  # type: ignore
             except ImportError:
@@ -220,12 +223,15 @@ class SentinelAgent(BaseAgent):
                  # these were already computed by engine.gather() but previously
                  # dropped before reaching the caller.
                  "event_type": a.get("event_type", ""), "sentiment": a.get("sentiment", 0.0),
-                 "published_at": a.get("published_at", ""), "summary": a.get("summary", ""),
+                 "published_at": a.get("published_at", ""),
+                 "collected_at": a.get("collected_at"), "summary": a.get("summary", ""),
                  # Added for term-reliability grading (Tier 0 self-improvement):
                  # which specific terms fired, so Oracle can later report back
                  # whether each one's implied direction matched reality.
                  "matched_terms": get_matched_terms(a["title"], a.get("summary", ""))}
-                for a in g["articles"]]}
+                for a in g["articles"]],
+                    "source_status": g.get("source_status", {}),
+                    "snapshot_age_sec": g.get("snapshot_age_sec")}
 
         if task == "news.record_term_outcomes":
             # Called by Oracle's TradeLearningEngine after a trade closes,

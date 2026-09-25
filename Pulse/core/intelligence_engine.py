@@ -31,9 +31,11 @@ from __future__ import annotations
 import os
 import re
 import sys
+import threading
 import time
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -67,6 +69,19 @@ MOOD = [
 
 _CHRONICLE_CACHE_TTL = float(os.getenv("PULSE_CHRONICLE_CACHE_TTL_SEC", "300"))
 _PULSE_USER_REGION   = os.getenv("PULSE_USER_REGION", "NG").upper()
+_SENTIMENT_CACHE_TTL = float(os.getenv("PULSE_SENTIMENT_CACHE_TTL_SEC", "900"))
+_SENTIMENT_MAX_AGE_SEC = float(os.getenv("PULSE_SENTIMENT_MAX_AGE_SEC", "86400"))
+
+
+def _post_published_at(post: Dict[str, Any]) -> Optional[float]:
+    value = post.get("created_at")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value[:10]).replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 # Ordered category list for display
 _CATEGORIES = [
@@ -154,6 +169,8 @@ class IntelligenceEngine:
         self.collectors = CollectorRegistry()
         self.trends     = TrendDetector()
         self._posts: List[Dict[str, Any]] = []
+        self._sentiment_cache: Dict[str, tuple] = {}
+        self._sentiment_cache_lock = threading.Lock()
 
     # ── Chronicle cache helpers ───────────────────────────────────────────────
     def _chronicle_recent_report(self) -> Optional[Dict[str, Any]]:
@@ -215,6 +232,8 @@ class IntelligenceEngine:
                 llm_used = True
 
         self._posts.extend(posts)
+        if len(self._posts) > 2000:
+            self._posts = self._posts[-2000:]
         return {
             "posts":            posts,
             "source_status":    raw["source_status"],
@@ -374,6 +393,12 @@ class IntelligenceEngine:
     # ── sentiment_for ─────────────────────────────────────────────────────────
     def sentiment_for(self, symbol: str) -> Dict[str, Any]:
         sym_upper = symbol.upper()
+        now = time.time()
+        with self._sentiment_cache_lock:
+            cached = self._sentiment_cache.get(sym_upper)
+            if (cached and now - cached[0] < _SENTIMENT_CACHE_TTL
+                    and now < cached[2]):
+                return dict(cached[1])
 
         def _matches(p: Dict[str, Any]) -> bool:
             """True if post p is relevant to the requested symbol.
@@ -383,17 +408,30 @@ class IntelligenceEngine:
                     return True
             return False
 
-        rel = [p for p in self._posts if _matches(p)]
+        def _is_fresh(post: Dict[str, Any]) -> bool:
+            posted_at = _post_published_at(post)
+            if posted_at is None:
+                return False
+            age = now - posted_at
+            return 0 <= age <= _SENTIMENT_MAX_AGE_SEC
+
+        rel = [p for p in self._posts if _matches(p) and _is_fresh(p)]
         if not rel:
             g   = self.gather(topics=[symbol])
-            rel = [p for p in g["posts"] if _matches(p)]
+            rel = [p for p in g["posts"] if _matches(p) and _is_fresh(p)]
         if not rel:
-            return {"symbol": symbol, "sentiment": 0.0,
-                    "post_count": 0, "confidence": 0.0}
+            result = {"symbol": symbol, "sentiment": 0.0,
+                      "post_count": 0, "confidence": 0.0,
+                      "evidence_state": "degraded",
+                      "note": "no fresh, symbol-matched social evidence"}
+            with self._sentiment_cache_lock:
+                self._sentiment_cache[sym_upper] = (
+                    now, result, now + _SENTIMENT_CACHE_TTL)
+            return result
         weights = [p["authenticity"] for p in rel]
         wsent   = sum(p["sentiment"] * w for p, w in zip(rel, weights))
         manip   = detect_manipulation(rel, symbol=symbol)
-        return {
+        result = {
             "symbol":               symbol,
             "sentiment":            round(wsent / (sum(weights) or 1.0), 3),
             "post_count":           len(rel),
@@ -401,7 +439,13 @@ class IntelligenceEngine:
             "avg_authenticity":     round(sum(weights) / len(rel), 3),
             "platforms":            list({p["platform"] for p in rel}),
             "manipulation_warning": manip["flagged"],
+            "evidence_state":       "fresh",
         }
+        fresh_until = min(
+            (_post_published_at(post) or now) + _SENTIMENT_MAX_AGE_SEC for post in rel)
+        with self._sentiment_cache_lock:
+            self._sentiment_cache[sym_upper] = (now, result, fresh_until)
+        return result
 
     # ── _preserve ─────────────────────────────────────────────────────────────
     def _preserve(self, report: Dict[str, Any]) -> None:

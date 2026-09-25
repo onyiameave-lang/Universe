@@ -63,19 +63,24 @@ class SignalFusion:
 
     def _news_signal(self, symbol: str) -> Dict[str, Any]:
         if self.sentinel is None:
-            return {"direction": 0.0, "confidence": 0.0, "note": "sentinel unavailable"}
+            return {"direction": 0.0, "confidence": 0.0,
+                    "evidence_state": "degraded", "note": "sentinel unavailable"}
         try:
             s = self.sentinel.sentiment_for(symbol)
             return {"direction": s.get("sentiment", 0.0),
                    "confidence": s.get("confidence", 0.0),
+                   "evidence_state": s.get("evidence_state", "unknown"),
+                   "source_status": s.get("source_status", {}),
                    "cross_source": s.get("cross_source", False),
                    "articles": s.get("article_count", 0)}
         except Exception:
-            return {"direction": 0.0, "confidence": 0.0, "note": "sentinel error"}
+                return {"direction": 0.0, "confidence": 0.0,
+                    "evidence_state": "degraded", "note": "sentinel error"}
 
     def _social_signal(self, symbol: str) -> Dict[str, Any]:
         if self.pulse is None:
-            return {"direction": 0.0, "confidence": 0.0, "note": "pulse unavailable"}
+            return {"direction": 0.0, "confidence": 0.0,
+                    "evidence_state": "degraded", "note": "pulse unavailable"}
         try:
             s = self.pulse.sentiment_for(symbol)
             conf = s.get("confidence", 0.0)
@@ -83,10 +88,12 @@ class SignalFusion:
             if s.get("manipulation_warning"):
                 conf *= 0.3
             return {"direction": s.get("sentiment", 0.0), "confidence": conf,
+                     "evidence_state": s.get("evidence_state", "unknown"),
                    "posts": s.get("post_count", 0),
                    "manipulation_warning": s.get("manipulation_warning", False)}
         except Exception:
-            return {"direction": 0.0, "confidence": 0.0, "note": "pulse error"}
+                return {"direction": 0.0, "confidence": 0.0,
+                    "evidence_state": "degraded", "note": "pulse error"}
 
     def _memory_signal(self, symbol: str, regime: str) -> Dict[str, Any]:
         if self.chronicle is None:
@@ -142,7 +149,12 @@ class SignalFusion:
         else:
             call = "hold"
 
-        return {"symbol": symbol, "call": call, "direction": round(fused_direction, 3),
-               "confidence": confidence, "agreement": round(agreement, 3),
-               "streams": streams,
-               "manipulation_warning": streams["social"].get("manipulation_warning", False)}
+            evidence_state = "degraded" if any(
+                streams[name].get("evidence_state") == "degraded" for name in ("news", "social")
+            ) else "available"
+            return {"symbol": symbol, "call": call, "direction": round(fused_direction, 3),
+                "confidence": confidence, "agreement": round(agreement, 3),
+                "streams": streams,
+                "evidence_state": evidence_state,
+                "degraded_evidence": evidence_state == "degraded",
+                "manipulation_warning": streams["social"].get("manipulation_warning", False)}

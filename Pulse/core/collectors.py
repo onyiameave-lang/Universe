@@ -46,6 +46,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from shared.http_resilience import ResilientHTTPClient
 
 log = logging.getLogger("pulse.collectors")
 
@@ -56,8 +57,12 @@ _UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 _TIMEOUT = 14
-_RATE_LIMIT_COOLDOWN_SEC = float(os.getenv("PULSE_RATE_LIMIT_COOLDOWN_SEC", "900"))
-_rate_limited_until: Dict[str, float] = {}
+_HTTP_CLIENT = ResilientHTTPClient(
+    "pulse.collectors",
+    cache_ttl_sec=float(os.getenv("PULSE_HTTP_CACHE_TTL_SEC", "300")),
+    rate_limit_cooldown_sec=float(os.getenv("PULSE_RATE_LIMIT_COOLDOWN_SEC", "900")),
+    user_agent=_UA,
+)
 
 # FIX-PC-01 (Phase 5e): Nuclear socket timeout at module level.
 # urllib timeout= only covers the READ phase; DNS resolution is NOT bounded.
@@ -118,33 +123,7 @@ class Post:
 # ─────────────────────────────────────────────────────────────────────────────
 def _get(url: str, headers: Optional[Dict] = None,
          timeout: int = _TIMEOUT) -> Optional[str]:
-    host = urllib.parse.urlparse(url).netloc or url
-    cooldown_until = _rate_limited_until.get(host, 0.0)
-    if time.time() < cooldown_until:
-        log.info("[pulse.collectors] source %s cooling down after HTTP 429 for %.0fs",
-                 host, cooldown_until - time.time())
-        return None
-    req = urllib.request.Request(
-        url, headers={"User-Agent": _UA, **(headers or {})})
-    # FIX-PC-02 (Phase 5e): Log each fetch so we can see which URL hangs.
-    log.debug("[pulse.collectors] _get: fetching %s (timeout=%ds)", url[:80], timeout)
-    _t0 = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            body = r.read().decode(
-                r.headers.get_content_charset() or "utf-8", errors="replace")
-        log.debug("[pulse.collectors] _get: OK %s in %.2fs (%d bytes)", url[:60], time.time() - _t0, len(body))
-        return body
-    except urllib.error.HTTPError as exc:
-        if exc.code == 429:
-            _rate_limited_until[host] = time.time() + _RATE_LIMIT_COOLDOWN_SEC
-            log.warning("[pulse.collectors] source %s rate-limited; cooling down %.0fs",
-                        host, _RATE_LIMIT_COOLDOWN_SEC)
-        log.warning("[pulse.collectors] HTTP %d from %s", exc.code, host)
-        return None
-    except Exception as exc:
-        log.debug("[pulse.collectors] _get: FAILED %s in %.2fs — %s", url[:60], time.time() - _t0, exc)
-        return None
+    return _HTTP_CLIENT.get_text(url, headers=headers, timeout=timeout)
 
 
 def _pid(text: str, platform: str) -> str:

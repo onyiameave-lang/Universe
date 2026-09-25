@@ -24,12 +24,15 @@ limitation honestly instead of inventing news.
 from __future__ import annotations
 
 import concurrent.futures as _cf
+import copy
 import logging
 import os
 import socket as _socket
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -107,6 +110,9 @@ _socket.setdefaulttimeout(15)
 # 17 × 120s = 2040s. We cap it at 12s — enough for pure-lexical scoring of
 # 100 articles, but short enough to not block the coordinator's 30s window.
 _ENRICH_TIMEOUT_SEC = 12
+_SENTIMENT_REFRESH_SEC = float(os.getenv("SENTINEL_SENTIMENT_REFRESH_SEC", "1800"))
+_SENTIMENT_MAX_AGE_SEC = float(os.getenv("SENTINEL_SENTIMENT_MAX_AGE_SEC", "10800"))
+_GATHER_CACHE_TTL_SEC = float(os.getenv("SENTINEL_GATHER_CACHE_TTL_SEC", "300"))
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +170,65 @@ class IntelligenceEngine:
         self.collectors = CollectorRegistry()
         self.clusterer = EventClusterer()
         self._articles: List[Dict[str, Any]] = []
+        self._sentiment_snapshot: List[Dict[str, Any]] = []
+        self._sentiment_snapshot_at = 0.0
+        self._sentiment_snapshot_status: Dict[str, Any] = {}
+        self._sentiment_refresh_lock = __import__("threading").Lock()
+        self._gather_cache: Dict[Any, Any] = {}
+        self._gather_cache_lock = __import__("threading").Lock()
+
+    @staticmethod
+    def _published_at(article: Dict[str, Any]) -> Optional[float]:
+        value = article.get("published_at")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(value)
+            except (TypeError, ValueError, IndexError, OverflowError):
+                return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+
+    @classmethod
+    def _is_fresh_for_trading(cls, article: Dict[str, Any], now: float) -> bool:
+        published = cls._published_at(article)
+        return published is not None and 0 <= now - published <= _SENTIMENT_MAX_AGE_SEC
+
+    @classmethod
+    def _matching_fresh_articles(cls, articles: List[Dict[str, Any]],
+                                 symbol: str, now: Optional[float] = None) -> List[Dict[str, Any]]:
+        now = time.time() if now is None else now
+        symbol_upper = symbol.upper()
+        return [article for article in articles
+                if symbol_upper in [item.upper() for item in article.get("symbols", [])]
+                and cls._is_fresh_for_trading(article, now)]
+
+    def _refresh_sentiment_snapshot(self) -> None:
+        if time.time() - self._sentiment_snapshot_at < _SENTIMENT_REFRESH_SEC:
+            return
+        with self._sentiment_refresh_lock:
+            if time.time() - self._sentiment_snapshot_at < _SENTIMENT_REFRESH_SEC:
+                return
+            _socket.setdefaulttimeout(15)
+            gathered = self.gather(
+                topics=None, limit=8, consult_chronicle=False,
+                include_deep_analysis=False)
+            self._sentiment_snapshot = gathered.get("articles", [])
+            self._sentiment_snapshot_status = gathered.get("source_status", {})
+            self._sentiment_snapshot_at = time.time()
+
+    def articles_for_symbol(self, symbol: str) -> Dict[str, Any]:
+        """Return fresh, symbol-matched items from the shared polling snapshot."""
+        self._refresh_sentiment_snapshot()
+        return {
+            "articles": self._matching_fresh_articles(self._sentiment_snapshot, symbol),
+            "source_status": self._sentiment_snapshot_status,
+            "snapshot_age_sec": round(time.time() - self._sentiment_snapshot_at, 1),
+        }
 
     # ------------------------------------------------------------------
     # Principle 3 — Memory First: consult Chronicle before external APIs
@@ -187,6 +252,29 @@ class IntelligenceEngine:
             results = self.chronicle.search(query=query, domain="news", limit=1)
             if not results:
                 return None
+
+            def _refresh_sentiment_snapshot(self) -> None:
+                if time.time() - self._sentiment_snapshot_at < _SENTIMENT_REFRESH_SEC:
+                    return
+                with self._sentiment_refresh_lock:
+                    if time.time() - self._sentiment_snapshot_at < _SENTIMENT_REFRESH_SEC:
+                        return
+                    _socket.setdefaulttimeout(15)
+                    gathered = self.gather(
+                        topics=None, limit=8, consult_chronicle=False,
+                        include_deep_analysis=False)
+                    self._sentiment_snapshot = gathered.get("articles", [])
+                    self._sentiment_snapshot_status = gathered.get("source_status", {})
+                    self._sentiment_snapshot_at = time.time()
+
+            def articles_for_symbol(self, symbol: str) -> Dict[str, Any]:
+                """Return only fresh, symbol-matched news from the shared polling snapshot."""
+                self._refresh_sentiment_snapshot()
+                return {
+                    "articles": self._matching_fresh_articles(self._sentiment_snapshot, symbol),
+                    "source_status": self._sentiment_snapshot_status,
+                    "snapshot_age_sec": round(time.time() - self._sentiment_snapshot_at, 1),
+                }
             # results may be a list of dicts or a dict with a 'results' key
             hits = results if isinstance(results, list) else results.get("results", [])
             if not hits:
@@ -211,18 +299,35 @@ class IntelligenceEngine:
         except Exception:
             return None  # Chronicle unavailable — fall through to live fetch
 
-    def gather(self, topics=None, sources=None, limit=8) -> Dict[str, Any]:
+    def gather(self, topics=None, sources=None, limit=8, *,
+               consult_chronicle=True, include_deep_analysis=True) -> Dict[str, Any]:
+        cache_key = (
+            tuple(sorted(set(topics or []))), tuple(sorted(set(sources or []))),
+            int(limit), bool(consult_chronicle), bool(include_deep_analysis),
+        )
+        now = time.time()
+        with self._gather_cache_lock:
+            cached = self._gather_cache.get(cache_key)
+            if cached and cached[0] > now:
+                result = copy.deepcopy(cached[1])
+                result["cache_hit"] = True
+                return result
+            self._gather_cache.pop(cache_key, None)
+
         # ---- Principle 3: Memory First ----
-        cached = self._consult_chronicle(topics)
+        cached = self._consult_chronicle(topics) if consult_chronicle else None
         if cached is not None:
             # Fresh Chronicle hit — return without hitting external APIs
-            return {
+            result = {
                 "articles": [],
                 "source_status": {"chronicle": "cache_hit"},
                 "count": 0,
                 "duration_sec": 0.0,
                 "chronicle_cache": cached,
             }
+            with self._gather_cache_lock:
+                self._gather_cache[cache_key] = (time.time() + _GATHER_CACHE_TTL_SEC, result)
+            return copy.deepcopy(result)
 
         started = time.time()
         log.info("[sentinel.engine] gather: topics=%r sources=%r — calling collectors.collect()",
@@ -254,7 +359,7 @@ class IntelligenceEngine:
             # symbols were silently getting skipped). Articles beyond the
             # cap just keep their lexical event_type/sentiment above.
             deep = deep_analyze(a["title"], a.get("summary", ""), self.llm) \
-                if i < MAX_DEEP_ANALYSIS_ARTICLES else None
+                if include_deep_analysis and i < MAX_DEEP_ANALYSIS_ARTICLES else None
             a["deep_analysis"] = deep
             if deep is not None:
                 a["lexical_event_type"] = a["event_type"]
@@ -289,12 +394,11 @@ class IntelligenceEngine:
             a["misinformation_risk"] = mis["misinformation_risk"]
             a["misinfo_reasons"] = mis["reasons"]
 
-        # FIX-IE-11 (Phase 5i): Post-collection relevance filter.
+        # Trade evidence must never be broadened to unrelated headlines.
         # When a specific topic/symbol is requested, only keep articles whose
         # title or summary contains at least one of the topic's search terms.
-        # This prevents returning unrelated articles when NewsAPI/RSS returns
-        # broad results. Degrades gracefully: if filter removes everything,
-        # return all articles (better than empty).
+        # An empty match is honest absence of evidence, not permission to use
+        # unrelated market headlines.
         if topics and articles:
             filtered = [
                 a for a in articles
@@ -303,14 +407,24 @@ class IntelligenceEngine:
             if filtered:
                 log.info("[sentinel.engine] gather: relevance filter kept %d/%d articles for topics=%r",
                          len(filtered), len(articles), topics)
-                articles = filtered
             else:
-                log.info("[sentinel.engine] gather: relevance filter removed all articles — returning unfiltered %d",
-                         len(articles))
+                log.info("[sentinel.engine] gather: no relevant articles among %d for topics=%r",
+                         len(articles), topics)
+            articles = filtered
 
         self._articles.extend(articles)
-        return {"articles": articles, "source_status": raw["source_status"],
-               "count": len(articles), "duration_sec": round(time.time() - started, 2)}
+        if len(self._articles) > 2000:
+            self._articles = self._articles[-2000:]
+        result = {"articles": articles, "source_status": raw["source_status"],
+                  "count": len(articles), "duration_sec": round(time.time() - started, 2)}
+        with self._gather_cache_lock:
+            self._gather_cache[cache_key] = (time.time() + _GATHER_CACHE_TTL_SEC, result)
+            if len(self._gather_cache) > 256:
+                expired = [key for key, value in self._gather_cache.items()
+                           if value[0] <= time.time()]
+                for key in expired:
+                    self._gather_cache.pop(key, None)
+        return copy.deepcopy(result)
 
     # FIX-IE-07 (Phase 5i): LLM synthesis with hard 20s timeout.
     # Previously any LLM call in the engine had no timeout — if the LLM HTTP
@@ -406,46 +520,15 @@ class IntelligenceEngine:
         return {"status": "complete", "report": report}
 
     def sentiment_for(self, symbol: str, topics: Optional[List[str]] = None) -> Dict[str, Any]:
-        # FIX-IE-05 (Phase 5h): Accept optional `topics` parameter.
-        # When the coordinator passes topics=["GBPUSD"], use that list directly
-        # for gather() so collectors filter by the right symbol terms.
-        # Fall back to [symbol] if topics is not provided (backward compatible).
-        gather_topics = topics if topics else ([symbol] if symbol else None)
-        rel = [a for a in self._articles if symbol.upper() in [s.upper() for s in a.get("symbols", [])]]
+        snapshot = self.articles_for_symbol(symbol)
+        snapshot_age = snapshot["snapshot_age_sec"]
+        rel = snapshot["articles"]
         if not rel:
-            # FIX-IE-04 (Phase 5e): Wrap targeted gather() in a thread with 20s
-            # timeout. Previously this call had NO timeout — if collectors hung on
-            # DNS for symbol-specific feeds, sentiment_for() blocked forever.
-            # Constitutional: Book II Principle V Graceful Degradation.
-            log.info("[sentinel.engine] sentiment_for: no cached articles for %r — fetching live (20s timeout) topics=%r",
-                     symbol, gather_topics)
-            _t0 = time.time()
-            def _gather():
-                _socket.setdefaulttimeout(15)
-                return self.gather(topics=gather_topics)
-            try:
-                with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
-                    _fut = _pool.submit(_gather)
-                    g = _fut.result(timeout=20)
-                log.info("[sentinel.engine] sentiment_for: gather(%r) completed in %.2fs — %d articles collected",
-                         gather_topics, time.time() - _t0, g.get("count", 0))
-            except _cf.TimeoutError:
-                log.warning("[sentinel.engine] sentiment_for: gather(%r) TIMED OUT after %.2fs — returning empty sentiment",
-                            gather_topics, time.time() - _t0)
-                return {"symbol": symbol, "sentiment": 0.0, "article_count": 0, "confidence": 0.0,
-                        "note": "timed out fetching live news; try again in a moment"}
-            rel = [a for a in g["articles"] if symbol.upper() in [s.upper() for s in a.get("symbols", [])]]
-            if not rel and g.get("articles"):
-                # FIX-IE-06 (Phase 5h): If symbol extraction didn't match any article
-                # (e.g. "GBPUSD" not in article.symbols because analysis.py missed it),
-                # fall back to returning ALL gathered articles with a note.
-                # This prevents returning empty results when news WAS fetched.
-                log.info("[sentinel.engine] sentiment_for: symbol %r not found in article.symbols — "
-                         "returning all %d gathered articles (symbol extraction miss)",
-                         symbol, len(g["articles"]))
-                rel = g["articles"]
-        if not rel:
-            return {"symbol": symbol, "sentiment": 0.0, "article_count": 0, "confidence": 0.0}
+            return {"symbol": symbol, "sentiment": 0.0, "article_count": 0,
+                    "confidence": 0.0, "evidence_state": "degraded",
+                    "source_status": snapshot["source_status"],
+                    "snapshot_age_sec": round(snapshot_age, 1),
+                    "note": "no fresh, symbol-matched news evidence"}
         # credibility-weighted sentiment
         wsum = sum(a["sentiment"] * a["credibility"] for a in rel)
         cw = sum(a["credibility"] for a in rel) or 1.0
@@ -468,6 +551,9 @@ class IntelligenceEngine:
         )
         return {"symbol": symbol, "sentiment": sentiment_val, "article_count": len(rel),
                "confidence": confidence_val,
+             "evidence_state": "fresh",
+               "source_status": snapshot["source_status"],
+               "snapshot_age_sec": snapshot_age,
                "cross_source": len({a["source"] for a in rel}) > 1,
                "top_headline": top["title"],
                "top_headlines": top_headlines,

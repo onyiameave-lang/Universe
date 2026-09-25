@@ -64,6 +64,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from shared.http_resilience import ResilientHTTPClient
 
 # S-7: standalone import guard — shared.config may not be on sys.path when
 # collectors.py is imported directly (unit tests, quick scripts).
@@ -79,8 +80,12 @@ except Exception:
 
 _UA = "SentinelNewsAI/1.0 (AI Ecosystem news intelligence)"
 _TIMEOUT = 12
-_RATE_LIMIT_COOLDOWN_SEC = float(os.getenv("SENTINEL_RATE_LIMIT_COOLDOWN_SEC", "900"))
-_rate_limited_until: Dict[str, float] = {}
+_HTTP_CLIENT = ResilientHTTPClient(
+    "sentinel.collectors",
+    cache_ttl_sec=float(os.getenv("SENTINEL_HTTP_CACHE_TTL_SEC", "300")),
+    rate_limit_cooldown_sec=float(os.getenv("SENTINEL_RATE_LIMIT_COOLDOWN_SEC", "900")),
+    user_agent=_UA,
+)
 
 # FIX-SC-01 (Phase 5e): Set socket-level default timeout at module load time.
 # urllib's timeout= parameter only covers the READ phase of an HTTP connection.
@@ -197,45 +202,7 @@ class Article:
 
 
 def _get(url: str, headers: Optional[Dict] = None) -> Optional[str]:
-    host = urllib.parse.urlparse(url).netloc or url
-    cooldown_until = _rate_limited_until.get(host, 0.0)
-    if time.time() < cooldown_until:
-        log.info("[sentinel.collectors] source %s cooling down after HTTP 429 for %.0fs",
-                 host, cooldown_until - time.time())
-        return None
-    req = urllib.request.Request(url, headers={"User-Agent": _UA, **(headers or {})})
-    # FIX-SC-02 (Phase 5e): Log each HTTP fetch attempt so we can see exactly
-    # which URL hangs in production logs. Constitutional: Book II No Silent Failures.
-    # FIX-SC-06 (Phase 5h): Upgraded from DEBUG to INFO/WARNING so errors are
-    # visible in production logs without needing --debug flag.
-    log.info("[sentinel.collectors] _get: fetching %s (timeout=%ds)", url[:80], _TIMEOUT)
-    _t0 = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
-            body = r.read().decode(r.headers.get_content_charset() or "utf-8", errors="replace")
-        log.info("[sentinel.collectors] _get: OK %s in %.2fs (%d bytes)", url[:60], time.time() - _t0, len(body))
-        return body
-    except urllib.error.HTTPError as exc:
-        # FIX-SC-07 (Phase 5i): HTTPError carries the response body — read it so
-        # callers (e.g. NewsAPICollector) can parse the JSON error payload and log
-        # the actual API error code (e.g. "apiKeyInvalid", "rateLimited").
-        # Previously this fell through to the generic except and returned None,
-        # hiding the real reason for the 401/429.
-        try:
-            err_body = exc.read().decode("utf-8", errors="replace")
-        except Exception:
-            err_body = ""
-        if exc.code == 429:
-            _rate_limited_until[host] = time.time() + _RATE_LIMIT_COOLDOWN_SEC
-            log.warning("[sentinel.collectors] source %s rate-limited; cooling down %.0fs",
-                        host, _RATE_LIMIT_COOLDOWN_SEC)
-        log.warning("[sentinel.collectors] _get: HTTP %d %s in %.2fs — %s — body=%r",
-                    exc.code, exc.reason, time.time() - _t0, url[:60], err_body[:200])
-        return err_body if err_body else None
-    except Exception as exc:
-        log.warning("[sentinel.collectors] _get: FAILED %s in %.2fs — %s: %s",
-                    url[:60], time.time() - _t0, type(exc).__name__, exc)
-        return None
+    return _HTTP_CLIENT.get_text(url, headers=headers, timeout=_TIMEOUT)
 
 
 def _clean(text: str) -> str:
@@ -387,11 +354,6 @@ class NewsAPICollector:
             log.info("[sentinel.newsapi] NEWSAPI_KEY not set — skipping NewsAPI collector")
             return []
 
-        # FIX-SC-08 (Phase 5i): Log key prefix so user can verify the correct key
-        # is being read. Shows first 8 chars + "..." to avoid leaking the full key.
-        log.info("[sentinel.newsapi] using NEWSAPI_KEY=%s... (len=%d)",
-                 key[:8], len(key))
-
         # FIX-SC-05 (Phase 5h): Map financial symbols to human-readable search terms.
         # NewsAPI doesn't understand "GBPUSD" — it needs "pound sterling GBP forex".
         # Use the same _SYMBOL_FEED_TERMS dict that RSS/Guardian use for consistency.
@@ -409,11 +371,10 @@ class NewsAPICollector:
             "q": q, "sortBy": "publishedAt", "pageSize": limit, "language": "en",
         })
         url = f"{self.API}?{params}"
-        log.info("[sentinel.newsapi] fetching: q=%r pageSize=%d", q, limit)
+        log.debug("[sentinel.newsapi] fetching: q=%r pageSize=%d", q, limit)
         body = _get(url, headers={"X-Api-Key": key})
         if not body:
-            log.warning("[sentinel.newsapi] ERROR: _get() returned None for %s — "
-                        "check NEWSAPI_KEY validity and network connectivity", url[:80])
+            log.debug("[sentinel.newsapi] no response for request; source status is logged by HTTP client")
             return []
         try:
             parsed = json.loads(body)

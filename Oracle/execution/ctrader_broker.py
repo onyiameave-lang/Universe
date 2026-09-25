@@ -59,6 +59,10 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+try:
+    from execution.market_clock import MarketClock  # type: ignore
+except ImportError:
+    from Oracle.execution.market_clock import MarketClock  # type: ignore
 
 # Ensure this broker always sees the root .env before reading CTRADER_* vars.
 try:
@@ -125,8 +129,10 @@ class CTraderBroker:
         self._client = None                 # ctrader_open_api.Client, set in connect()
         self._symbol_id_by_name: Dict[str, int] = {}
         self._symbol_name_by_id: Dict[int, str] = {}
+        self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
         self._symbol_constraints: Dict[int, Dict[str, int]] = {}
         self._positions_cache: Dict[int, Dict[str, Any]] = {}
+        self._positions_last_refresh_ok = False
         self._cache_lock = threading.Lock()
         self._constraints_lock = threading.Lock()
 
@@ -150,7 +156,8 @@ class CTraderBroker:
             from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
             from ctrader_open_api.messages.OpenApiMessages_pb2 import (
                 ProtoOAApplicationAuthReq, ProtoOAAccountAuthReq, ProtoOASymbolsListReq,
-                ProtoOATraderReq, ProtoOAApplicationAuthRes, ProtoOAAccountAuthRes,
+                ProtoOASymbolByIdReq, ProtoOATraderReq,
+                ProtoOAApplicationAuthRes, ProtoOAAccountAuthRes,
                 ProtoOAErrorRes,
             )
         except ImportError as exc:
@@ -298,6 +305,50 @@ class CTraderBroker:
                 time.sleep(1.0)
         log.warning("cTrader: symbol list fetch timed out twice; symbol translation will fail")
 
+    def load_market_schedules(self, symbol_names: List[str]) -> None:
+        """Fetch authoritative cTrader schedules for only the configured symbols."""
+        if not self.status.connected:
+            return
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASymbolByIdReq
+        except ImportError as exc:
+            log.warning("cTrader: cannot load market schedules: %s", exc)
+            return
+
+        symbol_ids = [self._symbol_id_by_name.get(name.upper()) for name in symbol_names]
+        symbol_ids = list(dict.fromkeys(value for value in symbol_ids if value is not None))
+        for offset in range(0, len(symbol_ids), 25):
+            req = ProtoOASymbolByIdReq()
+            req.ctidTraderAccountId = self._account_id
+            req.symbolId.extend(symbol_ids[offset:offset + 25])
+            payload = self._send_and_wait(req)
+            if payload is None:
+                log.warning("cTrader: schedule request timed out for symbol batch %d",
+                            offset // 25 + 1)
+                continue
+            for symbol in getattr(payload, "symbol", []):
+                name = self._symbol_name_by_id.get(symbol.symbolId)
+                if not name:
+                    continue
+                self._symbol_schedule_by_name[name.upper()] = {
+                    "schedule": list(getattr(symbol, "schedule", [])),
+                    "timezone": getattr(symbol, "scheduleTimeZone", ""),
+                    "trading_mode": getattr(symbol, "tradingMode", 0),
+                    "holidays": list(getattr(symbol, "holiday", [])),
+                }
+        log.info("cTrader: loaded market schedules for %d/%d configured symbols",
+                 len(self._symbol_schedule_by_name), len(symbol_ids))
+
+    def market_state(self, symbol: str, now=None) -> Dict[str, Any]:
+        details = self._symbol_schedule_by_name.get(symbol.upper())
+        if details is None:
+            from datetime import datetime, timezone
+            return MarketClock.evaluate(
+                symbol, [], "", now=now or datetime.now(timezone.utc))
+        return MarketClock.evaluate(
+            symbol, details["schedule"], details["timezone"],
+            trading_mode=details["trading_mode"], holidays=details["holidays"], now=now)
+
     # ── the sync bridge ───────────────────────────────────────────────────
 
     def _send_and_wait(self, request, timeout: float = _DEFAULT_TIMEOUT_SEC):
@@ -435,11 +486,13 @@ class CTraderBroker:
         try:
             from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAReconcileReq
         except ImportError:
+            self._positions_last_refresh_ok = False
             return list(self._positions_cache.values())
 
         req = ProtoOAReconcileReq()
         req.ctidTraderAccountId = self._account_id
         payload = self._send_and_wait(req)
+        self._positions_last_refresh_ok = payload is not None
         if payload is not None:
             with self._cache_lock:
                 self._positions_cache.clear()

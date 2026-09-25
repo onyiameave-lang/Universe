@@ -419,6 +419,11 @@ class CTraderDemoTrader:
             log.info("Connected: %s account, equity %.2f %s",
                      status["account_type"], self._start_equity or 0, status.get("currency", ""))
             self._build_symbol_map()
+            mapped_symbols = [self._sym_mapper.translate(symbol) for symbol in self.symbols]
+            try:
+                self.broker.load_market_schedules([name for name in mapped_symbols if name])
+            except Exception as exc:
+                log.warning("Could not load broker market schedules; new entries will fail closed: %s", exc)
         else:
             log.warning("cTrader not connected: %s", status.get("reason"))
             self._build_symbol_map(broker_symbols=[])
@@ -442,9 +447,14 @@ class CTraderDemoTrader:
         self._sym_mapper.build(broker_symbols, self.symbols)
         self._sym_mapper.log_map(self.symbols)
 
-    def _get_open_position(self, broker_sym):
+    def _get_open_position(self, broker_sym, positions=None):
         try:
-            positions = self.broker.positions(symbol=broker_sym)
+            if positions is None:
+                positions = self.broker.positions(symbol=broker_sym)
+            else:
+                prefix = broker_sym.upper()[:6]
+                positions = [position for position in positions
+                             if position.get("symbol", "").upper().startswith(prefix)]
         except Exception as exc:
             log.warning("Could not fetch positions for %s: %s", broker_sym, exc)
             return None
@@ -495,6 +505,16 @@ class CTraderDemoTrader:
                  symbol, dir_norm.value, entry_price, stop, target, confidence)
 
     def _poll_managed_positions(self):
+        if not self.broker.status.connected:
+            return
+        try:
+            open_positions = self.broker.positions()
+        except Exception as exc:
+            log.warning("Could not refresh open positions for CTM: %s", exc)
+            return
+        if not getattr(self.broker, "_positions_last_refresh_ok", True):
+            log.warning("cTrader position reconciliation failed; skipping CTM pass to avoid false closes")
+            return
         with self._manage_lock:
             symbols = list(self._managed_positions.keys())
         for symbol in symbols:
@@ -503,7 +523,7 @@ class CTraderDemoTrader:
             if pos is None:
                 continue
             broker_sym = self._sym_mapper.translate(symbol) or symbol
-            live_pos = self._get_open_position(broker_sym)
+            live_pos = self._get_open_position(broker_sym, open_positions)
             if live_pos is None:
                 log.info("[%s] no longer open — deregistering from CTM", symbol)
                 try:
@@ -519,6 +539,11 @@ class CTraderDemoTrader:
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
                 with self._manage_lock:
                     self._managed_positions.pop(symbol, None)
+                continue
+            market_state = self.broker.market_state(broker_sym)
+            if market_state["state"] in {"CLOSED", "DAILY_BREAK", "HOLIDAY", "PRE_OPEN"}:
+                log.debug("[%s] position remains broker-protected; market state=%s",
+                          symbol, market_state["state"])
                 continue
             try:
                 sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "ctrader_demo"})
@@ -641,7 +666,7 @@ class CTraderDemoTrader:
                       f"{summary['trades']} trade(s) | {summary['holds']} hold | "
                       f"{summary['rejects']} reject | {summary['errors']} error | "
                       f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
-                      f"{summary['managed']} managed")
+                        f"{summary['managed']} managed | {summary['market_closed']} not open")
                 if summary["kill_switch"] or self._kill_switch_check():
                     print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
                     print(self._close_all_positions())
@@ -657,7 +682,24 @@ class CTraderDemoTrader:
 
     def _tick(self):
         summary = dict(scanned=0, trades=0, holds=0, rejects=0,
-                       errors=0, timeouts=0, unmapped=0, managed=0, kill_switch=False)
+                   errors=0, timeouts=0, unmapped=0, managed=0,
+                   market_closed=0, kill_switch=False)
+        if self._kill_switch_check():
+            summary["kill_switch"] = True
+            return summary
+        open_positions = []
+        if self.broker.status.connected:
+            try:
+                open_positions = self.broker.positions()
+            except Exception as exc:
+                log.warning("Could not refresh open positions for scan: %s", exc)
+                summary["errors"] += 1
+                return summary
+            if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                log.warning("cTrader position reconciliation failed; skipping new-entry scan")
+                summary["errors"] += 1
+                return summary
+
         for symbol in self.symbols:
             if self._kill_switch_check():
                 summary["kill_switch"] = True
@@ -668,7 +710,7 @@ class CTraderDemoTrader:
                 summary["unmapped"] += 1
                 continue
             summary["scanned"] += 1
-            existing_pos = self._get_open_position(broker_sym)
+            existing_pos = self._get_open_position(broker_sym, open_positions)
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
@@ -681,7 +723,7 @@ class CTraderDemoTrader:
                                              stop=sl, target=tp, confidence=0.5,
                                              size=existing_pos.get("volume", 0.0))
                 continue
-            if len(self._managed_positions) >= self.max_trades:
+            if len(open_positions) >= self.max_trades:
                 log.info("[%s] new entry skipped — max open positions reached; "
                          "existing positions remain monitored", symbol)
                 continue
@@ -689,11 +731,18 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] DEDUP: Chronicle shows open position")
                 summary["holds"] += 1
                 continue
+            market_state = self.broker.market_state(broker_sym)
+            if not market_state["can_open"]:
+                log.info("[%s] new entry skipped — market state=%s (%s)",
+                         symbol, market_state["state"], market_state["reason"])
+                summary["market_closed"] += 1
+                continue
             print(f"[{symbol}->{broker_sym}] evaluating entry...")
             try:
                 sig, timed_out = _call_with_timeout(
                     lambda sym=symbol: self.oracle.act(
-                        "trade.propose", {"symbol": sym, "_sender": "ctrader_demo"}),
+                        "trade.propose", {"symbol": sym, "_sender": "ctrader_demo",
+                                          "market_state": market_state}),
                     self._symbol_timeout)
             except Exception as exc:
                 print(f"[{symbol}] ERROR  {exc}")
@@ -725,7 +774,11 @@ class CTraderDemoTrader:
                 continue
             plan = sig["plan"]
             s = sig["signal"]
-            self._open_context[symbol] = sig.get("_streams", {})
+            self._open_context[symbol] = dict(sig.get("_streams", {}) or {})
+            self._open_context[symbol]["market_context"] = {
+                key: market_state.get(key) for key in
+                ("state", "sessions", "overlap", "schedule_timezone", "updated_at_utc")
+            }
             conf_str = f"conf={s.get('confidence', 0):.3f}"
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym

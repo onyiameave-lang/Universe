@@ -18,8 +18,9 @@ def _article(**overrides):
     return article
 
 
-def test_recent_collection_timestamp_can_drive_news_impact():
-    assessment = NewsImpactClassifier().assess([_article()], "EURUSD")
+def test_recent_published_timestamp_can_drive_news_impact():
+    article = _article(published_at=datetime.now(timezone.utc).isoformat())
+    assessment = NewsImpactClassifier().assess([article], "EURUSD")
     assert assessment.level == "high"
     assert assessment.pause_new_entries is True
 
@@ -28,7 +29,7 @@ def test_stale_or_unknown_timestamp_cannot_drive_news_impact():
     window = timedelta(minutes=5)
     classifier = NewsImpactClassifier(NewsImpactConfig(recency_window=window))
     stale = _article(collected_at=(datetime.now(timezone.utc) - timedelta(hours=2)).timestamp())
-    unknown = _article(collected_at="not-a-timestamp")
+    unknown = _article(collected_at=datetime.now(timezone.utc).timestamp())
 
     assert classifier.assess([stale], "EURUSD").level == "none"
     assert classifier.assess([unknown], "EURUSD").level == "none"
