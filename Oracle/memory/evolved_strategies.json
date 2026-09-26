@@ -8644,15 +8644,15 @@
     "symbol": "META"
   },
   "MSFT::high_volatility": {
-    "certified_at": 1790366408.630638,
-    "generation": 80,
+    "certified_at": 1790396115.5345297,
+    "generation": 88,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0514,
-      "best_sharpe": 0.65,
-      "fitness": 9.1461,
-      "generation": 80,
-      "genome_id": "mut-a9a8e4",
+      "backtests": 30,
+      "best_return": 0.0501,
+      "best_sharpe": 0.636,
+      "fitness": 8.9436,
+      "generation": 88,
+      "genome_id": "mut-015eff",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -8666,9 +8666,9 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "time_exit",
           "params": {
-            "lookback": 10,
+            "max_bars": 20,
             "sl_mult": 2.0,
             "tp_mult": 3.0
           }
@@ -8686,7 +8686,7 @@
           "logic_type": "rsi",
           "params": {
             "lower": 30,
-            "period": 13,
+            "period": 11,
             "upper": 70
           }
         },
@@ -8696,11 +8696,7 @@
         },
         "risk": {
           "logic_type": "default",
-          "params": {
-            "max_correlated_positions": 3,
-            "max_dd_limit": 0.2,
-            "risk_per_trade": 0.01
-          }
+          "params": {}
         },
         "trade_management": {
           "logic_type": "default",
@@ -8709,8 +8705,8 @@
         "trend": {
           "logic_type": "hma_slope",
           "params": {
-            "period": 15,
-            "slow": 46
+            "period": 14,
+            "slow": 43
           }
         },
         "volatility": {
@@ -8722,22 +8718,22 @@
         }
       },
       "parents": [
-        "xov-a9e8b0"
+        "xov-dd40a7"
       ]
     },
     "in_sample": {
-      "fitness": 9.1461,
-      "return": 0.0514
+      "fitness": 8.9436,
+      "return": 0.0501
     },
     "out_of_sample": {
-      "avg_pnl": 130.03,
+      "avg_pnl": 130.08,
       "consistency": 1.0,
-      "expectancy": 130.03,
-      "final_equity": 10390.09,
+      "expectancy": 130.08,
+      "final_equity": 10390.24,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 4.357,
+      "sharpe_proxy": 4.369,
       "sortino_proxy": 0.0,
       "status": "complete",
       "total_return": 0.039,
@@ -8745,7 +8741,7 @@
       "win_rate": 1.0
     },
     "parents": [
-      "xov-a9e8b0"
+      "xov-dd40a7"
     ],
     "regime": "high_volatility",
     "symbol": "MSFT"
