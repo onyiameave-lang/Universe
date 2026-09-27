@@ -40,12 +40,86 @@ def test_failure_summary_reports_deltas_and_redacts_secrets():
     assert counts["trade.propose::HTTP token=super-secret failed"] == 7
     assert initial[0]["new_since_last_report"] is None
     assert "[REDACTED]" in initial[0]["error"]
+    assert initial[0]["routine_outcome"] is False
     assert any(item.get("lesson") == "timeout" for item in initial)
 
     next_run, _, has_baseline = research_director._summarize_failures(
         learning, counts | {"trade.propose::HTTP token=super-secret failed": 5})
     assert has_baseline
     assert next_run[0]["new_since_last_report"] == 2
+
+
+def test_routine_trade_decisions_are_not_classified_as_operational_failures():
+    learning = {
+        "failure_signatures": {
+            "trade.propose::risk gate rejected": 2885,
+            "trade.propose::signal is hold": 1559,
+            "trade.propose::broker request timed out": 4,
+        },
+        "lessons": [],
+    }
+
+    failures, _, _ = research_director._summarize_failures(learning, {})
+    routine = {item["error"]: item["routine_outcome"] for item in failures}
+
+    assert routine["risk gate rejected"] is True
+    assert routine["signal is hold"] is True
+    assert routine["broker request timed out"] is False
+
+
+def test_operational_errors_rank_ahead_of_high_volume_routine_outcomes():
+    signatures = {
+        f"trade.propose::risk gate rejected {index}": 100
+        for index in range(20)
+    }
+    signatures["market.data::provider timeout"] = 1
+    learning = {"failure_signatures": signatures, "lessons": []}
+
+    failures, _, _ = research_director._summarize_failures(learning, {})
+
+    assert failures[0]["task"] == "market.data"
+    assert failures[0]["routine_outcome"] is False
+
+
+def test_operational_atlas_assessment_uses_local_memory_and_llm_path():
+    class Atlas:
+        def __init__(self):
+            self.best_effort_calls = []
+            self.web_research_calls = []
+
+        def _best_effort_report(self, query, domain):
+            self.best_effort_calls.append((query, domain))
+            return {"summary": "Check provider timeouts and cache state."}
+
+        def act(self, task, context):
+            self.web_research_calls.append((task, context))
+            raise AssertionError("operational failure details must not go to web search")
+
+    atlas = Atlas()
+    assessment = research_director._atlas_assessment(
+        atlas, "Explain these errors", memory_only=True)
+
+    assert assessment == "Check provider timeouts and cache state."
+    assert atlas.best_effort_calls == [("Explain these errors", "trading")]
+    assert atlas.web_research_calls == []
+
+
+def test_boot_agents_passes_chronicle_to_atlas(monkeypatch):
+    loaded = []
+    peers = {"Chronicle": object(), "Forge": object(), "Atlas": object()}
+
+    def fake_load(folder, rel, cls, **kwargs):
+        loaded.append((folder, kwargs))
+        return peers[folder]
+
+    monkeypatch.setattr(research_director, "_load", fake_load)
+    monkeypatch.setattr(research_director, "unload_conflicting_modules", lambda: None)
+
+    chronicle, forge, atlas = research_director._boot_agents()
+
+    assert (chronicle, forge, atlas) == (
+        peers["Chronicle"], peers["Forge"], peers["Atlas"])
+    assert loaded[2] == ("Atlas", {"chronicle_client": peers["Chronicle"]})
 
 
 def test_state_checkpoint_round_trips_atomically(tmp_path):

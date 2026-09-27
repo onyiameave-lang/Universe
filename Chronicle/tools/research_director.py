@@ -116,7 +116,8 @@ def _boot_agents():
     forge = _load("Forge", "agents/training_agent.py", "ForgeAgent")
     unload_conflicting_modules()
 
-    atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent")
+    atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent",
+                  chronicle_client=chronicle)
     unload_conflicting_modules()
 
     return chronicle, forge, atlas
@@ -231,6 +232,19 @@ def _get_or_add_hypothesis(forge, statement: str) -> str:
     return hypothesis_id
 
 
+def _atlas_assessment(atlas, query: str, memory_only: bool) -> Optional[str]:
+    """Use Atlas's local memory/LLM fallback for operational logs, not web search."""
+    if memory_only:
+        report = atlas._best_effort_report(query, "trading")
+    else:
+        result = atlas.act("research.investigate", {
+            "query": query, "domain": "trading", "depth": "standard",
+            "_sender": "chronicle_research_director"})
+        report = (result or {}).get("report") or {}
+    summary = report.get("summary")
+    return summary if isinstance(summary, str) and summary.strip() else None
+
+
 def _redact_failure_text(value: Any) -> str:
     text = str(value or "").replace("\n", " ").strip()
     text = re.sub(r"(?i)\b(bearer)\s+\S+", r"\1 [REDACTED]", text)
@@ -261,6 +275,7 @@ def _summarize_failures(
         prior = prior if isinstance(prior, int) and not isinstance(prior, bool) else 0
         delta = count - prior if count >= prior else count
         task, separator, error = str(signature).partition("::")
+        normalized_error = error.strip().lower()
         report_items.append({
             "task": _redact_failure_text(task),
             "error": _redact_failure_text(error if separator else ""),
@@ -268,10 +283,13 @@ def _summarize_failures(
             "new_since_last_report": delta if has_baseline else None,
             "recurring": count >= 3,
             "counter_reset": has_baseline and count < prior,
+            "routine_outcome": normalized_error.startswith(
+                ("risk gate rejected", "signal is hold")),
         })
 
     report_items.sort(
         key=lambda item: (
+            not item.get("routine_outcome", False),
             item["new_since_last_report"] or 0,
             item["count"],
         ),
@@ -279,7 +297,7 @@ def _summarize_failures(
     )
     report_items = report_items[:_FAILURE_REPORT_LIMIT]
 
-    lesson_counts: Counter[Tuple[str, str, str]] = Counter()
+    lesson_counts: Counter[Tuple[str, str, str, bool]] = Counter()
     for lesson in learning.get("lessons", []):
         if not isinstance(lesson, dict):
             continue
@@ -287,12 +305,21 @@ def _summarize_failures(
         summary = _redact_failure_text(
             lesson.get("root_cause") or lesson.get("lesson") or lesson.get("adjustment"))
         if task and summary:
-            lesson_counts[(task, summary, _redact_failure_text(lesson.get("adjustment")))] += 1
+            routine_outcome = summary.strip().lower().startswith(
+                ("risk gate rejected", "signal is hold"))
+            lesson_counts[
+                (task, summary, _redact_failure_text(lesson.get("adjustment")),
+                 routine_outcome)
+            ] += 1
 
-    for (task, summary, adjustment), count in lesson_counts.most_common(5):
+    ranked_lessons = sorted(
+        lesson_counts.items(),
+        key=lambda item: (item[0][3], -item[1]),
+    )
+    for (task, summary, adjustment, routine_outcome), count in ranked_lessons[:5]:
         report_items.append({
             "task": task, "lesson": summary, "suggested_adjustment": adjustment,
-            "count": count,
+            "count": count, "routine_outcome": routine_outcome,
         })
     return report_items, normalized_counts, has_baseline
 
@@ -409,57 +436,73 @@ def run():
                 delta = item["new_since_last_report"]
                 delta_text = (f", +{delta} since prior report" if delta is not None
                               else ", baseline count")
+                category = "routine control outcome" if item.get("routine_outcome") \
+                    else "operational failure"
                 report_lines.append(
-                    f"- {item['task']}: {item['error'] or '(no error detail)'} "
+                    f"- [{category}] {item['task']}: {item['error'] or '(no error detail)'} "
                     f"(total {item['count']}{delta_text})")
             for item in failures:
                 if "lesson" in item:
+                    lesson_type = "routine outcome lesson" if item.get("routine_outcome") \
+                        else "operational lesson"
                     report_lines.append(
-                        f"- Existing lesson for {item['task']}: {item['lesson']}; "
+                        f"- Existing {lesson_type} for {item['task']}: {item['lesson']}; "
                         f"suggested adjustment: {item['suggested_adjustment'] or '(none recorded)'} "
                         f"(stored {item['count']} time(s))")
 
-        atlas_queries = []
-        if failure_rows and (not has_failure_baseline or any(
-                item["new_since_last_report"] for item in failure_rows)):
-            recorded_lessons = [item for item in failures if "lesson" in item]
-            lesson_context = (
-                "\nRecorded learning lessons:\n" + "\n".join(
-                    f"- task={item['task']}; lesson={item['lesson']}; "
-                    f"adjustment={item['suggested_adjustment']}"
-                    for item in recorded_lessons
-                ) if recorded_lessons else ""
+        atlas_queries: List[Tuple[str, bool]] = []
+        operational_failures = [
+            item for item in failure_rows if not item.get("routine_outcome")
+        ]
+        if operational_failures and (not has_failure_baseline or any(
+                item["new_since_last_report"] for item in operational_failures)):
+            new_failures = [
+                item for item in operational_failures
+                if item["new_since_last_report"] is None or item["new_since_last_report"] > 0
+            ][:5]
+            failure_context = "\n".join(
+                f"- {item['task']}: {item['error'] or '(no detail)'} "
+                f"(new={item['new_since_last_report']}, total={item['count']})"
+                for item in new_failures
             )
-            atlas_queries.append(
-                "Review these recurring Oracle operational failure signatures and the "
-                "recorded learning lessons. Identify plausible common patterns and safe "
-                "diagnostic questions for a human to investigate. Do not invent missing "
-                "facts, propose automatic code changes, or generate trading strategies:\n"
-                + "\n".join(
-                    f"- task={item['task']}; error={item['error']}; "
-                    f"new={item['new_since_last_report']}; total={item['count']}"
-                    for item in failure_rows if item["new_since_last_report"] is None
-                    or item["new_since_last_report"] > 0
-                ) + lesson_context
+            recorded_lessons = [
+                item for item in failures
+                if "lesson" in item and not item.get("routine_outcome")
+            ][:3]
+            lesson_context = "\n".join(
+                f"- {item['task']}: {item['lesson']}; "
+                f"adjustment={item['suggested_adjustment']}"
+                for item in recorded_lessons
             )
+            prompt = (
+                "Explain these recurring Oracle operational errors using available "
+                "Chronicle memory and model knowledge. Identify cautious, testable "
+                "diagnostic questions for a human. Do not claim to have verified the "
+                "runtime, propose automatic code changes, or generate trading strategies.\n"
+                f"Errors:\n{failure_context}"
+            )
+            if lesson_context:
+                prompt += f"\nRecorded lessons:\n{lesson_context}"
+            atlas_queries.append((prompt, True))
         confirmed = [item for item in conclusions if item["status"] == "confirmed"]
         if confirmed:
-            atlas_queries.append(
+            atlas_queries.append((
                 "Given that " + "; ".join(
                     f"the {item['stream']} stream shows {item['result'].get('reason', '')}"
                     for item in confirmed) +
                 " -- is this consistent with how these signal types are generally understood "
-                "to relate to short-term price movement?")
+                "to relate to short-term price movement?", False))
 
         if atlas is not None:
-            for query in atlas_queries:
+            for query, use_best_effort in atlas_queries:
                 try:
-                    atlas_result = atlas.act("research.investigate", {
-                        "query": query, "domain": "trading", "depth": "standard",
-                        "_sender": "chronicle_research_director"})
-                    atlas_summary = ((atlas_result or {}).get("report") or {}).get("summary")
+                    atlas_summary = _atlas_assessment(atlas, query, use_best_effort)
                     if atlas_summary:
-                        report_lines.extend(["", f"Atlas assessment: {atlas_summary}"])
+                        assessment_type = (
+                            "Atlas advisory assessment (Chronicle/LLM only; no web search)"
+                            if use_best_effort else "Atlas assessment"
+                        )
+                        report_lines.extend(["", f"{assessment_type}: {atlas_summary}"])
                 except Exception as exc:
                     log.warning("Atlas context request failed (non-blocking): %s", exc)
         elif atlas_queries:
