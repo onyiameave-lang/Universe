@@ -21,7 +21,7 @@ Type=oneshot
 User=github-actions-deploy
 WorkingDirectory=/home/github-actions-deploy/oracle-trader/Chronicle
 ExecStart=/home/github-actions-deploy/oracle-trader/venv/bin/python tools/research_director.py
-EnvironmentFile=/home/github-actions-deploy/oracle-trader/.env
+EnvironmentFile=/home/github-actions-deploy/oracle-trader/Oracle/.env
 
 StandardOutput=journal
 StandardError=journal
