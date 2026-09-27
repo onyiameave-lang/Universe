@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -20,6 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("shared.learning")
+_SYNC_RETRY_BASE_SEC = 5.0
+_SYNC_RETRY_MAX_SEC = 300.0
 
 
 class Episode:
@@ -54,11 +57,15 @@ class LearningLog:
         self.llm       = llm
         self.chronicle = chronicle
         self._lock     = threading.RLock()
+        self._sync_condition = threading.Condition(self._lock)
         self._reflection_slot = threading.BoundedSemaphore(1)
-        self._chronicle_slot = threading.BoundedSemaphore(1)
         self._episodes: List[Episode]          = []
         self._lessons:  List[Dict[str, Any]]   = []
         self._failure_signatures: Dict[str, int] = {}
+        self._pending_chronicle: List[Dict[str, Any]] = []
+        self._sync_stop = threading.Event()
+        self._sync_thread: Optional[threading.Thread] = None
+        self._chronicle_unavailable_warned = False
         self._path = Path(storage_dir) / f"{agent_name}_learning.json"
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._load()
@@ -70,20 +77,168 @@ class LearningLog:
                 data = json.loads(self._path.read_text(encoding="utf-8"))
                 self._lessons             = data.get("lessons", [])
                 self._failure_signatures  = data.get("failure_signatures", {})
+                pending = data.get("pending_chronicle", [])
+                if isinstance(pending, list):
+                    self._pending_chronicle = [
+                        item for item in pending
+                        if isinstance(item, dict)
+                        and isinstance(item.get("memory_id"), str)
+                        and isinstance(item.get("lesson"), dict)
+                    ]
             except (OSError, json.JSONDecodeError) as exc:
                 log.warning("could not load learning log for %s from %s: %s",
                             self.agent, self._path, exc)
 
-    def _persist(self) -> None:
+    def _persist(self) -> bool:
         try:
-            self._path.write_text(json.dumps({
-                "agent":              self.agent,
-                "lessons":            self._lessons,
-                "failure_signatures": self._failure_signatures,
-            }, indent=2), encoding="utf-8")
+            with self._lock:
+                data = json.dumps({
+                    "agent":              self.agent,
+                    "lessons":            self._lessons,
+                    "failure_signatures": self._failure_signatures,
+                    "pending_chronicle":  self._pending_chronicle,
+                }, indent=2)
+                tmp_path = self._path.with_suffix(".tmp")
+                with tmp_path.open("w", encoding="utf-8") as stream:
+                    stream.write(data)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(tmp_path, self._path)
+            return True
         except (OSError, TypeError, ValueError) as exc:
             log.warning("could not persist learning log for %s to %s: %s",
                         self.agent, self._path, exc)
+            return False
+
+    def start_sync_worker(self) -> None:
+        """Start one durable outbox worker for this agent's lessons."""
+        with self._sync_condition:
+            if self.chronicle is None or not self._pending_chronicle or (
+                    self._sync_thread and self._sync_thread.is_alive()):
+                return
+            self._sync_stop.clear()
+            self._sync_thread = threading.Thread(
+                target=self._sync_loop,
+                name=f"learning-sync-{self.agent}",
+                daemon=True,
+            )
+            self._sync_thread.start()
+            self._sync_condition.notify_all()
+
+    def set_chronicle(self, chronicle: Any) -> None:
+        """Attach or replace Chronicle and resume any durable pending writes."""
+        with self._sync_condition:
+            self.chronicle = chronicle
+            if chronicle is not None:
+                self._chronicle_unavailable_warned = False
+            self._sync_condition.notify_all()
+        if chronicle is not None:
+            self.start_sync_worker()
+
+    def stop_sync_worker(self, timeout: float = 2.0) -> None:
+        self._sync_stop.set()
+        with self._sync_condition:
+            self._sync_condition.notify_all()
+        worker = self._sync_thread
+        if worker is not None:
+            worker.join(timeout=timeout)
+            if worker.is_alive():
+                log.warning(
+                    "%s Chronicle sync worker is still blocked; pending lessons remain on disk",
+                    self.agent,
+                )
+
+    def _sync_loop(self) -> None:
+        while not self._sync_stop.is_set():
+            with self._sync_condition:
+                if self.chronicle is None:
+                    self._sync_condition.wait()
+                    continue
+                now = time.time()
+                due = next(
+                    (item for item in self._pending_chronicle
+                     if item.get("next_attempt_at", 0) <= now),
+                    None,
+                )
+                if due is None:
+                    wait_for = min(
+                        (max(0.1, item.get("next_attempt_at", 0) - now)
+                         for item in self._pending_chronicle),
+                        default=None,
+                    )
+                    self._sync_condition.wait(timeout=wait_for)
+                    continue
+                entry = dict(due)
+
+            self._sync_one(entry)
+
+    def _sync_one(self, entry: Dict[str, Any]) -> None:
+        if not self._persist():
+            self._retry_sync(entry, "local outbox could not be persisted")
+            return
+
+        try:
+            stored = self._preserve_lesson(
+                entry["lesson"], memory_id=entry["memory_id"])
+        except Exception as exc:
+            stored = False
+            error = f"{type(exc).__name__}: {exc}"
+        else:
+            error = "Chronicle did not confirm storage"
+
+        with self._sync_condition:
+            current = next(
+                (item for item in self._pending_chronicle
+                 if item.get("memory_id") == entry["memory_id"]),
+                None,
+            )
+            if current is None:
+                return
+            if stored:
+                self._pending_chronicle.remove(current)
+                if not self._persist():
+                    current["next_attempt_at"] = time.time() + 5.0
+                    current["last_error"] = "could not persist Chronicle acknowledgement"
+                    self._pending_chronicle.append(current)
+                    self._persist()
+                    log.warning(
+                        "%s Chronicle stored lesson %s but local acknowledgement failed; "
+                        "the stable ID will make retry safe",
+                        self.agent, entry["memory_id"],
+                    )
+                else:
+                    log.info("%s synced lesson %s to Chronicle",
+                             self.agent, entry["memory_id"])
+                self._sync_condition.notify_all()
+                return
+
+        self._retry_sync(entry, error)
+
+    def _retry_sync(self, entry: Dict[str, Any], error: str) -> None:
+        with self._sync_condition:
+            current = next(
+                (item for item in self._pending_chronicle
+                 if item.get("memory_id") == entry.get("memory_id")),
+                None,
+            )
+            if current is None:
+                return
+            attempts = int(current.get("attempts", 0)) + 1
+            delay = min(
+                _SYNC_RETRY_BASE_SEC * (2 ** min(attempts - 1, 6)),
+                _SYNC_RETRY_MAX_SEC,
+            )
+            current.update({
+                "attempts": attempts,
+                "last_error": error[:300],
+                "next_attempt_at": time.time() + delay,
+            })
+            self._persist()
+            self._sync_condition.notify_all()
+        log.warning(
+            "%s could not sync lesson %s to Chronicle (attempt %d; retry in %.0fs): %s",
+            self.agent, entry.get("memory_id"), attempts, delay, error,
+        )
 
     # ------------------------------------------------------------------
     def record(self, task: str, outcome: str, success: bool,
@@ -112,19 +267,36 @@ class LearningLog:
 
         with self._lock:
             ep.lesson = lesson
+            outbox_persisted = True
             if lesson:
                 self._lessons.append(lesson)
-            self._persist()
+                self._pending_chronicle.append({
+                    "memory_id": f"learning-{self.agent}-{uuid.uuid4().hex}",
+                    "lesson": lesson,
+                    "created_at": time.time(),
+                    "attempts": 0,
+                    "next_attempt_at": 0.0,
+                    "last_error": "",
+                })
+            outbox_persisted = self._persist()
+            pending_count = len(self._pending_chronicle)
 
-        if lesson:
-            if self._chronicle_slot.acquire(blocking=False):
-                try:
-                    self._preserve_lesson(lesson)
-                finally:
-                    self._chronicle_slot.release()
-            else:
-                log.warning("%s lesson saved locally but Chronicle preservation skipped; "
-                            "another lesson write is still running", self.agent)
+        if lesson and not outbox_persisted:
+            log.error(
+                "%s lesson/outbox could not be durably saved; Chronicle sync is not guaranteed",
+                self.agent,
+            )
+        if lesson and self.chronicle is None:
+            if not self._chronicle_unavailable_warned:
+                log.warning(
+                    "%s lesson queued locally for Chronicle; Chronicle is unavailable "
+                    "(pending=%d)", self.agent, pending_count,
+                )
+                self._chronicle_unavailable_warned = True
+        elif lesson:
+            self.start_sync_worker()
+            with self._sync_condition:
+                self._sync_condition.notify_all()
         return ep
 
     def _signature(self, task: str, error: str) -> str:
@@ -210,11 +382,11 @@ class LearningLog:
                 if n >= 3
             ]
 
-    def _preserve_lesson(self, lesson: Dict[str, Any]) -> None:
+    def _preserve_lesson(self, lesson: Dict[str, Any], memory_id: str) -> bool:
         if self.chronicle is None:
-            return
+            return False
         try:
-            self.chronicle.store_memory(
+            result = self.chronicle.store_memory(
                 content=(
                     f"Lesson [{self.agent}]: {lesson.get('lesson')} "
                     f"(cause: {lesson.get('root_cause')}; "
@@ -222,10 +394,13 @@ class LearningLog:
                 ),
                 pillar="evolutionary", domain="learning",
                 tags=["lesson", self.agent], source_repository=self.agent,
+                memory_id=memory_id, autolink=False,
             )
+            return isinstance(result, dict) and result.get("status") == "complete"
         except Exception as exc:
             log.warning("could not preserve learning lesson for %s in Chronicle: %s",
                         self.agent, exc)
+            return False
 
     def stats(self) -> Dict[str, Any]:
         with self._lock:
@@ -236,6 +411,7 @@ class LearningLog:
                 "successes":         successes,
                 "failures":          len(self._episodes) - successes,
                 "lessons_learned":   len(self._lessons),
+                "pending_chronicle_syncs": len(self._pending_chronicle),
                 "unadapted_failures": self.unadapted_failures(),
                 "success_rate":      (
                     round(successes / len(self._episodes), 3)

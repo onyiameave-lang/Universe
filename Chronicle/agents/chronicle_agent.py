@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -151,7 +152,8 @@ class ChronicleAgent(BaseAgent):
                     summary: str = "", source_repository: str = "unknown",
                     source_agent: str = "", evidence: Optional[List[str]] = None,
                     lesson: str = "", tags: Optional[List[str]] = None,
-                    autolink: bool = True) -> Dict[str, Any]:
+                    autolink: bool = True,
+                    memory_id: Optional[str] = None) -> Dict[str, Any]:
         try:
             pillar_enum = MemoryPillar(pillar)
         except ValueError:
@@ -162,7 +164,8 @@ class ChronicleAgent(BaseAgent):
                                temperature=0.2, max_tokens=80)
             summary = advice.strip() if advice else text[:160]
         summary = summary or text[:160]
-        record = MemoryRecord(pillar=pillar_enum, domain=domain, content=content, summary=summary,
+        record = MemoryRecord(memory_id=memory_id or f"mem-{uuid.uuid4().hex[:12]}",
+                             pillar=pillar_enum, domain=domain, content=content, summary=summary,
                              embedding=self.embedder.encode(summary or text),
                              source_repository=source_repository, source_agent=source_agent,
                              evidence=evidence or [], lesson=lesson, tags=tags or [])
@@ -425,7 +428,8 @@ class ChronicleAgent(BaseAgent):
             return self.store_memory(content=ctx.get("content", ""), pillar=ctx.get("pillar", "semantic"),
                                     domain=ctx.get("domain", "general"), summary=ctx.get("summary", ""),
                                     source_repository=sender, evidence=ctx.get("evidence"),
-                                    lesson=ctx.get("lesson", ""), tags=ctx.get("tags"))
+                                    lesson=ctx.get("lesson", ""), tags=ctx.get("tags"),
+                                    memory_id=ctx.get("memory_id"))
         if task in ("memory.retrieve", "memory.search"):
             return {"status": "complete", **self._retrieve(ctx.get("query", ""), sender,
                                                            ctx.get("domain"), ctx.get("limit", 5))}

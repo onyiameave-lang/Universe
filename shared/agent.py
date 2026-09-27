@@ -113,6 +113,8 @@ class BaseAgent(abc.ABC):
         self._started    = True
         self._started_at = time.time()
         self._stop.clear()
+        if self.learning is not None:
+            self.learning.start_sync_worker()
         if self._bus and self._registry:
             for ch in self.channels:
                 self._bus.subscribe(ch, self._on_bus_message)
@@ -142,6 +144,8 @@ class BaseAgent(abc.ABC):
 
     def stop(self) -> None:
         self._stop.set()
+        if self.learning is not None:
+            self.learning.stop_sync_worker()
         if self._hb_thread:
             self._hb_thread.join(timeout=2.0)
         if self._bus and self._registry:
