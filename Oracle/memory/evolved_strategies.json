@@ -13556,21 +13556,21 @@
     "symbol": "XAUUSD"
   },
   "XRPUSD::high_volatility": {
-    "certified_at": 1785174380.1173518,
-    "generation": 6,
+    "certified_at": 1790516528.9524908,
+    "generation": 16,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0013,
-      "best_sharpe": 0.0,
-      "fitness": 1.3288,
-      "generation": 6,
-      "genome_id": "mut-eb4a78",
+      "best_return": 0.0146,
+      "best_sharpe": 0.123,
+      "fitness": 2.7008,
+      "generation": 16,
+      "genome_id": "mut-d0f7a0",
       "modules": {
         "entry": {
-          "logic_type": "default",
+          "logic_type": "adaptive",
           "params": {
-            "confirmation_required": true,
-            "threshold": 0.66
+            "base_threshold": 0.2,
+            "regime_bonus": 0.091
           }
         },
         "execution": {
@@ -13578,36 +13578,34 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "default",
+          "logic_type": "atr_stops",
           "params": {
-            "atr_override": null,
-            "sl_mult": 1.3,
-            "tp_mult": 2.046
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
-          "logic_type": "strict",
+          "logic_type": "default",
           "params": {
             "allowed_regimes": [
               "trending_up",
               "trending_down",
               "ranging",
               "high_volatility"
-            ],
-            "volatility_limit": 0.5
+            ]
           }
         },
         "momentum": {
-          "logic_type": "volume_momentum",
+          "logic_type": "williams_r",
           "params": {
-            "period": 20
+            "lower": 15,
+            "period": 14,
+            "upper": 60
           }
         },
         "position": {
-          "logic_type": "fixed_fractional",
-          "params": {
-            "base_risk": 0.01
-          }
+          "logic_type": "default",
+          "params": {}
         },
         "risk": {
           "logic_type": "default",
@@ -13618,44 +13616,43 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "price_above_sma",
           "params": {
-            "lookback": 20
+            "period": 50
           }
         },
         "volatility": {
-          "logic_type": "atr_expansion",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "expansion_ratio": 1.35,
-            "period": 14
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-31657a"
+        "xov-ef5e8a"
       ]
     },
     "in_sample": {
-      "fitness": 1.3288,
-      "return": 0.0013
+      "fitness": 2.7008,
+      "return": 0.0146
     },
     "out_of_sample": {
-      "avg_pnl": 75.24,
-      "consistency": 0.8,
-      "expectancy": 75.24,
-      "final_equity": 10376.17,
+      "avg_pnl": 69.22,
+      "consistency": 0.714,
+      "expectancy": 69.22,
+      "final_equity": 10484.54,
       "max_drawdown": 0.01,
-      "profit_factor": 4.652,
-      "recovery_factor": 3.762,
-      "sharpe_proxy": 0.738,
-      "sortino_proxy": 1.633,
+      "profit_factor": 3.346,
+      "recovery_factor": 4.845,
+      "sharpe_proxy": 0.62,
+      "sortino_proxy": 1.254,
       "status": "complete",
-      "total_return": 0.0376,
-      "trades": 5,
-      "win_rate": 0.8
+      "total_return": 0.0485,
+      "trades": 7,
+      "win_rate": 0.714
     },
     "parents": [
-      "xov-31657a"
+      "xov-ef5e8a"
     ],
     "regime": "high_volatility",
     "symbol": "XRPUSD"
