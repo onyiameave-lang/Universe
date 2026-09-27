@@ -12,11 +12,14 @@ Changes in this version:
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger("shared.learning")
 
 
 class Episode:
@@ -51,6 +54,8 @@ class LearningLog:
         self.llm       = llm
         self.chronicle = chronicle
         self._lock     = threading.RLock()
+        self._reflection_slot = threading.BoundedSemaphore(1)
+        self._chronicle_slot = threading.BoundedSemaphore(1)
         self._episodes: List[Episode]          = []
         self._lessons:  List[Dict[str, Any]]   = []
         self._failure_signatures: Dict[str, int] = {}
@@ -65,8 +70,9 @@ class LearningLog:
                 data = json.loads(self._path.read_text(encoding="utf-8"))
                 self._lessons             = data.get("lessons", [])
                 self._failure_signatures  = data.get("failure_signatures", {})
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError) as exc:
+                log.warning("could not load learning log for %s from %s: %s",
+                            self.agent, self._path, exc)
 
     def _persist(self) -> None:
         try:
@@ -75,28 +81,50 @@ class LearningLog:
                 "lessons":            self._lessons,
                 "failure_signatures": self._failure_signatures,
             }, indent=2), encoding="utf-8")
-        except Exception:
-            pass  # aegis:allow-silent
+        except (OSError, TypeError, ValueError) as exc:
+            log.warning("could not persist learning log for %s to %s: %s",
+                        self.agent, self._path, exc)
 
     # ------------------------------------------------------------------
     def record(self, task: str, outcome: str, success: bool,
                context: Optional[Dict] = None, error: str = "") -> Episode:
-        """Record an episode. On failure, reflect and derive a lesson."""
+        """Record locally under lock; keep LLM and Chronicle calls outside it."""
         ep = Episode(task, outcome, success, context, error)
         with self._lock:
             self._episodes.append(ep)
-            if not success:
-                sig = self._signature(task, error)
-                self._failure_signatures[sig] = (
-                    self._failure_signatures.get(sig, 0) + 1
-                )
-                ep.lesson = self._reflect(
-                    ep, repeat_count=self._failure_signatures[sig]
-                )
-                if ep.lesson:
-                    self._lessons.append(ep.lesson)
-                    self._preserve_lesson(ep.lesson)
-                self._persist()
+            if success:
+                return ep
+            sig = self._signature(task, error)
+            repeat_count = self._failure_signatures.get(sig, 0) + 1
+            self._failure_signatures[sig] = repeat_count
+
+        if self._reflection_slot.acquire(blocking=False):
+            try:
+                lesson = self._reflect(ep, repeat_count=repeat_count)
+            finally:
+                self._reflection_slot.release()
+        else:
+            lesson = self._heuristic_reflection(ep, repeat_count)
+            # The local heuristic remains available immediately. Skip only
+            # optional LLM enrichment while another reflection is in flight.
+            log.warning("%s learning reflection skipped LLM enrichment; another reflection is running",
+                        self.agent)
+
+        with self._lock:
+            ep.lesson = lesson
+            if lesson:
+                self._lessons.append(lesson)
+            self._persist()
+
+        if lesson:
+            if self._chronicle_slot.acquire(blocking=False):
+                try:
+                    self._preserve_lesson(lesson)
+                finally:
+                    self._chronicle_slot.release()
+            else:
+                log.warning("%s lesson saved locally but Chronicle preservation skipped; "
+                            "another lesson write is still running", self.agent)
         return ep
 
     def _signature(self, task: str, error: str) -> str:
@@ -128,10 +156,15 @@ class LearningLog:
                     parsed["repeated"]     = repeated
                     parsed["repeat_count"] = repeat_count
                     return parsed
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning("LLM reflection failed for %s; using heuristic lesson: %s",
+                            self.agent, exc)
 
-        # Heuristic fallback — always runs when LLM is skipped/unavailable
+        return self._heuristic_reflection(ep, repeat_count)
+
+    def _heuristic_reflection(self, ep: Episode, repeat_count: int) -> Dict[str, Any]:
+        """Build a local lesson without external calls."""
+        repeated = repeat_count >= 3
         return {
             "source":       "heuristic",
             "task":         ep.task,
@@ -190,8 +223,9 @@ class LearningLog:
                 pillar="evolutionary", domain="learning",
                 tags=["lesson", self.agent], source_repository=self.agent,
             )
-        except Exception:
-            pass  # aegis:allow-silent
+        except Exception as exc:
+            log.warning("could not preserve learning lesson for %s in Chronicle: %s",
+                        self.agent, exc)
 
     def stats(self) -> Dict[str, Any]:
         with self._lock:

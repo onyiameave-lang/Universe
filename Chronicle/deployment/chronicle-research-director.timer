@@ -1,16 +1,16 @@
 # Chronicle Research Director — systemd timer
-# Runs once a day, AFTER the nightly trading activity has settled, so
-# there's a full day's worth of trades to actually analyze. 03:00 server
-# time is chosen to run after oracle-nightly-research's old 02:00 slot
-# (now retired) — adjust if your trading hours suggest a better time.
+# The VPS reports UTC, and the operator specified the broker/server weekend
+# closure as Friday 22:00 through Sunday 22:00. Run once at the start of that
+# window; the one-shot director catches up all trades since its last successful
+# report and reviews Oracle's recurring failure counts.
 #
 # See chronicle-research-director.service for install instructions.
 
 [Unit]
-Description=Run Chronicle Research Director once a day
+Description=Run Chronicle Research Director at weekend market close
 
 [Timer]
-OnCalendar=*-*-* 03:00:00
+OnCalendar=Fri *-*-* 22:00:00
 Persistent=true
 RandomizedDelaySec=600
 
