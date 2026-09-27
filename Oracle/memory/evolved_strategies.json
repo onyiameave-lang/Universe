@@ -13556,21 +13556,22 @@
     "symbol": "XAUUSD"
   },
   "XRPUSD::high_volatility": {
-    "certified_at": 1790516528.9524908,
-    "generation": 16,
+    "certified_at": 1790538052.217058,
+    "generation": 46,
     "genome": {
-      "backtests": 15,
+      "backtests": 30,
       "best_return": 0.0146,
       "best_sharpe": 0.123,
       "fitness": 2.7008,
-      "generation": 16,
-      "genome_id": "mut-d0f7a0",
+      "generation": 46,
+      "genome_id": "mut-ed924b",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.2,
-            "regime_bonus": 0.091
+            "base_threshold": 0.208,
+            "regime_bonus": 0.1,
+            "threshold": 0.208
           }
         },
         "execution": {
@@ -13578,8 +13579,9 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "swing_stops",
           "params": {
+            "lookback": 10,
             "sl_mult": 2.0,
             "tp_mult": 3.0
           }
@@ -13596,11 +13598,11 @@
           }
         },
         "momentum": {
-          "logic_type": "williams_r",
+          "logic_type": "cci",
           "params": {
             "lower": 15,
-            "period": 14,
-            "upper": 60
+            "period": 20,
+            "upper": 85
           }
         },
         "position": {
@@ -13622,14 +13624,12 @@
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
-          "params": {
-            "period": 20
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
       "parents": [
-        "xov-ef5e8a"
+        "xov-7f8d0c"
       ]
     },
     "in_sample": {
@@ -13637,22 +13637,22 @@
       "return": 0.0146
     },
     "out_of_sample": {
-      "avg_pnl": 69.22,
+      "avg_pnl": 69.72,
       "consistency": 0.714,
-      "expectancy": 69.22,
-      "final_equity": 10484.54,
+      "expectancy": 69.72,
+      "final_equity": 10488.03,
       "max_drawdown": 0.01,
-      "profit_factor": 3.346,
-      "recovery_factor": 4.845,
-      "sharpe_proxy": 0.62,
-      "sortino_proxy": 1.254,
+      "profit_factor": 3.363,
+      "recovery_factor": 4.88,
+      "sharpe_proxy": 0.624,
+      "sortino_proxy": 1.263,
       "status": "complete",
-      "total_return": 0.0485,
+      "total_return": 0.0488,
       "trades": 7,
       "win_rate": 0.714
     },
     "parents": [
-      "xov-ef5e8a"
+      "xov-7f8d0c"
     ],
     "regime": "high_volatility",
     "symbol": "XRPUSD"
