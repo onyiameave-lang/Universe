@@ -88,7 +88,6 @@ from intelligence.analysis import (relevance, summarize, keywords, extract_claim
                                    compute_corroboration, compute_confidence)
 from intelligence.contradiction import ContradictionEngine  # type: ignore
 
-
 class ResearchEngine:
     def __init__(self, chronicle_client=None, llm=None, confidence_target: float = 0.6):
         self.chronicle = chronicle_client

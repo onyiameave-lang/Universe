@@ -107,6 +107,8 @@ class ChronicleAgent(BaseAgent):
                         storage_dir=storage_dir, **kw)
         self.embedder = get_embedding_model()
         self.store = VectorStore(storage_dir=storage_dir)
+        if self.learning is not None:
+            self.learning.set_chronicle(self)
         # State Store: upsert-by-key, for frequently-updated STATE (champion
         # confidence, term reliability weights, hypothesis status) as opposed
         # to episodic memory (the VectorStore above). See core/state_store.py

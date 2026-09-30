@@ -57,6 +57,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 try:
@@ -83,6 +84,35 @@ _DEFAULT_TIMEOUT_SEC = 15.0
 _AUTH_TIMEOUT_SEC = 45.0
 
 
+def _normalize_order_direction(value: Any) -> Optional[str]:
+    direction = str(value or "").strip().lower()
+    return direction if direction in ("long", "buy", "short", "sell") else None
+
+
+def _execution_error_reason(payload: Any) -> str:
+    error_code = getattr(payload, "errorCode", None)
+    description = getattr(payload, "description", None)
+    return ": ".join(str(part) for part in (error_code, description) if part) \
+        or "unknown cTrader execution error"
+
+
+def _round_price_to_digits(price: float, digits: int) -> float:
+    quantum = Decimal(1).scaleb(-digits)
+    return float(Decimal(str(price)).quantize(quantum, rounding=ROUND_HALF_UP))
+
+
+def _volume_cents_within_constraints(
+        cents: int, constraints: Dict[str, Any]) -> int:
+    min_volume = constraints["minVolume"]
+    max_volume = constraints["maxVolume"]
+    step_volume = constraints["stepVolume"]
+    if cents < min_volume:
+        return 0
+    step_volume = max(1, step_volume)
+    stepped_volume = min_volume + ((cents - min_volume) // step_volume) * step_volume
+    return min(max_volume, stepped_volume)
+
+
 @dataclass
 class BrokerStatus:
     """Deliberately field-for-field identical to mt5_broker.BrokerStatus so
@@ -95,11 +125,13 @@ class BrokerStatus:
     equity: float = 0.0
     currency: str = ""
     reason: str = ""
+    account_info_available: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {"connected": self.connected, "account_type": self.account_type,
                 "login": self.login, "server": self.server, "balance": self.balance,
-                "equity": self.equity, "currency": self.currency, "reason": self.reason}
+                "equity": self.equity, "currency": self.currency, "reason": self.reason,
+                "account_info_available": self.account_info_available}
 
 
 class CTraderBroker:
@@ -130,7 +162,7 @@ class CTraderBroker:
         self._symbol_id_by_name: Dict[str, int] = {}
         self._symbol_name_by_id: Dict[int, str] = {}
         self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
-        self._symbol_constraints: Dict[int, Dict[str, int]] = {}
+        self._symbol_constraints: Dict[int, Dict[str, Any]] = {}
         self._positions_cache: Dict[int, Dict[str, Any]] = {}
         self._positions_last_refresh_ok = False
         self._cache_lock = threading.Lock()
@@ -250,12 +282,19 @@ class CTraderBroker:
         # Pull the symbol list once — needed to translate symbol name <-> id.
         self._load_symbols(ProtoOASymbolsListReq)
 
-        balance, equity, currency = self._fetch_balance(ProtoOATraderReq)
+        account_info = self._fetch_balance(ProtoOATraderReq)
+        if account_info is None:
+            self.status.account_info_available = False
+            balance, equity, currency = 0.0, 0.0, ""
+        else:
+            balance, equity, currency = account_info
+            self.status.account_info_available = True
 
         self.status = BrokerStatus(connected=True,
                                     account_type="demo" if self._use_demo else "live",
-                                    login=self._account_id,
-                                    balance=balance, equity=equity, currency=currency)
+                                    login=self._account_id, balance=balance,
+                                    equity=equity, currency=currency,
+                                    account_info_available=account_info is not None)
         log.info("cTrader connected: account %s (%s)", self._account_id,
                  "demo" if self._use_demo else "live")
         return self.status.to_dict()
@@ -380,7 +419,7 @@ class CTraderBroker:
         """Convert actual lots/units to cTrader cent volume with safe rounding."""
         return int(max(0, round(raw_volume * 100)))
 
-    def _get_symbol_constraints(self, symbol_id: int, symbol_name: str) -> Dict[str, int]:
+    def _get_symbol_constraints(self, symbol_id: int, symbol_name: str) -> Dict[str, Any]:
         with self._constraints_lock:
             if symbol_id in self._symbol_constraints:
                 return self._symbol_constraints[symbol_id]
@@ -388,14 +427,16 @@ class CTraderBroker:
         try:
             from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASymbolByIdReq
         except ImportError:
-            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+            return {"minVolume": 1, "maxVolume": 10_000_000,
+                    "stepVolume": 1, "digits": None}
 
         req = ProtoOASymbolByIdReq()
         req.ctidTraderAccountId = self._account_id
         req.symbolId.append(symbol_id)
         payload = self._send_and_wait(req)
         if payload is None:
-            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+            return {"minVolume": 1, "maxVolume": 10_000_000,
+                    "stepVolume": 1, "digits": None}
 
         syms = getattr(payload, "symbol", [])
         sym = None
@@ -404,13 +445,17 @@ class CTraderBroker:
         except TypeError:
             sym = syms
         if sym is None:
-            return {"minVolume": 1, "maxVolume": 10_000_000, "stepVolume": 1}
+            return {"minVolume": 1, "maxVolume": 10_000_000,
+                    "stepVolume": 1, "digits": None}
 
         constraints = {
             "minVolume": max(1, getattr(sym, "minVolume", 1)),
             "maxVolume": max(1, getattr(sym, "maxVolume", 10_000_000)),
             "stepVolume": max(1, getattr(sym, "stepVolume", 1)),
+            "digits": getattr(sym, "digits", None),
         }
+        if constraints["digits"] is not None:
+            constraints["digits"] = int(constraints["digits"])
         with self._constraints_lock:
             self._symbol_constraints[symbol_id] = constraints
         return constraints
@@ -424,11 +469,13 @@ class CTraderBroker:
         min_vol = constraints["minVolume"]
         max_vol = constraints["maxVolume"]
         step_vol = constraints["stepVolume"]
-        if step_vol <= 0:
-            step_vol = 1
-
-        steps = round(cents / step_vol)
-        clamped = max(min_vol, min(max_vol, steps * step_vol))
+        clamped = _volume_cents_within_constraints(cents, constraints)
+        if clamped == 0:
+            log.warning(
+                "cTrader: requested volume %d cents is below %s minimum %d cents; "
+                "refusing to increase trade risk",
+                cents, symbol_name, min_vol)
+            return 0
         if clamped != cents:
             log.info(
                 "cTrader: symbol %s volume adjusted from %d to %d cents (min=%d max=%d step=%d)",
@@ -525,7 +572,11 @@ class CTraderBroker:
         if symbol_id is None:
             return {"status": "error", "reason": f"symbol {symbol_name} not found in cTrader symbol list"}
 
-        is_buy = plan["direction"] in ("long", "buy")
+        direction = _normalize_order_direction(plan.get("direction"))
+        if direction is None:
+            return {"status": "rejected",
+                    "reason": f"invalid order direction: {plan.get('direction') or 'missing'}"}
+        is_buy = direction in ("long", "buy")
         try:
             raw_volume = float(plan["size"])
         except (TypeError, ValueError):
@@ -540,11 +591,30 @@ class CTraderBroker:
         req.tradeSide = ProtoOATradeSide.BUY if is_buy else ProtoOATradeSide.SELL
         req.volume = self._clamp_volume(raw_volume, symbol_id, symbol_name)
         if req.volume <= 0:
-            return {"status": "rejected", "reason": "order volume too small for cTrader"}
+            return {"status": "rejected",
+                    "reason": "requested order volume is below cTrader minimum; refusing to upsize"}
         if plan.get("stop") is not None:
-            req.stopLoss = float(plan["stop"])
+            stop = float(plan["stop"])
+            constraints = self._get_symbol_constraints(symbol_id, symbol_name)
+            digits = constraints.get("digits")
+            if not isinstance(digits, int) or digits < 0:
+                return {"status": "error",
+                        "reason": f"cTrader price precision unavailable for {symbol_name}"}
+            req.stopLoss = _round_price_to_digits(stop, digits)
+            if req.stopLoss != stop:
+                log.info("cTrader: rounded %s stop loss from %s to %s (%d digits)",
+                         symbol_name, stop, req.stopLoss, digits)
         if plan.get("target") is not None:
-            req.takeProfit = float(plan["target"])
+            target = float(plan["target"])
+            constraints = self._get_symbol_constraints(symbol_id, symbol_name)
+            digits = constraints.get("digits")
+            if not isinstance(digits, int) or digits < 0:
+                return {"status": "error",
+                        "reason": f"cTrader price precision unavailable for {symbol_name}"}
+            req.takeProfit = _round_price_to_digits(target, digits)
+            if req.takeProfit != target:
+                log.info("cTrader: rounded %s take profit from %s to %s (%d digits)",
+                         symbol_name, target, req.takeProfit, digits)
 
         payload = self._send_and_wait(req)
         if payload is None:
@@ -553,7 +623,10 @@ class CTraderBroker:
         position_id = getattr(getattr(payload, "position", None), "positionId", None)
         fill_price = getattr(getattr(payload, "position", None), "price", None) or getattr(payload, "executionPrice", 0.0)
         if position_id is None:
-            return {"status": "rejected", "reason": getattr(payload, "errorCode", "unknown error")}
+            reason = _execution_error_reason(payload)
+            log.warning("cTrader rejected %s order for %s: %s",
+                        direction, symbol_name, reason)
+            return {"status": "rejected", "reason": reason}
 
         return {"status": "filled", "order": position_id, "price": fill_price,
                 "volume": float(plan["size"]), "sl": plan.get("stop"), "tp": plan.get("target"),
@@ -644,6 +717,8 @@ class CTraderBroker:
         ProtoOAGetPositionUnrealizedPnLReq call not yet built. So a
         kill-switch check using this WILL catch realized losses correctly,
         but won't see an open position's floating drawdown until it closes.
+        On a failed refresh, `account_info_available` is false and the last
+        known numeric balance/equity is retained rather than replaced by zero.
         """
         if not self.status.connected:
             return self.status.to_dict()
@@ -651,17 +726,19 @@ class CTraderBroker:
             from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOATraderReq
         except ImportError:
             return self.status.to_dict()
-        balance, equity, currency = self._fetch_balance(ProtoOATraderReq)
-        self.status.balance = balance
-        self.status.equity = equity
-        self.status.currency = currency
+        account_info = self._fetch_balance(ProtoOATraderReq)
+        self.status.account_info_available = account_info is not None
+        if account_info is not None:
+            balance, equity, currency = account_info
+            self.status.balance = balance
+            self.status.equity = equity
+            self.status.currency = currency
         return self.status.to_dict()
 
-    def _fetch_balance(self, ProtoOATraderReq) -> Tuple[float, float, str]:
+    def _fetch_balance(self, ProtoOATraderReq) -> Optional[Tuple[float, float, str]]:
         """Shared by connect() and account() -- sends ProtoOATraderReq and
-        returns (balance, equity, currency). See account()'s docstring for
-        the honest limitation on what "equity" actually reflects here."""
-        balance, equity, currency = 0.0, 0.0, ""
+        returns (balance, equity, currency), or None if the refresh failed.
+        See account()'s docstring for the honest limitation on equity."""
         try:
             trader = None
             for attempt in (1, 2):
@@ -682,8 +759,9 @@ class CTraderBroker:
                 equity = balance   # no open positions' floating P&L folded in yet — see docstring above
                 deposit_asset_id = getattr(trader, "depositAssetId", None)
                 currency = f"asset_id:{deposit_asset_id}" if deposit_asset_id is not None else ""
+                return balance, equity, currency
             else:
-                log.warning("cTrader: account info fetch timed out twice; balance/equity will show 0.0")
+                log.warning("cTrader: account info fetch timed out twice; keeping last known balance/equity")
         except Exception as exc:
             log.warning("cTrader: could not fetch account balance/equity: %s", exc)
-        return balance, equity, currency
+        return None

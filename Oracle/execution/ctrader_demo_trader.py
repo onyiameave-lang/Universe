@@ -47,10 +47,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import sys
 import time
 import threading
+import concurrent.futures as _cf
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -117,8 +119,9 @@ DEFAULT_SYMBOLS: List[str] = [
 
 _LIVE_PRESET: List[str] = [
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
-    "XAUUSD", "USOIL",
+    "XAUUSD",
     "BTCUSD", "ETHUSD",
+    "VIX", "MSFT", "USDCAD",
 ]
 
 MAX_POSITIONS_PER_SYMBOL: int = 1
@@ -253,23 +256,52 @@ def _load(folder, rel, cls, **kw):
 
 
 def _call_with_timeout(fn, timeout_sec: float) -> Tuple[Any, bool]:
-    result_box: List[Any] = [None]
-    exc_box:    List[Optional[BaseException]] = [None]
+    """Run `fn` with a timeout using a shared ThreadPoolExecutor.
 
-    def _run():
-        try:
-            result_box[0] = fn()
-        except Exception as e:
-            exc_box[0] = e
+    This avoids creating a new thread per symbol call (which can accumulate
+    and exhaust file descriptors). The executor's worker threads may still be
+    blocked by a long-running task, but the total number of threads is bounded
+    by ORACLE_SYMBOL_MAX_WORKERS (default 4).
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    t.join(timeout_sec)
-    if t.is_alive():
+    Returns (result, timed_out). If the function raises, the exception is
+    propagated to the caller. If a timeout occurs, (None, True) is returned.
+    """
+    # Lazy-create a module-level executor so multiple calls share worker threads
+    global _symbol_executor
+    try:
+        _symbol_executor
+    except NameError:
+        max_workers = int(os.getenv("ORACLE_SYMBOL_MAX_WORKERS", "4"))
+        _symbol_executor = _cf.ThreadPoolExecutor(max_workers=max_workers)
+
+    fut = _symbol_executor.submit(fn)
+    try:
+        result = fut.result(timeout=timeout_sec)
+    except _cf.TimeoutError:
+        # Cannot forcibly cancel a running thread; leave it to finish but
+        # report a timeout to the caller so the scan can continue.
         return None, True
-    if exc_box[0] is not None:
-        raise exc_box[0]
-    return result_box[0], False
+    except Exception as exc:
+        # Re-raise any exception from the worker
+        raise
+    return result, False
+
+
+def _duplicate_broker_symbol_mappings(symbols, mapper) -> Dict[str, str]:
+    """Map duplicate canonical symbols to the first canonical using that instrument."""
+    first_by_broker: Dict[str, str] = {}
+    duplicates: Dict[str, str] = {}
+    for symbol in symbols:
+        broker_symbol = mapper.translate(symbol)
+        if broker_symbol is None:
+            continue
+        broker_key = broker_symbol.upper()
+        first = first_by_broker.get(broker_key)
+        if first is None:
+            first_by_broker[broker_key] = symbol
+        else:
+            duplicates[symbol] = first
+    return duplicates
 
 
 class SymbolMapper:
@@ -353,6 +385,14 @@ class SymbolMapper:
         print("────────────────────────────────────────────────────────\n")
 
 
+def _is_trading_disabled_rejection(result: Dict[str, Any]) -> bool:
+    if result.get("status") != "rejected":
+        return False
+    reason = str(result.get("reason", "")).strip()
+    error_code = reason.split(":", 1)[0].strip().upper()
+    return error_code == "TRADING_DISABLED"
+
+
 class CTraderDemoTrader:
     """Demo trader for cTrader. Same pipeline as DemoTrader, CTraderBroker adapter."""
 
@@ -368,6 +408,7 @@ class CTraderDemoTrader:
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
         self._open_context: Dict[str, Dict] = {}
+        self._trading_disabled_symbols = set()
 
         self._symbol_timeout = float(
             os.getenv("ORACLE_SYMBOL_TIMEOUT_SEC", str(_DEFAULT_SYMBOL_TIMEOUT)))
@@ -376,6 +417,7 @@ class CTraderDemoTrader:
         self._ks_equity_ttl = _ks_ttl
         self._ks_equity_cache: Optional[float] = None
         self._ks_equity_ts: float = 0.0
+        self._ks_check_unavailable = False
         self._ks_fired = False
 
         self._sym_mapper = SymbolMapper()
@@ -415,9 +457,22 @@ class CTraderDemoTrader:
     def connect(self):
         status = self.broker.connect()
         if status.get("connected"):
-            self._start_equity = status.get("equity") or status.get("balance")
-            log.info("Connected: %s account, equity %.2f %s",
-                     status["account_type"], self._start_equity or 0, status.get("currency", ""))
+            starting_equity = status.get("equity") or status.get("balance")
+            if (status.get("account_info_available") is True
+                    and isinstance(starting_equity, (int, float))
+                    and math.isfinite(starting_equity)
+                    and starting_equity > 0):
+                self._start_equity = float(starting_equity)
+                self._ks_equity_cache = self._start_equity
+                self._ks_equity_ts = time.time()
+                log.info("Connected: %s account, equity %.2f %s",
+                         status["account_type"], self._start_equity,
+                         status.get("currency", ""))
+            else:
+                self._start_equity = None
+                log.warning(
+                    "Connected to cTrader but initial account equity is unavailable; "
+                    "new entries will wait for a valid account refresh")
             self._build_symbol_map()
             mapped_symbols = [self._sym_mapper.translate(symbol) for symbol in self.symbols]
             try:
@@ -667,7 +722,7 @@ class CTraderDemoTrader:
                       f"{summary['rejects']} reject | {summary['errors']} error | "
                       f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
                         f"{summary['managed']} managed | {summary['market_closed']} not open")
-                if summary["kill_switch"] or self._kill_switch_check():
+                if summary["kill_switch"]:
                     print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
                     print(self._close_all_positions())
                     break
@@ -684,8 +739,14 @@ class CTraderDemoTrader:
         summary = dict(scanned=0, trades=0, holds=0, rejects=0,
                    errors=0, timeouts=0, unmapped=0, managed=0,
                    market_closed=0, kill_switch=False)
+        duplicate_mappings = _duplicate_broker_symbol_mappings(
+            self.symbols, self._sym_mapper)
         if self._kill_switch_check():
             summary["kill_switch"] = True
+            return summary
+        if self._ks_check_unavailable:
+            summary["errors"] += 1
+            log.warning("Skipping new entries because cTrader account equity is unavailable")
             return summary
         open_positions = []
         if self.broker.status.connected:
@@ -704,10 +765,24 @@ class CTraderDemoTrader:
             if self._kill_switch_check():
                 summary["kill_switch"] = True
                 return summary
+            if self._ks_check_unavailable:
+                summary["errors"] += 1
+                log.warning("Stopping scan because cTrader account equity is unavailable")
+                return summary
             broker_sym = self._sym_mapper.translate(symbol)
             if broker_sym is None:
                 print(f"[{symbol}] UNMAPPED — add BROKER_SYMBOL_MAP={symbol}:<name> to .env")
                 summary["unmapped"] += 1
+                continue
+            duplicate_of = duplicate_mappings.get(symbol)
+            if duplicate_of is not None:
+                log.warning(
+                    "[%s->%s] duplicate broker mapping; already scanning %s for this instrument",
+                    symbol, broker_sym, duplicate_of,
+                )
+                print(f"[{symbol}->{broker_sym}] SKIP duplicate broker mapping "
+                      f"(covered by {duplicate_of})")
+                summary["holds"] += 1
                 continue
             summary["scanned"] += 1
             existing_pos = self._get_open_position(broker_sym, open_positions)
@@ -722,6 +797,13 @@ class CTraderDemoTrader:
                     self._register_position(symbol, direction, entry_price=entry_price,
                                              stop=sl, target=tp, confidence=0.5,
                                              size=existing_pos.get("volume", 0.0))
+                continue
+            if broker_sym.upper() in self._trading_disabled_symbols:
+                log.info("[%s->%s] new entry skipped — cTrader previously reported "
+                         "TRADING_DISABLED for this instrument",
+                         symbol, broker_sym)
+                print(f"[{symbol}->{broker_sym}] SKIP trading disabled by cTrader")
+                summary["market_closed"] += 1
                 continue
             if len(open_positions) >= self.max_trades:
                 log.info("[%s] new entry skipped — max open positions reached; "
@@ -797,6 +879,15 @@ class CTraderDemoTrader:
                         volume=result.get("volume", plan.get("size", 0)),
                         price=result.get("price", 0.0),
                         sl=plan.get("stop", 0.0), tp=plan.get("target", 0.0))
+                    open_positions.append({
+                        "symbol": broker_sym,
+                        "ticket": ticket,
+                        "type": "buy" if plan["direction"] in ("long", "buy") else "sell",
+                        "price_open": result.get("price") or plan.get("entry", 0.0),
+                        "volume": result.get("volume", plan.get("size", 0.0)),
+                        "sl": plan.get("stop", 0.0),
+                        "tp": plan.get("target", 0.0),
+                    })
                     self._register_position(symbol, plan["direction"],
                         entry_price=result.get("price") or plan.get("entry", 0.0),
                         stop=plan.get("stop", 0.0), target=plan.get("target", 0.0),
@@ -809,24 +900,52 @@ class CTraderDemoTrader:
                     self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:
                     summary["rejects"] += 1
+                    if _is_trading_disabled_rejection(result):
+                        self._trading_disabled_symbols.add(broker_sym.upper())
+                        log.warning(
+                            "[%s->%s] cTrader disabled new trading; suppressing further "
+                            "entry attempts for this instrument until trader restart",
+                            symbol, broker_sym,
+                        )
             else:
                 print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  (cTrader not connected)")
                 summary["trades"] += 1
+        if self._kill_switch_check():
+            summary["kill_switch"] = True
+        elif self._ks_check_unavailable:
+            summary["errors"] += 1
         return summary
 
     def _kill_switch_check(self):
         if self._ks_fired:
             return True
-        if self._start_equity is None or not self.broker.status.connected:
+        self._ks_check_unavailable = False
+        if not self.broker.status.connected:
             return False
         _now = time.time()
-        if self._ks_equity_cache is None or (_now - self._ks_equity_ts) >= self._ks_equity_ttl:
+        if (self._start_equity is None or self._ks_equity_cache is None
+                or (_now - self._ks_equity_ts) >= self._ks_equity_ttl):
             acct = self.broker.account()
-            self._ks_equity_cache = acct.get("equity", self._start_equity)
+            equity = acct.get("equity")
+            if (acct.get("account_info_available") is not True
+                    or not isinstance(equity, (int, float))
+                    or not math.isfinite(equity)
+                    or equity <= 0):
+                self._ks_check_unavailable = True
+                log.warning(
+                    "Kill-switch check deferred: cTrader returned no valid account equity; "
+                    "retaining last known value")
+                return False
+            if self._start_equity is None:
+                self._start_equity = float(equity)
+                log.info("Starting session equity baseline set to %.2f", self._start_equity)
+            self._ks_equity_cache = float(equity)
             self._ks_equity_ts = _now
         equity = self._ks_equity_cache
-        loss = (self._start_equity - equity) / self._start_equity if self._start_equity else 0
+        if self._start_equity is None:
+            return False
+        loss = (self._start_equity - equity) / self._start_equity
         if loss >= self.session_max_loss_pct:
             self._ks_fired = True
         return self._ks_fired

@@ -39,10 +39,13 @@ and handing them to `NewsImpactClassifier.assess()`.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger("oracle.news_impact")
 
 
 # Event categories (from Sentinel's intelligence.analysis.EVENT_TYPES) that
@@ -218,6 +221,8 @@ def assess_news_impact(sentinel_client, symbol: str,
         result = sentinel_client.act("news.credibility", {"topics": [symbol], "_sender": "news_impact"})
         articles = result.get("articles", []) if isinstance(result, dict) else []
     except Exception as exc:
+        log.warning("Sentinel news check failed for %s; skipping assessment: %s",
+                    symbol, exc, exc_info=True)
         return NewsImpactAssessment(
             level="none", confidence_multiplier=1.0, size_multiplier=1.0,
             pause_new_entries=False, reason=f"news fetch failed ({exc}) — news check skipped")

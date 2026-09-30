@@ -342,19 +342,25 @@ class TradeLearningEngine:
             pnl_r = (pos.entry_price - exit_price) / risk_per_unit
         won = pnl_r > 0
         duration_sec = max(0.0, time.time() - pos.entry_time)
+        realized_direction = (
+            1 if exit_price > pos.entry_price
+            else -1 if exit_price < pos.entry_price
+            else 0
+        )
 
         # 1. Feed the realized outcome back into adaptive fusion so
         #    per-stream trust weights adapt (winning and losing trades both
         #    teach it something, per the roadmap).
-        try:
-            oracle_agent.act("fusion.learn", {
-                "symbol": pos.symbol,
-                "streams": pos.entry_streams,
-                "realized_direction": 1 if won else -1,
-                "_sender": "trade_learning",
-            })
-        except Exception as exc:
-            log.warning("[%s] fusion.learn failed: %s", pos.symbol, exc)
+        if realized_direction:
+            try:
+                oracle_agent.act("fusion.learn", {
+                    "symbol": pos.symbol,
+                    "streams": pos.entry_streams,
+                    "realized_direction": realized_direction,
+                    "_sender": "trade_learning",
+                })
+            except Exception as exc:
+                log.warning("[%s] fusion.learn failed: %s", pos.symbol, exc)
 
         # 2. Grade Sentinel's news terms (Tier 0 self-improvement) against
         #    what price ACTUALLY did between entry and exit — independent

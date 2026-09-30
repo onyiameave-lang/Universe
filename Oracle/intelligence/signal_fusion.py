@@ -20,7 +20,10 @@ LOWER confidence (honest uncertainty), agreement raises it.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger("oracle.signal_fusion")
 
 
 class SignalFusion:
@@ -74,7 +77,8 @@ class SignalFusion:
                    "cross_source": s.get("cross_source", False),
                    "articles": s.get("article_count", 0)}
         except Exception:
-                return {"direction": 0.0, "confidence": 0.0,
+            log.warning("Sentinel sentiment request failed for %s", symbol, exc_info=True)
+            return {"direction": 0.0, "confidence": 0.0,
                     "evidence_state": "degraded", "note": "sentinel error"}
 
     def _social_signal(self, symbol: str) -> Dict[str, Any]:
@@ -92,7 +96,8 @@ class SignalFusion:
                    "posts": s.get("post_count", 0),
                    "manipulation_warning": s.get("manipulation_warning", False)}
         except Exception:
-                return {"direction": 0.0, "confidence": 0.0,
+            log.warning("Pulse sentiment request failed for %s", symbol, exc_info=True)
+            return {"direction": 0.0, "confidence": 0.0,
                     "evidence_state": "degraded", "note": "pulse error"}
 
     def _memory_signal(self, symbol: str, regime: str) -> Dict[str, Any]:

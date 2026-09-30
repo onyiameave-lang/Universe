@@ -22,8 +22,11 @@ same way in trade.propose and in the Continuous Trade Manager.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger("oracle.social_risk")
 
 
 @dataclass
@@ -94,6 +97,8 @@ def assess_social_risk(pulse_client, symbol: str,
                                                             "_sender": "social_risk"})
         flags = result.get("manipulation_flags", []) if isinstance(result, dict) else []
     except Exception as exc:
+        log.warning("Pulse social-risk check failed for %s; skipping assessment: %s",
+                    symbol, exc, exc_info=True)
         return SocialRiskAssessment(
             level="none", confidence_multiplier=1.0, size_multiplier=1.0,
             pause_new_entries=False, reason=f"social check failed ({exc}) — skipped")

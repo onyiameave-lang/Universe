@@ -17,6 +17,7 @@ FIX-HYBRID-01: hybrid_retriever observer — notified on add/update so SBERT
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -26,6 +27,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core.embeddings import cosine_similarity  # type: ignore
 from core.memory_record import MemoryRecord      # type: ignore
+
+log = logging.getLogger("chronicle.vector_store")
 
 try:
     import numpy as _np
