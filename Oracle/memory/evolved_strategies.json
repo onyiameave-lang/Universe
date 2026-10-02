@@ -5713,21 +5713,21 @@
     "symbol": "FTSE"
   },
   "FTSE::trending_down": {
-    "certified_at": 1790951823.8013566,
-    "generation": 72,
+    "certified_at": 1790973159.0777228,
+    "generation": 102,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0406,
-      "best_sharpe": 6.026,
-      "fitness": 10.2788,
-      "generation": 72,
-      "genome_id": "mut-ec5fe3",
+      "best_return": 0.0199,
+      "best_sharpe": 0.463,
+      "fitness": 6.3441,
+      "generation": 102,
+      "genome_id": "mut-7580a3",
       "modules": {
         "entry": {
-          "logic_type": "default",
+          "logic_type": "adaptive",
           "params": {
-            "confirmation_required": 1,
-            "threshold": 0.5
+            "base_threshold": 0.234,
+            "regime_bonus": 0.088
           }
         },
         "execution": {
@@ -5735,11 +5735,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "default",
+          "logic_type": "time_exit",
           "params": {
-            "atr_override": null,
-            "sl_mult": 1.319,
-            "tp_mult": 3.523
+            "max_bars": 20,
+            "sl_mult": 1.935,
+            "tp_mult": 3.083
           }
         },
         "market_regime": {
@@ -5754,19 +5754,15 @@
           }
         },
         "momentum": {
-          "logic_type": "stochastic",
+          "logic_type": "adx_strength",
           "params": {
-            "d_period": 3,
-            "k_period": 12,
-            "lower": 25,
-            "upper": 69
+            "period": 14,
+            "threshold": 20
           }
         },
         "position": {
-          "logic_type": "volatility_adjusted",
-          "params": {
-            "base_risk": 0.01
-          }
+          "logic_type": "default",
+          "params": {}
         },
         "risk": {
           "logic_type": "default",
@@ -5779,43 +5775,42 @@
         "trend": {
           "logic_type": "sma_crossover",
           "params": {
-            "fast": 22,
-            "slow": 35
+            "fast": 16,
+            "slow": 40
           }
         },
         "volatility": {
-          "logic_type": "atr_contraction",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "contraction_ratio": 0.7,
-            "period": 14
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-17e952"
+        "xov-c62d9d"
       ]
     },
     "in_sample": {
-      "fitness": 10.2788,
-      "return": 0.0406
+      "fitness": 6.3441,
+      "return": 0.0199
     },
     "out_of_sample": {
-      "avg_pnl": 61.16,
+      "avg_pnl": 66.72,
       "consistency": 0.5,
-      "expectancy": 61.16,
-      "final_equity": 10122.31,
+      "expectancy": 66.72,
+      "final_equity": 10133.45,
       "max_drawdown": 0.0,
-      "profit_factor": 5.417,
+      "profit_factor": 9.063,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 0.688,
-      "sortino_proxy": 3.123,
+      "sharpe_proxy": 0.801,
+      "sortino_proxy": 5.702,
       "status": "complete",
-      "total_return": 0.0122,
+      "total_return": 0.0133,
       "trades": 2,
       "win_rate": 0.5
     },
     "parents": [
-      "xov-17e952"
+      "xov-c62d9d"
     ],
     "regime": "trending_down",
     "symbol": "FTSE"
@@ -8637,15 +8632,15 @@
     "symbol": "JPN225"
   },
   "JPN225::ranging": {
-    "certified_at": 1790256497.863247,
-    "generation": 18,
+    "certified_at": 1790973253.0481486,
+    "generation": 20,
     "genome": {
-      "backtests": 8,
-      "best_return": 0.0459,
-      "best_sharpe": 0.704,
-      "fitness": 9.5117,
-      "generation": 18,
-      "genome_id": "mut-c9808e",
+      "backtests": 23,
+      "best_return": 0.0249,
+      "best_sharpe": 0.36,
+      "fitness": 5.6217,
+      "generation": 20,
+      "genome_id": "mut-e35078",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -8701,7 +8696,7 @@
           "logic_type": "vwap_trend",
           "params": {
             "period": 20,
-            "slow": 44
+            "slow": 38
           }
         },
         "volatility": {
@@ -8712,30 +8707,30 @@
         }
       },
       "parents": [
-        "xov-1b9c17"
+        "seed-1c107c"
       ]
     },
     "in_sample": {
-      "fitness": 9.5117,
-      "return": 0.0459
+      "fitness": 5.6217,
+      "return": 0.0249
     },
     "out_of_sample": {
-      "avg_pnl": 21.03,
+      "avg_pnl": 119.71,
       "consistency": 1.0,
-      "expectancy": 21.03,
-      "final_equity": 10021.03,
+      "expectancy": 119.71,
+      "final_equity": 10119.71,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
       "sharpe_proxy": 0.0,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0021,
+      "total_return": 0.012,
       "trades": 1,
       "win_rate": 1.0
     },
     "parents": [
-      "xov-1b9c17"
+      "seed-1c107c"
     ],
     "regime": "ranging",
     "symbol": "JPN225"
@@ -11683,22 +11678,21 @@
     "symbol": "UK100"
   },
   "UK100::trending_down": {
-    "certified_at": 1790867875.6890132,
-    "generation": 174,
+    "certified_at": 1790973244.021771,
+    "generation": 204,
     "genome": {
-      "backtests": 15,
-      "best_return": 0.0258,
-      "best_sharpe": 0.937,
-      "fitness": 6.1264,
-      "generation": 174,
-      "genome_id": "mut-6dd415",
+      "backtests": 30,
+      "best_return": 0.0459,
+      "best_sharpe": 0.92,
+      "fitness": 11.0116,
+      "generation": 204,
+      "genome_id": "mut-7fe3bf",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.231,
-            "regime_bonus": 0.086,
-            "threshold": 0.5
+            "base_threshold": 0.299,
+            "regime_bonus": 0.105
           }
         },
         "execution": {
@@ -11708,9 +11702,9 @@
         "exit": {
           "logic_type": "time_exit",
           "params": {
-            "max_bars": 26,
-            "sl_mult": 1.706,
-            "tp_mult": 3.256
+            "max_bars": 24,
+            "sl_mult": 2.027,
+            "tp_mult": 5.029
           }
         },
         "market_regime": {
@@ -11725,11 +11719,11 @@
           }
         },
         "momentum": {
-          "logic_type": "cci",
+          "logic_type": "rsi",
           "params": {
-            "lower": 15,
-            "period": 21,
-            "upper": 85
+            "lower": 27,
+            "period": 18,
+            "upper": 69
           }
         },
         "position": {
@@ -11748,41 +11742,39 @@
           "logic_type": "sma_crossover",
           "params": {
             "fast": 17,
-            "slow": 39
+            "slow": 26
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
-          "params": {
-            "period": 20
-          }
+          "logic_type": "default",
+          "params": {}
         }
       },
       "parents": [
-        "xov-b5b710"
+        "xov-03927f"
       ]
     },
     "in_sample": {
-      "fitness": 6.1264,
-      "return": 0.0258
+      "fitness": 11.0116,
+      "return": 0.0459
     },
     "out_of_sample": {
-      "avg_pnl": 75.0,
+      "avg_pnl": 66.72,
       "consistency": 0.5,
-      "expectancy": 75.0,
-      "final_equity": 10150.0,
+      "expectancy": 66.72,
+      "final_equity": 10133.45,
       "max_drawdown": 0.0,
-      "profit_factor": null,
+      "profit_factor": 9.063,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 1.0,
-      "sortino_proxy": 0.0,
+      "sharpe_proxy": 0.801,
+      "sortino_proxy": 5.702,
       "status": "complete",
-      "total_return": 0.015,
+      "total_return": 0.0133,
       "trades": 2,
       "win_rate": 0.5
     },
     "parents": [
-      "xov-b5b710"
+      "xov-03927f"
     ],
     "regime": "trending_down",
     "symbol": "UK100"
