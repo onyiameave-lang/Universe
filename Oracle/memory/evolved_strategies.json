@@ -1334,21 +1334,21 @@
     "symbol": "AUDJPY"
   },
   "AUDNZD::ranging": {
-    "certified_at": 1790916418.377881,
-    "generation": 28,
+    "certified_at": 1791033064.5326967,
+    "generation": 54,
     "genome": {
-      "backtests": 15,
+      "backtests": 30,
       "best_return": 0.0167,
       "best_sharpe": 1.254,
-      "fitness": 9.7523,
-      "generation": 28,
-      "genome_id": "mut-bdca1d",
+      "fitness": 9.8723,
+      "generation": 54,
+      "genome_id": "mut-87fd9d",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.22,
-            "regime_bonus": 0.089,
+            "base_threshold": 0.217,
+            "regime_bonus": 0.082,
             "threshold": 0.5
           }
         },
@@ -1359,9 +1359,9 @@
         "exit": {
           "logic_type": "trailing_atr",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "sl_mult": 1.852,
+            "tp_mult": 5.539,
+            "trail_mult": 1.41
           }
         },
         "market_regime": {
@@ -1378,8 +1378,8 @@
         "momentum": {
           "logic_type": "adx_strength",
           "params": {
-            "period": 13,
-            "threshold": 21
+            "period": 12,
+            "threshold": 19
           }
         },
         "position": {
@@ -1395,45 +1395,45 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "sma_crossover",
           "params": {
-            "lookback": 19,
+            "fast": 18,
             "slow": 49
           }
         },
         "volatility": {
-          "logic_type": "atr_expansion",
+          "logic_type": "atr_contraction",
           "params": {
-            "expansion_ratio": 1.2,
+            "contraction_ratio": 0.7,
             "period": 14
           }
         }
       },
       "parents": [
-        "xov-40c3a2"
+        "xov-336783"
       ]
     },
     "in_sample": {
-      "fitness": 9.7523,
+      "fitness": 9.8723,
       "return": 0.0167
     },
     "out_of_sample": {
-      "avg_pnl": 32.75,
+      "avg_pnl": 35.81,
       "consistency": 0.667,
-      "expectancy": 32.75,
-      "final_equity": 10098.25,
+      "expectancy": 35.81,
+      "final_equity": 10107.44,
       "max_drawdown": 0.01,
-      "profit_factor": 1.982,
-      "recovery_factor": 0.983,
-      "sharpe_proxy": 0.321,
-      "sortino_proxy": 0.567,
+      "profit_factor": 2.074,
+      "recovery_factor": 1.074,
+      "sharpe_proxy": 0.349,
+      "sortino_proxy": 0.62,
       "status": "complete",
-      "total_return": 0.0098,
+      "total_return": 0.0107,
       "trades": 3,
       "win_rate": 0.667
     },
     "parents": [
-      "xov-40c3a2"
+      "xov-336783"
     ],
     "regime": "ranging",
     "symbol": "AUDNZD"
