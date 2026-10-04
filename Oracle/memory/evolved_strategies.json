@@ -3546,6 +3546,112 @@
     "regime": "high_volatility",
     "symbol": "CHFJPY"
   },
+  "CHFJPY::ranging": {
+    "certified_at": 1791141612.9685416,
+    "generation": 22,
+    "genome": {
+      "backtests": 15,
+      "best_return": 0.0448,
+      "best_sharpe": 1.605,
+      "fitness": 18.1315,
+      "generation": 22,
+      "genome_id": "mut-ac6089",
+      "modules": {
+        "entry": {
+          "logic_type": "adaptive",
+          "params": {
+            "base_threshold": 0.204,
+            "regime_bonus": 0.099,
+            "threshold": 0.222
+          }
+        },
+        "execution": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "exit": {
+          "logic_type": "trailing_atr",
+          "params": {
+            "sl_mult": 1.824,
+            "tp_mult": 5.117,
+            "trail_mult": 1.468
+          }
+        },
+        "market_regime": {
+          "logic_type": "default",
+          "params": {
+            "allowed_regimes": [
+              "trending_up",
+              "trending_down",
+              "ranging",
+              "high_volatility"
+            ]
+          }
+        },
+        "momentum": {
+          "logic_type": "williams_r",
+          "params": {
+            "lower": 15,
+            "period": 15,
+            "upper": 60
+          }
+        },
+        "position": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "risk": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trade_management": {
+          "logic_type": "default",
+          "params": {}
+        },
+        "trend": {
+          "logic_type": "sma_crossover",
+          "params": {
+            "fast": 23,
+            "slow": 49
+          }
+        },
+        "volatility": {
+          "logic_type": "atr_expansion",
+          "params": {
+            "expansion_ratio": 1.2,
+            "period": 14
+          }
+        }
+      },
+      "parents": [
+        "xov-4372e6"
+      ]
+    },
+    "in_sample": {
+      "fitness": 18.1315,
+      "return": 0.0448
+    },
+    "out_of_sample": {
+      "avg_pnl": 39.79,
+      "consistency": 0.5,
+      "expectancy": 39.79,
+      "final_equity": 10238.7,
+      "max_drawdown": 0.01,
+      "profit_factor": 2.118,
+      "recovery_factor": 2.387,
+      "sharpe_proxy": 0.346,
+      "sortino_proxy": 0.675,
+      "status": "complete",
+      "total_return": 0.0239,
+      "trades": 6,
+      "win_rate": 0.5
+    },
+    "parents": [
+      "xov-4372e6"
+    ],
+    "regime": "ranging",
+    "symbol": "CHFJPY"
+  },
   "CHFJPY::trending_down": {
     "certified_at": 1790800790.4225585,
     "generation": 68,
