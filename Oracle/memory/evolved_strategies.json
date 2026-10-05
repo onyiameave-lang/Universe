@@ -775,7 +775,7 @@
           "logic_type": "price_above_sma",
           "params": {
             "period": 50,
-            "slow": 49
+            "slow": 48
           }
         },
         "volatility": {
@@ -5577,7 +5577,7 @@
           "logic_type": "sma_crossover",
           "params": {
             "fast": 23,
-            "slow": 49
+            "slow": 48
           }
         },
         "volatility": {
@@ -10494,7 +10494,7 @@
           "logic_type": "ichimoku_cloud",
           "params": {
             "kijun": 26,
-            "slow": 49,
+            "slow": 48,
             "tenkan": 9
           }
         },
@@ -13985,21 +13985,21 @@
     "symbol": "VIX"
   },
   "XAGUSD::high_volatility": {
-    "certified_at": 1789586901.1625946,
-    "generation": 70,
+    "certified_at": 1791175640.1767774,
+    "generation": 100,
     "genome": {
-      "backtests": 10,
-      "best_return": 0.0297,
-      "best_sharpe": 0.523,
-      "fitness": 7.5634,
-      "generation": 70,
-      "genome_id": "mut-f96f41",
+      "backtests": 25,
+      "best_return": 0.0408,
+      "best_sharpe": 0.517,
+      "fitness": 7.5303,
+      "generation": 100,
+      "genome_id": "mut-89c665",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.224,
-            "regime_bonus": 0.137,
+            "base_threshold": 0.214,
+            "regime_bonus": 0.138,
             "threshold": 0.5
           }
         },
@@ -14008,11 +14008,10 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "atr_stops",
           "params": {
-            "lookback": 10,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "sl_mult": 2.5,
+            "tp_mult": 5.0
           }
         },
         "market_regime": {
@@ -14027,9 +14026,11 @@
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "rsi",
           "params": {
-            "lookback": 11
+            "lower": 30,
+            "period": 15,
+            "upper": 68
           }
         },
         "position": {
@@ -14047,42 +14048,43 @@
         "trend": {
           "logic_type": "hma_slope",
           "params": {
-            "period": 19,
-            "slow": 32
+            "period": 18,
+            "slow": 34
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "atr_expansion",
           "params": {
-            "period": 20
+            "expansion_ratio": 1.2,
+            "period": 14
           }
         }
       },
       "parents": [
-        "xov-782fea"
+        "xov-ebf545"
       ]
     },
     "in_sample": {
-      "fitness": 7.5634,
-      "return": 0.0297
+      "fitness": 7.5303,
+      "return": 0.0408
     },
     "out_of_sample": {
-      "avg_pnl": 80.97,
+      "avg_pnl": 113.67,
       "consistency": 0.75,
-      "expectancy": 80.97,
-      "final_equity": 10323.86,
-      "max_drawdown": 0.01,
-      "profit_factor": 4.239,
-      "recovery_factor": 3.239,
-      "sharpe_proxy": 0.771,
-      "sortino_proxy": 1.619,
+      "expectancy": 113.67,
+      "final_equity": 10454.69,
+      "max_drawdown": 0.0,
+      "profit_factor": 218.555,
+      "recovery_factor": 0.0,
+      "sharpe_proxy": 1.7,
+      "sortino_proxy": 108.778,
       "status": "complete",
-      "total_return": 0.0324,
+      "total_return": 0.0455,
       "trades": 4,
       "win_rate": 0.75
     },
     "parents": [
-      "xov-782fea"
+      "xov-ebf545"
     ],
     "regime": "high_volatility",
     "symbol": "XAGUSD"
