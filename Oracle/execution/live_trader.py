@@ -56,8 +56,6 @@ v3 additions (broker symbol mapping):
   FIX-9  _tick() translates every Oracle symbol to its broker symbol before
          calling broker.place_order().  Symbols that cannot be mapped are
          skipped with a clear [SYMBOL] UNMAPPED warning.
-  FIX-10 _learn_from_closed() uses broker symbol for position lookup but
-         reports back to Oracle with the canonical symbol name.
 
 v4 additions (broker_symbol key / mt5_broker.py v2 integration):
   FIX-11 _tick() now sets plan["broker_symbol"] = broker_sym as a SEPARATE
@@ -674,10 +672,11 @@ class LiveTrader:
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual close)")
-                    if not outcome.won:
-                        # Reduce Overtrading (roadmap Phase 2 item 6):
-                        # start the post-loss cooldown for this symbol.
-                        self.oracle.risk.portfolio.record_loss(symbol)
+                    if outcome is not None:
+                        if outcome.won:
+                            self.oracle.risk.portfolio.record_win(symbol)
+                        else:
+                            self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -753,8 +752,11 @@ class LiveTrader:
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
-                            if not outcome.won:
-                                self.oracle.risk.portfolio.record_loss(symbol)
+                            if outcome is not None:
+                                if outcome.won:
+                                    self.oracle.risk.portfolio.record_win(symbol)
+                                else:
+                                    self.oracle.risk.portfolio.record_loss(symbol)
                         except Exception as exc:
                             log.warning("[%s] Demo Trade Learning failed on CTM close: %s",
                                         symbol, exc)
@@ -839,7 +841,6 @@ class LiveTrader:
         except KeyboardInterrupt:
             print("\nStopped by user.")
         finally:
-            self._learn_from_closed()
             self.shutdown()
 
     # ── per-cycle tick ────────────────────────────────────────────────────────
@@ -1069,21 +1070,6 @@ class LiveTrader:
         return self._ks_fired
 
     # ── learning ──────────────────────────────────────────────────────────────
-
-    def _learn_from_closed(self) -> None:
-        """Feed realized direction of closed positions back into adaptive fusion."""
-        for canon_sym, streams in self._open_context.items():
-            # FIX-10: look up positions using the broker symbol, but report back
-            # to Oracle using the canonical name so AdaptiveFusion keys match.
-            broker_sym = self._sym_mapper.translate(canon_sym) or canon_sym
-            poss = [p for p in self.broker.positions()
-                    if p["symbol"].upper().startswith(broker_sym[:6].upper())]
-            if not poss:
-                continue
-            realized = 1 if sum(p["profit"] for p in poss) >= 0 else -1
-            self.oracle.act("fusion.learn", {"symbol": canon_sym, "streams": streams,
-                                            "realized_direction": realized,
-                                            "_sender": "live_trader"})
 
     # ── external controls ─────────────────────────────────────────────────────
 

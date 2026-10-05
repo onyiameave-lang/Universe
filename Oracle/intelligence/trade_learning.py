@@ -342,6 +342,11 @@ class TradeLearningEngine:
             pnl_r = (pos.entry_price - exit_price) / risk_per_unit
         won = pnl_r > 0
         duration_sec = max(0.0, time.time() - pos.entry_time)
+        realized_direction = (
+            1 if exit_price > pos.entry_price
+            else -1 if exit_price < pos.entry_price
+            else 0
+        )
 
         # 1. Feed the realized outcome back into adaptive fusion so
         #    per-stream trust weights adapt (winning and losing trades both
@@ -350,7 +355,8 @@ class TradeLearningEngine:
             oracle_agent.act("fusion.learn", {
                 "symbol": pos.symbol,
                 "streams": pos.entry_streams,
-                "realized_direction": 1 if won else -1,
+                "realized_direction": realized_direction,
+                "trade_won": won,
                 "_sender": "trade_learning",
             })
         except Exception as exc:

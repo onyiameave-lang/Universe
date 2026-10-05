@@ -15,7 +15,7 @@ Commands:
   champion <S>       show the regime-aware champion
   backtest <S>       walk-forward validation
   propose <S>        risk-gated trade plan
-  learn <S> <+1/-1>  feed a realized outcome so fusion weights adapt
+  learn <S> <+1/-1> <win/loss>  feed price direction and trade result
   portfolio | status | quit
 """
 from __future__ import annotations
@@ -202,7 +202,7 @@ def main():
     print(f" Paper trading: {agent.risk.paper} | Sentinel:{sentinel is not None} "
           f"Pulse:{pulse is not None} Chronicle:{chronicle is not None}")
     print(" Commands: signal <S> | evolve <S> [gens] | research <S> [gens] | hypotheses <S> |")
-    print("           champion <S> | backtest <S> | propose <S> | learn <S> <+1/-1> | portfolio | status | benchmark | quit")
+    print("           champion <S> | backtest <S> | propose <S> | learn <S> <+1/-1> <win/loss> | portfolio | status | benchmark | quit")
 
     last_streams = {}
     while True:
@@ -370,10 +370,17 @@ def main():
                 out.pop("_streams", None)
                 print(json.dumps(out, indent=2))
 
-            elif cmd == "learn" and len(parts) >= 3:
-                rd = 1 if parts[2].strip() in ("+1", "1", "up") else -1
+            elif cmd == "learn" and len(parts) >= 4:
+                direction = parts[2].strip().lower()
+                result = parts[3].strip().lower()
+                if direction not in ("+1", "1", "up", "-1", "down") \
+                        or result not in ("win", "loss"):
+                    print("Usage: learn <symbol> <+1/-1> <win/loss>")
+                    continue
+                rd = 1 if direction in ("+1", "1", "up") else -1
                 print(json.dumps(agent.act("fusion.learn",
-                                           {"symbol": parts[1], "streams": last_streams, "realized_direction": rd,
+                                           {"symbol": parts[1], "streams": last_streams,
+                                            "realized_direction": rd, "trade_won": result == "win",
                                             "_sender": "user"}), indent=2))
 
             elif cmd == "portfolio":

@@ -362,8 +362,13 @@ class OracleAgent(BaseAgent):
             return self.risk.open_position(plan) if plan else \
                 {"status": "error", "message": "no plan; run trade.propose"}
         if task == "fusion.learn":
+            trade_won = ctx.get("trade_won")
+            if not isinstance(trade_won, bool):
+                return {"status": "error",
+                        "message": "fusion.learn requires the realized trade_won boolean"}
             return {"status": "complete", **self.fusion.learn_from_outcome(
-                symbol, ctx.get("streams", {}), ctx.get("realized_direction", 0))}
+                symbol, ctx.get("streams", {}), ctx.get("realized_direction", 0),
+                trade_won=trade_won)}
         if task == "risk.assess":
             return {"status": "complete", "risk": self.risk.evaluate(
                 symbol, ctx.get("direction", "long"), ctx.get("entry", 0),

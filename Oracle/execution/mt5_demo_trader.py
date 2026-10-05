@@ -575,8 +575,11 @@ class DemoTrader:
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual close)")
-                    if not outcome.won:
-                        self.oracle.risk.portfolio.record_loss(symbol)
+                    if outcome is not None:
+                        if outcome.won:
+                            self.oracle.risk.portfolio.record_win(symbol)
+                        else:
+                            self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -652,8 +655,11 @@ class DemoTrader:
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
-                            if not outcome.won:
-                                self.oracle.risk.portfolio.record_loss(symbol)
+                            if outcome is not None:
+                                if outcome.won:
+                                    self.oracle.risk.portfolio.record_win(symbol)
+                                else:
+                                    self.oracle.risk.portfolio.record_loss(symbol)
                         except Exception as exc:
                             log.warning("[%s] Demo Trade Learning failed on CTM close: %s",
                                         symbol, exc)
@@ -735,7 +741,6 @@ class DemoTrader:
         except KeyboardInterrupt:
             print("\nStopped by user.")
         finally:
-            self._learn_from_closed()
             self.shutdown()
 
     # ── per-cycle tick ────────────────────────────────────────────────────────
@@ -934,18 +939,6 @@ class DemoTrader:
         return self._ks_fired
 
     # ── learning ──────────────────────────────────────────────────────────────
-
-    def _learn_from_closed(self) -> None:
-        for canon_sym, streams in self._open_context.items():
-            broker_sym = self._sym_mapper.translate(canon_sym) or canon_sym
-            poss = [p for p in self.broker.positions()
-                    if p["symbol"].upper().startswith(broker_sym[:6].upper())]
-            if not poss:
-                continue
-            realized = 1 if sum(p["profit"] for p in poss) >= 0 else -1
-            self.oracle.act("fusion.learn", {"symbol": canon_sym, "streams": streams,
-                                             "realized_direction": realized,
-                                             "_sender": "demo_trader"})
 
     # ── external controls ─────────────────────────────────────────────────────
 
