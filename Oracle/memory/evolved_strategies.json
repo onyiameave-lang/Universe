@@ -1503,7 +1503,7 @@
           "logic_type": "price_above_sma",
           "params": {
             "period": 50,
-            "slow": 49
+            "slow": 48
           }
         },
         "volatility": {
@@ -8750,22 +8750,22 @@
     "symbol": "JPM"
   },
   "JPN225::high_volatility": {
-    "certified_at": 1790916609.929951,
-    "generation": 26,
+    "certified_at": 1791219602.6848683,
+    "generation": 2,
     "genome": {
-      "backtests": 3,
-      "best_return": 0.0249,
-      "best_sharpe": 0.36,
-      "fitness": 5.6217,
-      "generation": 26,
-      "genome_id": "mut-92c7ff",
+      "backtests": 2,
+      "best_return": 0.031,
+      "best_sharpe": 0.457,
+      "fitness": 6.7687,
+      "generation": 2,
+      "genome_id": "mut-8dd3ef",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.237,
-            "regime_bonus": 0.109,
-            "threshold": 0.5
+            "base_threshold": 0.226,
+            "regime_bonus": 0.1,
+            "threshold": 0.226
           }
         },
         "execution": {
@@ -8773,11 +8773,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "swing_stops",
           "params": {
-            "sl_mult": 1.5,
-            "tp_mult": 5.0,
-            "trail_mult": 1.375
+            "lookback": 10,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
@@ -8795,7 +8795,7 @@
           "logic_type": "adx_strength",
           "params": {
             "period": 14,
-            "threshold": 26
+            "threshold": 20
           }
         },
         "position": {
@@ -8811,42 +8811,45 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ema_slope",
+          "logic_type": "sma_crossover",
           "params": {
-            "period": 18,
-            "slow": 43
+            "fast": 20,
+            "slow": 42
           }
         },
         "volatility": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "bollinger_width",
+          "params": {
+            "period": 20,
+            "threshold": 15.0
+          }
         }
       },
       "parents": [
-        "xov-e444c4"
+        "xov-97a281"
       ]
     },
     "in_sample": {
-      "fitness": 5.6217,
-      "return": 0.0249
+      "fitness": 6.7687,
+      "return": 0.031
     },
     "out_of_sample": {
-      "avg_pnl": 101.45,
-      "consistency": 1.0,
-      "expectancy": 101.45,
-      "final_equity": 10101.45,
-      "max_drawdown": 0.0,
-      "profit_factor": null,
-      "recovery_factor": 0.0,
-      "sharpe_proxy": 0.0,
-      "sortino_proxy": 0.0,
+      "avg_pnl": 56.8,
+      "consistency": 0.75,
+      "expectancy": 56.8,
+      "final_equity": 10227.19,
+      "max_drawdown": 0.01,
+      "profit_factor": 3.272,
+      "recovery_factor": 2.272,
+      "sharpe_proxy": 0.55,
+      "sortino_proxy": 1.136,
       "status": "complete",
-      "total_return": 0.0101,
-      "trades": 1,
-      "win_rate": 1.0
+      "total_return": 0.0227,
+      "trades": 4,
+      "win_rate": 0.75
     },
     "parents": [
-      "xov-e444c4"
+      "xov-97a281"
     ],
     "regime": "high_volatility",
     "symbol": "JPN225"
