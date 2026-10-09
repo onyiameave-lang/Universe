@@ -7844,21 +7844,21 @@
     "symbol": "GER40"
   },
   "GER40::trending_down": {
-    "certified_at": 1791558565.3429933,
-    "generation": 28,
+    "certified_at": 1791578626.586151,
+    "generation": 56,
     "genome": {
       "backtests": 15,
-      "best_return": 0.0135,
-      "best_sharpe": 0.426,
-      "fitness": 5.9297,
-      "generation": 28,
-      "genome_id": "mut-672107",
+      "best_return": 0.0218,
+      "best_sharpe": 0.524,
+      "fitness": 7.0682,
+      "generation": 56,
+      "genome_id": "mut-890921",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.15
+            "base_threshold": 0.285,
+            "regime_bonus": 0.095
           }
         },
         "execution": {
@@ -7866,11 +7866,10 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "atr_stops",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "sl_mult": 2.361,
+            "tp_mult": 4.563
           }
         },
         "market_regime": {
@@ -7885,9 +7884,11 @@
           }
         },
         "momentum": {
-          "logic_type": "volume_momentum",
+          "logic_type": "rsi",
           "params": {
-            "period": 20
+            "lower": 30,
+            "period": 14,
+            "upper": 80
           }
         },
         "position": {
@@ -7905,40 +7906,43 @@
         "trend": {
           "logic_type": "sma_crossover",
           "params": {
-            "fast": 23,
-            "slow": 40
+            "fast": 20,
+            "slow": 33
           }
         },
         "volatility": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "atr_contraction",
+          "params": {
+            "contraction_ratio": 0.7,
+            "period": 14
+          }
         }
       },
       "parents": [
-        "xov-f555e0"
+        "xov-4338b7"
       ]
     },
     "in_sample": {
-      "fitness": 5.9297,
-      "return": 0.0135
+      "fitness": 7.0682,
+      "return": 0.0218
     },
     "out_of_sample": {
-      "avg_pnl": 108.81,
+      "avg_pnl": 109.91,
       "consistency": 1.0,
-      "expectancy": 108.81,
-      "final_equity": 10217.61,
+      "expectancy": 109.91,
+      "final_equity": 10219.83,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 2.641,
+      "sharpe_proxy": 2.742,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0218,
+      "total_return": 0.022,
       "trades": 2,
       "win_rate": 1.0
     },
     "parents": [
-      "xov-f555e0"
+      "xov-4338b7"
     ],
     "regime": "trending_down",
     "symbol": "GER40"
