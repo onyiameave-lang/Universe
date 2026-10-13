@@ -3767,63 +3767,67 @@
     "symbol": "CHFJPY"
   },
   "CHFJPY::ranging": {
-    "certified_at": 1791826385.0565407,
-    "generation": 74,
+    "certified_at": 1791906171.560257,
+    "generation": 102,
     "genome": {
       "backtests": 15,
       "best_return": 0.0414,
       "best_sharpe": 0.834,
-      "fitness": 10.007,
-      "generation": 74,
-      "genome_id": "mut-176a0e",
+      "fitness": 10.1852,
+      "generation": 102,
+      "genome_id": "mut-1c11ad",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.164,
+            "base_threshold": 0.103,
             "regime_bonus": 0.15,
-            "threshold": 0.5
+            "threshold": 0.103
           }
         },
         "execution": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "slippage_pips": 1.2220990931708342
+          }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "time_exit",
           "params": {
-            "lookback": 10,
-            "sl_mult": 1.818,
-            "tp_mult": 3.171
+            "max_bars": 20,
+            "sl_mult": 2.0,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
           "logic_type": "default",
           "params": {
             "allowed_regimes": [
-              "trending_up",
-              "trending_down",
               "ranging",
-              "high_volatility"
+              "trending_up",
+              "trending_down"
             ]
           }
         },
         "momentum": {
-          "logic_type": "stochastic",
+          "logic_type": "price_action",
           "params": {
-            "d_period": 3,
-            "k_period": 15,
-            "lower": 22,
-            "upper": 82
+            "lookback": 10
           }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "fixed_fractional",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "risk": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "max_correlated_positions": 3,
+            "max_dd_limit": 0.1,
+            "risk_per_trade": 0.01
+          }
         },
         "trade_management": {
           "logic_type": "default",
@@ -3832,42 +3836,43 @@
         "trend": {
           "logic_type": "sma_crossover",
           "params": {
-            "fast": 22,
-            "slow": 42
+            "fast": 26,
+            "slow": 48
           }
         },
         "volatility": {
-          "logic_type": "keltner_squeeze",
+          "logic_type": "atr_contraction",
           "params": {
-            "period": 20
+            "contraction_ratio": 0.7,
+            "period": 14
           }
         }
       },
       "parents": [
-        "xov-42f9a4"
+        "xov-f8b10d"
       ]
     },
     "in_sample": {
-      "fitness": 10.007,
+      "fitness": 10.1852,
       "return": 0.0414
     },
     "out_of_sample": {
-      "avg_pnl": 74.23,
+      "avg_pnl": 74.39,
       "consistency": 0.5,
-      "expectancy": 74.23,
-      "final_equity": 10148.46,
+      "expectancy": 74.39,
+      "final_equity": 10148.77,
       "max_drawdown": 0.0,
-      "profit_factor": 97.403,
+      "profit_factor": 121.951,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 0.98,
-      "sortino_proxy": 68.167,
+      "sharpe_proxy": 0.984,
+      "sortino_proxy": 85.525,
       "status": "complete",
-      "total_return": 0.0148,
+      "total_return": 0.0149,
       "trades": 2,
       "win_rate": 0.5
     },
     "parents": [
-      "xov-42f9a4"
+      "xov-f8b10d"
     ],
     "regime": "ranging",
     "symbol": "CHFJPY"
