@@ -7092,20 +7092,20 @@
     "symbol": "GBPCHF"
   },
   "GBPJPY::ranging": {
-    "certified_at": 1792008215.0996265,
-    "generation": 86,
+    "certified_at": 1792036216.9506574,
+    "generation": 114,
     "genome": {
-      "backtests": 15,
+      "backtests": 30,
       "best_return": 0.0199,
-      "best_sharpe": 0.554,
-      "fitness": 5.533,
-      "generation": 86,
-      "genome_id": "mut-c6a433",
+      "best_sharpe": 0.47,
+      "fitness": 6.3547,
+      "generation": 114,
+      "genome_id": "mut-7c5032",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
-            "base_threshold": 0.261,
+            "base_threshold": 0.245,
             "regime_bonus": 0.15,
             "threshold": 0.5
           }
@@ -7115,11 +7115,10 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "atr_stops",
           "params": {
-            "sl_mult": 1.401,
-            "tp_mult": 6.674,
-            "trail_mult": 1.343
+            "sl_mult": 2.288,
+            "tp_mult": 5.0
           }
         },
         "market_regime": {
@@ -7137,8 +7136,8 @@
           "logic_type": "williams_r",
           "params": {
             "lower": 15,
-            "period": 14,
-            "upper": 64
+            "period": 15,
+            "upper": 60
           }
         },
         "position": {
@@ -7154,46 +7153,46 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ichimoku_cloud",
+          "logic_type": "supertrend",
           "params": {
-            "kijun": 30,
-            "slow": 48,
-            "tenkan": 9
+            "multiplier": 3.0,
+            "period": 11,
+            "slow": 43
           }
         },
         "volatility": {
-          "logic_type": "atr_expansion",
+          "logic_type": "bollinger_width",
           "params": {
-            "expansion_ratio": 1.2,
-            "period": 14
+            "period": 20,
+            "threshold": 15.0
           }
         }
       },
       "parents": [
-        "xov-b0a85c"
+        "xov-b5c173"
       ]
     },
     "in_sample": {
-      "fitness": 5.533,
+      "fitness": 6.3547,
       "return": 0.0199
     },
     "out_of_sample": {
-      "avg_pnl": 105.64,
+      "avg_pnl": 105.88,
       "consistency": 1.0,
-      "expectancy": 105.64,
-      "final_equity": 10211.28,
+      "expectancy": 105.88,
+      "final_equity": 10211.75,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 2.381,
+      "sharpe_proxy": 2.399,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0211,
+      "total_return": 0.0212,
       "trades": 2,
       "win_rate": 1.0
     },
     "parents": [
-      "xov-b0a85c"
+      "xov-b5c173"
     ],
     "regime": "ranging",
     "symbol": "GBPJPY"
