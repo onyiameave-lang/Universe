@@ -10409,7 +10409,7 @@
           "logic_type": "market_structure",
           "params": {
             "lookback": 20,
-            "slow": 43
+            "slow": 42
           }
         },
         "volatility": {
@@ -12421,15 +12421,15 @@
     "symbol": "UKOIL"
   },
   "US30::ranging": {
-    "certified_at": 1792008439.0832903,
-    "generation": 20,
+    "certified_at": 1792093791.7578852,
+    "generation": 40,
     "genome": {
-      "backtests": 11,
+      "backtests": 26,
       "best_return": 0.0391,
       "best_sharpe": 4.428,
       "fitness": 15.5886,
-      "generation": 20,
-      "genome_id": "mut-642d82",
+      "generation": 40,
+      "genome_id": "mut-3ba7c6",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
@@ -12444,33 +12444,36 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "trailing_atr",
+          "logic_type": "swing_stops",
           "params": {
-            "sl_mult": 2.0,
-            "tp_mult": 6.0,
-            "trail_mult": 1.5
+            "lookback": 10,
+            "sl_mult": 2.124,
+            "tp_mult": 3.0
           }
         },
         "market_regime": {
-          "logic_type": "default",
+          "logic_type": "strict",
           "params": {
             "allowed_regimes": [
               "trending_up",
-              "trending_down",
-              "ranging",
-              "high_volatility"
-            ]
+              "trending_down"
+            ],
+            "volatility_limit": 1.0
           }
         },
         "momentum": {
-          "logic_type": "price_action",
+          "logic_type": "rsi",
           "params": {
-            "lookback": 10
+            "lower": 27,
+            "period": 14,
+            "upper": 70
           }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "fixed_fractional",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "risk": {
           "logic_type": "default",
@@ -12481,23 +12484,21 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ichimoku_cloud",
+          "logic_type": "ema",
           "params": {
-            "kijun": 24,
-            "slow": 46,
-            "tenkan": 9
+            "fast": 9,
+            "slow": 44
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-ab38cf"
+        "xov-233bdc"
       ]
     },
     "in_sample": {
@@ -12505,22 +12506,22 @@
       "return": 0.0391
     },
     "out_of_sample": {
-      "avg_pnl": 55.87,
+      "avg_pnl": 59.09,
       "consistency": 0.75,
-      "expectancy": 55.87,
-      "final_equity": 10223.48,
+      "expectancy": 59.09,
+      "final_equity": 10236.35,
       "max_drawdown": 0.01,
-      "profit_factor": 3.169,
-      "recovery_factor": 2.235,
-      "sharpe_proxy": 0.53,
-      "sortino_proxy": 1.085,
+      "profit_factor": 3.294,
+      "recovery_factor": 2.364,
+      "sharpe_proxy": 0.565,
+      "sortino_proxy": 1.147,
       "status": "complete",
-      "total_return": 0.0223,
+      "total_return": 0.0236,
       "trades": 4,
       "win_rate": 0.75
     },
     "parents": [
-      "xov-ab38cf"
+      "xov-233bdc"
     ],
     "regime": "ranging",
     "symbol": "US30"
