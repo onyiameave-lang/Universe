@@ -22,8 +22,10 @@ import os
 import sys
 import threading
 import time
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from core.embeddings import cosine_similarity  # type: ignore
 from core.memory_record import MemoryRecord      # type: ignore
@@ -45,6 +47,7 @@ class VectorStore:
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._path = self.storage_dir / "records.json"
+        self._process_lock_path = self.storage_dir / "records.lock"
         self._lock = threading.RLock()
         self._records: Dict[str, MemoryRecord] = {}
         self._matrix = None
@@ -57,58 +60,117 @@ class VectorStore:
         self._load()
 
     def _load(self) -> None:
+        with self._process_lock():
+            if not self._path.exists():
+                return
+            try:
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+                if not isinstance(raw, list):
+                    raise ValueError("records.json must contain a JSON list")
+                for item in raw:
+                    rec = MemoryRecord.from_dict(item)
+                    self._records[rec.memory_id] = rec
+                self._dirty = True
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                backup = self._quarantine_corrupt_file()
+                log.error(
+                    "Chronicle records file is unreadable (%s); preserved as %s",
+                    exc, backup, exc_info=True,
+                )
+            except Exception as exc:
+                backup = self._quarantine_corrupt_file()
+                log.error(
+                    "Chronicle records file failed to load (%s); preserved as %s",
+                    exc, backup, exc_info=True,
+                )
+
+    def _quarantine_corrupt_file(self) -> Optional[Path]:
         if not self._path.exists():
-            return
-        try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-            for item in raw:
-                rec = MemoryRecord.from_dict(item)
-                self._records[rec.memory_id] = rec
-            self._dirty = True
-        except Exception:
-            if self._path.exists():
-                self._path.rename(self.storage_dir / "records.corrupt.json")
+            return None
+        backup = self.storage_dir / (
+            f"records.corrupt.{time.time_ns()}.{uuid.uuid4().hex}.json"
+        )
+        os.replace(self._path, backup)
+        return backup
+
+    @contextmanager
+    def _process_lock(self) -> Iterator[None]:
+        """Serialize store load/merge/write across processes on this machine."""
+        with self._process_lock_path.open("a+b") as handle:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0, os.SEEK_END)
+                if handle.tell() == 0:
+                    handle.write(b"\0")
+                    handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                try:
+                    yield
+                finally:
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _persist(self) -> None:
-        """FIX-VS-V8-01: Windows-safe atomic write with retry fallback."""
-        merged = dict(self._records)
-        if self._path.exists():
-            try:
-                for item in json.loads(self._path.read_text(encoding="utf-8")):
-                    disk_rec = MemoryRecord.from_dict(item)
-                    current = merged.get(disk_rec.memory_id)
-                    if current is None:
-                        merged[disk_rec.memory_id] = disk_rec
-                        continue
-                    disk_updated = getattr(disk_rec, "updated_at", 0) or 0
-                    current_updated = getattr(current, "updated_at", 0) or 0
-                    if disk_updated > current_updated:
-                        merged[disk_rec.memory_id] = disk_rec
-                self._records = merged
-            except Exception:
-                log.warning("could not merge existing records.json before persist", exc_info=True)
-        data = [r.to_dict(include_embedding=True) for r in merged.values()]
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data), encoding="utf-8")
-        if sys.platform == "win32":
-            import shutil
-            for attempt in range(3):
+        """Merge and atomically persist without shared-temp or cross-process races."""
+        with self._lock, self._process_lock():
+            merged = dict(self._records)
+            if self._path.exists():
                 try:
-                    os.replace(str(tmp), str(self._path))
-                    return
-                except (PermissionError, OSError):
-                    if attempt < 2:
+                    raw = json.loads(self._path.read_text(encoding="utf-8"))
+                    if not isinstance(raw, list):
+                        raise ValueError("records.json must contain a JSON list")
+                    for item in raw:
+                        disk_rec = MemoryRecord.from_dict(item)
+                        current = merged.get(disk_rec.memory_id)
+                        if current is None:
+                            merged[disk_rec.memory_id] = disk_rec
+                            continue
+                        disk_updated = getattr(disk_rec, "updated_at", 0) or 0
+                        current_updated = getattr(current, "updated_at", 0) or 0
+                        if disk_updated > current_updated:
+                            merged[disk_rec.memory_id] = disk_rec
+                except (OSError, ValueError, TypeError, KeyError) as exc:
+                    backup = self._quarantine_corrupt_file()
+                    log.error(
+                        "could not merge existing records.json (%s); preserved as %s",
+                        exc, backup, exc_info=True,
+                    )
+
+            tmp = self._path.with_name(
+                f".{self._path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            try:
+                with tmp.open("x", encoding="utf-8", newline="\n") as handle:
+                    json.dump(
+                        [record.to_dict(include_embedding=True)
+                         for record in merged.values()],
+                        handle,
+                        separators=(",", ":"),
+                    )
+                    handle.flush()
+                    os.fsync(handle.fileno())
+
+                for attempt in range(3):
+                    try:
+                        os.replace(tmp, self._path)
+                        break
+                    except OSError:
+                        if attempt == 2:
+                            raise
                         time.sleep(0.05 * (attempt + 1))
-                    else:
-                        try:
-                            shutil.move(str(tmp), str(self._path))
-                        except Exception:
-                            try:
-                                tmp.unlink(missing_ok=True)
-                            except Exception:
-                                pass
-        else:
-            tmp.replace(self._path)
+            finally:
+                tmp.unlink(missing_ok=True)
+            self._records = merged
 
     def _notify_hybrid(self) -> None:
         """FIX-HYBRID-01: Notify HybridRetriever that records changed."""

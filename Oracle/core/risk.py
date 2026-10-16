@@ -29,6 +29,8 @@ ENV-CONFIGURABLE RISK PARAMS (added 2026-07-17):
   ORACLE_DAILY_LOSS_LIMIT          daily kill-switch as % of equity,
                                    paper mode   (default 0.06 = 6%)
   ORACLE_DAILY_LOSS_LIMIT_LIVE     same, live mode (default 0.03 = 3%)
+  ORACLE_WIN_COOLDOWN_SEC          post-win per-symbol cooldown (default 1800)
+  ORACLE_WIN_COOLDOWN_SEC_LIVE     same, live mode (default 7200)
   ORACLE_STOP_MULT                 ATR stop-loss multiplier  (default 2.0)
   ORACLE_TARGET_MULT               ATR take-profit multiplier (default 3.0)
   ORACLE_REWARD_RISK               reward:risk label in plan  (default 1.5)
@@ -112,6 +114,8 @@ _MAX_CURRENCY_PCT_LIVE  = _float_env("ORACLE_MAX_CURRENCY_PCT_LIVE", 0.50)
 # separate from the confidence floor above.
 _LOSS_COOLDOWN_SEC_PAPER = _float_env("ORACLE_LOSS_COOLDOWN_SEC",      1800)   # 30 min
 _LOSS_COOLDOWN_SEC_LIVE  = _float_env("ORACLE_LOSS_COOLDOWN_SEC_LIVE", 7200)   # 2 hours
+_WIN_COOLDOWN_SEC_PAPER = _float_env("ORACLE_WIN_COOLDOWN_SEC",      1800)   # 30 min
+_WIN_COOLDOWN_SEC_LIVE  = _float_env("ORACLE_WIN_COOLDOWN_SEC_LIVE", 7200)   # 2 hours
 _MAX_TRADES_PER_SYMBOL_PER_DAY_PAPER = int(_float_env("ORACLE_MAX_TRADES_PER_SYMBOL_DAY",      5))
 _MAX_TRADES_PER_SYMBOL_PER_DAY_LIVE  = int(_float_env("ORACLE_MAX_TRADES_PER_SYMBOL_DAY_LIVE",  3))
 
@@ -172,12 +176,13 @@ class Portfolio:
     # capital?'" — Dynamic Position Sizing already shrinks low-confidence
     # trades toward near-nothing, so this isn't about raising the
     # confidence bar again; it's about FREQUENCY/discipline: don't
-    # immediately re-enter a symbol right after getting stopped out
-    # (revenge trading), and don't chase an unlimited number of entries on
+    # immediately re-enter a symbol after a close, and don't chase an
+    # unlimited number of entries on
     # the same symbol in one day even if each one individually clears the
     # confidence floor.
 
     last_loss_at: Dict[str, float] = field(default_factory=dict)
+    last_win_at: Dict[str, float] = field(default_factory=dict)
     trades_today: Dict[str, int] = field(default_factory=dict)
     trades_today_date: str = ""
 
@@ -193,8 +198,16 @@ class Portfolio:
         """Call once per losing close — feeds the post-loss cooldown."""
         self.last_loss_at[symbol] = time.time()
 
+    def record_win(self, symbol: str) -> None:
+        """Call once per winning close — prevents immediate re-entry."""
+        self.last_win_at[symbol] = time.time()
+
     def seconds_since_last_loss(self, symbol: str) -> Optional[float]:
         last = self.last_loss_at.get(symbol)
+        return (time.time() - last) if last is not None else None
+
+    def seconds_since_last_win(self, symbol: str) -> Optional[float]:
+        last = self.last_win_at.get(symbol)
         return (time.time() - last) if last is not None else None
 
     def trades_opened_today(self, symbol: str) -> int:
@@ -307,6 +320,7 @@ class RiskManager:
         self.max_lot_pct      = _MAX_LOT_PCT_PAPER if self.paper else _MAX_LOT_PCT_LIVE
         self.max_currency_pct = _MAX_CURRENCY_PCT_PAPER if self.paper else _MAX_CURRENCY_PCT_LIVE
         self.loss_cooldown_sec = _LOSS_COOLDOWN_SEC_PAPER if self.paper else _LOSS_COOLDOWN_SEC_LIVE
+        self.win_cooldown_sec = _WIN_COOLDOWN_SEC_PAPER if self.paper else _WIN_COOLDOWN_SEC_LIVE
         self.max_trades_per_symbol_per_day = (
             _MAX_TRADES_PER_SYMBOL_PER_DAY_PAPER if self.paper else _MAX_TRADES_PER_SYMBOL_PER_DAY_LIVE)
         self.stop_mult        = _STOP_MULT
@@ -399,14 +413,20 @@ class RiskManager:
         if any(p.symbol == symbol for p in self.portfolio.positions):
             rejections.append(f"already holding {symbol}")
 
-        # Reduce Overtrading (roadmap Phase 2 item 6): post-loss cooldown —
-        # don't immediately re-enter a symbol right after getting stopped
-        # out of it (revenge trading is a classic overtrading pattern).
+        # Reduce Overtrading (roadmap Phase 2 item 6): post-loss cooldown.
         since_loss = self.portfolio.seconds_since_last_loss(symbol)
         if since_loss is not None and since_loss < self.loss_cooldown_sec:
             rejections.append(
                 f"{symbol} lost a trade {since_loss/60:.0f}min ago — "
                 f"cooldown is {self.loss_cooldown_sec/60:.0f}min (reduce overtrading)")
+
+        # A win still requires time for a fresh setup; don't allow recent
+        # profits to trigger an immediate repeat entry.
+        since_win = self.portfolio.seconds_since_last_win(symbol)
+        if since_win is not None and since_win < self.win_cooldown_sec:
+            rejections.append(
+                f"{symbol} won a trade {since_win/60:.0f}min ago — "
+                f"cooldown is {self.win_cooldown_sec/60:.0f}min (reduce overtrading)")
 
         # Reduce Overtrading: daily cap on new entries per symbol, even if
         # each one individually clears the confidence floor.

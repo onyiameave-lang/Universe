@@ -31,13 +31,14 @@ def test_record_close_once_skips_duplicate_close(tmp_path, monkeypatch):
 
 def test_record_close_uses_price_direction_for_fusion_learning(monkeypatch):
     cases = (
-        ("buy", 100.0, 110.0, 1),
-        ("buy", 100.0, 90.0, -1),
-        ("sell", 100.0, 90.0, -1),
-        ("sell", 100.0, 110.0, 1),
+        ("buy", 100.0, 110.0, 1, True),
+        ("buy", 100.0, 90.0, -1, False),
+        ("sell", 100.0, 90.0, -1, True),
+        ("sell", 100.0, 110.0, 1, False),
+        ("sell", 100.0, 100.0, 0, False),
     )
 
-    for direction, entry, exit_price, expected_direction in cases:
+    for direction, entry, exit_price, expected_direction, expected_win in cases:
         engine = trade_learning.TradeLearningEngine.__new__(trade_learning.TradeLearningEngine)
         engine.confidence = SimpleNamespace(
             record_outcome=lambda *args: {
@@ -70,3 +71,4 @@ def test_record_close_uses_price_direction_for_fusion_learning(monkeypatch):
 
         assert captured[0][0] == "fusion.learn"
         assert captured[0][1]["realized_direction"] == expected_direction
+        assert captured[0][1]["trade_won"] is expected_win

@@ -31,12 +31,13 @@ v3 changes vs v2:
          Now _filling_mode(symbol) queries symbol_info() and picks the right
          constant.  Falls back to FOK if symbol_info() is unavailable.
 
-  FIX-2  Clamp and round volume to symbol constraints before order_send().
+  FIX-2  Convert risk-manager position units to broker lots, then enforce
+         symbol volume constraints before order_send().
          Brokers enforce volume_min / volume_max / volume_step per symbol.
-         WTI has volume_min=1.0, volume_step=1.0 — sending 0.01 lots was
-         silently rejected.  New _clamp_volume(symbol, raw_vol) queries
-         symbol_info() and returns a valid volume, logging any adjustment.
-         Falls back to raw_vol if symbol_info() is unavailable.
+         RiskManager sizes positions in underlying units; MT5 expects lots.
+         _clamp_volume() uses symbol_info().trade_contract_size to convert
+         units to lots, rounds down to volume_step, and rejects missing or
+         invalid metadata rather than treating units as lots.
 
 v4 changes vs v3:
   FIX-3  Added close_position(ticket) and modify_position(ticket, sl, tp) methods.
@@ -93,7 +94,7 @@ DEFAULT_SYMBOL_MAP = {
     "EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "USDJPY": "USDJPY", "AUDUSD": "AUDUSD",
     "USDCAD": "USDCAD", "USDCHF": "USDCHF", "NZDUSD": "NZDUSD", "EURGBP": "EURGBP",
     "EURJPY": "EURJPY", "GBPJPY": "GBPJPY",
-    "XAUUSD": "XAUUSD", "USOIL": "XTIUSD",
+    "XAUUSD": "XAUUSD", "USOIL": "USOIL",
     "BTCUSD": "BTCUSD", "ETHUSD": "ETHUSD", "SOLUSD": "SOLUSD", "XRPUSD": "XRPUSD",
     "BNBUSD": "BNBUSD", "ADAUSD": "ADAUSD",
     "SPX": "US500", "NASDAQ": "USTEC", "DJI": "US30", "RUT": "US2000", "VIX": "VIX",
@@ -237,53 +238,64 @@ class MT5Broker:
             return mt5.ORDER_FILLING_FOK
 
     # ── FIX-2: volume clamping / rounding ──────────────────────────────────────────────────────────────────────────
-    def _clamp_volume(self, symbol: str, raw_vol: float) -> float:
+    def _clamp_volume(self, symbol: str, raw_units: float) -> Optional[float]:
         """
-        Clamp *raw_vol* to [volume_min, volume_max] and round to volume_step
-        as reported by symbol_info() for *symbol*.
-
-        WTI example: volume_min=1.0, volume_step=1.0 → 0.01 → 1.0
-        EURUSD example: volume_min=0.01, volume_step=0.01 → 0.01 → 0.01 (unchanged)
-
-        Returns raw_vol unchanged if symbol_info() is unavailable.
+        Convert underlying units to MT5 lots and round down to the broker's
+        volume step. Return None when broker metadata is missing/invalid or
+        the requested size is below the minimum; never increase risk by
+        treating units as lots or rounding up to the minimum.
         """
         mt5 = self._mt5
         if mt5 is None:
-            return raw_vol
+            log.error("_clamp_volume(%s): MT5 unavailable; refusing order", symbol)
+            return None
         try:
             info = mt5.symbol_info(symbol)
             if info is None:
-                log.warning("_clamp_volume(%s): symbol_info returned None — using raw vol %.4f",
-                            symbol, raw_vol)
-                return raw_vol
+                log.error("_clamp_volume(%s): symbol_info returned None; refusing order", symbol)
+                return None
 
-            vol_min  = getattr(info, "volume_min",  0.01)
-            vol_max  = getattr(info, "volume_max",  500.0)
-            vol_step = getattr(info, "volume_step", 0.01)
+            contract_size = getattr(info, "trade_contract_size", None)
+            vol_min = getattr(info, "volume_min", None)
+            vol_max = getattr(info, "volume_max", None)
+            vol_step = getattr(info, "volume_step", None)
+            values = (raw_units, contract_size, vol_min, vol_max, vol_step)
+            if (not all(isinstance(value, (int, float)) and math.isfinite(value)
+                        for value in values)
+                    or raw_units <= 0 or contract_size <= 0 or vol_min <= 0
+                    or vol_max < vol_min or vol_step <= 0):
+                log.error("_clamp_volume(%s): invalid size or symbol contract/volume metadata; "
+                          "refusing order", symbol)
+                return None
 
-            # round to nearest step
-            if vol_step > 0:
-                steps = round(raw_vol / vol_step)
-                vol = steps * vol_step
-            else:
-                vol = raw_vol
+            raw_lots = raw_units / contract_size
+            # Round down to ensure rounding never exceeds the risk-sized units.
+            steps = math.floor((raw_lots / vol_step) + 1e-12)
+            vol = steps * vol_step
 
-            # clamp
-            vol = max(vol_min, min(vol_max, vol))
+            # Respect the broker maximum without ever raising a too-small
+            # risk-sized trade to the minimum volume.
+            vol = min(vol_max, vol)
+            if vol < vol_min:
+                log.warning(
+                    "_clamp_volume(%s): requested %.4f units (%.8f lots) is below "
+                    "minimum %.4f lots; refusing order",
+                    symbol, raw_units, raw_lots, vol_min)
+                return None
 
-            # round to avoid floating-point noise (e.g. 0.9999999 → 1.0)
-            decimals = max(0, -int(math.floor(math.log10(vol_step)))) if vol_step < 1 else 0
+            step_text = f"{vol_step:.10f}".rstrip("0").rstrip(".")
+            decimals = len(step_text.partition(".")[2])
             vol = round(vol, decimals)
 
-            if abs(vol - raw_vol) > 1e-9:
-                log.info("_clamp_volume(%s): adjusted %.4f → %.4f "
-                         "(min=%.4f max=%.4f step=%.4f)",
-                         symbol, raw_vol, vol, vol_min, vol_max, vol_step)
+            log.info(
+                "_clamp_volume(%s): %.4f units → %.4f lots "
+                "(contract_size=%.4f min=%.4f max=%.4f step=%.4f)",
+                symbol, raw_units, vol, contract_size, vol_min, vol_max, vol_step)
             return vol
 
         except Exception as exc:
-            log.warning("_clamp_volume(%s): %s — using raw vol %.4f", symbol, exc, raw_vol)
-            return raw_vol
+            log.error("_clamp_volume(%s): %s; refusing order", symbol, exc)
+            return None
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -344,8 +356,16 @@ class MT5Broker:
         filling = self._filling_mode(symbol)
 
         # FIX-2: clamp/round volume to broker symbol constraints
-        raw_vol = float(plan["size"])
-        volume  = self._clamp_volume(symbol, raw_vol)
+        raw_units = float(plan["size"])
+        volume = self._clamp_volume(symbol, raw_units)
+        if volume is None:
+            return {
+                "status": "rejected",
+                "reason": f"could not safely convert requested {raw_units:.4f} "
+                          f"{symbol} units to MT5 lots",
+                "symbol": symbol,
+                "volume_units_raw": raw_units,
+            }
 
         request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol,
                   "volume": volume, "type": order_type, "price": price,
@@ -354,13 +374,28 @@ class MT5Broker:
                   "type_time": mt5.ORDER_TIME_GTC, "type_filling": filling}
         result = mt5.order_send(request)
         if result is None: return {"status": "error", "reason": f"order_send returned None: {mt5.last_error()}"}
-        ok = result.retcode == mt5.TRADE_RETCODE_DONE
-        return {"status": "filled" if ok else "rejected", "retcode": result.retcode,
+        retcode = getattr(result, "retcode", None)
+        comment = str(getattr(result, "comment", "") or "")
+        ok = retcode == mt5.TRADE_RETCODE_DONE
+        reason = "" if ok else (
+            f"MT5 order rejected (retcode={retcode}, "
+            f"comment={comment or 'no broker comment'})"
+        )
+        if not ok:
+            log.warning(
+                "%s symbol=%s volume=%.4f lots price=%.8f sl=%.8f tp=%.8f "
+                "filling=%s retcode=%s comment=%s",
+                reason, symbol, volume, price, float(plan["stop"]),
+                float(plan["target"]), filling, retcode, comment or "<empty>",
+            )
+        return {"status": "filled" if ok else "rejected", "retcode": retcode,
+               "reason": reason,
                "account_type": self.status.account_type, "symbol": symbol,
                "volume": volume, "price": getattr(result, "price", price),
                "order": getattr(result, "order", None), "sl": plan["stop"], "tp": plan["target"],
-               "comment": getattr(result, "comment", ""),
-               "filling_mode": filling, "volume_raw": raw_vol}
+               "comment": comment,
+               "filling_mode": filling, "volume_raw": raw_units,
+               "volume_units_raw": raw_units, "volume_lots": volume}
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -732,6 +767,37 @@ class MT5Broker:
 
         except Exception as exc:
             log.warning("get_positions_by_symbol(%s): %s", symbol, exc)
+            return []
+
+    def observed_positions_by_symbol(self, symbol: str) -> List[Dict[str, Any]]:
+        """Read positions from the connected MT5 terminal, including in paper mode.
+
+        This is intentionally read-only. Signal-only mode needs to observe
+        positions the user opened manually even when Oracle's own execution is
+        configured for paper trading.
+        """
+        if not self.status.connected or self._mt5 is None:
+            return []
+        try:
+            self._mt5.symbol_select(symbol, True)
+            raw = self._mt5.positions_get(symbol=symbol)
+            if not raw:
+                prefix = symbol.upper()[:6]
+                raw = [p for p in (self._mt5.positions_get() or [])
+                       if p.symbol.upper().startswith(prefix)]
+            return [{
+                "symbol": p.symbol,
+                "volume": p.volume,
+                "type": "buy" if int(p.type) == 0 else "sell",
+                "price_open": p.price_open,
+                "sl": p.sl,
+                "tp": p.tp,
+                "profit": p.profit,
+                "ticket": int(p.ticket),
+                "time": float(getattr(p, "time", 0.0)) or None,
+            } for p in (raw or [])]
+        except Exception as exc:
+            log.warning("observed_positions_by_symbol(%s): %s", symbol, exc)
             return []
 
     # ── FIX-5: adopt_position() ───────────────────────────────────────────────

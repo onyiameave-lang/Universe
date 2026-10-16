@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 DEFAULT_WEIGHTS = {"technical": 0.45, "news": 0.22, "social": 0.18, "memory": 0.15}
 MIN_W, MAX_W = 0.05, 0.75
@@ -60,8 +60,20 @@ class AdaptiveFusion:
                 self._state[symbol] = {"weights": dict(DEFAULT_WEIGHTS),
                                      "entry_threshold": 0.15,
                                      "stream_hits": {k: {"correct": 0, "total": 0} for k in DEFAULT_WEIGHTS},
-                                     "trades": 0, "wins": 0}
-            return self._state[symbol]
+                                     "trades": 0, "wins": 0,
+                                     "outcome_trades": 0, "outcome_wins": 0}
+            state = self._state[symbol]
+            if "outcome_trades" not in state:
+                # Older versions counted rising prices as wins, even for
+                # short trades. Their threshold history cannot be corrected
+                # without the original trade directions, so restart that
+                # small-sample statistic while preserving learned weights.
+                state["outcome_trades"] = 0
+                state["outcome_wins"] = 0
+                state["trades"] = 0
+                state["wins"] = 0
+                state["entry_threshold"] = 0.15
+            return state
 
     def weights(self, symbol: str) -> Dict[str, float]:
         return dict(self._sym(symbol)["weights"])
@@ -95,45 +107,54 @@ class AdaptiveFusion:
                "manipulation_warning": streams.get("social", {}).get("manipulation_warning", False)}
 
     def learn_from_outcome(self, symbol: str, streams_at_entry: Dict[str, Dict[str, Any]],
-                          realized_direction: int) -> Dict[str, Any]:
+                          realized_direction: int,
+                          trade_won: bool) -> Dict[str, Any]:
         """
         realized_direction: +1 if price moved up after entry, -1 if down.
         Reward streams that agreed with the realized move, penalize those that didn't.
+        trade_won is the outcome of the actual long/short position.
         """
         with self._lock:
             s = self._sym(symbol)
             w = s["weights"]
-            for name, sig in streams_at_entry.items():
-                d = sig.get("direction", 0.0)
-                if abs(d) < 0.05 or sig.get("confidence", 0) < 0.1:
-                    continue
-                stream_dir = 1 if d > 0 else -1
-                correct = (stream_dir == realized_direction)
-                stat = s["stream_hits"].setdefault(name, {"correct": 0, "total": 0})
-                stat["total"] += 1
-                if correct:
-                    stat["correct"] += 1
-                    w[name] = min(MAX_W, w[name] + LR * sig.get("confidence", 0.5))
-                else:
-                    w[name] = max(MIN_W, w[name] - LR * sig.get("confidence", 0.5))
+            if realized_direction:
+                for name, sig in streams_at_entry.items():
+                    d = sig.get("direction", 0.0)
+                    if abs(d) < 0.05 or sig.get("confidence", 0) < 0.1:
+                        continue
+                    stream_dir = 1 if d > 0 else -1
+                    correct = (stream_dir == realized_direction)
+                    stat = s["stream_hits"].setdefault(name, {"correct": 0, "total": 0})
+                    stat["total"] += 1
+                    if correct:
+                        stat["correct"] += 1
+                        w[name] = min(MAX_W, w[name] + LR * sig.get("confidence", 0.5))
+                    else:
+                        w[name] = max(MIN_W, w[name] - LR * sig.get("confidence", 0.5))
             # normalize weights to sum 1
             total = sum(w.values()) or 1.0
             for k in w:
                 w[k] = round(w[k] / total, 4)
-            # adapt entry threshold to realized win rate
+            # Adapt to actual trade results, not just price direction. A
+            # five-trade neutral prior prevents one early win from sharply
+            # lowering the entry threshold.
+            s["outcome_trades"] += 1
+            s["outcome_wins"] += int(trade_won)
             s["trades"] += 1
-            if realized_direction != 0:
-                s["wins"] += 1 if realized_direction > 0 else 0
-            win_rate = s["wins"] / s["trades"] if s["trades"] else 0.5
-            # low win rate -> demand a stronger signal (raise threshold); high -> relax
+            s["wins"] += int(trade_won)
+            win_rate = (5 * 0.5 + s["outcome_wins"]) / (5 + s["outcome_trades"])
+            # Low win rate -> demand a stronger signal; high -> relax.
             s["entry_threshold"] = round(min(0.4, max(0.08, 0.15 + (0.5 - win_rate) * 0.3)), 3)
             self._persist()
             return {"symbol": symbol, "updated_weights": dict(w),
                    "entry_threshold": s["entry_threshold"],
+                   "outcome_trades": s["outcome_trades"],
+                   "outcome_wins": s["outcome_wins"],
                    "stream_accuracy": {n: round(st["correct"] / st["total"], 3)
                                      for n, st in s["stream_hits"].items() if st["total"]}}
 
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             return {sym: {"weights": st["weights"], "entry_threshold": st["entry_threshold"],
-                        "trades": st["trades"]} for sym, st in self._state.items()}
+                        "trades": st.get("outcome_trades", st["trades"])}
+                    for sym, st in self._state.items()}

@@ -7,8 +7,8 @@ broker symbol overrides pre-loaded.
 
 The ONLY differences from live_trader.py:
   1. DEFAULT_SYMBOLS has 41 symbols instead of 8.
-  2. MetaQuotes-Demo symbol overrides are pre-loaded in _DEMO_BROKER_MAP so
-     you don't need to set BROKER_SYMBOL_MAP in .env.
+  2. MetaQuotes-Demo symbol overrides are pre-loaded and enabled only when
+     connected to that specific server.
   3. Class is named DemoTrader (not LiveTrader).
   4. Log name is oracle.demo.
   5. Paper trading is forced ON by default (ORACLE_PAPER_TRADING=false still
@@ -53,6 +53,10 @@ from execution.mt5_broker import MT5Broker  # type: ignore
 from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
 from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
     TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+)
+from execution.telegram_notifier import (  # type: ignore
+    TelegramNotifier, RecentSignalCache, signal_only_enabled,
+    format_entry_alert, format_position_alert,
 )
 from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
 from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
@@ -99,15 +103,15 @@ DEFAULT_SYMBOLS: List[str] = [
 _LIVE_PRESET: List[str] = [
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
     "XAUUSD", "USOIL",
-    "BTCUSD", "ETHUSD",
+    "NZDUSD", "EURGBP",
 ]
 
 # ── ONE position per symbol cap ───────────────────────────────────────────────
 MAX_POSITIONS_PER_SYMBOL: int = 1   # never stack more than this many positions per symbol
 
 # ── MetaQuotes-Demo broker symbol overrides ───────────────────────────────────
-# These are pre-loaded so you don't need BROKER_SYMBOL_MAP in .env.
-# The SymbolMapper env-var overrides take priority over these if set.
+# These are enabled only for the MetaQuotes-Demo server.
+# MT5_BROKER_SYMBOL_MAP overrides them when set.
 _DEMO_BROKER_MAP: Dict[str, str] = {
     # Crypto (MetaQuotes-Demo uses 'm' suffix)
     "BTCUSD":  "BTCUSDm",
@@ -258,14 +262,19 @@ class SymbolMapper:
         self._map: Dict[str, str] = {}
         self._broker_symbols: List[str] = []
         self._env_overrides: Dict[str, str] = self._parse_env_overrides()
-        # Pre-load MetaQuotes-Demo overrides (lower priority than env-var)
+        # MetaQuotes aliases are only enabled by DemoTrader when its connected
+        # server is MetaQuotes-Demo.
         self._demo_overrides: Dict[str, str] = {
-            k.upper(): v for k, v in (demo_overrides or _DEMO_BROKER_MAP).items()
+            k.upper(): v for k, v in (
+                _DEMO_BROKER_MAP if demo_overrides is None else demo_overrides
+            ).items()
         }
 
     @staticmethod
     def _parse_env_overrides() -> Dict[str, str]:
-        raw = os.getenv("BROKER_SYMBOL_MAP", "").strip()
+        # BROKER_SYMBOL_MAP is shared with the cTrader adapter. Keep MT5's
+        # aliases isolated so cTrader-only symbols cannot leak into MT5.
+        raw = os.getenv("MT5_BROKER_SYMBOL_MAP", "").strip()
         result: Dict[str, str] = {}
         if not raw:
             return result
@@ -373,6 +382,12 @@ class DemoTrader:
         self.max_trades   = max_trades if max_trades is not None else _env_int(
             "ORACLE_MAX_TRADES_PER_SESSION", 10)
         self.confirm_live = confirm_live
+        self.signal_only = signal_only_enabled()
+        self.telegram = TelegramNotifier()
+        self._recent_signals = RecentSignalCache()
+        if self.signal_only and not self.telegram.enabled:
+            log.warning("Signal-only mode is ON, but Telegram credentials are missing; "
+                        "approved signals will be printed locally only")
         self.broker = MT5Broker()
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
@@ -446,6 +461,13 @@ class DemoTrader:
         return status
 
     def _build_symbol_map(self, broker_symbols: Optional[List[str]] = None) -> None:
+        server = str(getattr(self.broker.status, "server", "") or "").strip()
+        is_metaquotes_demo = server.casefold() == "metaquotes-demo"
+        self._sym_mapper._demo_overrides = (
+            {k.upper(): v for k, v in _DEMO_BROKER_MAP.items()}
+            if is_metaquotes_demo else {}
+        )
+
         if broker_symbols is None:
             try:
                 raw = self.broker.symbols()
@@ -455,9 +477,23 @@ class DemoTrader:
                 broker_symbols = []
 
         if not broker_symbols:
-            log.warning("Broker returned 0 symbols — using demo overrides + canonical names")
-            # Seed with demo override values so they appear in the broker set
-            broker_symbols = list(self.symbols) + list(_DEMO_BROKER_MAP.values())
+            log.warning(
+                "Broker returned 0 symbols — using canonical names%s",
+                " and MetaQuotes-Demo aliases" if is_metaquotes_demo else "",
+            )
+            # Do not fabricate unrelated broker symbols for other MT5 servers.
+            # This keeps a missing catalogue from turning USOIL into XTIUSD.
+            configured_overrides = dict(self._sym_mapper._demo_overrides)
+            configured_overrides.update(self._sym_mapper._env_overrides)
+            broker_symbols = [
+                symbol for symbol in self.symbols
+                if symbol.upper() not in configured_overrides
+            ]
+            broker_symbols += [
+                configured_overrides[symbol.upper()]
+                for symbol in self.symbols
+                if symbol.upper() in configured_overrides
+            ]
 
         self._sym_mapper.build(broker_symbols, self.symbols)
         self._sym_mapper.log_map(self.symbols)
@@ -478,7 +514,9 @@ class DemoTrader:
         """
         try:
             # FIX-DEDUP: query MT5 directly, not just internal paper state
-            positions = self.broker.get_positions_by_symbol(broker_sym)
+            positions = (self.broker.observed_positions_by_symbol(broker_sym)
+                         if self.signal_only else
+                         self.broker.get_positions_by_symbol(broker_sym))
         except Exception as exc:
             log.warning("Could not fetch positions for %s: %s", broker_sym, exc)
             # Fallback to old method
@@ -575,8 +613,11 @@ class DemoTrader:
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual close)")
-                    if not outcome.won:
-                        self.oracle.risk.portfolio.record_loss(symbol)
+                    if outcome is not None:
+                        if outcome.won:
+                            self.oracle.risk.portfolio.record_win(symbol)
+                        else:
+                            self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -612,9 +653,41 @@ class DemoTrader:
                                    news_impact=news_assessment.level,
                                    social_risk=social_assessment.level,
                                    atr=current_atr)
+            observed_stop = float(live_pos.get("sl") or 0.0)
+            if observed_stop > 0 and abs(observed_stop - pos.initial_stop) > 1e-10:
+                # Pick up a stop change the user applied manually in MT5.
+                pos.current_stop = observed_stop
+            prior_stop = pos.current_stop
             decision = self._trade_manager.evaluate(pos, snap)
 
             pos_id = live_pos.get("ticket") or live_pos.get("id")
+            if self.signal_only:
+                # Keep the actual baseline until the user applies a suggested
+                # stop change manually.
+                if decision.action == Action.TIGHTEN_STOP:
+                    pos.current_stop = prior_stop
+                if decision.action == Action.TIGHTEN_STOP:
+                    try:
+                        digits = int(self.broker._mt5.symbol_info(broker_sym).digits)
+                        precision = max(0, digits - 1)
+                    except Exception:
+                        precision = 3
+                    stop_key = format(float(decision.new_stop or 0.0), f".{precision}f")
+                    self.telegram.send(
+                        format_position_alert(symbol, pos_id, "tighten_stop", decision,
+                                               pos.initial_stop, pos.initial_target),
+                        f"position:{pos_id}:tighten:{stop_key}",
+                    )
+                elif decision.action == Action.CLOSE:
+                    self.telegram.send(
+                        format_position_alert(symbol, pos_id, "close", decision,
+                                               pos.initial_stop, pos.initial_target),
+                        f"position:{pos_id}:close",
+                    )
+                # In signal-only mode the manager is advisory. Do not call any
+                # broker method that could modify or close this position.
+                continue
+
             if decision.action == Action.HOLD:
                 log.debug("[%s] CTM hold: %s", symbol, decision.reason)
                 if decision.reason != pos.last_journaled_hold_reason:
@@ -652,8 +725,11 @@ class DemoTrader:
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
-                            if not outcome.won:
-                                self.oracle.risk.portfolio.record_loss(symbol)
+                            if outcome is not None:
+                                if outcome.won:
+                                    self.oracle.risk.portfolio.record_win(symbol)
+                                else:
+                                    self.oracle.risk.portfolio.record_loss(symbol)
                         except Exception as exc:
                             log.warning("[%s] Demo Trade Learning failed on CTM close: %s",
                                         symbol, exc)
@@ -696,7 +772,7 @@ class DemoTrader:
             print("Oracle will still compute signals; execution is disabled until MT5 connects.")
         print(f"\nDemo trader started. Symbols={self.symbols} interval={self.interval}s")
         print(f"Account: {status.get('account_type')} | paper={self.broker.paper} "
-              f"| allow_live={self.broker.allow_live}")
+              f"| allow_live={self.broker.allow_live} | signal_only={self.signal_only}")
         print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades}")
         print(f"Continuous Trade Manager: polling every {self._manage_interval:.0f}s "
               f"(independent of the {self.interval}s scan cycle)")
@@ -717,15 +793,25 @@ class DemoTrader:
 
                 print(
                     f"\nCycle {cycle_label} done — scanned {summary['scanned']} symbols | "
-                    f"{summary['trades']} trade(s) | {summary['holds']} hold | "
+                    f"{summary['signals']} signal(s) | {summary['trades']} trade(s) | {summary['holds']} hold | "
                     f"{summary['rejects']} reject | {summary['errors']} error | "
                     f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
                     f"{summary['managed']} managed"
                 )
 
                 if summary["kill_switch"] or self._kill_switch_check():
-                    print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
-                    print(self.broker.close_all())
+                    if self.signal_only:
+                        print("KILL SWITCH: session loss limit hit. Stopping signal scans; "
+                              "Oracle will not close positions in signal-only mode.")
+                        self.telegram.send(
+                            "Oracle risk kill switch reached the session loss limit. "
+                            "Signal scans are stopping. Review your open positions and "
+                            "manage them manually; Oracle has not closed them.",
+                            "risk:session-kill-switch",
+                        )
+                    else:
+                        print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
+                        print(self.broker.close_all())
                     break
 
                 if cycles is None or cycle < cycles:
@@ -751,7 +837,7 @@ class DemoTrader:
         script (live_trader) has already opened a position for this symbol.
         After a successful fill, log the opened event to Chronicle.
         """
-        summary = dict(scanned=0, trades=0, holds=0, rejects=0,
+        summary = dict(scanned=0, trades=0, signals=0, holds=0, rejects=0,
                        errors=0, timeouts=0, unmapped=0, managed=0,
                        kill_switch=False)
 
@@ -763,7 +849,7 @@ class DemoTrader:
             broker_sym = self._sym_mapper.translate(symbol)
             if broker_sym is None:
                 log.warning("[%s] UNMAPPED — no matching broker symbol found; skipping", symbol)
-                print(f"[{symbol}] UNMAPPED  (add BROKER_SYMBOL_MAP={symbol}:<broker_name> to .env)")
+                print(f"[{symbol}] UNMAPPED  (add MT5_BROKER_SYMBOL_MAP={symbol}:<broker_name> to .env)")
                 summary["unmapped"] += 1
                 continue
 
@@ -783,10 +869,32 @@ class DemoTrader:
                              symbol)
                     entry_price = existing_pos.get("price_open") or existing_pos.get("price") or 0.0
                     direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
-                    sl = existing_pos.get("sl") or (entry_price * (0.995 if direction == "long" else 1.005))
-                    tp = existing_pos.get("tp") or (entry_price * (1.01 if direction == "long" else 0.99))
+                    recent = self._recent_signals.match(symbol, direction, existing_pos.get("time"))
+                    if recent:
+                        self._open_context[symbol] = recent.get("streams") or {}
+                        sl = float(recent["plan"].get("stop") or 0.0)
+                        tp = float(recent["plan"].get("target") or 0.0)
+                        confidence = float(recent.get("effective_confidence", 0.5))
+                    else:
+                        sl = float(existing_pos.get("sl") or 0.0)
+                        tp = float(existing_pos.get("tp") or 0.0)
+                        confidence = 0.5
+                    if self.signal_only and (sl <= 0 or tp <= 0):
+                        self.telegram.send(
+                            f"Oracle found {symbol} position #{existing_pos.get('ticket')}, "
+                            "but cannot safely monitor it: no matching recent Oracle signal "
+                            "and the position is missing a stop loss or take profit. Add both "
+                            "levels in MT5 or wait for a matching Oracle signal. No changes were made.",
+                            f"position:{existing_pos.get('ticket')}:missing-baseline",
+                        )
+                        log.warning("[%s] signal-only monitoring skipped: position lacks a "
+                                    "matching signal or complete broker SL/TP", symbol)
+                        continue
+                    if not self.signal_only:
+                        sl = sl or (entry_price * (0.995 if direction == "long" else 1.005))
+                        tp = tp or (entry_price * (1.01 if direction == "long" else 0.99))
                     self._register_position(symbol, direction, entry_price=entry_price,
-                                             stop=sl, target=tp, confidence=0.5,
+                                             stop=sl, target=tp, confidence=confidence,
                                              size=existing_pos.get("volume", 0.0))
                 log.debug("[%s] position already open — Continuous Trade Manager "
                           "owns it; skipping new entry this cycle", symbol)
@@ -865,7 +973,27 @@ class DemoTrader:
             s    = sig["signal"]
             self._open_context[symbol] = sig.get("_streams", {})
 
-            conf_str = f"conf={s.get('confidence', 0):.3f}"
+            conf_str = f"conf={sig.get('effective_confidence', s.get('confidence', 0)):.3f}"
+
+            if self.signal_only:
+                alert = format_entry_alert(symbol, sig)
+                delivered = self.telegram.send(alert, f"entry:{symbol}:{plan.get('direction', '')}")
+                if delivered:
+                    self._recent_signals.remember(symbol, {
+                        "direction": plan.get("direction", ""),
+                        "plan": dict(plan),
+                        "effective_confidence": sig.get("effective_confidence", s.get("confidence", 0.5)),
+                        "streams": sig.get("_streams", {}),
+                    })
+                summary["signals"] += 1
+                log.info("[%s→%s] SIGNAL ONLY direction=%s %s Telegram=%s",
+                         symbol, broker_sym, plan["direction"], conf_str,
+                         "sent" if delivered else ("configured; delivery skipped/failed" if self.telegram.enabled else "not configured"))
+                print(f"[{symbol}→{broker_sym}] SIGNAL ONLY  direction={plan['direction']}  "
+                      f"{conf_str}  Telegram={'sent' if delivered else 'not sent'}")
+                if not self.telegram.enabled:
+                    print(alert)
+                continue
 
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym
@@ -950,6 +1078,9 @@ class DemoTrader:
     # ── external controls ─────────────────────────────────────────────────────
 
     def kill(self) -> Dict[str, Any]:
+        if self.signal_only:
+            return {"status": "signal_only", "message":
+                    "Oracle is in signal-only mode; manage positions manually."}
         return self.broker.close_all()
 
     def shutdown(self) -> None:

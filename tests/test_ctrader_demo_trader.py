@@ -14,6 +14,8 @@ def test_live_preset_has_ten_symbols_without_disabled_oil_and_adds_top_champions
     assert len(_LIVE_PRESET) == 10
     assert len(set(_LIVE_PRESET)) == 10
     assert "USOIL" not in _LIVE_PRESET
+    assert not {"BTCUSD", "ETHUSD"}.intersection(_LIVE_PRESET)
+    assert {"NZDUSD", "EURGBP"}.issubset(_LIVE_PRESET)
     assert {"VIX", "MSFT", "USDCAD"}.issubset(_LIVE_PRESET)
 
 

@@ -12,7 +12,8 @@ demo_trader doesn't know about it and may open another USDJPY.
 
 This module provides two things:
   1. ChroniclePositionLog — writes position events (opened/closed/modified)
-     to Chronicle so the other script can see them.
+     to Chronicle so the other script can see them, with a local JSONL
+     fallback when both Chronicle transports fail.
   2. query_open_positions(symbol) — reads Chronicle's recent events for a
      symbol and returns any positions that were opened but not yet closed.
 
@@ -21,7 +22,9 @@ Chronicle integration
 Chronicle is the ecosystem's shared memory agent.  We communicate with it
 via its .act() method (if the agent object is available) OR via the REST API
 at http://localhost:8000/agents/chronicle/chat (if running inside the
-ecosystem).
+ecosystem). If both fail, events are durably appended to
+~/.universe/oracle/position_events_fallback.jsonl by default. Override the
+fallback path with ORACLE_POSITION_EVENT_FALLBACK_PATH.
 
 The event format stored in Chronicle:
   {
@@ -67,7 +70,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 import re
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -87,6 +92,13 @@ _CHRONICLE_API_URL: str = os.getenv(
 
 # TRADER_ID tags every event so you can see which script created it
 _DEFAULT_TRADER_ID: str = os.getenv("TRADER_ID", "trader")
+_DEFAULT_LOCAL_FALLBACK_PATH = (
+    Path(os.getenv(
+        "ORACLE_POSITION_EVENT_FALLBACK_PATH",
+        str(Path.home() / ".universe" / "oracle" / "position_events_fallback.jsonl"),
+    )).expanduser()
+)
+_LOCAL_FALLBACK_LOCK = threading.Lock()
 
 
 class ChroniclePositionLog:
@@ -99,7 +111,8 @@ class ChroniclePositionLog:
 
     def __init__(self,
                  chronicle_agent=None,
-                 trader_id: str = _DEFAULT_TRADER_ID):
+                 trader_id: str = _DEFAULT_TRADER_ID,
+                 local_fallback_path: Optional[str | Path] = None):
         """
         chronicle_agent: a loaded ChronicleAgent instance (may be None).
                          If None, falls back to REST API calls.
@@ -107,6 +120,9 @@ class ChroniclePositionLog:
         """
         self._chronicle = chronicle_agent
         self._trader_id = trader_id or _DEFAULT_TRADER_ID
+        self._local_fallback_path = Path(
+            local_fallback_path or _DEFAULT_LOCAL_FALLBACK_PATH
+        ).expanduser()
         log.info("ChroniclePositionLog: trader_id=%r  chronicle_agent=%s  api=%s",
                  self._trader_id,
                  "available" if chronicle_agent else "None (REST fallback)",
@@ -246,10 +262,12 @@ class ChroniclePositionLog:
         if payload.get("reason"):
             summary += f" reason={payload['reason']}"
 
+        failures = []
+
         # Attempt 1: direct agent call
         if self._chronicle is not None:
             try:
-                self._chronicle.act("memory.store", {
+                result = self._chronicle.act("memory.store", {
                     "key":     f"position_event:{payload.get('symbol','?')}:{payload['ts']:.0f}",
                     "value":   json.dumps(payload),
                     "content": json.dumps(payload),
@@ -259,9 +277,16 @@ class ChroniclePositionLog:
                     "tags":    ["position_event", payload["event"], payload.get("symbol", "")],
                     "_sender": self._trader_id,
                 })
-                log.debug("_write: stored via chronicle_agent: %s", summary)
-                return
+                if not (isinstance(result, dict)
+                        and result.get("status") in {"error", "failed", "rejected"}):
+                    log.debug("_write: stored via chronicle_agent: %s", summary)
+                    return
+                failures.append(
+                    f"chronicle_agent returned status={result.get('status')}: "
+                    f"{result.get('message', 'store failed')}"
+                )
             except Exception as exc:
+                failures.append(f"chronicle_agent.act failed: {exc}")
                 log.debug("_write: chronicle_agent.act failed (%s) — trying REST", exc)
 
         # Attempt 2: REST API
@@ -281,10 +306,40 @@ class ChroniclePositionLog:
             log.debug("_write: stored via REST: %s", summary)
             return
         except Exception as exc:
-            log.debug("_write: REST fallback also failed (%s) — event not stored", exc)
+            failures.append(f"Chronicle REST fallback failed: {exc}")
+            log.debug("_write: REST fallback also failed (%s)", exc)
 
-        # Both failed — log at WARNING but never raise (never block trading)
-        log.warning("_write: could not store position event to Chronicle: %s", summary)
+        try:
+            self._write_local_fallback(payload)
+        except OSError as exc:
+            log.error(
+                "_write: Chronicle storage and local fallback both failed "
+                "for %s: %s; local_path=%s",
+                summary, "; ".join(failures), self._local_fallback_path,
+                exc_info=True,
+            )
+            return
+        log.warning(
+            "_write: Chronicle storage failed; saved position event to local "
+            "fallback %s: %s (reasons: %s)",
+            self._local_fallback_path, summary, "; ".join(failures),
+        )
+
+    def _write_local_fallback(self, payload: Dict[str, Any]) -> None:
+        """Durably append an event when neither Chronicle transport succeeds."""
+        encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+        path = self._local_fallback_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _LOCAL_FALLBACK_LOCK:
+            descriptor = os.open(
+                path,
+                os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+                0o600,
+            )
+            with os.fdopen(descriptor, "a", encoding="utf-8", newline="\n") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
 
     def _query_recent_events(self, symbol: str) -> List[Dict[str, Any]]:
         """

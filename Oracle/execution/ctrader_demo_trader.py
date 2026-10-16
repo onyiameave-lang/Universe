@@ -120,7 +120,7 @@ DEFAULT_SYMBOLS: List[str] = [
 _LIVE_PRESET: List[str] = [
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
     "XAUUSD",
-    "BTCUSD", "ETHUSD",
+    "NZDUSD", "EURGBP",
     "VIX", "MSFT", "USDCAD",
 ]
 
@@ -587,8 +587,11 @@ class CTraderDemoTrader:
                         self.oracle, pos, exit_price=pos.last_price,
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual)")
-                    if not outcome.won:
-                        self.oracle.risk.portfolio.record_loss(symbol)
+                    if outcome is not None:
+                        if outcome.won:
+                            self.oracle.risk.portfolio.record_win(symbol)
+                        else:
+                            self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Trade Learning failed on close: %s", symbol, exc)
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
@@ -628,15 +631,21 @@ class CTraderDemoTrader:
             if decision.action == Action.TIGHTEN_STOP:
                 log.info("[%s] CTM tighten #%s -> %.5f: %s",
                          symbol, pos_id, decision.new_stop, decision.reason)
-                print(f"[{symbol}->{broker_sym}] CTM TIGHTEN #{pos_id} "
-                      f"stop->{decision.new_stop:.5f}  {decision.reason}")
                 try:
                     mod = self.broker.modify_position(pos_id, stop_loss=decision.new_stop)
                     if mod.get("status") == "modified":
+                        print(f"[{symbol}->{broker_sym}] CTM TIGHTEN #{pos_id} "
+                              f"stop->{decision.new_stop:.5f}  {decision.reason}")
                         self._pos_log.log_modified(symbol, broker_sym, pos_id,
                                                     sl=decision.new_stop or 0.0, tp=pos.initial_target)
+                    else:
+                        log.warning("[%s] CTM: stop modification not confirmed #%s: %s",
+                                    symbol, pos_id, mod.get("reason", "unknown broker response"))
+                        print(f"[{symbol}->{broker_sym}] CTM TIGHTEN FAILED #{pos_id}: "
+                              f"{mod.get('reason', 'broker did not confirm the new stop')}")
                 except Exception as exc:
                     log.warning("[%s] CTM: modify failed #%s: %s", symbol, pos_id, exc)
+                    print(f"[{symbol}->{broker_sym}] CTM TIGHTEN FAILED #{pos_id}: {exc}")
             elif decision.action == Action.CLOSE:
                 log.info("[%s] CTM close #%s: %s", symbol, pos_id, decision.reason)
                 print(f"[{symbol}->{broker_sym}] CTM CLOSE #{pos_id}  {decision.reason}")
@@ -650,8 +659,11 @@ class CTraderDemoTrader:
                                 self.oracle, pos, exit_price=snap.price,
                                 exit_confidence=snap.confidence, exit_regime=snap.regime,
                                 exit_reason=decision.reason)
-                            if not outcome.won:
-                                self.oracle.risk.portfolio.record_loss(symbol)
+                            if outcome is not None:
+                                if outcome.won:
+                                    self.oracle.risk.portfolio.record_win(symbol)
+                                else:
+                                    self.oracle.risk.portfolio.record_loss(symbol)
                         except Exception:
                             pass
                         self.oracle.risk.portfolio.remove_by_symbol(symbol)

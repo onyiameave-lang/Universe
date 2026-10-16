@@ -96,6 +96,36 @@ def _execution_error_reason(payload: Any) -> str:
         or "unknown cTrader execution error"
 
 
+def _position_amendment_error(
+        payload: Any,
+        ticket: int,
+        stop_loss: Optional[float],
+        take_profit: Optional[float]) -> Optional[str]:
+    """Return why an SL/TP amendment is not confirmed by its execution event."""
+    error_code = getattr(payload, "errorCode", None)
+    if error_code:
+        return _execution_error_reason(payload)
+    if getattr(payload, "executionType", None) == 7:  # ORDER_REJECTED
+        return _execution_error_reason(payload)
+
+    position = getattr(payload, "position", None)
+    if position is None or getattr(position, "positionId", None) != ticket:
+        return "execution event did not confirm the requested position"
+
+    for field, requested in (("stopLoss", stop_loss), ("takeProfit", take_profit)):
+        if requested is None:
+            continue
+        actual = getattr(position, field, None)
+        if (isinstance(actual, bool) or not isinstance(actual, (int, float))
+                or not math.isclose(float(actual), float(requested),
+                                   rel_tol=0.0, abs_tol=1e-9)):
+            return (
+                f"execution event did not confirm {field}: "
+                f"requested {requested}, received {actual}"
+            )
+    return None
+
+
 def _round_price_to_digits(price: float, digits: int) -> float:
     quantum = Decimal(1).scaleb(-digits)
     return float(Decimal(str(price)).quantize(quantum, rounding=ROUND_HALF_UP))
@@ -695,6 +725,12 @@ class CTraderBroker:
         payload = self._send_and_wait(req)
         if payload is None:
             return {"status": "error", "reason": "modify timed out waiting for execution event"}
+
+        reason = _position_amendment_error(payload, ticket, stop_loss, take_profit)
+        if reason is not None:
+            log.warning("cTrader: position %s stop/limit amendment not confirmed: %s",
+                        ticket, reason)
+            return {"status": "error", "reason": reason, "ticket": ticket}
 
         with self._cache_lock:
             if stop_loss is not None:

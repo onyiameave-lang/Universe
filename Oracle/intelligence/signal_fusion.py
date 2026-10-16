@@ -75,7 +75,8 @@ class SignalFusion:
                    "evidence_state": s.get("evidence_state", "unknown"),
                    "source_status": s.get("source_status", {}),
                    "cross_source": s.get("cross_source", False),
-                   "articles": s.get("article_count", 0)}
+                   "articles": s.get("article_count", 0),
+                   "_risk_articles": s.get("risk_articles", [])}
         except Exception:
             log.warning("Sentinel sentiment request failed for %s", symbol, exc_info=True)
             return {"direction": 0.0, "confidence": 0.0,
@@ -94,7 +95,8 @@ class SignalFusion:
             return {"direction": s.get("sentiment", 0.0), "confidence": conf,
                      "evidence_state": s.get("evidence_state", "unknown"),
                    "posts": s.get("post_count", 0),
-                   "manipulation_warning": s.get("manipulation_warning", False)}
+                   "manipulation_warning": s.get("manipulation_warning", False),
+                   "_manipulation_flags": s.get("manipulation_flags", [])}
         except Exception:
             log.warning("Pulse sentiment request failed for %s", symbol, exc_info=True)
             return {"direction": 0.0, "confidence": 0.0,

@@ -165,21 +165,16 @@ Oracle uses canonical names (EURUSD, USOIL, SPX…). Your broker may use
 different names (XTIUSD, US500…). The script auto-discovers mappings from
 the broker's live symbol list.
 
-For symbols it can't auto-map, add overrides in `mt5_config.py`:
-```python
-SYMBOL_MAP_OVERRIDES = {
-    "USOIL":  "XTIUSD",   # your broker's name for WTI crude
-    "SPX":    "US500",    # your broker's name for S&P 500
-    "NASDAQ": "USTEC",
-    "DJI":    "US30",
-    "BTCUSD": "BTCUSDm",  # some brokers add 'm' suffix
-}
+For symbols it can't auto-map, add the broker's exact MT5 symbol name to
+`MT5_BROKER_SYMBOL_MAP` in `.env`:
+```env
+MT5_BROKER_SYMBOL_MAP=USOIL:<your-MT5-symbol>,SPX:US500,NASDAQ:USTEC,DJI:US30
 ```
 
-Or via environment variable:
-```env
-BROKER_SYMBOL_MAP=USOIL:XTIUSD,SPX:US500,NASDAQ:USTEC,DJI:US30
-```
+`BROKER_SYMBOL_MAP` is reserved for the cTrader adapter and is ignored by the
+MT5 trader. MT5 also only uses its built-in MetaQuotes-Demo aliases when the
+connected server is `MetaQuotes-Demo`; other servers use their discovered
+symbols or `MT5_BROKER_SYMBOL_MAP`.
 
 ---
 
@@ -206,8 +201,8 @@ BROKER_SYMBOL_MAP=USOIL:XTIUSD,SPX:US500,NASDAQ:USTEC,DJI:US30
 - Try leaving credentials blank — MT5 uses the currently-logged-in account
 
 ### "UNMAPPED — no broker symbol found"
-- Add the mapping to `SYMBOL_MAP_OVERRIDES` in `mt5_config.py`
-- Common: USOIL→XTIUSD, SPX→US500, NASDAQ→USTEC, DJI→US30
+- Find the exact name in the connected MT5 terminal's symbol list and add it
+  to `MT5_BROKER_SYMBOL_MAP` in `.env`; don't assume another broker's aliases.
 
 ### "MetaTrader5 package not installed"
 ```cmd

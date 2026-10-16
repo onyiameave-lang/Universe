@@ -351,16 +351,16 @@ class TradeLearningEngine:
         # 1. Feed the realized outcome back into adaptive fusion so
         #    per-stream trust weights adapt (winning and losing trades both
         #    teach it something, per the roadmap).
-        if realized_direction:
-            try:
-                oracle_agent.act("fusion.learn", {
-                    "symbol": pos.symbol,
-                    "streams": pos.entry_streams,
-                    "realized_direction": realized_direction,
-                    "_sender": "trade_learning",
-                })
-            except Exception as exc:
-                log.warning("[%s] fusion.learn failed: %s", pos.symbol, exc)
+        try:
+            oracle_agent.act("fusion.learn", {
+                "symbol": pos.symbol,
+                "streams": pos.entry_streams,
+                "realized_direction": realized_direction,
+                "trade_won": won,
+                "_sender": "trade_learning",
+            })
+        except Exception as exc:
+            log.warning("[%s] fusion.learn failed: %s", pos.symbol, exc)
 
         # 2. Grade Sentinel's news terms (Tier 0 self-improvement) against
         #    what price ACTUALLY did between entry and exit — independent

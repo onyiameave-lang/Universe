@@ -552,6 +552,7 @@ class IntelligenceEngine:
         return {"symbol": symbol, "sentiment": sentiment_val, "article_count": len(rel),
                "confidence": confidence_val,
              "evidence_state": "fresh",
+               "risk_articles": rel,
                "source_status": snapshot["source_status"],
                "snapshot_age_sec": snapshot_age,
                "cross_source": len({a["source"] for a in rel}) > 1,

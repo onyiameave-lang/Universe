@@ -215,6 +215,16 @@ class TradeManager:
         if pos.direction == Direction.SELL and snap.price >= pos.current_stop:
             return ManagedDecision(Action.CLOSE, reason=(
                 f"price {snap.price:.5f} hit stop {pos.current_stop:.5f}"), **base)
+        if pos.initial_target > 0 and pos.direction == Direction.BUY \
+                and snap.price >= pos.initial_target:
+            return ManagedDecision(Action.CLOSE, reason=(
+                f"price {snap.price:.5f} reached take-profit target "
+                f"{pos.initial_target:.5f}"), **base)
+        if pos.initial_target > 0 and pos.direction == Direction.SELL \
+                and snap.price <= pos.initial_target:
+            return ManagedDecision(Action.CLOSE, reason=(
+                f"price {snap.price:.5f} reached take-profit target "
+                f"{pos.initial_target:.5f}"), **base)
 
         # ---- 2. High-impact news check (checked first among the "soft"
         #         triggers -- roadmap: "Oracle should never ignore major

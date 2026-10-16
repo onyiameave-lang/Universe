@@ -439,6 +439,7 @@ class IntelligenceEngine:
             "avg_authenticity":     round(sum(weights) / len(rel), 3),
             "platforms":            list({p["platform"] for p in rel}),
             "manipulation_warning": manip["flagged"],
+            "manipulation_flags":  manip["manipulation_flags"],
             "evidence_state":       "fresh",
         }
         fresh_until = min(

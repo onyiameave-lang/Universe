@@ -9890,11 +9890,53 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 975
+    },
+    {
+      "source": "heuristic",
+      "task": "news.credibility",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'news.credibility' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "news.credibility",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'news.credibility' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "news.credibility",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'news.credibility' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
+    },
+    {
+      "source": "heuristic",
+      "task": "news.credibility",
+      "root_cause": "cannot schedule new futures after interpreter shutdown",
+      "lesson": "Task 'news.credibility' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 4
     }
   ],
   "failure_signatures": {
     "news.sentiment::No module named 'core.collectors'": 8,
     "news_path::all attempts failed": 6,
-    "news.credibility::No module named 'intelligence.term_reliability'": 975
-  }
+    "news.credibility::No module named 'intelligence.term_reliability'": 975,
+    "news.credibility::cannot schedule new futures after interpreter shutdown": 4
+  },
+  "pending_chronicle": []
 }

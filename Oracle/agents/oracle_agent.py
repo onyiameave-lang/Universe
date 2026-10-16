@@ -85,15 +85,15 @@ except ImportError:
 
 # News Intelligence (Phase 1 roadmap item 2)
 try:
-    from intelligence.news_impact import assess_news_impact  # type: ignore
+    from intelligence.news_impact import NewsImpactClassifier  # type: ignore
 except ImportError:
-    from Oracle.intelligence.news_impact import assess_news_impact  # type: ignore
+    from Oracle.intelligence.news_impact import NewsImpactClassifier  # type: ignore
 
 # Social Risk — Pulse manipulation detection (pump/dump-style coordinated activity)
 try:
-    from intelligence.social_risk import assess_social_risk  # type: ignore
+    from intelligence.social_risk import SocialRiskClassifier  # type: ignore
 except ImportError:
-    from Oracle.intelligence.social_risk import assess_social_risk  # type: ignore
+    from Oracle.intelligence.social_risk import SocialRiskClassifier  # type: ignore
 
 # Champion Confidence (roadmap Phase 1 item 4) — reads the same live
 # confidence store the Continuous Trade Manager's learning loop writes to.
@@ -262,6 +262,9 @@ class OracleAgent(BaseAgent):
             out = self.signal(symbol)
             if out.get("status") == "complete":
                 self._preserve(symbol, out)
+                streams = (out.get("signal") or {}).get("streams", {})
+                (streams.get("news") or {}).pop("_risk_articles", None)
+                (streams.get("social") or {}).pop("_manipulation_flags", None)
             out.pop("_technicals", None)
             return out
         if task == "strategy.evolve":
@@ -328,12 +331,21 @@ class OracleAgent(BaseAgent):
             # risk.evaluate() below reject the trade outright — reusing the
             # existing confidence floor instead of a parallel "paused" path.
             # A medium-impact event dampens confidence/size but doesn't halt.
-            news = assess_news_impact(self.sentinel, symbol)
+            streams = s.get("streams", {})
+            news_stream = streams.get("news", {})
+            social_stream = streams.get("social", {})
+            news = NewsImpactClassifier().assess(
+                news_stream.get("_risk_articles", []), symbol)
             # Social Risk: Pulse-detected coordinated pump/dump-style activity.
             # Compounds with news multiplicatively — each is an independent
             # reason to distrust the signal, so both firing should be more
             # conservative than either alone, not just take the worse of the two.
-            social = assess_social_risk(self.pulse, symbol)
+            social = SocialRiskClassifier().assess(
+                social_stream.get("_manipulation_flags", []), symbol)
+            # These are private decision inputs. Do not expose full provider
+            # payloads in the public trade.propose response.
+            news_stream.pop("_risk_articles", None)
+            social_stream.pop("_manipulation_flags", None)
             effective_confidence = s["confidence"] * news.confidence_multiplier * social.confidence_multiplier
             if news.level != "none":
                 log.info("[%s] news impact=%s conf %.3f -> %.3f: %s",
@@ -352,6 +364,7 @@ class OracleAgent(BaseAgent):
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason}
             return {"status": "complete", "plan": plan, "signal": s,
+                    "effective_confidence": effective_confidence,
                     "using_evolved_champion": sig["using_evolved_champion"],
                     "news_impact": news.level, "news_reason": news.reason,
                     "social_risk": social.level, "social_reason": social.reason,
@@ -362,8 +375,13 @@ class OracleAgent(BaseAgent):
             return self.risk.open_position(plan) if plan else \
                 {"status": "error", "message": "no plan; run trade.propose"}
         if task == "fusion.learn":
+            trade_won = ctx.get("trade_won")
+            if not isinstance(trade_won, bool):
+                return {"status": "error",
+                        "message": "fusion.learn requires the realized trade_won boolean"}
             return {"status": "complete", **self.fusion.learn_from_outcome(
-                symbol, ctx.get("streams", {}), ctx.get("realized_direction", 0))}
+                symbol, ctx.get("streams", {}), ctx.get("realized_direction", 0),
+                trade_won=trade_won)}
         if task == "risk.assess":
             return {"status": "complete", "risk": self.risk.evaluate(
                 symbol, ctx.get("direction", "long"), ctx.get("entry", 0),
@@ -421,4 +439,8 @@ class OracleAgent(BaseAgent):
         return base
 
     def sentiment_for(self, symbol: str):
-        return self.signal(symbol).get("signal", {})
+        signal = self.signal(symbol).get("signal", {})
+        streams = signal.get("streams", {})
+        (streams.get("news") or {}).pop("_risk_articles", None)
+        (streams.get("social") or {}).pop("_manipulation_flags", None)
+        return signal
