@@ -11269,100 +11269,116 @@
     "symbol": "RUT"
   },
   "SENSEX::ranging": {
-    "certified_at": 1792070101.1691067,
-    "generation": 102,
+    "certified_at": 1792156160.2690682,
+    "generation": 2,
     "genome": {
-      "backtests": 5,
-      "best_return": 0.0417,
-      "best_sharpe": 0.849,
-      "fitness": 10.2639,
-      "generation": 102,
-      "genome_id": "market-d0abb2",
+      "backtests": 15,
+      "best_return": 0.016,
+      "best_sharpe": 0.481,
+      "fitness": 6.8046,
+      "generation": 2,
+      "genome_id": "mut-2e4b41",
       "modules": {
         "entry": {
-          "logic_type": "adaptive",
+          "logic_type": "default",
           "params": {
-            "base_threshold": 0.3,
-            "regime_bonus": 0.15
+            "confirmation_required": false,
+            "threshold": 0.37
           }
         },
         "execution": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "slippage_pips": 0.6701025876230284
+          }
         },
         "exit": {
-          "logic_type": "swing_stops",
+          "logic_type": "default",
           "params": {
-            "lookback": 10,
-            "sl_mult": 2.0,
-            "tp_mult": 3.0
+            "atr_override": null,
+            "sl_mult": 2.1,
+            "tp_mult": 4.0
           }
         },
         "market_regime": {
-          "logic_type": "default",
+          "logic_type": "strict",
           "params": {
             "allowed_regimes": [
               "trending_up",
               "trending_down"
-            ]
+            ],
+            "volatility_limit": 1.0
           }
         },
         "momentum": {
-          "logic_type": "roc",
+          "logic_type": "rsi",
           "params": {
-            "period": 10,
-            "threshold": 15
+            "lower": 31,
+            "period": 8,
+            "upper": 68
           }
         },
         "position": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "volatility_adjusted",
+          "params": {
+            "base_risk": 0.01
+          }
         },
         "risk": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "max_correlated_positions": 3,
+            "max_dd_limit": 0.15,
+            "risk_per_trade": 0.01
+          }
         },
         "trade_management": {
-          "logic_type": "default",
-          "params": {}
+          "logic_type": "trailing_stop",
+          "params": {
+            "activate_at_r": 1.6,
+            "trail_mult": 2.3
+          }
         },
         "trend": {
-          "logic_type": "market_structure",
+          "logic_type": "ema",
           "params": {
-            "lookback": 17,
+            "fast": 15,
             "slow": 46
           }
         },
         "volatility": {
           "logic_type": "default",
-          "params": {}
+          "params": {
+            "expansion_ratio": 1.0,
+            "period": 14
+          }
         }
       },
       "parents": [
-        "xov-06d24b"
+        "seed-848992"
       ]
     },
     "in_sample": {
-      "fitness": 10.2639,
-      "return": 0.0417
+      "fitness": 6.8046,
+      "return": 0.016
     },
     "out_of_sample": {
-      "avg_pnl": 70.44,
-      "consistency": 0.6,
-      "expectancy": 70.44,
-      "final_equity": 10352.22,
+      "avg_pnl": 74.95,
+      "consistency": 0.8,
+      "expectancy": 74.95,
+      "final_equity": 10374.75,
       "max_drawdown": 0.01,
-      "profit_factor": 4.368,
-      "recovery_factor": 3.522,
-      "sharpe_proxy": 0.667,
-      "sortino_proxy": 1.506,
+      "profit_factor": 4.584,
+      "recovery_factor": 3.747,
+      "sharpe_proxy": 0.729,
+      "sortino_proxy": 1.603,
       "status": "complete",
-      "total_return": 0.0352,
+      "total_return": 0.0375,
       "trades": 5,
-      "win_rate": 0.6
+      "win_rate": 0.8
     },
     "parents": [
-      "xov-06d24b"
+      "seed-848992"
     ],
     "regime": "ranging",
     "symbol": "SENSEX"
