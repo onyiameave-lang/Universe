@@ -11051,21 +11051,21 @@
     "symbol": "RUT"
   },
   "RUT::trending_down": {
-    "certified_at": 1792008376.7588446,
-    "generation": 44,
+    "certified_at": 1792238738.3702343,
+    "generation": 72,
     "genome": {
-      "backtests": 8,
-      "best_return": 0.0214,
-      "best_sharpe": 0.507,
-      "fitness": 6.8846,
-      "generation": 44,
-      "genome_id": "mut-9ed69b",
+      "backtests": 15,
+      "best_return": 0.0368,
+      "best_sharpe": 3.042,
+      "fitness": 8.9995,
+      "generation": 72,
+      "genome_id": "mut-5e496f",
       "modules": {
         "entry": {
           "logic_type": "adaptive",
           "params": {
             "base_threshold": 0.35,
-            "regime_bonus": 0.1
+            "regime_bonus": 0.102
           }
         },
         "execution": {
@@ -11073,10 +11073,11 @@
           "params": {}
         },
         "exit": {
-          "logic_type": "atr_stops",
+          "logic_type": "time_exit",
           "params": {
-            "sl_mult": 1.5,
-            "tp_mult": 4.0
+            "max_bars": 19,
+            "sl_mult": 1.747,
+            "tp_mult": 3.588
           }
         },
         "market_regime": {
@@ -11091,10 +11092,12 @@
           }
         },
         "momentum": {
-          "logic_type": "adx_strength",
+          "logic_type": "stochastic",
           "params": {
-            "period": 14,
-            "threshold": 20
+            "d_period": 3,
+            "k_period": 8,
+            "lower": 23,
+            "upper": 67
           }
         },
         "position": {
@@ -11110,46 +11113,44 @@
           "params": {}
         },
         "trend": {
-          "logic_type": "ichimoku_cloud",
+          "logic_type": "sma_crossover",
           "params": {
-            "kijun": 26,
-            "slow": 46,
-            "tenkan": 9
+            "fast": 20,
+            "slow": 46
           }
         },
         "volatility": {
-          "logic_type": "historical_vol",
+          "logic_type": "keltner_squeeze",
           "params": {
-            "period": 20,
-            "threshold": 15.0
+            "period": 20
           }
         }
       },
       "parents": [
-        "xov-777ff4"
+        "xov-93ef26"
       ]
     },
     "in_sample": {
-      "fitness": 6.8846,
-      "return": 0.0214
+      "fitness": 8.9995,
+      "return": 0.0368
     },
     "out_of_sample": {
-      "avg_pnl": 146.69,
+      "avg_pnl": 148.16,
       "consistency": 1.0,
-      "expectancy": 146.69,
-      "final_equity": 10586.77,
+      "expectancy": 148.16,
+      "final_equity": 10592.64,
       "max_drawdown": 0.0,
       "profit_factor": null,
       "recovery_factor": 0.0,
-      "sharpe_proxy": 15.0,
+      "sharpe_proxy": 20.352,
       "sortino_proxy": 0.0,
       "status": "complete",
-      "total_return": 0.0587,
+      "total_return": 0.0593,
       "trades": 4,
       "win_rate": 1.0
     },
     "parents": [
-      "xov-777ff4"
+      "xov-93ef26"
     ],
     "regime": "trending_down",
     "symbol": "RUT"
