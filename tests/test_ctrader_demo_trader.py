@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import threading
 
 from Oracle.execution.ctrader_demo_trader import (
     CTraderDemoTrader,
@@ -7,6 +8,7 @@ from Oracle.execution.ctrader_demo_trader import (
     _LIVE_PRESET,
     _duplicate_broker_symbol_mappings,
     _is_trading_disabled_rejection,
+    _call_with_timeout,
 )
 
 
@@ -111,3 +113,39 @@ def test_first_valid_account_refresh_sets_session_baseline():
     assert trader._kill_switch_check() is False
     assert trader._start_equity == 12_500.0
     assert trader._ks_equity_cache == 12_500.0
+
+
+def test_timed_out_symbol_call_remains_single_flight_until_it_finishes(monkeypatch):
+    import Oracle.execution.ctrader_demo_trader as trader_module
+
+    monkeypatch.setattr(trader_module, "_symbol_slots", threading.BoundedSemaphore(1))
+    monkeypatch.setattr(trader_module, "_symbol_futures", {})
+
+    release = threading.Event()
+    started = threading.Event()
+    calls = []
+
+    def blocked_call():
+        assert threading.current_thread().daemon is True
+        calls.append("started")
+        started.set()
+        release.wait(2)
+        return {"status": "complete"}
+
+    _, timed_out = _call_with_timeout(blocked_call, 0.01, work_key=("trader", "EURUSD"))
+    assert timed_out is True
+    assert started.wait(1)
+    future = trader_module._symbol_futures[("trader", "EURUSD")]
+
+    late_result, duplicate_timed_out = _call_with_timeout(
+        lambda: calls.append("duplicate"), 0.01, work_key=("trader", "EURUSD"))
+
+    assert duplicate_timed_out is True
+    assert late_result is None
+    assert calls == ["started"]
+    # The sole executor slot is still held by the timed-out Oracle call.
+    _, capacity_timed_out = _call_with_timeout(
+        lambda: calls.append("other symbol"), 0.01, work_key=("trader", "GBPUSD"))
+    assert capacity_timed_out is True
+    release.set()
+    assert future.result(timeout=1)["status"] == "complete"

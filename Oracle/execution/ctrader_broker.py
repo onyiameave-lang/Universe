@@ -429,6 +429,7 @@ class CTraderBroker:
         msg_id = str(uuid.uuid4())
         ev = threading.Event()
         slot = {"event": ev, "result": [None]}
+        started_at = time.monotonic()
         with self._pending_lock:
             self._pending[msg_id] = slot
 
@@ -441,8 +442,12 @@ class CTraderBroker:
         with self._pending_lock:
             self._pending.pop(msg_id, None)
         if not ok:
-            log.warning("cTrader: request timed out after %.1fs (clientMsgId=%s)", timeout, msg_id)
+            elapsed = time.monotonic() - started_at
+            log.warning("cTrader: request timed out after %.3fs (limit=%.1fs, clientMsgId=%s)",
+                        elapsed, timeout, msg_id)
             return None
+        log.debug("cTrader: request completed in %.3fs (clientMsgId=%s)",
+                  time.monotonic() - started_at, msg_id)
         return slot["result"][0]
 
     def _volume_to_cents(self, raw_volume: float) -> int:

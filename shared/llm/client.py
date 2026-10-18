@@ -34,6 +34,8 @@ New in this version (deep-fix):
 Environment variables (all optional, safe defaults):
   PULSE_LLM_MODE or ORACLE_LLM_MODE   "essential_only" | "full"  (default "full")
   LLM_RATE_LIMIT_RPM                  int   (default 5)
+  LLM_RATE_LIMIT_WAIT_SEC             float (default 120; essential calls)
+  LLM_NON_ESSENTIAL_RATE_LIMIT_WAIT_SEC float (default 0; advisory calls)
   LLM_MAX_RETRIES                     int   (default 3)
   LLM_MAX_BACKOFF_SEC                 float (default 60.0)
   LLM_CACHE_TTL_SEC                   float (default 120.0)
@@ -112,6 +114,10 @@ _RATE_LIMIT_RPM      = max(1, int(os.getenv("LLM_RATE_LIMIT_RPM",          "5"))
 _MAX_RETRIES         = max(0, int(os.getenv("LLM_MAX_RETRIES",              "3")))
 _MAX_BACKOFF_SEC     = float(os.getenv("LLM_MAX_BACKOFF_SEC",               "60.0"))
 _CACHE_TTL_SEC       = float(os.getenv("LLM_CACHE_TTL_SEC",                "120.0"))
+_ESSENTIAL_RATE_LIMIT_WAIT_SEC = max(
+    0.0, float(os.getenv("LLM_RATE_LIMIT_WAIT_SEC", "120.0")))
+_NON_ESSENTIAL_RATE_LIMIT_WAIT_SEC = max(
+    0.0, float(os.getenv("LLM_NON_ESSENTIAL_RATE_LIMIT_WAIT_SEC", "0.0")))
 _CB_COOLDOWN_SEC     = float(os.getenv("CIRCUIT_BREAKER_COOLDOWN_SEC",      "60.0"))
 
 
@@ -580,7 +586,11 @@ class LLMClient:
             return cached
 
         # ── 4. TOKEN BUCKET ────────────────────────────────────────────
-        if not _bucket.acquire(timeout=120.0):
+        rate_limit_wait = (
+            _ESSENTIAL_RATE_LIMIT_WAIT_SEC if essential
+            else _NON_ESSENTIAL_RATE_LIMIT_WAIT_SEC
+        )
+        if not _bucket.acquire(timeout=rate_limit_wait):
             return LLMResult(ok=False, reason="rate_limiter_timeout",
                              provider="none", latency_ms=0.0)
 

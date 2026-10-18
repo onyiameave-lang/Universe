@@ -81,6 +81,10 @@ from core.risk import Position as RiskPosition  # type: ignore
 
 log = logging.getLogger("oracle.ctrader_demo")
 
+_symbol_slots = None
+_symbol_futures = {}
+_symbol_executor_lock = threading.RLock()
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
@@ -255,34 +259,67 @@ def _load(folder, rel, cls, **kw):
             sys.path.pop(0)
 
 
-def _call_with_timeout(fn, timeout_sec: float) -> Tuple[Any, bool]:
-    """Run `fn` with a timeout using a shared ThreadPoolExecutor.
+def _call_with_timeout(fn, timeout_sec: float, *, work_key=None) -> Tuple[Any, bool]:
+    """Run a bounded Oracle proposal on a daemon thread with a caller timeout.
 
-    This avoids creating a new thread per symbol call (which can accumulate
-    and exhaust file descriptors). The executor's worker threads may still be
-    blocked by a long-running task, but the total number of threads is bounded
-    by ORACLE_SYMBOL_MAX_WORKERS (default 4).
-
-    Returns (result, timed_out). If the function raises, the exception is
-    propagated to the caller. If a timeout occurs, (None, True) is returned.
+    Python cannot stop a thread blocked in Oracle/driver code. Keep its
+    capacity reserved, reject additional work when all slots are occupied,
+    and optionally prevent overlapping calls for the same work key. Daemon
+    workers ensure an abandoned, read-only proposal cannot hold process
+    shutdown open. Results arriving after timeout are discarded by the caller.
     """
-    # Lazy-create a module-level executor so multiple calls share worker threads
-    global _symbol_executor
-    try:
-        _symbol_executor
-    except NameError:
-        max_workers = int(os.getenv("ORACLE_SYMBOL_MAX_WORKERS", "4"))
-        _symbol_executor = _cf.ThreadPoolExecutor(max_workers=max_workers)
+    global _symbol_slots
+    with _symbol_executor_lock:
+        if _symbol_slots is None:
+            max_workers = max(1, int(os.getenv("ORACLE_SYMBOL_MAX_WORKERS", "4")))
+            _symbol_slots = threading.BoundedSemaphore(max_workers)
+        if work_key is not None:
+            previous = _symbol_futures.get(work_key)
+            if previous is not None and not previous.done():
+                return None, True
+            if previous is not None:
+                _symbol_futures.pop(work_key, None)
+        if not _symbol_slots.acquire(blocking=False):
+            return None, True
+        fut = _cf.Future()
+        if work_key is not None:
+            _symbol_futures[work_key] = fut
 
-    fut = _symbol_executor.submit(fn)
+        def _release_slot(completed):
+            with _symbol_executor_lock:
+                if work_key is not None and _symbol_futures.get(work_key) is completed:
+                    _symbol_futures.pop(work_key, None)
+                _symbol_slots.release()
+
+        fut.add_done_callback(_release_slot)
+
+        def _run():
+            if not fut.set_running_or_notify_cancel():
+                return
+            try:
+                result = fn()
+            except BaseException as exc:
+                fut.set_exception(exc)
+            else:
+                fut.set_result(result)
+
+        worker = threading.Thread(
+            target=_run,
+            name="oracle-symbol-proposal",
+            daemon=True,
+        )
+        try:
+            worker.start()
+        except Exception:
+            if work_key is not None and _symbol_futures.get(work_key) is fut:
+                _symbol_futures.pop(work_key, None)
+            _symbol_slots.release()
+            raise
     try:
         result = fut.result(timeout=timeout_sec)
     except _cf.TimeoutError:
-        # Cannot forcibly cancel a running thread; leave it to finish but
-        # report a timeout to the caller so the scan can continue.
         return None, True
-    except Exception as exc:
-        # Re-raise any exception from the worker
+    except Exception:
         raise
     return result, False
 
@@ -837,7 +874,8 @@ class CTraderDemoTrader:
                     lambda sym=symbol: self.oracle.act(
                         "trade.propose", {"symbol": sym, "_sender": "ctrader_demo",
                                           "market_state": market_state}),
-                    self._symbol_timeout)
+                    self._symbol_timeout,
+                    work_key=(id(self), symbol))
             except Exception as exc:
                 print(f"[{symbol}] ERROR  {exc}")
                 summary["errors"] += 1

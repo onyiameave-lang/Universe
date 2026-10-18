@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import threading
 
 from Oracle.execution.ctrader_broker import (
     _execution_error_reason,
@@ -74,3 +75,41 @@ def test_order_volume_below_broker_minimum_is_not_upsized():
     assert _volume_cents_within_constraints(1_905, constraints) == 0
     assert _volume_cents_within_constraints(250_000, constraints) == 200_000
     assert _volume_cents_within_constraints(50_000_000, constraints) == 50_000_000
+
+
+def test_late_response_for_timed_out_request_is_not_delivered_to_a_caller():
+    from Oracle.execution.ctrader_broker import CTraderBroker
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker._pending = {}
+    broker._pending_lock = threading.Lock()
+    broker._Protobuf = SimpleNamespace(extract=lambda message: message.payload)
+    seen_payloads = []
+    broker._update_cache_from_payload = seen_payloads.append
+
+    broker._dispatch_message(SimpleNamespace(
+        clientMsgId="already-timed-out", payload={"status": "filled"}))
+
+    assert seen_payloads == [{"status": "filled"}]
+
+
+def test_send_and_wait_removes_a_request_after_timeout(monkeypatch):
+    import Oracle.execution.ctrader_broker as broker_module
+
+    class ImmediateTimeoutEvent:
+        def wait(self, timeout=None):
+            return False
+
+    class Deferred:
+        def addErrback(self, callback):
+            return self
+
+    broker = broker_module.CTraderBroker.__new__(broker_module.CTraderBroker)
+    broker._pending = {}
+    broker._pending_lock = threading.Lock()
+    broker._client = SimpleNamespace(send=lambda request, clientMsgId: Deferred())
+    broker._reactor = SimpleNamespace(callFromThread=lambda callback: callback())
+    monkeypatch.setattr(broker_module, "threading", SimpleNamespace(Event=ImmediateTimeoutEvent))
+
+    assert broker._send_and_wait(object(), timeout=0.01) is None
+    assert broker._pending == {}

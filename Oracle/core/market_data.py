@@ -28,6 +28,10 @@ import os  # noqa: E402 (needed for env var above; placed after existing imports
 
 _UA = "MarketOracleAI/1.0 (AI Ecosystem financial intelligence)"
 _TIMEOUT = 15
+try:
+    _YFINANCE_TIMEOUT_SEC = max(1.0, float(os.getenv("YFINANCE_TIMEOUT_SEC", "10")))
+except ValueError:
+    _YFINANCE_TIMEOUT_SEC = 10.0
 
 # ---- In-memory TTL cache for market data ----
 # Prevents repeated yfinance/Stooq HTTP calls within the same trading cycle.
@@ -99,7 +103,8 @@ class YFinanceSource:
     def fetch(self, symbol: str, period: str = "6mo", interval: str = "1d") -> Optional[Series]:
         try:
             import yfinance as yf
-            df = yf.Ticker(self._map(symbol)).history(period=period, interval=interval)
+            df = yf.Ticker(self._map(symbol)).history(
+                period=period, interval=interval, timeout=_YFINANCE_TIMEOUT_SEC)
             if df is None or df.empty:
                 return None
             bars = []
