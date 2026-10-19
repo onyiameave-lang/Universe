@@ -259,7 +259,8 @@ def _load(folder, rel, cls, **kw):
             sys.path.pop(0)
 
 
-def _call_with_timeout(fn, timeout_sec: float, *, work_key=None) -> Tuple[Any, bool]:
+def _call_with_timeout(fn, timeout_sec: float, *, work_key=None,
+                      reason_out=None) -> Tuple[Any, bool]:
     """Run a bounded Oracle proposal on a daemon thread with a caller timeout.
 
     Python cannot stop a thread blocked in Oracle/driver code. Keep its
@@ -276,10 +277,18 @@ def _call_with_timeout(fn, timeout_sec: float, *, work_key=None) -> Tuple[Any, b
         if work_key is not None:
             previous = _symbol_futures.get(work_key)
             if previous is not None and not previous.done():
+                if reason_out is not None:
+                    reason_out.append("previous_worker_active")
+                log.warning("Oracle proposal skipped for %s: previous timed-out worker is still running",
+                            work_key[-1] if isinstance(work_key, tuple) else work_key)
                 return None, True
             if previous is not None:
                 _symbol_futures.pop(work_key, None)
         if not _symbol_slots.acquire(blocking=False):
+            if reason_out is not None:
+                reason_out.append("worker_capacity_full")
+            log.warning("Oracle proposal skipped for %s: all symbol worker slots are occupied",
+                        work_key[-1] if isinstance(work_key, tuple) else work_key)
             return None, True
         fut = _cf.Future()
         if work_key is not None:
@@ -318,6 +327,10 @@ def _call_with_timeout(fn, timeout_sec: float, *, work_key=None) -> Tuple[Any, b
     try:
         result = fut.result(timeout=timeout_sec)
     except _cf.TimeoutError:
+        if reason_out is not None:
+            reason_out.append("deadline_exceeded")
+        log.warning("Oracle proposal exceeded %.1fs for %s; daemon worker remains active",
+                    timeout_sec, work_key[-1] if isinstance(work_key, tuple) else work_key)
         return None, True
     except Exception:
         raise
@@ -869,20 +882,28 @@ class CTraderDemoTrader:
                 summary["market_closed"] += 1
                 continue
             print(f"[{symbol}->{broker_sym}] evaluating entry...")
+            proposal_started = time.monotonic()
+            timeout_reason = []
             try:
                 sig, timed_out = _call_with_timeout(
                     lambda sym=symbol: self.oracle.act(
                         "trade.propose", {"symbol": sym, "_sender": "ctrader_demo",
                                           "market_state": market_state}),
                     self._symbol_timeout,
-                    work_key=(id(self), symbol))
+                    work_key=(id(self), symbol), reason_out=timeout_reason)
             except Exception as exc:
                 print(f"[{symbol}] ERROR  {exc}")
                 summary["errors"] += 1
                 continue
             if timed_out:
-                print(f"[{symbol}] TIMEOUT after {self._symbol_timeout:.0f}s")
-                summary["timeouts"] += 1
+                elapsed = time.monotonic() - proposal_started
+                reason = timeout_reason[0] if timeout_reason else "unknown"
+                if reason == "deadline_exceeded":
+                    print(f"[{symbol}] TIMEOUT after {elapsed:.1f}s (limit {self._symbol_timeout:.0f}s)")
+                    summary["timeouts"] += 1
+                else:
+                    print(f"[{symbol}] SKIP after {elapsed:.1f}s (proposal {reason})")
+                    summary["errors"] += 1
                 continue
             status = (sig or {}).get("status")
             if status != "complete":

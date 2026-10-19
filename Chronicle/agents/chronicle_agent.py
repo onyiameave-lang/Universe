@@ -186,9 +186,15 @@ class ChronicleAgent(BaseAgent):
         except Exception:
             log.debug("autolink skipped")
 
-    def _retrieve(self, query: str, requester: str, domain: Optional[str], top_k: int) -> Dict[str, Any]:
-        result = self.retrieval.retrieve(query=query, requester=requester, domain=domain, top_k=top_k)
-        self.anticipation.observe(requester, query, domain, [r["memory_id"] for r in result["results"]])
+    def _retrieve(self, query: str, requester: str, domain: Optional[str], top_k: int,
+                  record_usage: bool = True) -> Dict[str, Any]:
+        result = self.retrieval.retrieve(
+            query=query, requester=requester, domain=domain, top_k=top_k,
+            record_usage=record_usage,
+        )
+        if record_usage:
+            self.anticipation.observe(
+                requester, query, domain, [r["memory_id"] for r in result["results"]])
         return result
 
     def answer(self, query: str, requester: str = "unknown",
@@ -509,7 +515,10 @@ class ChronicleAgent(BaseAgent):
     # ---- in-process convenience ----
 
     def search(self, query: str = "", domain: Optional[str] = None, limit: int = 5, **kw):
-        return self._retrieve(query, kw.get("requester", "ecosystem"), domain, limit)["results"]
+        return self._retrieve(
+            query, kw.get("requester", "ecosystem"), domain, limit,
+            record_usage=kw.get("record_usage", True),
+        )["results"]
 
     def store(self, content, memory_type="semantic", domain="general", tags=None, **kw):  # type: ignore
         return self.store_memory(content=content, pillar=memory_type, domain=domain, tags=tags,

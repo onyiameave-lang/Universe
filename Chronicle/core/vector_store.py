@@ -202,6 +202,21 @@ class VectorStore:
             self._persist()
         self._notify_hybrid()  # FIX-HYBRID-01: outside lock to avoid deadlock
 
+    def update_many(self, records: List[MemoryRecord], *,
+                    notify_hybrid: bool = True) -> None:
+        """Persist related record updates in one write and one index refresh."""
+        if not records:
+            return
+        with self._lock:
+            for record in records:
+                record.version += 1
+                record.compute_confidence()
+                self._records[record.memory_id] = record
+            self._dirty = True
+            self._persist()
+        if notify_hybrid:
+            self._notify_hybrid()
+
     def archive(self, memory_id: str) -> bool:
         with self._lock:
             rec = self._records.get(memory_id)

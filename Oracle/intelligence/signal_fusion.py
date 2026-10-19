@@ -107,7 +107,8 @@ class SignalFusion:
             return {"direction": 0.0, "confidence": 0.0, "note": "chronicle unavailable"}
         try:
             mems = self.chronicle.search(query=f"{symbol} {regime} strategy outcome",
-                                        domain="trading", limit=4, requester="oracle")
+                                        domain="trading", limit=4, requester="oracle",
+                                        record_usage=False)
             if not mems:
                 return {"direction": 0.0, "confidence": 0.0, "note": "no prior memory"}
             # infer directional lesson from memory summaries

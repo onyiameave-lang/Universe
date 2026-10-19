@@ -211,7 +211,8 @@ class IntelligenceEngine:
         return None
 
     # ── gather ────────────────────────────────────────────────────────────────
-    def gather(self, topics=None, sources=None, limit=10) -> Dict[str, Any]:
+    def gather(self, topics=None, sources=None, limit=10, *,
+               allow_external_enrichment: bool = True) -> Dict[str, Any]:
         started  = time.time()
         raw      = self.collectors.collect_by_category(
             topics=topics, sources=sources, limit=limit)
@@ -222,8 +223,8 @@ class IntelligenceEngine:
             p["symbols"]      = extract_symbols(p["title"] + " " + p["content"])
             score, used_llm   = _score_sentiment(
                 p["title"] + " " + p["content"],
-                llm=self.llm,
-                chronicle=self.chronicle,
+                llm=self.llm if allow_external_enrichment else None,
+                chronicle=self.chronicle if allow_external_enrichment else None,
             )
             p["sentiment"]    = score
             p["authenticity"] = authenticity_weight(p)
@@ -417,7 +418,11 @@ class IntelligenceEngine:
 
         rel = [p for p in self._posts if _matches(p) and _is_fresh(p)]
         if not rel:
-            g   = self.gather(topics=[symbol])
+            # This method feeds Oracle's per-symbol trading decision. Keep it
+            # bounded and independent of optional LLM/Chronicle lookups: those
+            # calls used to run once per post and could hold a symbol scan for
+            # minutes when Chronicle or the LLM provider was slow.
+            g   = self.gather(topics=[symbol], allow_external_enrichment=False)
             rel = [p for p in g["posts"] if _matches(p) and _is_fresh(p)]
         if not rel:
             result = {"symbol": symbol, "sentiment": 0.0,

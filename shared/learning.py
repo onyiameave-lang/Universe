@@ -23,6 +23,19 @@ from typing import Any, Dict, List, Optional
 log = logging.getLogger("shared.learning")
 _SYNC_RETRY_BASE_SEC = 5.0
 _SYNC_RETRY_MAX_SEC = 300.0
+_PERSIST_LOCKS_GUARD = threading.Lock()
+_PERSIST_LOCKS: Dict[str, threading.RLock] = {}
+
+
+def _persist_lock(path: Path) -> threading.RLock:
+    """Return a process-wide lock for a learning log's destination path."""
+    key = str(path.resolve()).casefold()
+    with _PERSIST_LOCKS_GUARD:
+        lock = _PERSIST_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _PERSIST_LOCKS[key] = lock
+        return lock
 
 
 class Episode:
@@ -67,6 +80,7 @@ class LearningLog:
         self._sync_thread: Optional[threading.Thread] = None
         self._chronicle_unavailable_warned = False
         self._path = Path(storage_dir) / f"{agent_name}_learning.json"
+        self._persist_lock = _persist_lock(self._path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._load()
 
@@ -90,25 +104,45 @@ class LearningLog:
                             self.agent, self._path, exc)
 
     def _persist(self) -> bool:
+        tmp_path = self._path.with_name(
+            f"{self._path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+        )
         try:
-            with self._lock:
+            # Different LearningLog instances (or duplicate module imports) can
+            # target the same Chronicle file. Serialize in-process writers and
+            # give each writer its own temp file so Windows never races on one
+            # shared `.tmp` path.
+            with self._persist_lock, self._lock:
                 data = json.dumps({
                     "agent":              self.agent,
                     "lessons":            self._lessons,
                     "failure_signatures": self._failure_signatures,
                     "pending_chronicle":  self._pending_chronicle,
                 }, indent=2)
-                tmp_path = self._path.with_suffix(".tmp")
                 with tmp_path.open("w", encoding="utf-8") as stream:
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                os.replace(tmp_path, self._path)
+                # Antivirus/indexer handles can briefly deny the destination
+                # rename on Windows. Retry only that atomic replacement.
+                for attempt in range(4):
+                    try:
+                        os.replace(tmp_path, self._path)
+                        break
+                    except PermissionError:
+                        if attempt == 3:
+                            raise
+                        time.sleep(0.05 * (2 ** attempt))
             return True
         except (OSError, TypeError, ValueError) as exc:
             log.warning("could not persist learning log for %s to %s: %s",
                         self.agent, self._path, exc)
             return False
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def start_sync_worker(self) -> None:
         """Start one durable outbox worker for this agent's lessons."""

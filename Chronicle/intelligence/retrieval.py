@@ -133,7 +133,7 @@ class RetrievalEngine:
 
     def retrieve(self, query: str, requester: str = "unknown", intent: str = "",
                  domain: Optional[str] = None, pillar: Optional[str] = None,
-                 top_k: int = 5) -> Dict[str, Any]:
+                 top_k: int = 5, record_usage: bool = True) -> Dict[str, Any]:
         trace: Dict[str, Any] = {}
         started = time.time()
 
@@ -197,9 +197,14 @@ class RetrievalEngine:
             "scorer": "sbert+bm25" if (self._hybrid is not None) else "cosine-only"
         }
 
-        for rec, _ in ranked[:top_k]:
-            _record_retrieval(rec, requester)
-            self.store.update(rec)
+        if record_usage:
+            retrieved_records = [rec for rec, _ in ranked[:top_k]]
+            for rec in retrieved_records:
+                _record_retrieval(rec, requester)
+            if retrieved_records:
+                # Usage feedback is metadata-only. Persist the batch once
+                # without rebuilding the text index.
+                self.store.update_many(retrieved_records, notify_hybrid=False)
 
         results = [{"memory_id": rec.memory_id,
                     "summary": rec.summary or str(rec.content)[:120],
@@ -236,7 +241,8 @@ class RetrievalEngine:
 
         try:
             # Refresh corpus so newly added records are included
-            self._refresh_hybrid()
+            # VectorStore notifies this retriever whenever searchable content
+            # changes. Avoid rebuilding the full BM25 corpus for every query.
 
             # Build candidate dict lookup
             cand_map: Dict[str, Tuple[MemoryRecord, float]] = {}

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -217,9 +218,21 @@ class OracleAgent(BaseAgent):
         # FIX O-3: use SignalFusion for news/social/memory streams.
         # These methods call sentinel.sentiment_for(), pulse.sentiment_for(),
         # chronicle.search() and return richer dicts than the old inline methods.
-        news_stream   = self._signal_fusion._news_signal(symbol)
+        stage_started = time.monotonic()
+        news_stream = self._signal_fusion._news_signal(symbol)
+        stage_elapsed = time.monotonic() - stage_started
+        if stage_elapsed >= 3.0:
+            log.warning("[%s] proposal evidence stage Sentinel/news took %.1fs", symbol, stage_elapsed)
+        stage_started = time.monotonic()
         social_stream = self._signal_fusion._social_signal(symbol)
+        stage_elapsed = time.monotonic() - stage_started
+        if stage_elapsed >= 3.0:
+            log.warning("[%s] proposal evidence stage Pulse/social took %.1fs", symbol, stage_elapsed)
+        stage_started = time.monotonic()
         memory_stream = self._signal_fusion._memory_signal(symbol, regime)
+        stage_elapsed = time.monotonic() - stage_started
+        if stage_elapsed >= 3.0:
+            log.warning("[%s] proposal evidence stage Chronicle/memory took %.1fs", symbol, stage_elapsed)
 
         return {
             "technical": tech,
@@ -238,11 +251,26 @@ class OracleAgent(BaseAgent):
                 "last": md["series"].last, "technicals": analyze(md["series"])}
 
     def signal(self, symbol):
+        started = time.monotonic()
         market = self.analyze_market(symbol)
+        market_elapsed = time.monotonic() - started
+        if market_elapsed >= 5.0:
+            log.warning("[%s] proposal stage market_data took %.1fs", symbol, market_elapsed)
         if market["status"] != "complete":
             return market
+        streams_started = time.monotonic()
         streams = self._streams(symbol, market["technicals"])
+        streams_elapsed = time.monotonic() - streams_started
+        if streams_elapsed >= 5.0:
+            log.warning("[%s] proposal stage evidence_streams took %.1fs", symbol, streams_elapsed)
+        fusion_started = time.monotonic()
         fused = self.fusion.fuse(symbol, streams)
+        fusion_elapsed = time.monotonic() - fusion_started
+        if fusion_elapsed >= 5.0:
+            log.warning("[%s] proposal stage fusion took %.1fs", symbol, fusion_elapsed)
+        total_elapsed = time.monotonic() - started
+        if total_elapsed >= 10.0:
+            log.warning("[%s] proposal signal complete after %.1fs", symbol, total_elapsed)
         atr = market["technicals"].get("atr_14") or (market["last"] * 0.01)
         return {"status": "complete", "symbol": symbol, "signal": fused,
                 "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
@@ -319,7 +347,11 @@ class OracleAgent(BaseAgent):
             return {"status": "complete", "backtest": self.backtester.run(series, decide),
                     "used_champion": champ is not None}
         if task == "trade.propose":
+            propose_started = time.monotonic()
             sig = self.signal(symbol)
+            signal_elapsed = time.monotonic() - propose_started
+            if signal_elapsed >= 5.0:
+                log.warning("[%s] trade.propose signal phase took %.1fs", symbol, signal_elapsed)
             if sig["status"] != "complete":
                 return sig
             s = sig["signal"]
@@ -356,7 +388,11 @@ class OracleAgent(BaseAgent):
             atr = sig["_technicals"].get("atr_14") or (sig["last"] * 0.01)
             direction = "long" if s["call"] == "buy" else "short"
             plan = self.risk.evaluate(symbol, direction, sig["last"], atr, effective_confidence)
+            preserve_started = time.monotonic()
             self._preserve(symbol, sig)
+            preserve_elapsed = time.monotonic() - preserve_started
+            if preserve_elapsed >= 3.0:
+                log.warning("[%s] trade.propose Chronicle preserve took %.1fs", symbol, preserve_elapsed)
             if not plan["approved"]:
                 self.trade_journal.log_rejection(
                     symbol, direction, effective_confidence, plan.get("reasons", []))

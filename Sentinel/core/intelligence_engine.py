@@ -342,7 +342,11 @@ class IntelligenceEngine:
             # Lexical event_type/sentiment stay as the fast, always-available
             # fallback (this codebase's own graceful-degradation principle).
             a["event_type"] = classify_event(a["title"], a.get("summary", ""))
-            a["sentiment"] = sentiment(a["title"], a.get("summary", ""), llm=self.llm)
+            # Trade sentiment is advisory. Keep the same lexical-only policy
+            # as _enrich_articles(): a non-essential LLM call can still block
+            # on the rate limiter for up to 120s per headline, even when deep
+            # analysis is disabled for the trading snapshot.
+            a["sentiment"] = sentiment(a["title"], a.get("summary", ""), llm=None)
             # Deep Analysis (structured event understanding, not word-counting):
             # only activates when a real LLM client is available. When it
             # succeeds, its event_type/economic sentiment REPLACE the lexical
