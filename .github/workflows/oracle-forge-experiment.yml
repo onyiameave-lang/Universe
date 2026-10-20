@@ -69,9 +69,14 @@ jobs:
           CTRADER_ACCESS_TOKEN: ${{ secrets.CTRADER_ACCESS_TOKEN }}
           CTRADER_ACCOUNT_ID: ${{ secrets.CTRADER_ACCOUNT_ID }}
           CTRADER_USE_DEMO: "true"
-          ORACLE_FORGE_COST_PROFILES_JSON: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
+          ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
           ORACLE_FORGE_MINIMUM_EXECUTED_TRADES: "100"
         run: |
+          if [[ -n "$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE" ]]; then
+            export ORACLE_FORGE_COST_PROFILES_JSON="$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE"
+          else
+            export ORACLE_FORGE_COST_PROFILES_JSON="$(cat Oracle/config/forge_cost_profiles.json)"
+          fi
           python api.py > /tmp/oracle-forge-api.log 2>&1 &
           echo $! > /tmp/oracle-forge-api.pid
           for attempt in $(seq 1 90); do
