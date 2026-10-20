@@ -502,6 +502,8 @@ class OracleAgent(BaseAgent):
                                     slippage_bps_samples.append(
                                         max(0.0, adverse / quote["price"] * 10000.0)
                                     )
+                                    if len(slippage_bps_samples) >= minimum_deals:
+                                        break
 
                 minimum_quotes = max(20, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_QUOTES", "100")))
                 profile = None
