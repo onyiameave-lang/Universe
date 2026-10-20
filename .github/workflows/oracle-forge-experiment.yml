@@ -81,8 +81,13 @@ jobs:
           python api.py > /tmp/oracle-forge-api.log 2>&1 &
           echo $! > /tmp/oracle-forge-api.pid
           for attempt in $(seq 1 90); do
-            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
-              exit 0
+            if health="$(curl --fail --silent http://127.0.0.1:8000/health)"; then
+              if python -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if "oracle" in d.get("active_agents", []) else 1)' <<< "$health"; then
+                exit 0
+              fi
+              echo "API is responding, but Oracle did not initialize; refusing to run a misleading research cycle."
+              cat /tmp/oracle-forge-api.log
+              exit 1
             fi
             sleep 2
           done
