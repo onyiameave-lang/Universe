@@ -731,6 +731,10 @@ class CTraderBroker:
             "swapCalculationType": getattr(sym, "swapCalculationType", None),
             "pnlConversionFeeRate": getattr(sym, "pnlConversionFeeRate", None),
         }
+        constraints["baseAssetName"] = self._asset_name_by_id.get(
+            int(constraints["baseAssetId"])) if constraints["baseAssetId"] is not None else None
+        constraints["quoteAssetName"] = self._asset_name_by_id.get(
+            int(constraints["quoteAssetId"])) if constraints["quoteAssetId"] is not None else None
         if constraints["digits"] is not None:
             constraints["digits"] = int(constraints["digits"])
         for field in ("pipPosition", "lotSize", "commission", "commissionType",
@@ -741,6 +745,13 @@ class CTraderBroker:
         with self._constraints_lock:
             self._symbol_constraints[symbol_id] = constraints
         return constraints
+
+    def asset_name(self, asset_id: int) -> Optional[str]:
+        """Return the exact asset name from cTrader's authenticated asset catalog."""
+        try:
+            return self._asset_name_by_id.get(int(asset_id))
+        except (TypeError, ValueError):
+            return None
 
     def symbol_metadata(self, symbol: str) -> Dict[str, Any]:
         """Return broker-reported metadata for an exact listed symbol."""

@@ -41,8 +41,28 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_CTRADER_RESEARCH_ALIASES_FILE = _REPO_ROOT / "config" / "ctrader_research_symbol_aliases.json"
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+
+def _ctrader_research_aliases() -> Dict[str, str]:
+    """Read explicit canonical-to-broker mappings for research only."""
+    try:
+        document = json.loads(_CTRADER_RESEARCH_ALIASES_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        log.warning("cTrader research symbol alias file is unavailable or invalid")
+        return {}
+    if not isinstance(document, dict) or document.get("schema") != "oracle.ctrader_research_symbol_aliases.v1":
+        return {}
+    aliases = document.get("aliases")
+    if not isinstance(aliases, dict):
+        return {}
+    return {
+        str(canonical).strip().upper(): str(broker).strip().upper()
+        for canonical, broker in aliases.items()
+        if str(canonical).strip() and str(broker).strip()
+    }
 _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
@@ -317,8 +337,10 @@ class OracleAgent(BaseAgent):
         if connection.get("status") != "complete":
             return {"status": "blocked", "message": connection.get("message"), "observations": []}
         broker = connection["broker"]
+        aliases = _ctrader_research_aliases()
+        broker_catalog = set(broker.symbol_catalog())
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        window_hours = max(1, min(24, int(os.getenv("ORACLE_FORGE_COST_WINDOW_HOURS", "1"))))
+        window_hours = max(1, min(24, int(os.getenv("ORACLE_FORGE_COST_WINDOW_HOURS", "6"))))
         window_start_ms = now_ms - window_hours * 60 * 60 * 1000
         deals_result = broker.historical_deals(
             now_ms - 7 * 24 * 60 * 60 * 1000, now_ms, max_rows=10000, timeout=60.0)
@@ -330,14 +352,45 @@ class OracleAgent(BaseAgent):
                         deals_result.get("message", deals_result.get("status")))
         all_deals = deals_result.get("deals", []) if isinstance(deals_result, dict) else []
         account_currency = str(getattr(broker.status, "currency", "")).upper()
+        conversion_graph: Dict[str, Dict[str, float]] = {"USD": {"USD": 1.0}}
+
+        def add_conversion(base: str, quote: str, rate: float) -> None:
+            base, quote = str(base or "").upper(), str(quote or "").upper()
+            if not base or not quote or base == quote or not math.isfinite(rate) or rate <= 0:
+                return
+            conversion_graph.setdefault(base, {})[quote] = rate
+            conversion_graph.setdefault(quote, {})[base] = 1.0 / rate
+
+        def conversion_to_usd(asset: str) -> Optional[float]:
+            asset = str(asset or "").upper()
+            if asset == "USD":
+                return 1.0
+            if not asset:
+                return None
+            pending = [(asset, 1.0)]
+            visited = set()
+            while pending:
+                current, rate = pending.pop(0)
+                if current == "USD":
+                    return rate
+                if current in visited:
+                    continue
+                visited.add(current)
+                for next_asset, edge_rate in conversion_graph.get(current, {}).items():
+                    if next_asset not in visited:
+                        pending.append((next_asset, rate * edge_rate))
+            return None
+
         for raw_symbol in symbols:
             symbol = str(raw_symbol).strip().upper()
+            broker_symbol = aliases.get(symbol, symbol)
             try:
-                if symbol not in broker.symbol_catalog():
+                if broker_symbol not in broker_catalog:
                     observations.append({"status": "blocked", "symbol": symbol,
-                                         "message": f"broker does not list symbol {symbol}"})
+                                         "broker_symbol": broker_symbol,
+                                         "message": f"broker does not list mapped symbol {broker_symbol}"})
                     continue
-                metadata = broker.symbol_metadata(symbol)
+                metadata = broker.symbol_metadata(broker_symbol)
                 chunk_minutes = max(1, min(60, int(os.getenv("ORACLE_FORGE_TICK_CHUNK_MINUTES", "15"))))
                 chunk_ms = chunk_minutes * 60 * 1000
                 bid_ticks, ask_ticks = [], []
@@ -345,8 +398,8 @@ class OracleAgent(BaseAgent):
                 cursor = window_start_ms
                 while cursor < now_ms:
                     chunk_end = min(now_ms, cursor + chunk_ms)
-                    bid_chunk = broker.historical_ticks(symbol, "BID", cursor, chunk_end, timeout=60.0)
-                    ask_chunk = broker.historical_ticks(symbol, "ASK", cursor, chunk_end, timeout=60.0)
+                    bid_chunk = broker.historical_ticks(broker_symbol, "BID", cursor, chunk_end, timeout=60.0)
+                    ask_chunk = broker.historical_ticks(broker_symbol, "ASK", cursor, chunk_end, timeout=60.0)
                     bid_statuses.append(bid_chunk.get("status"))
                     ask_statuses.append(ask_chunk.get("status"))
                     bid_ticks.extend(bid_chunk.get("ticks", []))
@@ -359,6 +412,7 @@ class OracleAgent(BaseAgent):
                 ask_times = [item["timestamp_ms"] for item in ask_ticks]
                 pip_position = metadata.get("pipPosition")
                 paired_spreads = []
+                paired_mids = []
                 quote_tolerance_ms = max(100, int(os.getenv("ORACLE_FORGE_QUOTE_MATCH_TOLERANCE_MS", "1000")))
                 for bid_tick in bid_ticks:
                     idx = bisect.bisect_left(ask_times, bid_tick["timestamp_ms"])
@@ -371,8 +425,15 @@ class OracleAgent(BaseAgent):
                     mid = (float(bid_tick["price"]) + float(ask_tick["price"])) / 2.0
                     if mid > 0 and ask_tick["price"] >= bid_tick["price"]:
                         paired_spreads.append((ask_tick["price"] - bid_tick["price"]) / mid * 10000.0)
+                        paired_mids.append(mid)
 
-                symbol_deals = [d for d in all_deals if d.get("symbol") == symbol and d.get("deal_status") == 2]
+                base_asset = str(metadata.get("baseAssetName") or "").upper()
+                quote_asset = str(metadata.get("quoteAssetName") or "").upper()
+                current_mid = sorted(paired_mids)[len(paired_mids) // 2] if paired_mids else None
+                if current_mid is not None:
+                    add_conversion(base_asset, quote_asset, current_mid)
+
+                symbol_deals = [d for d in all_deals if d.get("symbol") == broker_symbol and d.get("deal_status") == 2]
                 commission_bps_samples, slippage_bps_samples = [], []
                 for deal in symbol_deals:
                     execution_price = deal.get("execution_price")
@@ -398,7 +459,7 @@ class OracleAgent(BaseAgent):
                         if reference_timestamp and trade_side in {1, 2}:
                             quote_type = "ASK" if trade_side == 1 else "BID"
                             quote_result = broker.historical_ticks(
-                                symbol,
+                                broker_symbol,
                                 quote_type,
                                 max(0, reference_timestamp - quote_tolerance_ms),
                                 reference_timestamp + quote_tolerance_ms + 1,
@@ -425,21 +486,47 @@ class OracleAgent(BaseAgent):
                 minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
                 profile = None
                 reasons = []
+                commission_type = metadata.get("commissionType")
+                precise_rate = metadata.get("preciseTradingCommissionRate")
+                commission_base = None
+                commission_source = "cTrader symbol commission schedule"
+                quote_to_usd = conversion_to_usd(quote_asset)
+                if not isinstance(precise_rate, (int, float)):
+                    reasons.append("cTrader precise symbol commission rate is unavailable")
+                elif commission_type == 1:  # USD per million USD notional
+                    if account_currency != "USD":
+                        reasons.append("USD-denominated commission schedule requires a USD account")
+                    else:
+                        usd_per_million = float(precise_rate) / 1e8
+                        commission_base = usd_per_million / 1_000_000.0 * 10_000.0
+                elif commission_type == 2:  # USD per lot
+                    if account_currency != "USD":
+                        reasons.append("USD-denominated commission schedule requires a USD account")
+                    elif float(precise_rate) == 0:
+                        commission_base = 0.0
+                    else:
+                        lot_size = metadata.get("lotSize")
+                        if (current_mid is None or quote_to_usd is None
+                                or not isinstance(lot_size, (int, float)) or lot_size <= 0):
+                            reasons.append("cannot convert cTrader per-lot commission into USD notional bps")
+                        else:
+                            usd_per_lot = float(precise_rate) / 1e8
+                            usd_notional_per_lot = (float(lot_size) / 100.0) * current_mid * quote_to_usd
+                            if usd_notional_per_lot <= 0:
+                                reasons.append("cTrader symbol metadata produced an invalid USD notional per lot")
+                            else:
+                                commission_base = usd_per_lot / usd_notional_per_lot * 10_000.0
+                elif commission_type == 3:  # percentage of trading value
+                    commission_base = (float(precise_rate) / 1e5) * 100.0
+                else:
+                    reasons.append(f"unsupported cTrader commission type: {commission_type}")
                 if not bid_complete or not ask_complete:
                     reasons.append("complete, non-truncated bid and ask tick windows are required")
                 if len(paired_spreads) < minimum_quotes:
                     reasons.append(f"only {len(paired_spreads)} matched bid/ask observations; {minimum_quotes} required")
-                if not deal_status_ok:
-                    reasons.append("complete cTrader deal history is required")
-                if account_currency != "USD":
-                    reasons.append("deal-cost conversion currently requires USD account currency")
                 minimum_commission = metadata.get("preciseMinCommission")
                 if isinstance(minimum_commission, (int, float)) and minimum_commission > 0:
                     reasons.append("symbol minimum commission requires per-trade modeling, which the current bps backtester does not support")
-                if len(commission_bps_samples) < minimum_deals:
-                    reasons.append(f"only {len(commission_bps_samples)} commission observations; {minimum_deals} required")
-                if len(slippage_bps_samples) < minimum_deals:
-                    reasons.append(f"only {len(slippage_bps_samples)} matched fill/slippage observations; {minimum_deals} required")
 
                 def percentile(values, fraction):
                     ordered = sorted(float(value) for value in values)
@@ -448,24 +535,45 @@ class OracleAgent(BaseAgent):
                 if not reasons:
                     spread_base = percentile(paired_spreads, 0.95)
                     spread_stress = percentile(paired_spreads, 0.99)
-                    commission_base = percentile(commission_bps_samples, 0.95)
-                    slippage_base = percentile(slippage_bps_samples, 0.95)
-                    slippage_stress = percentile(slippage_bps_samples, 0.99)
+                    if len(slippage_bps_samples) >= minimum_deals:
+                        slippage_base = percentile(slippage_bps_samples, 0.95)
+                        slippage_stress = percentile(slippage_bps_samples, 0.99)
+                        slippage_status = "api_observed"
+                        slippage_method = "matched cTrader fills versus execution-time historical quotes; p95 base / p99 stress"
+                    else:
+                        # A full p95 spread is charged as the baseline extra
+                        # adverse movement per fill; the p99 spread is used for
+                        # stress. This is explicitly an assumption, not observed
+                        # broker slippage, and the resulting profile is research-only.
+                        slippage_base = spread_base / 2.0
+                        slippage_stress = spread_stress
+                        slippage_status = "provisional_spread_anchored"
+                        slippage_method = "assumption: half p95 full spread per fill; p99 full spread per fill under stress"
                     if spread_stress < spread_base or slippage_stress < slippage_base:
                         reasons.append("stress percentile calculation was inconsistent")
                     else:
                         profile = {
                             "broker": "cTrader account metadata",
                             "account_type": str(getattr(broker.status, "account_type", "unknown")),
-                            "profile_version": f"ctrader-api-{now_ms}-{symbol.lower()}",
-                            "profile_status": "api_observed",
+                            "broker_symbol": broker_symbol,
+                            "alias_schema": "oracle.ctrader_research_symbol_aliases.v1",
+                            "profile_version": f"ctrader-cost-v2-{now_ms}-{symbol.lower()}",
+                            "profile_status": ("api_observed_costs" if slippage_status == "api_observed"
+                                               else "provisional_research_only"),
+                            "promotion_eligible": False,
                             "price_basis": "bid",
                             "commission_bps": commission_base,
                             "slippage_bps": slippage_base,
                             "spread_bps": spread_base,
                             "stress_slippage_bps": slippage_stress,
                             "stress_spread_bps": spread_stress,
-                            "method": "cTrader observed deal commissions and matched historical BID/ASK ticks; p95 base / p99 stress",
+                            "commission_source": commission_source,
+                            "slippage_status": slippage_status,
+                            "slippage_method": slippage_method,
+                            "slippage_assumption_version": (
+                                "spread-anchored-v1" if slippage_status == "provisional_spread_anchored" else None
+                            ),
+                            "method": "cTrader commission schedule and historical BID/ASK ticks; p95 base / p99 stress",
                             "evidence": {
                                 "observed_at": datetime.now(timezone.utc).isoformat(),
                                 "window_start_ms": window_start_ms, "window_end_ms": now_ms,
@@ -476,12 +584,17 @@ class OracleAgent(BaseAgent):
                                 "commission_type": metadata.get("commissionType"),
                                 "precise_trading_commission_rate": metadata.get("preciseTradingCommissionRate"),
                                 "minimum_commission": metadata.get("preciseMinCommission"),
+                                "base_asset": base_asset, "quote_asset": quote_asset,
+                                "quote_asset_to_usd_rate": quote_to_usd,
+                                "median_mid_price": current_mid,
+                                "deal_history_status": deals_result.get("status", "error"),
                                 "pip_position": pip_position,
                             },
                         }
                         profiles[symbol] = profile
                 observations.append({
                     "symbol": symbol,
+                    "broker_symbol": broker_symbol,
                     "status": "complete" if profile else "blocked",
                     "metadata": metadata,
                     "sample": {"matched_spreads": len(paired_spreads),
@@ -499,7 +612,7 @@ class OracleAgent(BaseAgent):
                                      "message": f"cost observation failed: {type(exc).__name__}"})
         unmatched = [item for item in observations
                      if item.get("status") == "blocked"
-                     and str(item.get("message", "")).startswith("broker does not list symbol ")]
+                     and str(item.get("message", "")).startswith("broker does not list mapped symbol ")]
         return {"status": "complete", "source": "ctrader_open_api",
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 "count": len(observations), "observations": observations,
@@ -515,12 +628,13 @@ class OracleAgent(BaseAgent):
         if connection.get("status") != "complete":
             return connection
         broker = connection["broker"]
+        broker_symbol = _ctrader_research_aliases().get(str(symbol).strip().upper(), str(symbol).strip().upper())
 
         with self._forge_ctrader_history_lock:
             end = datetime.now(timezone.utc)
             start = end - timedelta(days=5 * 365 + 2)
             history = broker.historical_bars(
-                symbol=symbol,
+                symbol=broker_symbol,
                 from_timestamp_ms=int(start.timestamp() * 1000),
                 to_timestamp_ms=int(end.timestamp() * 1000),
                 period="D1",
@@ -555,7 +669,8 @@ class OracleAgent(BaseAgent):
         if len(series.bars) < 75:
             return {"status": "error", "message": "fewer than 75 completed daily bars remain after excluding the current UTC day"}
         return {"status": "complete", "series": series, "source": series.source,
-                "bars": len(series.bars), "price_basis": "bid"}
+                "bars": len(series.bars), "price_basis": "bid",
+                "broker_symbol": broker_symbol}
 
     def research_window_fingerprint(self, symbol: str) -> Dict[str, Any]:
         """Return a stable data-window fingerprint for scheduled deduplication."""

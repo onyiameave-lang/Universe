@@ -71,6 +71,10 @@ jobs:
           CTRADER_ACCOUNT_ID: ${{ secrets.CTRADER_ACCOUNT_ID }}
           CTRADER_USE_DEMO: "true"
           ORACLE_FORGE_MINIMUM_EXECUTED_TRADES: "100"
+          ORACLE_FORGE_COST_WINDOW_HOURS: "6"
+          ORACLE_FORGE_TICK_CHUNK_MINUTES: "15"
+          ORACLE_FORGE_MINIMUM_COST_QUOTES: "100"
+          ORACLE_FORGE_MINIMUM_COST_DEALS: "20"
         run: |
           missing_secrets=()
           [[ -n "$CTRADER_CLIENT_ID" ]] || missing_secrets+=(CTRADER_CLIENT_ID)
