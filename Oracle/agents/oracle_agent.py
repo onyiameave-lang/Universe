@@ -334,8 +334,103 @@ class OracleAgent(BaseAgent):
             return {"status": "error", "message": f"invalid cTrader history response: {type(exc).__name__}: {exc}"}
         if len(series.bars) < 75:
             return {"status": "error", "message": f"cTrader returned only {len(series.bars)} daily bars; at least 75 are required"}
+        # Keep the research input stable during six-hour runs by excluding the
+        # currently forming UTC D1 candle from every downstream evaluation.
+        today_utc = datetime.now(timezone.utc).date()
+        series.bars = [
+            bar for bar in series.bars
+            if datetime.fromisoformat(str(bar.ts).replace("Z", "+00:00")).date() < today_utc
+        ]
+        if len(series.bars) < 75:
+            return {"status": "error", "message": "fewer than 75 completed daily bars remain after excluding the current UTC day"}
         return {"status": "complete", "series": series, "source": series.source,
                 "bars": len(series.bars), "price_basis": "bid"}
+
+    def research_window_fingerprint(self, symbol: str) -> Dict[str, Any]:
+        """Return a stable data-window fingerprint for scheduled deduplication."""
+        import hashlib
+        market = self._get_ctrader_research_series(symbol)
+        if market.get("status") != "complete":
+            return {"status": "blocked", "symbol": symbol, "message": market.get("message")}
+        series = market["series"]
+        payload = [{
+            "timestamp": bar.ts, "open": bar.open, "high": bar.high,
+            "low": bar.low, "close": bar.close, "volume": bar.volume,
+        } for bar in series.bars]
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        return {"status": "complete", "symbol": symbol.upper(),
+                "data_fingerprint": hashlib.sha256(encoded).hexdigest(),
+                "last_completed_bar": str(series.bars[-1].ts), "bars": len(series.bars)}
+
+    def assess_market_data_drift(self, symbol: str) -> Dict[str, Any]:
+        """Compare recent completed daily return/range distributions with history.
+
+        This is a market-data distribution monitor, not a claim about strategy
+        performance drift or news causality. It never changes an Oracle genome.
+        """
+        market = self._get_ctrader_research_series(symbol)
+        if market.get("status") != "complete":
+            return {"status": "blocked", "symbol": symbol, "message": market.get("message", "market history unavailable")}
+        bars = market["series"].bars
+        if len(bars) < 281:
+            return {"status": "blocked", "symbol": symbol, "message": "daily data drift requires 250 baseline and 30 recent completed bars"}
+        # cTrader D1 may include the still-forming UTC daily candle. Exclude it
+        # so repeated six-hour runs do not treat changing intraday data as a
+        # completed daily observation.
+        today_utc = datetime.now(timezone.utc).date()
+        bars = [bar for bar in bars if datetime.fromisoformat(str(bar.ts).replace("Z", "+00:00")).date() < today_utc]
+        if len(bars) < 281:
+            return {"status": "blocked", "symbol": symbol, "message": "fewer than 281 completed daily bars after excluding the current UTC day"}
+
+        import hashlib
+        import math
+        import statistics
+
+        baseline, recent = bars[-280:-30], bars[-30:]
+        def features(items):
+            result = []
+            for previous, current in zip(items, items[1:]):
+                ret = math.log(current.close / previous.close)
+                normalized_range = (current.high - current.low) / previous.close
+                result.append((ret, normalized_range))
+            return result
+        baseline_features = features(baseline)
+        recent_features = features(recent)
+        def psi(reference, observed, bins=10):
+            ordered = sorted(reference)
+            edges = [ordered[min(len(ordered) - 1, int(i * len(ordered) / bins))] for i in range(1, bins)]
+            def proportions(values):
+                counts = [0] * bins
+                for value in values:
+                    index = 0
+                    while index < len(edges) and value > edges[index]:
+                        index += 1
+                    counts[index] += 1
+                return [(count + 0.5) / (len(values) + bins * 0.5) for count in counts]
+            expected, actual = proportions(reference), proportions(observed)
+            return sum((a - e) * math.log(a / e) for e, a in zip(expected, actual))
+        return_series = psi([row[0] for row in baseline_features], [row[0] for row in recent_features])
+        range_psi = psi([row[1] for row in baseline_features], [row[1] for row in recent_features])
+        recent_volatility = statistics.pstdev(row[0] for row in recent_features)
+        baseline_volatility = statistics.pstdev(row[0] for row in baseline_features)
+        fingerprint_data = "|".join(str(bar.ts) for bar in bars[-30:]).encode("utf-8")
+        fingerprint = hashlib.sha256(fingerprint_data).hexdigest()
+        maximum_psi = max(return_series, range_psi)
+        level = "high" if maximum_psi >= 0.25 else "moderate" if maximum_psi >= 0.10 else "low"
+        return {
+            "status": "complete", "symbol": symbol.upper(),
+            "monitor": "oracle_daily_market_data_distribution_v1",
+            "classification": level,
+            "features": {
+                "daily_log_return_psi": return_series,
+                "normalized_daily_range_psi": range_psi,
+                "baseline_daily_return_volatility": baseline_volatility,
+                "recent_daily_return_volatility": recent_volatility,
+            },
+            "sample": {"baseline_bars": len(baseline), "recent_bars": len(recent), "bar_interval": "D1", "completed_bars_only": True},
+            "window_fingerprint": fingerprint,
+            "interpretation": "Distribution shift indicator only; not strategy-performance drift, causal attribution, or a trading signal.",
+        }
 
     def request_forge_improvement(self, symbol: str, regime: Optional[str] = None,
                                   reason: str = "Oracle performance review requested",
@@ -469,6 +564,10 @@ class OracleAgent(BaseAgent):
                 minimum_executed_trades=ctx.get("minimum_executed_trades"),
                 ablation_targets=ctx.get("ablation_targets"),
             )
+        if task == "market.data.drift.assess":
+            return self.assess_market_data_drift(symbol)
+        if task == "market.data.window.fingerprint":
+            return self.research_window_fingerprint(symbol)
         if task == "strategy.promotion.authorization_request":
             try:
                 experiment_id = ctx.get("experiment_id")

@@ -685,7 +685,7 @@ async def oracle_forge_experiment(request: Request):
     """Run a governed, read-only Oracle/Forge challenger or single-component ablation."""
     data = await request.json()
     symbol = str(data.get("symbol", "")).strip().upper()
-    if not symbol or _extract_symbol_from_text(symbol) != symbol:
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
         raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
     targets = data.get("ablation_targets", [])
     if not isinstance(targets, list) or len(targets) > 1 or any(not isinstance(item, str) for item in targets):
@@ -708,6 +708,47 @@ async def oracle_forge_experiment(request: Request):
     except Exception as exc:
         add_log("oracle", "error", str(exc))
         raise HTTPException(status_code=500, detail=f"Oracle Forge research request failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/drift")
+async def oracle_forge_drift(request: Request):
+    """Assess Oracle market-data distribution drift without generating trades."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "market.data.drift.assess",
+            {"symbol": symbol, "_sender": "forge_action"},
+            "Oracle market data drift assessment accepted.",
+        )
+        return _normalize_agent_response("oracle", "market.data.drift.assess", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle market drift assessment failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/window")
+async def oracle_forge_window(request: Request):
+    """Fingerprint the completed Oracle research window before doing work."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "market.data.window.fingerprint",
+            {"symbol": symbol, "_sender": "forge_action"},
+            "Oracle research data fingerprint accepted.",
+        )
+        return _normalize_agent_response("oracle", "market.data.window.fingerprint", result)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Oracle research fingerprint failed: {type(exc).__name__}")
 
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):

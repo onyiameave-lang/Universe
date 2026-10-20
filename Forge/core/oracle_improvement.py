@@ -390,6 +390,8 @@ class OracleImprovementService:
             return {"status": "error", "message": "Chronicle could not persist the final experiment evidence"}
         return {"status": update.get("status", "complete"), "experiment_id": original["experiment_id"],
                 "symbol": original["symbol"], "regime": original["regime"],
+                "dataset_fingerprint": original.get("dataset_fingerprint"),
+                "holdout_fingerprint": original.get("holdout_fingerprint"),
                 "recommendation": update.get("recommendation", "none"),
                 "promotion_performed": False,
                 "guardrails": update.get("guardrails"),

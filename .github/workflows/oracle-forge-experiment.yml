@@ -4,17 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       symbol:
-        description: Oracle symbol to review
+        description: Oracle symbol or comma-separated symbols (ALL uses the default watchlist)
         required: true
-        default: EURUSD
+        default: ALL
       experiment_type:
-        description: Run a challenger comparison or one module ablation
+        description: Select a mode, or AUTO to use the scheduled six-hour rotation
         type: choice
         options:
+          - auto
           - challenger
           - ablation
+          - drift
         required: true
-        default: challenger
+        default: auto
       ablation_target:
         description: Required for ablation runs
         type: choice
@@ -30,8 +32,7 @@ on:
           - market_regime
         required: false
   schedule:
-    # Monthly cadence limits repeated peeking while this remains research-only.
-    - cron: "17 6 1 * *"
+    - cron: "0 */6 * * *"
 
 permissions:
   contents: write
@@ -43,7 +44,7 @@ concurrency:
 jobs:
   research-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 350
     steps:
       - name: Check out Oracle V2 research branch
         uses: actions/checkout@v4
@@ -90,9 +91,10 @@ jobs:
 
       - name: Run bounded research review
         env:
-          ORACLE_FORGE_SYMBOL: ${{ inputs.symbol || 'EURUSD' }}
-          ORACLE_FORGE_EXPERIMENT_TYPE: ${{ inputs.experiment_type || 'challenger' }}
+          ORACLE_FORGE_SYMBOLS: ${{ inputs.symbol || 'ALL' }}
+          ORACLE_FORGE_EXPERIMENT_TYPE: ${{ inputs.experiment_type || 'auto' }}
           ORACLE_FORGE_ABLATION_TARGET: ${{ inputs.ablation_target || '' }}
+          ORACLE_FORGE_COST_PROFILES_JSON: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
         run: python Oracle/tools/forge_experiment_runner.py
 
       - name: Stop API
