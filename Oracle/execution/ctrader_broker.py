@@ -592,7 +592,7 @@ class CTraderBroker:
 
     def historical_deals(self, from_timestamp_ms: int, to_timestamp_ms: int,
                          max_rows: int = 10000, timeout: float = 60.0) -> Dict[str, Any]:
-        """Fetch account execution deals for a bounded cost/slippage sample."""
+        """Fetch complete account deal history, splitting ranges when cTrader truncates them."""
         if not self.status.connected or self._client is None:
             return {"status": "error", "message": "cTrader account is not connected"}
         if (isinstance(from_timestamp_ms, bool) or isinstance(to_timestamp_ms, bool)
@@ -605,36 +605,61 @@ class CTraderBroker:
             from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADealListReq
         except ImportError as exc:
             return {"status": "error", "message": f"cTrader deal history unavailable: {type(exc).__name__}"}
-        request = ProtoOADealListReq()
-        request.ctidTraderAccountId = self._account_id
-        request.fromTimestamp = from_timestamp_ms
-        request.toTimestamp = to_timestamp_ms
-        request.maxRows = max_rows
-        self._throttle_historical_request()
-        payload = self._send_and_wait(request, timeout=timeout)
-        if payload is None:
-            return {"status": "error", "message": "cTrader deal-history request timed out or failed"}
-        if getattr(payload, "errorCode", None):
-            detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
-            return {"status": "error", "message": f"cTrader rejected deal-history request: {detail}"}
-        deals = []
-        for deal in getattr(payload, "deal", []):
-            deals.append({
-                "deal_id": int(getattr(deal, "dealId", 0) or 0),
-                "symbol_id": int(getattr(deal, "symbolId", 0) or 0),
-                "symbol": self._symbol_name_by_id.get(int(getattr(deal, "symbolId", 0) or 0)),
-                "execution_timestamp_ms": int(getattr(deal, "executionTimestamp", 0) or 0),
-                "create_timestamp_ms": int(getattr(deal, "createTimestamp", 0) or 0),
-                "execution_price": getattr(deal, "executionPrice", None),
-                "trade_side": int(getattr(deal, "tradeSide", 0) or 0),
-                "deal_status": int(getattr(deal, "dealStatus", 0) or 0),
-                "filled_volume_cents": int(getattr(deal, "filledVolume", 0) or 0),
-                "commission_raw": int(getattr(deal, "commission", 0) or 0),
-                "money_digits": int(getattr(deal, "moneyDigits", 0) or 0),
-                "base_to_usd_conversion_rate": getattr(deal, "baseToUsdConversionRate", None),
-            })
-        return {"status": "incomplete" if bool(getattr(payload, "hasMore", False)) else "complete",
-                "deals": deals, "has_more": bool(getattr(payload, "hasMore", False)),
+        request_count = 0
+
+        def fetch_range(start_ms: int, end_ms: int, depth: int = 0) -> Dict[str, Any]:
+            nonlocal request_count
+            request = ProtoOADealListReq()
+            request.ctidTraderAccountId = self._account_id
+            request.fromTimestamp = start_ms
+            request.toTimestamp = end_ms
+            request.maxRows = max_rows
+            self._throttle_historical_request()
+            request_count += 1
+            payload = self._send_and_wait(request, timeout=timeout)
+            if payload is None:
+                return {"status": "error", "message": "cTrader deal-history request timed out or failed", "deals": []}
+            if getattr(payload, "errorCode", None):
+                detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
+                return {"status": "error", "message": f"cTrader rejected deal-history request: {detail}", "deals": []}
+
+            deals = []
+            for deal in getattr(payload, "deal", []):
+                symbol_id = int(getattr(deal, "symbolId", 0) or 0)
+                deals.append({
+                    "deal_id": int(getattr(deal, "dealId", 0) or 0),
+                    "symbol_id": symbol_id,
+                    "symbol": self._symbol_name_by_id.get(symbol_id),
+                    "execution_timestamp_ms": int(getattr(deal, "executionTimestamp", 0) or 0),
+                    "create_timestamp_ms": int(getattr(deal, "createTimestamp", 0) or 0),
+                    "execution_price": getattr(deal, "executionPrice", None),
+                    "trade_side": int(getattr(deal, "tradeSide", 0) or 0),
+                    "deal_status": int(getattr(deal, "dealStatus", 0) or 0),
+                    "filled_volume_cents": int(getattr(deal, "filledVolume", 0) or 0),
+                    "commission_raw": int(getattr(deal, "commission", 0) or 0),
+                    "money_digits": int(getattr(deal, "moneyDigits", 0) or 0),
+                    "base_to_usd_conversion_rate": getattr(deal, "baseToUsdConversionRate", None),
+                })
+            if not bool(getattr(payload, "hasMore", False)):
+                return {"status": "complete", "deals": deals}
+            if end_ms - start_ms <= 1 or depth >= 40:
+                return {"status": "incomplete", "deals": deals,
+                        "message": "cTrader deal history remains truncated at the smallest splittable time range"}
+
+            middle_ms = (start_ms + end_ms) // 2
+            left = fetch_range(start_ms, middle_ms, depth + 1)
+            right = fetch_range(middle_ms + 1, end_ms, depth + 1)
+            combined = deals + left.get("deals", []) + right.get("deals", [])
+            status = "complete" if left.get("status") == right.get("status") == "complete" else "incomplete"
+            return {"status": status, "deals": combined,
+                    "message": left.get("message") or right.get("message")}
+
+        result = fetch_range(from_timestamp_ms, to_timestamp_ms)
+        unique_deals = {deal["deal_id"]: deal for deal in result.get("deals", []) if deal.get("deal_id")}
+        deals = sorted(unique_deals.values(), key=lambda item: (item["execution_timestamp_ms"], item["deal_id"]))
+        return {"status": result.get("status", "error"), "deals": deals,
+                "has_more": result.get("status") != "complete", "request_count": request_count,
+                "message": result.get("message"),
                 "from_timestamp_ms": from_timestamp_ms, "to_timestamp_ms": to_timestamp_ms}
 
     def _throttle_historical_request(self) -> None:

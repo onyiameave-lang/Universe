@@ -342,8 +342,10 @@ class OracleAgent(BaseAgent):
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         window_hours = max(1, min(24, int(os.getenv("ORACLE_FORGE_COST_WINDOW_HOURS", "6"))))
         window_start_ms = now_ms - window_hours * 60 * 60 * 1000
+        deal_history_days = max(7, min(3650, int(os.getenv("ORACLE_FORGE_DEAL_HISTORY_DAYS", "1827"))))
         deals_result = broker.historical_deals(
-            now_ms - 7 * 24 * 60 * 60 * 1000, now_ms, max_rows=10000, timeout=60.0)
+            now_ms - deal_history_days * 24 * 60 * 60 * 1000,
+            now_ms, max_rows=10000, timeout=60.0)
         observations = []
         profiles = {}
         deal_status_ok = deals_result.get("status") == "complete"
@@ -433,9 +435,27 @@ class OracleAgent(BaseAgent):
                 if current_mid is not None:
                     add_conversion(base_asset, quote_asset, current_mid)
 
-                symbol_deals = [d for d in all_deals if d.get("symbol") == broker_symbol and d.get("deal_status") == 2]
+                symbol_deals = [
+                    d for d in all_deals
+                    if d.get("symbol") == broker_symbol
+                    and d.get("deal_status") in {2, 3}
+                    and float(d.get("filled_volume_cents") or 0) > 0
+                ]
                 commission_bps_samples, slippage_bps_samples = [], []
-                for deal in symbol_deals:
+                minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
+                maximum_slippage_deals = max(
+                    minimum_deals,
+                    min(500, int(os.getenv("ORACLE_FORGE_MAXIMUM_SLIPPAGE_DEALS", "100"))),
+                )
+                attempted_slippage_deals = 0
+                ordered_deals = sorted(
+                    symbol_deals,
+                    key=lambda item: int(item.get("execution_timestamp_ms") or 0),
+                    reverse=True,
+                )
+                for deal in ordered_deals:
+                    if attempted_slippage_deals >= maximum_slippage_deals:
+                        break
                     execution_price = deal.get("execution_price")
                     units = float(deal.get("filled_volume_cents") or 0) / 100.0
                     conversion = deal.get("base_to_usd_conversion_rate")
@@ -457,6 +477,7 @@ class OracleAgent(BaseAgent):
                         )
                         trade_side = deal.get("trade_side")
                         if reference_timestamp and trade_side in {1, 2}:
+                            attempted_slippage_deals += 1
                             quote_type = "ASK" if trade_side == 1 else "BID"
                             quote_result = broker.historical_ticks(
                                 broker_symbol,
@@ -483,7 +504,6 @@ class OracleAgent(BaseAgent):
                                     )
 
                 minimum_quotes = max(20, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_QUOTES", "100")))
-                minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
                 profile = None
                 reasons = []
                 commission_type = metadata.get("commissionType")
@@ -524,6 +544,8 @@ class OracleAgent(BaseAgent):
                     reasons.append("complete, non-truncated bid and ask tick windows are required")
                 if len(paired_spreads) < minimum_quotes:
                     reasons.append(f"only {len(paired_spreads)} matched bid/ask observations; {minimum_quotes} required")
+                if not deal_status_ok:
+                    reasons.append("complete cTrader deal history is required")
                 minimum_commission = metadata.get("preciseMinCommission")
                 if isinstance(minimum_commission, (int, float)) and minimum_commission > 0:
                     reasons.append("symbol minimum commission requires per-trade modeling, which the current bps backtester does not support")
@@ -567,6 +589,9 @@ class OracleAgent(BaseAgent):
                                 "window_start_ms": window_start_ms, "window_end_ms": now_ms,
                                 "window_hours": window_hours,
                                 "matched_spread_quotes": len(paired_spreads),
+                                "deal_history_records": len(all_deals),
+                                "deal_history_days": deal_history_days,
+                                "deal_history_request_count": deals_result.get("request_count"),
                                 "commission_deals": len(commission_bps_samples),
                                 "matched_slippage_deals": len(slippage_bps_samples),
                                 "commission_type": metadata.get("commissionType"),
@@ -587,6 +612,7 @@ class OracleAgent(BaseAgent):
                     "metadata": metadata,
                     "sample": {"matched_spreads": len(paired_spreads),
                                "filled_deals": len(symbol_deals),
+                               "slippage_deals_checked": attempted_slippage_deals,
                                "commission_observations": len(commission_bps_samples),
                                "matched_slippage_deals": len(slippage_bps_samples),
                                "bid_tick_status": "complete" if bid_complete else "incomplete",
@@ -606,6 +632,9 @@ class OracleAgent(BaseAgent):
                 "count": len(observations), "observations": observations,
                 "cost_profiles": profiles,
                 "deal_history_status": deals_result.get("status", "error"),
+                "deal_history_records": len(all_deals),
+                "deal_history_days": deal_history_days,
+                "deal_history_request_count": deals_result.get("request_count"),
                 # Exact names are diagnostic evidence only. Oracle never maps a
                 # canonical symbol to a broker instrument implicitly.
                 "broker_symbol_catalog": broker.symbol_catalog() if unmatched else []}
