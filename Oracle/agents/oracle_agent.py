@@ -165,6 +165,8 @@ class OracleAgent(BaseAgent):
     capabilities = ["market.analyze", "trade.signal", "trade.propose", "trade.execute",
                     "strategy.evolve", "strategy.champion", "strategy.backtest",
                     "strategy.research", "research.cycle", "strategy.improvement.request",
+                    "broker.cost.observations", "market.data.drift.assess",
+                    "market.data.window.fingerprint",
                     "hypothesis.generate",
                     "strategy.promotion.authorization_request", "strategy.promotion.authorize",
                     "fusion.learn", "risk.assess", "portfolio.status"]
@@ -289,13 +291,12 @@ class OracleAgent(BaseAgent):
                 "atr": atr,
                 "_technicals": market["technicals"]}
 
-    def _get_ctrader_research_series(self, symbol: str) -> Dict[str, Any]:
-        """Read five years of daily bars from Oracle's authenticated cTrader account."""
+    def _ensure_ctrader_research_broker(self) -> Dict[str, Any]:
+        """Connect the private read-only cTrader research client once."""
         try:
             from Oracle.execution.ctrader_broker import CTraderBroker  # type: ignore
         except ImportError:
             from execution.ctrader_broker import CTraderBroker  # type: ignore
-
         use_demo = os.getenv("CTRADER_USE_DEMO", "true").strip().lower() not in {"0", "false", "no"}
         with self._forge_ctrader_history_lock:
             if self._forge_ctrader_broker is None:
@@ -305,10 +306,42 @@ class OracleAgent(BaseAgent):
                     reason = connection.get("reason", "cTrader authentication failed") if isinstance(connection, dict) else "cTrader authentication failed"
                     return {"status": "error", "message": f"cTrader research connection failed: {reason}"}
                 self._forge_ctrader_broker = broker
+            return {"status": "complete", "broker": self._forge_ctrader_broker}
 
+    def collect_ctrader_cost_observations(self, symbols: List[str]) -> Dict[str, Any]:
+        """Collect broker-reported commission metadata and live spread samples.
+
+        A single live spread observation is evidence only. It is not promoted
+        to a historical spread assumption and does not measure slippage.
+        """
+        connection = self._ensure_ctrader_research_broker()
+        if connection.get("status") != "complete":
+            return {"status": "blocked", "message": connection.get("message"), "observations": []}
+        broker = connection["broker"]
+        observations = []
+        for raw_symbol in symbols:
+            symbol = str(raw_symbol).strip().upper()
+            try:
+                observations.append(broker.execution_cost_observation(symbol))
+            except Exception as exc:
+                log.warning("cTrader cost observation failed for %s: %s", symbol, type(exc).__name__)
+                observations.append({"status": "error", "symbol": symbol,
+                                     "message": f"cost observation failed: {type(exc).__name__}"})
+        return {"status": "complete", "source": "ctrader_open_api",
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+                "count": len(observations), "observations": observations}
+
+    def _get_ctrader_research_series(self, symbol: str) -> Dict[str, Any]:
+        """Read five years of daily bars from Oracle's authenticated cTrader account."""
+        connection = self._ensure_ctrader_research_broker()
+        if connection.get("status") != "complete":
+            return connection
+        broker = connection["broker"]
+
+        with self._forge_ctrader_history_lock:
             end = datetime.now(timezone.utc)
             start = end - timedelta(days=5 * 365 + 2)
-            history = self._forge_ctrader_broker.historical_bars(
+            history = broker.historical_bars(
                 symbol=symbol,
                 from_timestamp_ms=int(start.timestamp() * 1000),
                 to_timestamp_ms=int(end.timestamp() * 1000),
@@ -568,6 +601,11 @@ class OracleAgent(BaseAgent):
             return self.assess_market_data_drift(symbol)
         if task == "market.data.window.fingerprint":
             return self.research_window_fingerprint(symbol)
+        if task == "broker.cost.observations":
+            symbols = ctx.get("symbols") or ([symbol] if symbol else [])
+            if not isinstance(symbols, list) or any(not isinstance(item, str) for item in symbols):
+                return {"status": "error", "message": "symbols must be a list of strings"}
+            return self.collect_ctrader_cost_observations(symbols)
         if task == "strategy.promotion.authorization_request":
             try:
                 experiment_id = ctx.get("experiment_id")

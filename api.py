@@ -750,6 +750,29 @@ async def oracle_forge_window(request: Request):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Oracle research fingerprint failed: {type(exc).__name__}")
 
+@app.post("/oracle/forge/cost-observations")
+async def oracle_forge_cost_observations(request: Request):
+    """Read broker-reported symbol charges and live spread observations."""
+    data = await request.json()
+    symbols = data.get("symbols")
+    if (not isinstance(symbols, list) or not symbols or len(symbols) > 100
+            or any(not isinstance(item, str) or not re.fullmatch(r"[A-Z0-9._-]{1,24}", item.strip().upper())
+                   for item in symbols)):
+        raise HTTPException(status_code=422, detail="symbols must be a non-empty list of at most 100 valid symbol names")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    context = {"symbols": list(dict.fromkeys(item.strip().upper() for item in symbols)), "_sender": "forge_action"}
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "broker.cost.observations", context,
+            "Oracle broker cost observations accepted.",
+        )
+        return _normalize_agent_response("oracle", "broker.cost.observations", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle cost observations failed: {type(exc).__name__}")
+
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):
     if name not in AGENTS:

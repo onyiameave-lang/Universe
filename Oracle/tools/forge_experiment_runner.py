@@ -78,17 +78,22 @@ def _profile_symbols():
     return {str(symbol).upper() for symbol, profile in profiles.items() if isinstance(profile, dict)}
 
 
-def _post(url: str, symbol: str, mode: str, ablation: str | None):
+def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None):
     drift = mode == "drift"
     window = mode == "window"
+    cost_observations = mode == "cost-observations"
     endpoint = os.getenv(
-        "ORACLE_FORGE_DRIFT_API_URL" if drift else "ORACLE_FORGE_WINDOW_API_URL" if window else "ORACLE_FORGE_API_URL",
+        "ORACLE_FORGE_DRIFT_API_URL" if drift else "ORACLE_FORGE_WINDOW_API_URL" if window
+        else "ORACLE_FORGE_COST_OBSERVATIONS_API_URL" if cost_observations else "ORACLE_FORGE_API_URL",
         "http://127.0.0.1:8000/oracle/forge/drift" if drift
         else "http://127.0.0.1:8000/oracle/forge/window" if window
+        else "http://127.0.0.1:8000/oracle/forge/cost-observations" if cost_observations
         else "http://127.0.0.1:8000/oracle/forge/experiment",
     )
     payload = {"symbol": symbol}
-    if not drift and not window:
+    if cost_observations:
+        payload = {"symbols": list(symbols or [])}
+    elif not drift and not window:
         payload.update({
             "reason": "scheduled Forge challenger review" if mode == "challenger"
             else f"scheduled Forge component ablation: {ablation}",
@@ -99,7 +104,7 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None):
         headers={"Content-Type": "application/json"}, method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=900) as response:
+        with urllib.request.urlopen(request, timeout=2700 if cost_observations else 900) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         try:
@@ -138,6 +143,8 @@ def main() -> int:
 
     seen = _previous_windows()
     profiled_symbols = _profile_symbols()
+    print(f"Collecting cTrader commission metadata and live spread snapshots for {len(symbols)} symbols", flush=True)
+    cost_observation_result = _post("", "", "cost-observations", None, symbols=symbols)
     results = []
     for index, symbol in enumerate(symbols, start=1):
         print(f"[{index}/{len(symbols)}] {symbol}: {mode_spec}", flush=True)
@@ -193,6 +200,7 @@ def main() -> int:
         "symbol_count": len(symbols), "symbols": symbols,
         "research_only": True, "promotion_performed": False,
         "results": results,
+        "broker_cost_observations": _redact(cost_observation_result),
         "summary": {status: sum(item["status"] == status for item in results)
                     for status in sorted({item["status"] for item in results})},
         "workflow": "oracle-forge-experiment",

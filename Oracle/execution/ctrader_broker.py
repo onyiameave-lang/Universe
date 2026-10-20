@@ -194,6 +194,8 @@ class CTraderBroker:
         self._symbol_name_by_id: Dict[int, str] = {}
         self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
         self._symbol_constraints: Dict[int, Dict[str, Any]] = {}
+        self._spot_waiters: Dict[int, Dict[str, Any]] = {}
+        self._spot_lock = threading.Lock()
         self._positions_cache: Dict[int, Dict[str, Any]] = {}
         self._positions_last_refresh_ok = False
         self._cache_lock = threading.Lock()
@@ -354,6 +356,17 @@ class CTraderBroker:
 
         # Keep our local position cache current on every execution/reconcile.
         self._update_cache_from_payload(payload)
+        # Live quote events are not correlated to the subscribe request's
+        # clientMsgId. Route them separately to the waiting symbol snapshot.
+        symbol_id = getattr(payload, "symbolId", None)
+        bid = getattr(payload, "bid", None)
+        ask = getattr(payload, "ask", None)
+        if symbol_id and bid and ask:
+            with self._spot_lock:
+                waiter = self._spot_waiters.get(int(symbol_id))
+                if waiter is not None:
+                    waiter["quote"][0] = {"bid": int(bid), "ask": int(ask)}
+                    waiter["event"].set()
 
     def _load_symbols(self, ProtoOASymbolsListReq) -> None:
         # Retry once: found on first live connection that the FIRST request
@@ -554,12 +567,90 @@ class CTraderBroker:
             "maxVolume": max(1, getattr(sym, "maxVolume", 10_000_000)),
             "stepVolume": max(1, getattr(sym, "stepVolume", 1)),
             "digits": getattr(sym, "digits", None),
+            "pipPosition": getattr(sym, "pipPosition", None),
+            "lotSize": getattr(sym, "lotSize", None),
+            "commission": getattr(sym, "commission", None),
+            "commissionType": getattr(sym, "commissionType", None),
+            "preciseTradingCommissionRate": getattr(sym, "preciseTradingCommissionRate", None),
+            "minCommission": getattr(sym, "minCommission", None),
+            "minCommissionType": getattr(sym, "minCommissionType", None),
+            "minCommissionAsset": getattr(sym, "minCommissionAsset", None),
+            "preciseMinCommission": getattr(sym, "preciseMinCommission", None),
+            "swapLong": getattr(sym, "swapLong", None),
+            "swapShort": getattr(sym, "swapShort", None),
+            "swapCalculationType": getattr(sym, "swapCalculationType", None),
+            "pnlConversionFeeRate": getattr(sym, "pnlConversionFeeRate", None),
         }
         if constraints["digits"] is not None:
             constraints["digits"] = int(constraints["digits"])
+        for field in ("pipPosition", "lotSize", "commission", "commissionType",
+                      "preciseTradingCommissionRate", "minCommission", "minCommissionType",
+                      "preciseMinCommission", "swapCalculationType", "pnlConversionFeeRate"):
+            if constraints[field] is not None:
+                constraints[field] = int(constraints[field])
         with self._constraints_lock:
             self._symbol_constraints[symbol_id] = constraints
         return constraints
+
+    def execution_cost_observation(self, symbol: str, timeout: float = 10.0) -> Dict[str, Any]:
+        """Read broker commission metadata and one live bid/ask spread sample."""
+        symbol = str(symbol).strip().upper()
+        if not self.status.connected or self._client is None:
+            return {"status": "blocked", "symbol": symbol, "message": "cTrader account is not connected"}
+        symbol_id = self._symbol_id_by_name.get(symbol)
+        if symbol_id is None:
+            return {"status": "blocked", "symbol": symbol, "message": f"broker does not list symbol {symbol}"}
+        metadata = self._get_symbol_constraints(symbol_id, symbol)
+        if metadata.get("digits") is None:
+            return {"status": "blocked", "symbol": symbol, "message": "broker symbol metadata is unavailable"}
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+                ProtoOASubscribeSpotsReq, ProtoOAUnsubscribeSpotsReq,
+            )
+        except ImportError as exc:
+            return {"status": "blocked", "symbol": symbol, "message": f"cTrader quote messages unavailable: {type(exc).__name__}"}
+
+        event = threading.Event()
+        quote_slot = [None]
+        with self._spot_lock:
+            self._spot_waiters[symbol_id] = {"event": event, "quote": quote_slot}
+        subscribe = ProtoOASubscribeSpotsReq()
+        subscribe.ctidTraderAccountId = self._account_id
+        subscribe.symbolId.append(symbol_id)
+        try:
+            if self._send_and_wait(subscribe, timeout=timeout) is None:
+                return {"status": "error", "symbol": symbol, "metadata": metadata,
+                        "message": "cTrader quote subscription failed"}
+            if not event.wait(timeout=max(0.1, timeout)) or not quote_slot[0]:
+                return {"status": "unavailable", "symbol": symbol, "metadata": metadata,
+                        "slippage": {"status": "unavailable", "reason": "a quote snapshot does not measure order execution slippage"},
+                        "message": "no complete live bid/ask quote received"}
+            scale = 100000.0
+            digits = int(metadata["digits"])
+            bid_price = _round_price_to_digits(quote_slot[0]["bid"] / scale, digits)
+            ask_price = _round_price_to_digits(quote_slot[0]["ask"] / scale, digits)
+            if bid_price <= 0 or ask_price < bid_price:
+                return {"status": "error", "symbol": symbol, "message": "broker returned invalid bid/ask quote"}
+            mid = (bid_price + ask_price) / 2.0
+            return {
+                "status": "complete", "symbol": symbol, "broker_symbol_id": symbol_id,
+                "metadata": metadata,
+                "quote": {"bid": bid_price, "ask": ask_price, "observed_at": datetime.now(timezone.utc).isoformat()},
+                "spread": {"price": ask_price - bid_price,
+                           "pips": ((ask_price - bid_price) * (10 ** int(metadata.get("pipPosition") or digits))),
+                           "bps_of_mid": ((ask_price - bid_price) / mid * 10000.0) if mid else None},
+                "slippage": {"status": "unavailable", "reason": "a quote snapshot does not measure order execution slippage"},
+            }
+        finally:
+            unsubscribe = ProtoOAUnsubscribeSpotsReq()
+            unsubscribe.ctidTraderAccountId = self._account_id
+            unsubscribe.symbolId.append(symbol_id)
+            try:
+                self._send_and_wait(unsubscribe, timeout=min(timeout, 5.0))
+            except Exception:
+                log.debug("cTrader quote unsubscribe failed for %s", symbol, exc_info=True)
+            with self._spot_lock:
+                self._spot_waiters.pop(symbol_id, None)
 
     def _clamp_volume(self, raw_volume: float, symbol_id: int, symbol_name: str) -> int:
         cents = self._volume_to_cents(raw_volume)

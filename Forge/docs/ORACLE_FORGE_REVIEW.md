@@ -69,8 +69,19 @@ Pepperstone historical execution costs. The profile records its provisional
 status in every Chronicle experiment record; replace it with measured/account
 values and bump `profile_version` when verified.
 
-The monthly GitHub Action checks out `oracle-v2`, requests one read-only Oracle
-review, and commits a JSON report under `Forge/reports/oracle_experiments/`.
+Every scheduled run now queries cTrader for symbol commission metadata and
+captures one live bid/ask spread observation per symbol. The observations are
+stored in the run report under `broker_cost_observations`. They are not silently
+converted into active profiles: a single live spread is not a historical spread
+distribution, and cTrader does not expose a symbol-level slippage assumption.
+Oracle must record demo order reference quotes and fills to estimate slippage.
+Until a full, versioned profile is available, Forge continues to block that
+symbol's strategy experiment. Drift observations do not require execution-cost
+profiles.
+
+The six-hour GitHub Action checks out `oracle-v2`, rotates one research mode
+across the watchlist, and commits a JSON report under
+`Forge/reports/oracle_experiments/`.
 Scheduled workflows must also be present on the repository default branch.
 Each run uses a fresh hosted runner; Chronicle's local state is not durable
 between runs, while the committed report is. This initial Action is an
