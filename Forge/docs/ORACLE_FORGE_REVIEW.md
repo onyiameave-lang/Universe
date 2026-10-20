@@ -54,14 +54,20 @@ price basis, do not present the evaluation as broker-validated.
 ## Profile source and action setup
 
 The GitHub workflow requires repository Actions secrets named
-`CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_ACCESS_TOKEN`,
-`CTRADER_ACCOUNT_ID`, and `ORACLE_FORGE_COST_PROFILES_JSON`. The profile must
-declare `price_basis: "bid"` for the current cTrader trendbar source. Missing
-or mismatched inputs block the review; never add secret values to a commit or
-workflow log. The displayed deal commission and provisional spread/slippage
-assumptions are not enough to establish a verified historical cost profile.
-Label a profile provisional until confirmed from account terms and measured
-fills.
+`CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_ACCESS_TOKEN`, and
+`CTRADER_ACCOUNT_ID`. It loads the versioned, non-secret EURUSD profile from
+`Oracle/config/forge_cost_profiles.json`; a private
+`ORACLE_FORGE_COST_PROFILES_JSON` Actions secret can override that file. The
+profile declares `price_basis: "bid"` for the current cTrader trendbar source.
+Never add credential values to a commit or workflow log.
+
+The checked-in EURUSD profile is explicitly provisional and user-approved. It
+uses the proposed $3.50/standard-lot/side commission converted at a reference
+EURUSD price of 1.13700, plus the proposed 0.3 pip spread (0.26 bps), 0.5 pip
+slippage (0.44 bps), and 1.5 pip stress spread (1.32 bps). Those assumptions are not independently verified
+Pepperstone historical execution costs. The profile records its provisional
+status in every Chronicle experiment record; replace it with measured/account
+values and bump `profile_version` when verified.
 
 The monthly GitHub Action checks out `oracle-v2`, requests one read-only Oracle
 review, and commits a JSON report under `Forge/reports/oracle_experiments/`.

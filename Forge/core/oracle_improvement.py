@@ -185,6 +185,7 @@ class OracleImprovementService:
             "execution_cost_profile": {
                 "broker": str(costs["broker"]), "account_type": str(costs["account_type"]),
                 "profile_version": str(costs["profile_version"]),
+                "profile_status": str(costs.get("profile_status", "unverified")),
                 "price_basis": costs["price_basis"],
                 "spread_model": "full spread used once to derive the opposite executable quote from the supplied price basis",
             },
