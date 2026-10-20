@@ -57,6 +57,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -419,6 +420,71 @@ class CTraderBroker:
             trading_mode=details["trading_mode"], holidays=details["holidays"], now=now)
 
     # ── the sync bridge ───────────────────────────────────────────────────
+
+    def historical_bars(self, symbol: str, from_timestamp_ms: int, to_timestamp_ms: int,
+                        period: str = "D1", count: int = 2000,
+                        timeout: float = 45.0) -> Dict[str, Any]:
+        """Fetch read-only cTrader OHLCV trendbars for the requested range."""
+        if not self.status.connected or self._client is None:
+            return {"status": "error", "message": "cTrader account is not connected"}
+        symbol_id = self._symbol_id_by_name.get(symbol.upper())
+        if symbol_id is None:
+            return {"status": "error", "message": f"cTrader does not list symbol {symbol}"}
+        if (isinstance(from_timestamp_ms, bool) or isinstance(to_timestamp_ms, bool)
+                or not isinstance(from_timestamp_ms, int) or not isinstance(to_timestamp_ms, int)
+                or from_timestamp_ms < 0 or to_timestamp_ms <= from_timestamp_ms):
+            return {"status": "error", "message": "invalid cTrader history timestamp range"}
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            return {"status": "error", "message": "cTrader history count must be positive"}
+
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAGetTrendbarsReq
+            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATrendbarPeriod
+            period_value = ProtoOATrendbarPeriod.Value(str(period).upper())
+        except (ImportError, ValueError, AttributeError) as exc:
+            return {
+                "status": "error",
+                "message": f"cTrader historical bars are unavailable: {type(exc).__name__}: {exc}",
+            }
+
+        request = ProtoOAGetTrendbarsReq()
+        request.ctidTraderAccountId = self._account_id
+        request.symbolId = symbol_id
+        request.period = period_value
+        request.fromTimestamp = from_timestamp_ms
+        request.toTimestamp = to_timestamp_ms
+        request.count = count
+        payload = self._send_and_wait(request, timeout=timeout)
+        if payload is None:
+            return {"status": "error", "message": "cTrader historical-bar request timed out or failed"}
+        if getattr(payload, "errorCode", None):
+            detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
+            return {"status": "error", "message": f"cTrader rejected historical-bar request: {detail}"}
+
+        constraints = self._get_symbol_constraints(symbol_id, symbol.upper())
+        digits = constraints.get("digits")
+        if not isinstance(digits, int) or digits < 0:
+            return {"status": "error", "message": "cTrader did not provide symbol precision for historical bars"}
+
+        bars = []
+        for item in getattr(payload, "trendbar", []):
+            timestamp_minutes = int(getattr(item, "utcTimestampInMinutes", 0) or 0)
+            if timestamp_minutes <= 0:
+                return {"status": "error", "message": "cTrader returned a bar without a valid UTC timestamp"}
+            low_relative = int(item.low)
+            bars.append({
+                "timestamp": datetime.fromtimestamp(timestamp_minutes * 60, tz=timezone.utc).isoformat(),
+                "open": _round_price_to_digits((low_relative + int(item.deltaOpen)) / 100000.0, digits),
+                "high": _round_price_to_digits((low_relative + int(item.deltaHigh)) / 100000.0, digits),
+                "low": _round_price_to_digits(low_relative / 100000.0, digits),
+                "close": _round_price_to_digits((low_relative + int(item.deltaClose)) / 100000.0, digits),
+                "volume": float(item.volume),
+            })
+        bars.sort(key=lambda bar: bar["timestamp"])
+        if not bars:
+            return {"status": "error", "message": "cTrader returned no historical bars for the requested range"}
+        return {"status": "complete", "symbol": symbol.upper(), "source": "ctrader_open_api",
+                "price_basis": "bid", "period": str(period).upper(), "bars": bars}
 
     def _send_and_wait(self, request, timeout: float = _DEFAULT_TIMEOUT_SEC):
         """Send a protobuf request, block this (calling) thread until the

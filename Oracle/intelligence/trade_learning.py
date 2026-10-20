@@ -48,10 +48,26 @@ _closed_trade_keys_lock = threading.Lock()
 
 
 def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
-                            won: bool, pnl_r: float, chronicle_client=None) -> None:
+                            won: bool, pnl_r: float, chronicle_client=None,
+                            position=None, exit_price: Optional[float] = None,
+                            exit_reason: Optional[str] = None) -> None:
     _EXPERIMENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {"symbol": symbol, "entry_streams": entry_streams or {}, "won": won,
               "pnl_r": pnl_r, "timestamp": time.time()}
+    if position is not None:
+        stop_distance = abs(float(position.entry_price) - float(position.initial_stop))
+        record.update({
+            "entry_regime": getattr(position, "entry_regime", None),
+            "direction": getattr(getattr(position, "direction", None), "value", None),
+            "entry_price": float(position.entry_price),
+            "exit_price": float(exit_price) if exit_price is not None else None,
+            "initial_stop": float(position.initial_stop),
+            "initial_target": float(position.initial_target),
+            "initial_stop_distance": stop_distance,
+            "position_size_raw": float(position.size),
+            "position_size_unit": "strategy_or_broker_native_unverified",
+            "exit_reason": str(exit_reason or "unknown"),
+        })
     with _experiment_log_lock:
         with _EXPERIMENT_LOG_PATH.open("a") as f:
             f.write(json.dumps(record) + "\n")
@@ -448,8 +464,11 @@ class TradeLearningEngine:
         #    news stream actually predict wins?"), without duplicating or
         #    replacing either of the above.
         try:
-            _append_experiment_log(pos.symbol, pos.entry_streams, won, outcome.pnl_r,
-                                    chronicle_client=getattr(oracle_agent, "chronicle", None))
+            _append_experiment_log(
+                pos.symbol, pos.entry_streams, won, outcome.pnl_r,
+                chronicle_client=getattr(oracle_agent, "chronicle", None),
+                position=pos, exit_price=exit_price, exit_reason=exit_reason,
+            )
         except Exception as exc:
             log.warning("[%s] experiment log write failed: %s", pos.symbol, exc)
 

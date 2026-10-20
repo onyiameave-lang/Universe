@@ -193,18 +193,114 @@ class DataValidator:
         return cov / (va * vb) if va and vb else 0.0
 
 
-def train_test_split(ds: Dataset, validation_split: float = 0.2, seed: int = 42):
+def train_test_indices(
+    ds: Dataset, validation_split: float = 0.2, seed: int = 42
+) -> Tuple[List[int], List[int], str]:
+    """Return reproducible row indices and the split implementation used."""
+    if not 0 < validation_split < 1:
+        raise ValueError("validation_split must be between 0 and 1")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    indices = list(range(ds.n_samples))
+    groups_by_row: Dict[Tuple[float, ...], int] = {}
+    groups = []
+    for row in ds.X:
+        key = tuple(float(value) for value in row)
+        if key not in groups_by_row:
+            groups_by_row[key] = len(groups_by_row)
+        groups.append(groups_by_row[key])
+    has_duplicate_features = len(groups_by_row) < len(indices)
+    group_sizes = [0] * len(groups_by_row)
+    for group_id in groups:
+        group_sizes[group_id] += 1
+
+    if has_duplicate_features:
+        if len(groups_by_row) < 2:
+            raise ValueError(
+                "cannot create an independent validation split when all feature rows are duplicates"
+            )
+        try:
+            from sklearn.model_selection import GroupShuffleSplit
+            if ds.task_type == "classification" and len(set(map(str, ds.y))) > 1:
+                from sklearn.model_selection import StratifiedGroupKFold
+                splitter = StratifiedGroupKFold(
+                    n_splits=5, shuffle=True, random_state=seed
+                )
+                train_indices, validation_indices = next(
+                    splitter.split(ds.X, ds.y, groups)
+                )
+                method = "sklearn_stratified_group_holdout_v1"
+            else:
+                splitter = GroupShuffleSplit(
+                    n_splits=1, test_size=validation_split, random_state=seed
+                )
+                train_indices, validation_indices = next(
+                    splitter.split(ds.X, ds.y, groups)
+                )
+                method = "sklearn_group_holdout_v1"
+            return (
+                [int(index) for index in train_indices],
+                [int(index) for index in validation_indices],
+                method,
+            )
+        except Exception:
+            shuffled_group_ids = list(groups_by_row.values())
+            random.Random(seed).shuffle(shuffled_group_ids)
+            target_validation_count = max(1, math.ceil(ds.n_samples * validation_split))
+            validation_group_ids = set()
+            validation_count = 0
+            for group_id in shuffled_group_ids[:-1]:
+                if validation_count >= target_validation_count:
+                    break
+                validation_group_ids.add(group_id)
+                validation_count += group_sizes[group_id]
+            if not validation_group_ids or len(validation_group_ids) >= len(groups_by_row):
+                raise ValueError("unable to form disjoint grouped train and validation rows")
+            validation_indices = [
+                index for index, group_id in enumerate(groups)
+                if group_id in validation_group_ids
+            ]
+            train_indices = [
+                index for index, group_id in enumerate(groups)
+                if group_id not in validation_group_ids
+            ]
+            return train_indices, validation_indices, "python_seeded_group_holdout_v1"
+
     try:
         from sklearn.model_selection import train_test_split as sk
         strat = ds.y if ds.task_type == "classification" and len(set(map(str, ds.y))) > 1 else None
-        return sk(ds.X, ds.y, test_size=validation_split, random_state=seed, stratify=strat)
+        train_indices, validation_indices = sk(
+            indices,
+            test_size=validation_split,
+            random_state=seed,
+            stratify=strat,
+        )
+        method = (
+            "sklearn_stratified_random_holdout_v1"
+            if strat is not None else "sklearn_random_holdout_v1"
+        )
+        return (
+            [int(index) for index in train_indices],
+            [int(index) for index in validation_indices],
+            method,
+        )
     except Exception:
-        idx = list(range(ds.n_samples))
-        random.Random(seed).shuffle(idx)
+        indices = list(range(ds.n_samples))
+        random.Random(seed).shuffle(indices)
         cut = int(ds.n_samples * (1 - validation_split))
-        tr, va = idx[:cut], idx[cut:]
-        return ([ds.X[i] for i in tr], [ds.X[i] for i in va],
-                [ds.y[i] for i in tr], [ds.y[i] for i in va])
+        return indices[:cut], indices[cut:], "python_seeded_random_holdout_v1"
+
+
+def train_test_split(ds: Dataset, validation_split: float = 0.2, seed: int = 42):
+    train_indices, validation_indices, _ = train_test_indices(
+        ds, validation_split=validation_split, seed=seed
+    )
+    return (
+        [ds.X[i] for i in train_indices],
+        [ds.X[i] for i in validation_indices],
+        [ds.y[i] for i in train_indices],
+        [ds.y[i] for i in validation_indices],
+    )
 
 
 def kfold_indices(ds: Dataset, k: int = 5, seed: int = 42) -> List[Tuple[List[int], List[int]]]:

@@ -32,7 +32,11 @@ FIX O-3 (2026-07-17): Wire SignalFusion as the stream builder.
 from __future__ import annotations
 
 import logging
+import json
+import os
 import sys
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -46,9 +50,9 @@ if str(_ECO_ROOT) not in sys.path:
 # FIX: dual-import fallbacks — works whether Oracle/ is on sys.path (standalone)
 # or Oracle is loaded as a sub-package via api.py ecosystem.
 try:
-    from core.market_data import MarketData  # type: ignore
+    from core.market_data import MarketData, Series, Bar  # type: ignore
 except ImportError:
-    from Oracle.core.market_data import MarketData  # type: ignore
+    from Oracle.core.market_data import MarketData, Series, Bar  # type: ignore
 try:
     from core.risk import RiskManager  # type: ignore
 except ImportError:
@@ -77,6 +81,10 @@ try:
     from intelligence.scientific_lab import ScientificResearchLab  # type: ignore
 except ImportError:
     from Oracle.intelligence.scientific_lab import ScientificResearchLab  # type: ignore
+try:
+    from intelligence.scientific_lab import StrategyPromotionAuthorization  # type: ignore
+except ImportError:
+    from Oracle.intelligence.scientific_lab import StrategyPromotionAuthorization  # type: ignore
 # FIX O-3: import SignalFusion — the stream builder (was never imported before)
 try:
     from intelligence.signal_fusion import SignalFusion  # type: ignore
@@ -128,6 +136,27 @@ except Exception:
 log = logging.getLogger("oracle")
 
 
+def _strategy_promotion_verifier():
+    """Load Oracle's independently scoped Aegis trust configuration."""
+    raw_keys = os.environ.get("ORACLE_AEGIS_TRUSTED_ISSUERS_JSON")
+    if not raw_keys:
+        return None
+    try:
+        keys = json.loads(raw_keys)
+        if not isinstance(keys, dict) or not keys:
+            raise ValueError("ORACLE_AEGIS_TRUSTED_ISSUERS_JSON must be a non-empty object")
+        from Forge.core.authorization import Ed25519AuthorizationVerifier
+        return Ed25519AuthorizationVerifier(
+            trusted_issuers=keys,
+            audience="oracle.strategy.promotion",
+            database_path=_REPO_ROOT / "security" / "authorization_nonces.sqlite3",
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Oracle strategy promotion authorization configuration is invalid: {type(exc).__name__}"
+        ) from exc
+
+
 class OracleAgent(BaseAgent):
     name = "oracle"
     repository = "Oracle"
@@ -135,7 +164,9 @@ class OracleAgent(BaseAgent):
     description = "Scientific validator of trading intelligence and regime-aware champions."
     capabilities = ["market.analyze", "trade.signal", "trade.propose", "trade.execute",
                     "strategy.evolve", "strategy.champion", "strategy.backtest",
-                    "strategy.research", "research.cycle", "hypothesis.generate",
+                    "strategy.research", "research.cycle", "strategy.improvement.request",
+                    "hypothesis.generate",
+                    "strategy.promotion.authorization_request", "strategy.promotion.authorize",
                     "fusion.learn", "risk.assess", "portfolio.status"]
     channels = ["ecosystem.trading", "ecosystem.prediction", "ecosystem.broadcast"]
     memory_namespace = "oracle_memory"
@@ -143,20 +174,28 @@ class OracleAgent(BaseAgent):
     mission = {"purpose": "Form, validate, reject, improve, and preserve trading hypotheses."}
 
     def __init__(self, chronicle_client=None, sentinel_client=None, pulse_client=None,
-                 atlas_client=None, equity: float = 10000.0, **kw):
+                 atlas_client=None, forge_client=None, equity: float = 10000.0,
+                 strategy_promotion_verifier=None, **kw):
+        strategy_promotion_verifier = (
+            strategy_promotion_verifier or _strategy_promotion_verifier()
+        )
         super().__init__(chronicle_client=chronicle_client, atlas_client=atlas_client,
                          storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.data = MarketData()
+        self._forge_ctrader_broker = None
+        self._forge_ctrader_history_lock = threading.Lock()
         self.risk = RiskManager(equity=equity)
         self.backtester = Backtester(risk_per_trade=self.risk.risk_per_trade, starting_equity=equity)
         self.evolution = EvolutionLab(chronicle=chronicle_client, atlas=atlas_client,
                                      storage_dir=str(_REPO_ROOT / "memory"))
         self.lab = ScientificResearchLab(chronicle=chronicle_client, atlas=atlas_client,
-                                        storage_dir=str(_REPO_ROOT / "memory"))
+                                        storage_dir=str(_REPO_ROOT / "memory"),
+                                        promotion_verifier=strategy_promotion_verifier)
         self.fusion = AdaptiveFusion(storage_dir=str(_REPO_ROOT / "memory"), chronicle_client=chronicle_client)
         self.sentinel = sentinel_client
         self.pulse = pulse_client
         self.chronicle = chronicle_client
+        self.forge = forge_client
         self.trade_journal = TradeJournal(chronicle_client=chronicle_client)
         # FIX O-3: instantiate SignalFusion with the same sub-agent clients.
         # SignalFusion builds rich stream dicts; AdaptiveFusion fuses them with
@@ -250,6 +289,158 @@ class OracleAgent(BaseAgent):
                 "atr": atr,
                 "_technicals": market["technicals"]}
 
+    def _get_ctrader_research_series(self, symbol: str) -> Dict[str, Any]:
+        """Read five years of daily bars from Oracle's authenticated cTrader account."""
+        try:
+            from Oracle.execution.ctrader_broker import CTraderBroker  # type: ignore
+        except ImportError:
+            from execution.ctrader_broker import CTraderBroker  # type: ignore
+
+        use_demo = os.getenv("CTRADER_USE_DEMO", "true").strip().lower() not in {"0", "false", "no"}
+        with self._forge_ctrader_history_lock:
+            if self._forge_ctrader_broker is None:
+                broker = CTraderBroker(use_demo=use_demo)
+                connection = broker.connect()
+                if not isinstance(connection, dict) or not connection.get("connected"):
+                    reason = connection.get("reason", "cTrader authentication failed") if isinstance(connection, dict) else "cTrader authentication failed"
+                    return {"status": "error", "message": f"cTrader research connection failed: {reason}"}
+                self._forge_ctrader_broker = broker
+
+            end = datetime.now(timezone.utc)
+            start = end - timedelta(days=5 * 365 + 2)
+            history = self._forge_ctrader_broker.historical_bars(
+                symbol=symbol,
+                from_timestamp_ms=int(start.timestamp() * 1000),
+                to_timestamp_ms=int(end.timestamp() * 1000),
+                period="D1",
+                count=2000,
+                timeout=60.0,
+            )
+        if not isinstance(history, dict) or history.get("status") != "complete":
+            detail = history.get("message", "cTrader returned no historical bars") if isinstance(history, dict) else "cTrader returned an invalid history response"
+            return {"status": "error", "message": detail}
+
+        try:
+            bars = [Bar(
+                ts=str(item["timestamp"]), open=float(item["open"]),
+                high=float(item["high"]), low=float(item["low"]),
+                close=float(item["close"]), volume=float(item.get("volume", 0.0)),
+            ) for item in history["bars"]]
+            series = Series(symbol=symbol.upper(), bars=bars, source="ctrader_open_api_bid")
+            invalid = self.data._series_validation_error(series)
+            if invalid:
+                return {"status": "error", "message": f"cTrader returned invalid OHLCV history: {invalid}"}
+        except (KeyError, TypeError, ValueError) as exc:
+            return {"status": "error", "message": f"invalid cTrader history response: {type(exc).__name__}: {exc}"}
+        if len(series.bars) < 75:
+            return {"status": "error", "message": f"cTrader returned only {len(series.bars)} daily bars; at least 75 are required"}
+        return {"status": "complete", "series": series, "source": series.source,
+                "bars": len(series.bars), "price_basis": "bid"}
+
+    def request_forge_improvement(self, symbol: str, regime: Optional[str] = None,
+                                  reason: str = "Oracle performance review requested",
+                                  commission_bps: Optional[float] = None,
+                                  slippage_bps: Optional[float] = None,
+                                  execution_costs: Optional[Dict[str, Any]] = None,
+                                  minimum_executed_trades: Optional[int] = None,
+                                  ablation_targets: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Send Forge a read-only incumbent snapshot for governed research."""
+        if self.forge is None:
+            return {"status": "blocked", "message": "Forge is not connected to Oracle"}
+        research_market = self._get_ctrader_research_series(symbol)
+        if not isinstance(research_market, dict) or research_market.get("status") != "complete":
+            detail = research_market.get("message") if isinstance(research_market, dict) else None
+            return {"status": "blocked", "message": detail or "Oracle could not obtain five-year cTrader research history"}
+        series = research_market.get("series")
+        if series is None or not getattr(series, "bars", None):
+            return {"status": "blocked", "message": "Oracle five-year research history is empty"}
+        if str(getattr(series, "source", "")).lower().startswith("synthetic"):
+            return {"status": "blocked", "message": "synthetic data cannot be evaluated by Forge"}
+
+        if not regime:
+            regime = (analyze(series).get("regime") or {}).get("regime", "unknown")
+        champion = self.evolution.champion(symbol, regime)
+        if champion is None:
+            lab_record = self.lab.champion_info(symbol, regime)
+            genome_payload = lab_record.get("genome") if isinstance(lab_record, dict) else None
+        else:
+            genome_payload = champion.to_dict()
+        if not isinstance(genome_payload, dict):
+            return {"status": "blocked", "message": "Oracle has no active champion genome to challenge"}
+
+        confidence = self._champion_confidence.get(symbol, regime)
+        observed = int(confidence.get("wins", 0)) + int(confidence.get("losses", 0))
+        try:
+            if execution_costs is None:
+                profiles = json.loads(os.getenv("ORACLE_FORGE_COST_PROFILES_JSON", "{}"))
+                execution_costs = profiles.get(symbol.upper()) if isinstance(profiles, dict) else None
+            if isinstance(execution_costs, dict):
+                execution_costs = dict(execution_costs)
+                if commission_bps is not None:
+                    execution_costs["commission_bps"] = commission_bps
+                if slippage_bps is not None:
+                    execution_costs["slippage_bps"] = slippage_bps
+                for key in ("commission_bps", "slippage_bps", "spread_bps",
+                            "stress_slippage_bps", "stress_spread_bps"):
+                    if key in execution_costs:
+                        execution_costs[key] = float(execution_costs[key])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            execution_costs = None
+        if (isinstance(execution_costs, dict)
+                and execution_costs.get("price_basis") != research_market.get("price_basis")):
+            return {
+                "status": "blocked",
+                "message": (
+                    "execution-cost profile price_basis does not match cTrader historical bars; "
+                    "cTrader trendbars are bid-based and the active profile must declare bid"
+                ),
+            }
+        if minimum_executed_trades is None:
+            try:
+                minimum_executed_trades = int(os.getenv("ORACLE_FORGE_MINIMUM_EXECUTED_TRADES", "100"))
+            except ValueError:
+                minimum_executed_trades = None
+
+        request = {
+            "symbol": symbol.upper(),
+            "regime": regime,
+            "reason": reason,
+            "baseline_genome": genome_payload,
+            "performance_metrics": {
+                "observed_trades": observed,
+                "wins": int(confidence.get("wins", 0)),
+                "losses": int(confidence.get("losses", 0)),
+                "observed_win_rate": (int(confidence.get("wins", 0)) / observed) if observed else None,
+                "bayesian_live_confidence": confidence.get("live_confidence"),
+                "current_drawdown_r": confidence.get("current_drawdown_r"),
+                "as_of": confidence.get("last_updated"),
+            },
+            "bars": [{
+                "timestamp": bar.ts,
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+            } for bar in series.bars],
+            "data_source": getattr(series, "source", "unknown"),
+            "research_period": "5y",
+            "research_interval": "1d",
+            "execution_costs": execution_costs,
+            "minimum_executed_trades": minimum_executed_trades,
+            "ablation_targets": list(ablation_targets or []),
+            "risk_policy": {
+                "source": "Oracle RiskManager.max_drawdown",
+                "max_drawdown_fraction": getattr(self.risk, "max_drawdown", None),
+            },
+        }
+        try:
+            from shared.forge_client import ForgeClient
+            return ForgeClient(self.forge).request_oracle_improvement(request)
+        except Exception as exc:
+            log.warning("Forge Oracle improvement request failed for %s::%s: %s", symbol, regime, exc)
+            return {"status": "error", "message": f"Forge request failed: {type(exc).__name__}"}
+
     # ---- BaseAgent contract ----
 
     def execute(self, task, context):
@@ -267,6 +458,45 @@ class OracleAgent(BaseAgent):
                 (streams.get("social") or {}).pop("_manipulation_flags", None)
             out.pop("_technicals", None)
             return out
+        if task == "strategy.improvement.request":
+            return self.request_forge_improvement(
+                symbol=symbol,
+                regime=ctx.get("regime"),
+                reason=ctx.get("reason", "Oracle performance review requested"),
+                commission_bps=ctx.get("commission_bps"),
+                slippage_bps=ctx.get("slippage_bps"),
+                execution_costs=ctx.get("execution_costs"),
+                minimum_executed_trades=ctx.get("minimum_executed_trades"),
+                ablation_targets=ctx.get("ablation_targets"),
+            )
+        if task == "strategy.promotion.authorization_request":
+            try:
+                experiment_id = ctx.get("experiment_id")
+                claims = self.lab.promotion_authorization_claims(
+                    experiment_id, ctx.get("authorized_by")
+                )
+                return {
+                    "status": "pending_authorization",
+                    "experiment_id": experiment_id,
+                    "audience": "oracle.strategy.promotion",
+                    "required_claims": claims,
+                    "required_fields": [
+                        "authorization_id", "challenge_id", "authorized_by", "decision",
+                        "risk_category", "issued_at", "expires_at", "issuer",
+                        "audience", "signature", "nonce", "claims",
+                    ],
+                    "authorization_configured": self.lab._promotion_verifier is not None,
+                }
+            except Exception as exc:
+                return {"status": "error", "message": f"promotion authorization request failed: {type(exc).__name__}: {exc}"}
+        if task == "strategy.promotion.authorize":
+            try:
+                authorization = StrategyPromotionAuthorization.model_validate(
+                    ctx.get("authorization", {})
+                )
+                return self.lab.authorize_promotion(ctx.get("experiment_id"), authorization)
+            except Exception as exc:
+                return {"status": "error", "message": f"strategy promotion rejected: {type(exc).__name__}: {exc}"}
         if task == "strategy.evolve":
             md = self.data.get(symbol)
             series = md["series"] if md["status"] == "complete" else self.data.synthetic(symbol, n=160)

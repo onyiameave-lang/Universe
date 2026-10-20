@@ -589,20 +589,9 @@ class EvolutionLab:
             log.info("CERTIFICATION FAILED: status=%s return=%.4f trades=%d (min=%d)",
                      oos_result.get("status"), oos_return, oos_trades, oos_min_trades)
 
-        # Promote if approved
-        if promoted:
-            self._champions[champion_key] = {
-                "symbol": symbol, "regime": regime,
-                "genome": best.to_dict(),  # ISSUE 1: Full genome preserved
-                "in_sample": {"return": best.best_return, "fitness": best.fitness},
-                "out_of_sample": oos_result,
-                "certified_at": time.time(),
-                "generation": best.generation,
-                "parents": best.parents,
-            }
-            self._persist()
-            log.info("✅ CHAMPION PROMOTED: %s (OOS=%.4f, trades=%d)",
-                     best.genome_id, oos_return, oos_trades)
+        # Evolution produces evidence and candidate eligibility only. The
+        # owning research coordinator commits champion state after a separate,
+        # request-bound governance authorization.
 
         return {
             "status": "complete", "symbol": symbol, "regime": regime,
@@ -610,13 +599,15 @@ class EvolutionLab:
             "best_genome": best.to_dict(),  # ISSUE 1: Always full genome
             "in_sample_return": best.best_return,
             "out_of_sample": oos_result,
-            "promoted_new_champion": promoted,
+            "promoted_new_champion": False,
+            "candidate_eligible": promoted,
+            "promotion_status": "PENDING_GOVERNANCE" if promoted else "NOT_ELIGIBLE",
             "champion": (self._champions.get(champion_key, {}).get("genome", {}).get("genome_id")
                          if isinstance(self._champions.get(champion_key), dict)
                          and isinstance(self._champions.get(champion_key).get("genome"), dict)
                          else None),
             "champion_comparison": comparison,
-            "validation_summary": self._build_summary(all_reports, promoted).to_dict(),
+            "validation_summary": self._build_summary(all_reports, False).to_dict(),
             "diversity_final": round(population_diversity(population), 3),
             "mutation_pressure": round(self.stagnation.mutation_pressure, 2),
         }

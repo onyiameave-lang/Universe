@@ -19,16 +19,19 @@ google-genai>=0.1.0
 yfinance>=0.2.25
 # MetaTrader5 is Windows-only; install manually on Windows: pip install MetaTrader5>=5.0.45
 # MetaTrader5>=5.0.45
-service_identity
+service_identity==24.2.0
 ctrader-open-api
 pyOpenSSL==24.1.0
+cryptography>=42.0.0
 # --- optional PDF research (Atlas) ---
 pypdf>=3.0.0
 # --- config + tests ---
 python-dotenv>=1.0.0
+pydantic>=2.0.0
 pytest>=7.4.0
 fastapi>=0.100.0
 uvicorn>=0.22.0
+wsproto>=1.2.0
 python-multipart>=0.0.6
 # --- social / trend data (Pulse) ---
 pytrends>=4.9.0

@@ -62,6 +62,10 @@ class Series:
         return [b.close for b in self.bars]
 
     @property
+    def opens(self) -> List[float]:
+        return [b.open for b in self.bars]
+
+    @property
     def highs(self) -> List[float]:
         return [b.high for b in self.bars]
 
@@ -344,6 +348,11 @@ class MarketData:
             bars = [Bar(**b) for b in payload["bars"]]
             series = Series(symbol=payload["symbol"], bars=bars,
                            source=f"cache:{payload.get('source', 'unknown')}")
+            invalid = self._series_validation_error(series)
+            if invalid:
+                logging.getLogger("oracle.market_data").warning(
+                    "ignoring invalid cached history for %s: %s", symbol, invalid)
+                return None
             age_hours = (time.time() - payload.get("cached_at", 0)) / 3600.0
             return {"series": series, "age_hours": age_hours}
         except Exception as exc:
@@ -353,26 +362,39 @@ class MarketData:
 
     def get(self, symbol: str, period: str = "6mo", interval: str = "1d",
            allow_cache_fallback: bool = True) -> Dict[str, Any]:
+        logger = logging.getLogger("oracle.market_data")
         # ---- in-memory TTL cache (prevents redundant HTTP calls per cycle) ----
         _mem_key = f"{symbol.upper()}|{period}|{interval}"
         _now = time.time()
         _cached_mem = _market_data_mem_cache.get(_mem_key)
         if _cached_mem and (_now - _cached_mem["ts"]) < _MARKET_DATA_CACHE_TTL_SEC:
-            logging.getLogger("oracle.market_data").debug(
-                "market_data mem-cache HIT for %s (%.0fs old)", symbol,
-                _now - _cached_mem["ts"])
-            return _cached_mem["result"]
+            invalid = self._series_validation_error(_cached_mem["result"].get("series"))
+            if not invalid:
+                logger.debug(
+                    "market_data mem-cache HIT for %s (%.0fs old)", symbol,
+                    _now - _cached_mem["ts"])
+                return _cached_mem["result"]
+            logger.warning("discarding invalid in-memory history for %s: %s", symbol, invalid)
+            _market_data_mem_cache.pop(_mem_key, None)
 
+        source_errors = []
         for src in self.sources:
             if not getattr(src, "available", False):
                 continue
             series = src.fetch(symbol, period, interval)
             if series and series.bars:
+                invalid = self._series_validation_error(series)
+                if invalid:
+                    source_errors.append(f"{src.name}: {invalid}")
+                    logger.warning("rejecting invalid %s history for %s: %s",
+                                   src.name, symbol, invalid)
+                    continue
                 self._save_cache(symbol, series)
                 _result = {"status": "complete", "series": series,
                            "source": series.source, "bars": len(series.bars)}
                 _market_data_mem_cache[_mem_key] = {"result": _result, "ts": _now}
                 return _result
+            source_errors.append(f"{src.name}: no data returned")
 
         if allow_cache_fallback:
             cached = self._load_cache(symbol)
@@ -387,10 +409,29 @@ class MarketData:
                 _market_data_mem_cache[_mem_key] = {"result": _result, "ts": _now}
                 return _result
 
+        detail = "; ".join(source_errors) if source_errors else "no configured source is available"
         return {"status": "error", "series": None,
-               "message": f"no live market data for {symbol} (sources unreachable, no cache available)"}
-        return {"status": "error", "series": None,
-               "message": f"no live market data for {symbol} (sources unreachable)"}
+               "message": f"no valid live market data for {symbol}: {detail}"}
+
+    @staticmethod
+    def _series_validation_error(series: Any) -> Optional[str]:
+        """Reject malformed market bars before caching or returning them."""
+        if not isinstance(series, Series) or not series.bars:
+            return "series is empty"
+        invalid_count = 0
+        first_invalid = None
+        for index, bar in enumerate(series.bars):
+            values = (bar.open, bar.high, bar.low, bar.close, bar.volume)
+            if (any(not math.isfinite(value) for value in values)
+                    or bar.low <= 0 or bar.volume < 0
+                    or bar.high < max(bar.open, bar.close)
+                    or bar.low > min(bar.open, bar.close)):
+                invalid_count += 1
+                if first_invalid is None:
+                    first_invalid = index
+        if invalid_count:
+            return f"{invalid_count}/{len(series.bars)} bars violate OHLCV bounds (first invalid index {first_invalid})"
+        return None
 
     @staticmethod
     def synthetic(symbol: str, n: int = 130, seed: int = 7) -> Series:

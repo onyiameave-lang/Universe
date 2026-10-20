@@ -22,6 +22,11 @@ FRONTEND_ROOT = ROOT / "frontend"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# Load root configuration before importing ecosystem/shared singletons. This
+# also uses the built-in parser when python-dotenv is absent from the venv.
+from shared.startup import load_dotenv_early
+load_dotenv_early(__file__)
+
 import ecosystem
 
 # Import agent interface routers
@@ -575,7 +580,9 @@ async def lifespan(app: FastAPI):
             elif name == "genesis":
                 inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"), aegis_client=AGENTS.get("aegis"), nexus_client=AGENTS.get("nexus"))
             elif name == "oracle":
-                inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"), sentinel_client=AGENTS.get("sentinel"), pulse_client=AGENTS.get("pulse"))
+                inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"),
+                         sentinel_client=AGENTS.get("sentinel"), pulse_client=AGENTS.get("pulse"),
+                         forge_client=AGENTS.get("forge"))
             elif name == "nexus":
                 inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"))
             else:
@@ -672,6 +679,35 @@ async def query_agent(name: str, request: Request):
     except Exception as exc:
         add_log(name, "error", str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/oracle/forge/experiment")
+async def oracle_forge_experiment(request: Request):
+    """Run a governed, read-only Oracle/Forge challenger or single-component ablation."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not symbol or _extract_symbol_from_text(symbol) != symbol:
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    targets = data.get("ablation_targets", [])
+    if not isinstance(targets, list) or len(targets) > 1 or any(not isinstance(item, str) for item in targets):
+        raise HTTPException(status_code=422, detail="Ablation requests accept at most one registered component")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    context = {
+        "symbol": symbol,
+        "reason": str(data.get("reason", "scheduled Forge research review")),
+        "ablation_targets": targets,
+        "_sender": "forge_action",
+    }
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "strategy.improvement.request", context,
+            "Oracle Forge research request accepted.",
+        )
+        return _normalize_agent_response("oracle", "strategy.improvement.request", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle Forge research request failed: {type(exc).__name__}")
 
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):
@@ -785,4 +821,4 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, ws="wsproto")
