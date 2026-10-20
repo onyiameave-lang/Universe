@@ -527,6 +527,10 @@ class OracleAgent(BaseAgent):
                 minimum_commission = metadata.get("preciseMinCommission")
                 if isinstance(minimum_commission, (int, float)) and minimum_commission > 0:
                     reasons.append("symbol minimum commission requires per-trade modeling, which the current bps backtester does not support")
+                if len(slippage_bps_samples) < minimum_deals:
+                    reasons.append(
+                        f"only {len(slippage_bps_samples)} matched fill/slippage observations; {minimum_deals} required"
+                    )
 
                 def percentile(values, fraction):
                     ordered = sorted(float(value) for value in values)
@@ -535,20 +539,8 @@ class OracleAgent(BaseAgent):
                 if not reasons:
                     spread_base = percentile(paired_spreads, 0.95)
                     spread_stress = percentile(paired_spreads, 0.99)
-                    if len(slippage_bps_samples) >= minimum_deals:
-                        slippage_base = percentile(slippage_bps_samples, 0.95)
-                        slippage_stress = percentile(slippage_bps_samples, 0.99)
-                        slippage_status = "api_observed"
-                        slippage_method = "matched cTrader fills versus execution-time historical quotes; p95 base / p99 stress"
-                    else:
-                        # A full p95 spread is charged as the baseline extra
-                        # adverse movement per fill; the p99 spread is used for
-                        # stress. This is explicitly an assumption, not observed
-                        # broker slippage, and the resulting profile is research-only.
-                        slippage_base = spread_base / 2.0
-                        slippage_stress = spread_stress
-                        slippage_status = "provisional_spread_anchored"
-                        slippage_method = "assumption: half p95 full spread per fill; p99 full spread per fill under stress"
+                    slippage_base = percentile(slippage_bps_samples, 0.95)
+                    slippage_stress = percentile(slippage_bps_samples, 0.99)
                     if spread_stress < spread_base or slippage_stress < slippage_base:
                         reasons.append("stress percentile calculation was inconsistent")
                     else:
@@ -558,8 +550,7 @@ class OracleAgent(BaseAgent):
                             "broker_symbol": broker_symbol,
                             "alias_schema": "oracle.ctrader_research_symbol_aliases.v1",
                             "profile_version": f"ctrader-cost-v2-{now_ms}-{symbol.lower()}",
-                            "profile_status": ("api_observed_costs" if slippage_status == "api_observed"
-                                               else "provisional_research_only"),
+                            "profile_status": "api_observed_costs",
                             "promotion_eligible": False,
                             "price_basis": "bid",
                             "commission_bps": commission_base,
@@ -568,11 +559,8 @@ class OracleAgent(BaseAgent):
                             "stress_slippage_bps": slippage_stress,
                             "stress_spread_bps": spread_stress,
                             "commission_source": commission_source,
-                            "slippage_status": slippage_status,
-                            "slippage_method": slippage_method,
-                            "slippage_assumption_version": (
-                                "spread-anchored-v1" if slippage_status == "provisional_spread_anchored" else None
-                            ),
+                            "slippage_status": "api_observed",
+                            "slippage_method": "matched cTrader fills versus execution-time historical quotes; p95 base / p99 stress",
                             "method": "cTrader commission schedule and historical BID/ASK ticks; p95 base / p99 stress",
                             "evidence": {
                                 "observed_at": datetime.now(timezone.utc).isoformat(),
