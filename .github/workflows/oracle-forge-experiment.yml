@@ -73,6 +73,16 @@ jobs:
           ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
           ORACLE_FORGE_MINIMUM_EXECUTED_TRADES: "100"
         run: |
+          missing_secrets=()
+          [[ -n "$CTRADER_CLIENT_ID" ]] || missing_secrets+=(CTRADER_CLIENT_ID)
+          [[ -n "$CTRADER_CLIENT_SECRET" ]] || missing_secrets+=(CTRADER_CLIENT_SECRET)
+          [[ -n "$CTRADER_ACCESS_TOKEN" ]] || missing_secrets+=(CTRADER_ACCESS_TOKEN)
+          [[ -n "$CTRADER_ACCOUNT_ID" ]] || missing_secrets+=(CTRADER_ACCOUNT_ID)
+          if ((${#missing_secrets[@]})); then
+            echo "Missing GitHub Actions secrets: ${missing_secrets[*]}"
+            echo "Add them as repository secrets, or bind the job to the GitHub Environment that contains them."
+            exit 1
+          fi
           if [[ -n "$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE" ]]; then
             export ORACLE_FORGE_COST_PROFILES_JSON="$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE"
           else
