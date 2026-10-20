@@ -192,6 +192,8 @@ class CTraderBroker:
         self._client = None                 # ctrader_open_api.Client, set in connect()
         self._symbol_id_by_name: Dict[str, int] = {}
         self._symbol_name_by_id: Dict[int, str] = {}
+        self._symbol_base_asset_by_name: Dict[str, int] = {}
+        self._symbol_quote_asset_by_name: Dict[str, int] = {}
         self._asset_name_by_id: Dict[int, str] = {}
         self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
         self._symbol_constraints: Dict[int, Dict[str, Any]] = {}
@@ -384,8 +386,13 @@ class CTraderBroker:
             payload = self._send_and_wait(req, timeout=_DEFAULT_TIMEOUT_SEC)
             if payload is not None:
                 for sym in getattr(payload, "symbol", []):
-                    self._symbol_id_by_name[sym.symbolName.upper()] = sym.symbolId
+                    name = sym.symbolName.upper()
+                    self._symbol_id_by_name[name] = sym.symbolId
                     self._symbol_name_by_id[sym.symbolId] = sym.symbolName
+                    if getattr(sym, "baseAssetId", None) is not None:
+                        self._symbol_base_asset_by_name[name] = int(sym.baseAssetId)
+                    if getattr(sym, "quoteAssetId", None) is not None:
+                        self._symbol_quote_asset_by_name[name] = int(sym.quoteAssetId)
                 return
             if attempt == 1:
                 log.info("cTrader: symbol list fetch timed out on first attempt, retrying once...")
@@ -401,9 +408,9 @@ class CTraderBroker:
             log.warning("cTrader: asset list unavailable; account currency cannot be verified")
             return
         self._asset_name_by_id = {
-            int(getattr(asset, "id")): str(getattr(asset, "name", "")).upper()
+            int(getattr(asset, "assetId")): str(getattr(asset, "name", "")).upper()
             for asset in getattr(payload, "asset", [])
-            if getattr(asset, "id", None) is not None and getattr(asset, "name", None)
+            if getattr(asset, "assetId", None) is not None and getattr(asset, "name", None)
         }
 
     def load_market_schedules(self, symbol_names: List[str]) -> None:
@@ -706,8 +713,10 @@ class CTraderBroker:
             "maxVolume": max(1, getattr(sym, "maxVolume", 10_000_000)),
             "stepVolume": max(1, getattr(sym, "stepVolume", 1)),
             "digits": getattr(sym, "digits", None),
-            "baseAssetId": getattr(sym, "baseAssetId", None),
-            "quoteAssetId": getattr(sym, "quoteAssetId", None),
+            "baseAssetId": (getattr(sym, "baseAssetId", None)
+                             or self._symbol_base_asset_by_name.get(symbol_name.upper())),
+            "quoteAssetId": (getattr(sym, "quoteAssetId", None)
+                              or self._symbol_quote_asset_by_name.get(symbol_name.upper())),
             "pipPosition": getattr(sym, "pipPosition", None),
             "lotSize": getattr(sym, "lotSize", None),
             "commission": getattr(sym, "commission", None),

@@ -374,7 +374,6 @@ class OracleAgent(BaseAgent):
 
                 symbol_deals = [d for d in all_deals if d.get("symbol") == symbol and d.get("deal_status") == 2]
                 commission_bps_samples, slippage_bps_samples = [], []
-                bid_times = [item["timestamp_ms"] for item in bid_ticks]
                 for deal in symbol_deals:
                     execution_price = deal.get("execution_price")
                     units = float(deal.get("filled_volume_cents") or 0) / 100.0
@@ -387,18 +386,40 @@ class OracleAgent(BaseAgent):
                                       if isinstance(money_digits, int) and 1 <= money_digits <= 12 else 0.0)
                         if notional_usd > 0 and commission > 0 and account_currency == "USD":
                             commission_bps_samples.append(commission / notional_usd * 10000.0)
-                        reference_timestamp = int(deal.get("create_timestamp_ms") or 0)
-                        if reference_timestamp:
-                            quote_times = ask_times if deal.get("trade_side") == 1 else bid_times
-                            quote_ticks = ask_ticks if deal.get("trade_side") == 1 else bid_ticks
-                            pos = bisect.bisect_left(quote_times, reference_timestamp)
-                            quote_candidates = quote_ticks[max(0, pos - 1):min(len(quote_ticks), pos + 1)]
-                            if quote_candidates:
-                                quote = min(quote_candidates, key=lambda item: abs(item["timestamp_ms"] - reference_timestamp))
-                                if abs(quote["timestamp_ms"] - reference_timestamp) <= quote_tolerance_ms and quote["price"] > 0:
-                                    adverse = (float(execution_price) - quote["price"] if deal.get("trade_side") == 1
-                                               else quote["price"] - float(execution_price))
-                                    slippage_bps_samples.append(max(0.0, adverse / quote["price"] * 10000.0))
+                        # Compare the fill against the broker quote at execution
+                        # time, not the deal's submission time or the unrelated
+                        # recent quote window collected for spread measurement.
+                        reference_timestamp = int(
+                            deal.get("execution_timestamp_ms")
+                            or deal.get("create_timestamp_ms")
+                            or 0
+                        )
+                        trade_side = deal.get("trade_side")
+                        if reference_timestamp and trade_side in {1, 2}:
+                            quote_type = "ASK" if trade_side == 1 else "BID"
+                            quote_result = broker.historical_ticks(
+                                symbol,
+                                quote_type,
+                                max(0, reference_timestamp - quote_tolerance_ms),
+                                reference_timestamp + quote_tolerance_ms + 1,
+                                timeout=15.0,
+                            )
+                            quote_candidates = quote_result.get("ticks", [])
+                            if quote_result.get("status") == "complete" and quote_candidates:
+                                quote = min(
+                                    quote_candidates,
+                                    key=lambda item: abs(item["timestamp_ms"] - reference_timestamp),
+                                )
+                                if (abs(quote["timestamp_ms"] - reference_timestamp)
+                                        <= quote_tolerance_ms and quote["price"] > 0):
+                                    adverse = (
+                                        float(execution_price) - quote["price"]
+                                        if trade_side == 1
+                                        else quote["price"] - float(execution_price)
+                                    )
+                                    slippage_bps_samples.append(
+                                        max(0.0, adverse / quote["price"] * 10000.0)
+                                    )
 
                 minimum_quotes = max(20, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_QUOTES", "100")))
                 minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
