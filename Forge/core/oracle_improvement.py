@@ -345,14 +345,29 @@ class OracleImprovementService:
                 "statistical_evidence_complete": report.statistical_evidence_complete,
             }
             recommend = all(guardrails.values())
+            minimum_sample_met = (
+                guardrails["minimum_trade_sample_met"]
+                and guardrails["stress_minimum_trade_sample_met"]
+            )
+            if ablation_targets and not minimum_sample_met:
+                recommendation = "ablation_inconclusive_insufficient_trade_sample"
+                interpretation = "inconclusive_insufficient_trade_sample"
+            elif ablation_targets and recommend:
+                recommendation = "ablation_review_required"
+                interpretation = "guardrails_passed_requires_separate_review"
+            elif ablation_targets:
+                recommendation = "ablation_failed_guardrails"
+                interpretation = "guardrails_failed"
+            elif recommend:
+                recommendation = "candidate_for_governed_review"
+                interpretation = "guardrails_passed_requires_separate_review"
+            else:
+                recommendation = "keep_incumbent"
+                interpretation = "guardrails_failed_or_insufficient_evidence"
             return self._finish_record(chronicle, record_key, record, {
                 "status": "complete",
-                "recommendation": (
-                    "ablation_review_required" if ablation_targets and recommend
-                    else "ablation_failed_guardrails" if ablation_targets
-                    else "candidate_for_governed_review" if recommend
-                    else "keep_incumbent"
-                ),
+                "recommendation": recommendation,
+                "interpretation": interpretation,
                 "promotion_performed": False,
                 "guardrails": guardrails,
                 "trade_sample": {
@@ -395,6 +410,9 @@ class OracleImprovementService:
                 "recommendation": update.get("recommendation", "none"),
                 "promotion_performed": False,
                 "guardrails": update.get("guardrails"),
+                "interpretation": update.get("interpretation"),
+                "trade_sample": update.get("trade_sample"),
+                "drawdown_policy_check": update.get("drawdown_policy_check"),
                 "candidate_genome": update.get("candidate_genome", original.get("candidate_genome")),
                 "evaluation": update.get("evaluation"),
                 "result_metrics": (update.get("result") or {}).get("metrics"),

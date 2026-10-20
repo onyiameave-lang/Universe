@@ -652,6 +652,10 @@ class CTraderBroker:
             with self._spot_lock:
                 self._spot_waiters.pop(symbol_id, None)
 
+    def symbol_catalog(self) -> List[str]:
+        """Return exact symbol names exposed by the connected cTrader account."""
+        return sorted(self._symbol_id_by_name)
+
     def _clamp_volume(self, raw_volume: float, symbol_id: int, symbol_name: str) -> int:
         cents = self._volume_to_cents(raw_volume)
         if cents <= 0:

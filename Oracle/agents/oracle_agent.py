@@ -327,9 +327,15 @@ class OracleAgent(BaseAgent):
                 log.warning("cTrader cost observation failed for %s: %s", symbol, type(exc).__name__)
                 observations.append({"status": "error", "symbol": symbol,
                                      "message": f"cost observation failed: {type(exc).__name__}"})
+        unmatched = [item for item in observations
+                     if item.get("status") == "blocked"
+                     and str(item.get("message", "")).startswith("broker does not list symbol ")]
         return {"status": "complete", "source": "ctrader_open_api",
                 "observed_at": datetime.now(timezone.utc).isoformat(),
-                "count": len(observations), "observations": observations}
+                "count": len(observations), "observations": observations,
+                # Exact names are diagnostic evidence only. Oracle never maps a
+                # canonical symbol to a broker instrument implicitly.
+                "broker_symbol_catalog": broker.symbol_catalog() if unmatched else []}
 
     def _get_ctrader_research_series(self, symbol: str) -> Dict[str, Any]:
         """Read five years of daily bars from Oracle's authenticated cTrader account."""
