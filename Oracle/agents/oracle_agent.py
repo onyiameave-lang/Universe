@@ -393,6 +393,35 @@ class OracleAgent(BaseAgent):
                                          "message": f"broker does not list mapped symbol {broker_symbol}"})
                     continue
                 metadata = broker.symbol_metadata(broker_symbol)
+                symbol_deals = [
+                    d for d in all_deals
+                    if d.get("symbol") == broker_symbol
+                    and d.get("deal_status") in {2, 3}
+                    and float(d.get("filled_volume_cents") or 0) > 0
+                ]
+                minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
+                if not deal_status_ok or len(symbol_deals) < minimum_deals:
+                    if not deal_status_ok:
+                        reason = "complete cTrader deal history is required"
+                    else:
+                        reason = (
+                            f"only {len(symbol_deals)} actual filled deals; "
+                            f"{minimum_deals} required before requesting quote data"
+                        )
+                    observations.append({
+                        "symbol": symbol, "broker_symbol": broker_symbol,
+                        "status": "blocked", "metadata": metadata,
+                        "sample": {
+                            "filled_deals": len(symbol_deals),
+                            "slippage_deals_checked": 0,
+                            "matched_slippage_deals": 0,
+                            "matched_spreads": 0,
+                            "bid_tick_status": "not_requested",
+                            "ask_tick_status": "not_requested",
+                        },
+                        "cost_profile": None, "reasons": [reason],
+                    })
+                    continue
                 chunk_minutes = max(1, min(60, int(os.getenv("ORACLE_FORGE_TICK_CHUNK_MINUTES", "15"))))
                 chunk_ms = chunk_minutes * 60 * 1000
                 bid_ticks, ask_ticks = [], []
@@ -435,14 +464,7 @@ class OracleAgent(BaseAgent):
                 if current_mid is not None:
                     add_conversion(base_asset, quote_asset, current_mid)
 
-                symbol_deals = [
-                    d for d in all_deals
-                    if d.get("symbol") == broker_symbol
-                    and d.get("deal_status") in {2, 3}
-                    and float(d.get("filled_volume_cents") or 0) > 0
-                ]
                 commission_bps_samples, slippage_bps_samples = [], []
-                minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
                 maximum_slippage_deals = max(
                     minimum_deals,
                     min(500, int(os.getenv("ORACLE_FORGE_MAXIMUM_SLIPPAGE_DEALS", "100"))),
