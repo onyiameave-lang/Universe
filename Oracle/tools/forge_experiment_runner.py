@@ -101,6 +101,13 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None):
     try:
         with urllib.request.urlopen(request, timeout=900) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(4096).decode("utf-8", errors="replace")
+        except OSError:
+            body = ""
+        return {"status": "error", "error": "HTTPError", "http_status": exc.code,
+                "reason": str(exc.reason), "response_body": _redact(body)}
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         return {"status": "error", "error": f"Oracle Forge request failed: {type(exc).__name__}"}
 
@@ -135,6 +142,7 @@ def main() -> int:
     for index, symbol in enumerate(symbols, start=1):
         print(f"[{index}/{len(symbols)}] {symbol}: {mode_spec}", flush=True)
         fingerprint = None
+        status = None
         if mode != "drift" and symbol not in profiled_symbols:
             response = {"status": "blocked", "data": {
                 "status": "blocked", "message": "no explicit versioned execution-cost profile exists for this symbol"
@@ -143,9 +151,21 @@ def main() -> int:
         else:
             preflight = _post("", symbol, "window", None)
             preflight_data = preflight.get("data", {}) if isinstance(preflight, dict) else {}
-            if isinstance(preflight_data, dict) and preflight_data.get("status") == "complete":
+            preflight_status = preflight.get("status") if isinstance(preflight, dict) else "error"
+            if preflight_status != "complete" or not isinstance(preflight_data, dict) or not preflight_data.get("data_fingerprint"):
+                response = {
+                    "status": preflight_status or "error",
+                    "data": preflight_data if isinstance(preflight_data, dict) else {},
+                    "preflight_error": preflight.get("error") if isinstance(preflight, dict) else "invalid preflight response",
+                    "http_status": preflight.get("http_status") if isinstance(preflight, dict) else None,
+                    "response_body": preflight.get("response_body") if isinstance(preflight, dict) else None,
+                }
+                status = response["status"]
+            else:
                 fingerprint = preflight_data.get("data_fingerprint")
-            if fingerprint and (symbol, mode, ablation, fingerprint) in seen:
+            if status is not None:
+                pass
+            elif fingerprint and (symbol, mode, ablation, fingerprint) in seen:
                 response = {"status": "skipped", "data": {
                     "status": "skipped", "message": "this completed daily-data window was already assessed",
                     "data_fingerprint": fingerprint,
