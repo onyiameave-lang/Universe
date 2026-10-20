@@ -70,7 +70,6 @@ jobs:
           CTRADER_ACCESS_TOKEN: ${{ secrets.CTRADER_ACCESS_TOKEN }}
           CTRADER_ACCOUNT_ID: ${{ secrets.CTRADER_ACCOUNT_ID }}
           CTRADER_USE_DEMO: "true"
-          ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
           ORACLE_FORGE_MINIMUM_EXECUTED_TRADES: "100"
         run: |
           missing_secrets=()
@@ -82,11 +81,6 @@ jobs:
             echo "Missing GitHub Actions secrets: ${missing_secrets[*]}"
             echo "Add them as repository secrets, or bind the job to the GitHub Environment that contains them."
             exit 1
-          fi
-          if [[ -n "$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE" ]]; then
-            export ORACLE_FORGE_COST_PROFILES_JSON="$ORACLE_FORGE_COST_PROFILES_JSON_OVERRIDE"
-          else
-            export ORACLE_FORGE_COST_PROFILES_JSON="$(cat Oracle/config/forge_cost_profiles.json)"
           fi
           python api.py > /tmp/oracle-forge-api.log 2>&1 &
           echo $! > /tmp/oracle-forge-api.pid
@@ -109,7 +103,6 @@ jobs:
           ORACLE_FORGE_SYMBOLS: ${{ inputs.symbol || 'ALL' }}
           ORACLE_FORGE_EXPERIMENT_TYPE: ${{ inputs.experiment_type || 'auto' }}
           ORACLE_FORGE_ABLATION_TARGET: ${{ inputs.ablation_target || '' }}
-          ORACLE_FORGE_COST_PROFILES_JSON: ${{ secrets.ORACLE_FORGE_COST_PROFILES_JSON }}
         run: python Oracle/tools/forge_experiment_runner.py
 
       - name: Stop API

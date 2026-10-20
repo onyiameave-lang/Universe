@@ -67,18 +67,8 @@ def _previous_windows():
     return seen
 
 
-def _profile_symbols():
-    raw = os.getenv("ORACLE_FORGE_COST_PROFILES_JSON")
-    try:
-        profiles = json.loads(raw) if raw else json.loads(
-            (ROOT / "Oracle" / "config" / "forge_cost_profiles.json").read_text(encoding="utf-8")
-        )
-    except (OSError, json.JSONDecodeError):
-        return set()
-    return {str(symbol).upper() for symbol, profile in profiles.items() if isinstance(profile, dict)}
-
-
-def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None):
+def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
+          execution_costs=None):
     drift = mode == "drift"
     window = mode == "window"
     cost_observations = mode == "cost-observations"
@@ -99,6 +89,8 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None):
             else f"scheduled Forge component ablation: {ablation}",
             "ablation_targets": [ablation] if ablation else [],
         })
+        if isinstance(execution_costs, dict):
+            payload["execution_costs"] = execution_costs
     request = urllib.request.Request(
         endpoint, data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"}, method="POST",
@@ -142,17 +134,31 @@ def main() -> int:
         raise SystemExit("Oracle symbol list contains an invalid symbol")
 
     seen = _previous_windows()
-    profiled_symbols = _profile_symbols()
-    print(f"Collecting cTrader commission metadata and live spread snapshots for {len(symbols)} symbols", flush=True)
+    print(f"Collecting cTrader historical bid/ask ticks and deal costs for {len(symbols)} symbols", flush=True)
     cost_observation_result = _post("", "", "cost-observations", None, symbols=symbols)
+    cost_data = cost_observation_result.get("data", {}) if isinstance(cost_observation_result, dict) else {}
+    cost_profiles = cost_data.get("cost_profiles", {}) if isinstance(cost_data, dict) else {}
+    if not isinstance(cost_profiles, dict):
+        cost_profiles = {}
     results = []
     for index, symbol in enumerate(symbols, start=1):
         print(f"[{index}/{len(symbols)}] {symbol}: {mode_spec}", flush=True)
         fingerprint = None
         status = None
-        if mode != "drift" and symbol not in profiled_symbols:
+        execution_costs = cost_profiles.get(symbol)
+        if mode == "cost-observations":
+            observation = next((item for item in cost_data.get("observations", [])
+                                if isinstance(item, dict) and item.get("symbol") == symbol), {})
+            response = {"status": "complete" if isinstance(execution_costs, dict) else "blocked",
+                        "data": {"status": "complete" if isinstance(execution_costs, dict) else "blocked",
+                                 "cost_profile": execution_costs, "cost_observation": observation}}
+            status = response["status"]
+        elif mode != "drift" and not isinstance(execution_costs, dict):
+            observation = next((item for item in cost_data.get("observations", [])
+                                if isinstance(item, dict) and item.get("symbol") == symbol), {})
             response = {"status": "blocked", "data": {
-                "status": "blocked", "message": "no explicit versioned execution-cost profile exists for this symbol"
+                "status": "blocked", "message": "cTrader did not provide enough complete cost evidence for this symbol",
+                "cost_observation": observation,
             }}
             status = "blocked"
         else:
@@ -179,7 +185,7 @@ def main() -> int:
                 }}
                 status = "skipped"
             else:
-                response = _post("", symbol, mode, ablation)
+                response = _post("", symbol, mode, ablation, execution_costs=execution_costs)
                 status = response.get("status", "unknown") if isinstance(response, dict) else "unknown"
                 if fingerprint and status == "complete":
                     seen.add((symbol, mode, ablation, fingerprint))
@@ -201,6 +207,7 @@ def main() -> int:
         "research_only": True, "promotion_performed": False,
         "results": results,
         "broker_cost_observations": _redact(cost_observation_result),
+        "generated_cost_profile_count": len(cost_profiles),
         "summary": {status: sum(item["status"] == status for item in results)
                     for status in sorted({item["status"] for item in results})},
         "workflow": "oracle-forge-experiment",

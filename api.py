@@ -699,6 +699,8 @@ async def oracle_forge_experiment(request: Request):
         "ablation_targets": targets,
         "_sender": "forge_action",
     }
+    if isinstance(data.get("execution_costs"), dict):
+        context["execution_costs"] = data["execution_costs"]
     try:
         result = await run_in_threadpool(
             _call_agent, agent, "strategy.improvement.request", context,

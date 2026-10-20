@@ -23,22 +23,25 @@ interface is a `StrategyGenome`, not a PPO policy adapter.
 ## Required profile
 
 Forge blocks a recommendation unless the symbol has an explicit, versioned
-execution-cost profile in `ORACLE_FORGE_COST_PROFILES_JSON`. The environment
-variable must contain a JSON object keyed by Oracle symbol. Each profile must
-include:
+execution-cost profile. The scheduled runner queries cTrader for recent
+account deals and historical BID/ASK ticks, then passes a generated profile
+with that symbol's review. Each profile must include:
 
-- `broker` and `account_type`, verified against the cTrader account;
-- `profile_version`, changed whenever any cost or data assumption changes;
-- `commission_bps`, charged per side;
-- `slippage_bps`, charged per side;
+- `broker` and `account_type`, recorded from the connected cTrader account;
+- `profile_version`, generated for the observation window;
+- `commission_bps`, estimated per side from actual deal commission and USD notional;
+- `slippage_bps`, estimated per side by matching fills to historical quotes;
 - `spread_bps`, the full quoted spread, not a per-side value;
-- `stress_slippage_bps` and `stress_spread_bps`, explicitly specified adverse
-  assumptions no lower than base, with at least one strictly worse;
+- `stress_slippage_bps` and `stress_spread_bps`, derived from p99 observations;
 - `price_basis`, exactly `mid`, `bid`, or `ask`, verified for the supplied OHLC data.
 
-`ORACLE_FORGE_MINIMUM_EXECUTED_TRADES` defaults to the initial policy value of
-100. Values below 100 are rejected; a higher minimum is allowed. Forge does not
-infer the broker, account, or numerical cost values.
+The initial cost-sampling policy uses p95 for base costs and p99 for stress,
+requires at least 100 matched spread quotes and 20 commission and slippage
+observations, and blocks truncated or incomplete data. Commission normalization
+currently requires a USD account. Symbols with a broker minimum commission are
+blocked because the current bps backtester cannot model a per-trade fee floor.
+`ORACLE_FORGE_MINIMUM_EXECUTED_TRADES` defaults to 100; values below 100 are
+rejected.
 
 Values must be expressed as basis points relative to price. Forge never fills
 missing values with zero. The backtester derives the opposite executable quote
@@ -46,36 +49,28 @@ from the declared price basis and applies spread once; slippage is then applied
 adversely to the fill, with commission charged separately. Incumbent and
 candidate receive the same profile.
 
-The current Oracle market-data sources do not establish a broker-specific
-spread or account commission. A verified review requires the source semantics
-and account schedule to be confirmed. If a source does not provide the declared
-price basis, do not present the evaluation as broker-validated.
+Profiles record the sample window and counts. They are blocked when the
+observations cannot be matched or normalized safely. If the market data does
+not provide the declared price basis, do not present the evaluation as
+broker-validated.
 
 ## Profile source and action setup
 
 The GitHub workflow requires repository Actions secrets named
 `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_ACCESS_TOKEN`, and
-`CTRADER_ACCOUNT_ID`. It loads the versioned, non-secret EURUSD profile from
-`Oracle/config/forge_cost_profiles.json`; a private
-`ORACLE_FORGE_COST_PROFILES_JSON` Actions secret can override that file. The
-profile declares `price_basis: "bid"` for the current cTrader trendbar source.
+`CTRADER_ACCOUNT_ID`. Each scheduled run derives profiles from authenticated
+cTrader account data and passes them directly to the review request. The
+profile declares `price_basis: "bid"` to match the current cTrader trendbar
+source.
 Never add credential values to a commit or workflow log.
 
-The checked-in EURUSD profile is explicitly provisional and user-approved. It
-uses the proposed $3.50/standard-lot/side commission converted at a reference
-EURUSD price of 1.13700, plus the proposed 0.3 pip spread (0.26 bps), 0.5 pip
-slippage (0.44 bps), and 1.5 pip stress spread (1.32 bps). Those assumptions are not independently verified
-Pepperstone historical execution costs. The profile records its provisional
-status in every Chronicle experiment record; replace it with measured/account
-values and bump `profile_version` when verified.
-
-Every scheduled run now queries cTrader for symbol commission metadata and
-captures one live bid/ask spread observation per symbol. The observations are
-stored in the run report under `broker_cost_observations`. They are not silently
-converted into active profiles: a single live spread is not a historical spread
-distribution, and cTrader does not expose a symbol-level slippage assumption.
-Oracle must record demo order reference quotes and fills to estimate slippage.
-Until a full, versioned profile is available, Forge continues to block that
+Every scheduled run stores raw broker metadata, cost observations, profile
+versions, and sample counts under `broker_cost_observations`. cTrader does not
+publish a universal slippage assumption; slippage is estimated only from
+actual account fills matched to historical quotes around order submission. The
+checked-in EURUSD profile remains available for explicit direct/manual requests,
+but the scheduled runner does not fall back to it when API evidence is missing.
+Until a complete, versioned profile is available, Forge continues to block that
 symbol's strategy experiment. Drift observations do not require execution-cost
 profiles.
 

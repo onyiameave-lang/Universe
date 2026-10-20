@@ -309,20 +309,169 @@ class OracleAgent(BaseAgent):
             return {"status": "complete", "broker": self._forge_ctrader_broker}
 
     def collect_ctrader_cost_observations(self, symbols: List[str]) -> Dict[str, Any]:
-        """Collect broker-reported commission metadata and live spread samples.
+        """Build research-only cost profiles from recent broker tick/deal data."""
+        import bisect
+        import math
 
-        A single live spread observation is evidence only. It is not promoted
-        to a historical spread assumption and does not measure slippage.
-        """
         connection = self._ensure_ctrader_research_broker()
         if connection.get("status") != "complete":
             return {"status": "blocked", "message": connection.get("message"), "observations": []}
         broker = connection["broker"]
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        window_hours = max(1, min(24, int(os.getenv("ORACLE_FORGE_COST_WINDOW_HOURS", "1"))))
+        window_start_ms = now_ms - window_hours * 60 * 60 * 1000
+        deals_result = broker.historical_deals(
+            now_ms - 7 * 24 * 60 * 60 * 1000, now_ms, max_rows=10000, timeout=60.0)
         observations = []
+        profiles = {}
+        deal_status_ok = deals_result.get("status") == "complete"
+        if not deal_status_ok:
+            log.warning("cTrader cost profile deal sample unavailable: %s",
+                        deals_result.get("message", deals_result.get("status")))
+        all_deals = deals_result.get("deals", []) if isinstance(deals_result, dict) else []
+        account_currency = str(getattr(broker.status, "currency", "")).upper()
         for raw_symbol in symbols:
             symbol = str(raw_symbol).strip().upper()
             try:
-                observations.append(broker.execution_cost_observation(symbol))
+                if symbol not in broker.symbol_catalog():
+                    observations.append({"status": "blocked", "symbol": symbol,
+                                         "message": f"broker does not list symbol {symbol}"})
+                    continue
+                metadata = broker.symbol_metadata(symbol)
+                chunk_minutes = max(1, min(60, int(os.getenv("ORACLE_FORGE_TICK_CHUNK_MINUTES", "15"))))
+                chunk_ms = chunk_minutes * 60 * 1000
+                bid_ticks, ask_ticks = [], []
+                bid_statuses, ask_statuses = [], []
+                cursor = window_start_ms
+                while cursor < now_ms:
+                    chunk_end = min(now_ms, cursor + chunk_ms)
+                    bid_chunk = broker.historical_ticks(symbol, "BID", cursor, chunk_end, timeout=60.0)
+                    ask_chunk = broker.historical_ticks(symbol, "ASK", cursor, chunk_end, timeout=60.0)
+                    bid_statuses.append(bid_chunk.get("status"))
+                    ask_statuses.append(ask_chunk.get("status"))
+                    bid_ticks.extend(bid_chunk.get("ticks", []))
+                    ask_ticks.extend(ask_chunk.get("ticks", []))
+                    cursor = chunk_end
+                bid_ticks = sorted({item["timestamp_ms"]: item for item in bid_ticks}.values(), key=lambda item: item["timestamp_ms"])
+                ask_ticks = sorted({item["timestamp_ms"]: item for item in ask_ticks}.values(), key=lambda item: item["timestamp_ms"])
+                bid_complete = bool(bid_statuses) and all(value == "complete" for value in bid_statuses)
+                ask_complete = bool(ask_statuses) and all(value == "complete" for value in ask_statuses)
+                ask_times = [item["timestamp_ms"] for item in ask_ticks]
+                pip_position = metadata.get("pipPosition")
+                paired_spreads = []
+                quote_tolerance_ms = max(100, int(os.getenv("ORACLE_FORGE_QUOTE_MATCH_TOLERANCE_MS", "1000")))
+                for bid_tick in bid_ticks:
+                    idx = bisect.bisect_left(ask_times, bid_tick["timestamp_ms"])
+                    candidates = ask_ticks[max(0, idx - 1):min(len(ask_ticks), idx + 1)]
+                    if not candidates:
+                        continue
+                    ask_tick = min(candidates, key=lambda item: abs(item["timestamp_ms"] - bid_tick["timestamp_ms"]))
+                    if abs(ask_tick["timestamp_ms"] - bid_tick["timestamp_ms"]) > quote_tolerance_ms:
+                        continue
+                    mid = (float(bid_tick["price"]) + float(ask_tick["price"])) / 2.0
+                    if mid > 0 and ask_tick["price"] >= bid_tick["price"]:
+                        paired_spreads.append((ask_tick["price"] - bid_tick["price"]) / mid * 10000.0)
+
+                symbol_deals = [d for d in all_deals if d.get("symbol") == symbol and d.get("deal_status") == 2]
+                commission_bps_samples, slippage_bps_samples = [], []
+                bid_times = [item["timestamp_ms"] for item in bid_ticks]
+                for deal in symbol_deals:
+                    execution_price = deal.get("execution_price")
+                    units = float(deal.get("filled_volume_cents") or 0) / 100.0
+                    conversion = deal.get("base_to_usd_conversion_rate")
+                    if (isinstance(execution_price, (int, float)) and execution_price > 0
+                            and units > 0 and isinstance(conversion, (int, float)) and conversion > 0):
+                        notional_usd = units * float(conversion)
+                        money_digits = deal.get("money_digits")
+                        commission = (abs(float(deal.get("commission_raw") or 0)) / (10 ** int(money_digits))
+                                      if isinstance(money_digits, int) and 1 <= money_digits <= 12 else 0.0)
+                        if notional_usd > 0 and commission > 0 and account_currency == "USD":
+                            commission_bps_samples.append(commission / notional_usd * 10000.0)
+                        reference_timestamp = int(deal.get("create_timestamp_ms") or 0)
+                        if reference_timestamp:
+                            quote_times = ask_times if deal.get("trade_side") == 1 else bid_times
+                            quote_ticks = ask_ticks if deal.get("trade_side") == 1 else bid_ticks
+                            pos = bisect.bisect_left(quote_times, reference_timestamp)
+                            quote_candidates = quote_ticks[max(0, pos - 1):min(len(quote_ticks), pos + 1)]
+                            if quote_candidates:
+                                quote = min(quote_candidates, key=lambda item: abs(item["timestamp_ms"] - reference_timestamp))
+                                if abs(quote["timestamp_ms"] - reference_timestamp) <= quote_tolerance_ms and quote["price"] > 0:
+                                    adverse = (float(execution_price) - quote["price"] if deal.get("trade_side") == 1
+                                               else quote["price"] - float(execution_price))
+                                    slippage_bps_samples.append(max(0.0, adverse / quote["price"] * 10000.0))
+
+                minimum_quotes = max(20, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_QUOTES", "100")))
+                minimum_deals = max(1, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_DEALS", "20")))
+                profile = None
+                reasons = []
+                if not bid_complete or not ask_complete:
+                    reasons.append("complete, non-truncated bid and ask tick windows are required")
+                if len(paired_spreads) < minimum_quotes:
+                    reasons.append(f"only {len(paired_spreads)} matched bid/ask observations; {minimum_quotes} required")
+                if not deal_status_ok:
+                    reasons.append("complete cTrader deal history is required")
+                if account_currency != "USD":
+                    reasons.append("deal-cost conversion currently requires USD account currency")
+                minimum_commission = metadata.get("preciseMinCommission")
+                if isinstance(minimum_commission, (int, float)) and minimum_commission > 0:
+                    reasons.append("symbol minimum commission requires per-trade modeling, which the current bps backtester does not support")
+                if len(commission_bps_samples) < minimum_deals:
+                    reasons.append(f"only {len(commission_bps_samples)} commission observations; {minimum_deals} required")
+                if len(slippage_bps_samples) < minimum_deals:
+                    reasons.append(f"only {len(slippage_bps_samples)} matched fill/slippage observations; {minimum_deals} required")
+
+                def percentile(values, fraction):
+                    ordered = sorted(float(value) for value in values)
+                    return ordered[min(len(ordered) - 1, max(0, math.ceil(fraction * len(ordered)) - 1))]
+
+                if not reasons:
+                    spread_base = percentile(paired_spreads, 0.95)
+                    spread_stress = percentile(paired_spreads, 0.99)
+                    commission_base = percentile(commission_bps_samples, 0.95)
+                    slippage_base = percentile(slippage_bps_samples, 0.95)
+                    slippage_stress = percentile(slippage_bps_samples, 0.99)
+                    if spread_stress < spread_base or slippage_stress < slippage_base:
+                        reasons.append("stress percentile calculation was inconsistent")
+                    else:
+                        profile = {
+                            "broker": "cTrader account metadata",
+                            "account_type": str(getattr(broker.status, "account_type", "unknown")),
+                            "profile_version": f"ctrader-api-{now_ms}-{symbol.lower()}",
+                            "profile_status": "api_observed",
+                            "price_basis": "bid",
+                            "commission_bps": commission_base,
+                            "slippage_bps": slippage_base,
+                            "spread_bps": spread_base,
+                            "stress_slippage_bps": slippage_stress,
+                            "stress_spread_bps": spread_stress,
+                            "method": "cTrader observed deal commissions and matched historical BID/ASK ticks; p95 base / p99 stress",
+                            "evidence": {
+                                "observed_at": datetime.now(timezone.utc).isoformat(),
+                                "window_start_ms": window_start_ms, "window_end_ms": now_ms,
+                                "window_hours": window_hours,
+                                "matched_spread_quotes": len(paired_spreads),
+                                "commission_deals": len(commission_bps_samples),
+                                "matched_slippage_deals": len(slippage_bps_samples),
+                                "commission_type": metadata.get("commissionType"),
+                                "precise_trading_commission_rate": metadata.get("preciseTradingCommissionRate"),
+                                "minimum_commission": metadata.get("preciseMinCommission"),
+                                "pip_position": pip_position,
+                            },
+                        }
+                        profiles[symbol] = profile
+                observations.append({
+                    "symbol": symbol,
+                    "status": "complete" if profile else "blocked",
+                    "metadata": metadata,
+                    "sample": {"matched_spreads": len(paired_spreads),
+                               "filled_deals": len(symbol_deals),
+                               "commission_observations": len(commission_bps_samples),
+                               "matched_slippage_deals": len(slippage_bps_samples),
+                               "bid_tick_status": "complete" if bid_complete else "incomplete",
+                               "ask_tick_status": "complete" if ask_complete else "incomplete"},
+                    "cost_profile": profile,
+                    "reasons": reasons,
+                })
             except Exception as exc:
                 log.warning("cTrader cost observation failed for %s: %s", symbol, type(exc).__name__)
                 observations.append({"status": "error", "symbol": symbol,
@@ -333,6 +482,8 @@ class OracleAgent(BaseAgent):
         return {"status": "complete", "source": "ctrader_open_api",
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 "count": len(observations), "observations": observations,
+                "cost_profiles": profiles,
+                "deal_history_status": deals_result.get("status", "error"),
                 # Exact names are diagnostic evidence only. Oracle never maps a
                 # canonical symbol to a broker instrument implicitly.
                 "broker_symbol_catalog": broker.symbol_catalog() if unmatched else []}
