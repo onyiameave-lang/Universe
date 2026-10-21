@@ -440,6 +440,8 @@ class OracleAgent(BaseAgent):
                 ask_ticks = sorted({item["timestamp_ms"]: item for item in ask_ticks}.values(), key=lambda item: item["timestamp_ms"])
                 bid_complete = bool(bid_statuses) and all(value == "complete" for value in bid_statuses)
                 ask_complete = bool(ask_statuses) and all(value == "complete" for value in ask_statuses)
+                bid_raw_ticks = [int(item["raw_tick"]) for item in bid_ticks if isinstance(item.get("raw_tick"), int)]
+                ask_raw_ticks = [int(item["raw_tick"]) for item in ask_ticks if isinstance(item.get("raw_tick"), int)]
                 ask_times = [item["timestamp_ms"] for item in ask_ticks]
                 pip_position = metadata.get("pipPosition")
                 paired_spreads = []
@@ -645,6 +647,10 @@ class OracleAgent(BaseAgent):
                                 "base_asset": base_asset, "quote_asset": quote_asset,
                                 "quote_asset_to_usd_rate": quote_to_usd,
                                 "median_mid_price": current_mid,
+                                "bid_raw_tick_min": min(bid_raw_ticks) if bid_raw_ticks else None,
+                                "bid_raw_tick_max": max(bid_raw_ticks) if bid_raw_ticks else None,
+                                "ask_raw_tick_min": min(ask_raw_ticks) if ask_raw_ticks else None,
+                                "ask_raw_tick_max": max(ask_raw_ticks) if ask_raw_ticks else None,
                                 "deal_history_status": deals_result.get("status", "error"),
                                 "pip_position": pip_position,
                             },
@@ -656,6 +662,11 @@ class OracleAgent(BaseAgent):
                     "status": "complete" if profile else "blocked",
                     "metadata": metadata,
                     "sample": {"matched_spreads": len(paired_spreads),
+                               "median_mid_price": current_mid,
+                               "bid_raw_tick_min": min(bid_raw_ticks) if bid_raw_ticks else None,
+                               "bid_raw_tick_max": max(bid_raw_ticks) if bid_raw_ticks else None,
+                               "ask_raw_tick_min": min(ask_raw_ticks) if ask_raw_ticks else None,
+                               "ask_raw_tick_max": max(ask_raw_ticks) if ask_raw_ticks else None,
                                "filled_deals": len(symbol_deals),
                                "slippage_deals_checked": attempted_slippage_deals,
                                "commission_observations": len(commission_bps_samples),

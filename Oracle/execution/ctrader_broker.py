@@ -577,9 +577,11 @@ class CTraderBroker:
             # cTrader encodes the first timestamp absolutely, then subsequent
             # entries as signed time deltas (the sequence is newest first).
             timestamp_ms = encoded_timestamp if timestamp_ms is None else timestamp_ms + encoded_timestamp
-            price = _round_price_to_digits(int(item.tick) / 100000.0, digits)
+            raw_tick = int(item.tick)
+            price = _round_price_to_digits(raw_tick / 100000.0, digits)
             if from_timestamp_ms <= timestamp_ms <= to_timestamp_ms and price > 0:
-                ticks.append({"timestamp_ms": timestamp_ms, "price": price})
+                ticks.append({"timestamp_ms": timestamp_ms, "price": price,
+                              "raw_tick": raw_tick})
         ticks.sort(key=lambda item: item["timestamp_ms"])
         if not ticks:
             return {"status": "unavailable", "symbol": symbol, "quote_type": quote_type,
