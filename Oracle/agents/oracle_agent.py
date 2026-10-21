@@ -760,7 +760,9 @@ class OracleAgent(BaseAgent):
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
         return {"status": "complete", "symbol": symbol.upper(),
                 "data_fingerprint": hashlib.sha256(encoded).hexdigest(),
-                "last_completed_bar": str(series.bars[-1].ts), "bars": len(series.bars)}
+                "last_completed_bar": str(series.bars[-1].ts), "bars": len(series.bars),
+                "latest_close": float(series.bars[-1].close),
+                "price_basis": "bid"}
 
     def assess_market_data_drift(self, symbol: str) -> Dict[str, Any]:
         """Compare recent completed daily return/range distributions with history.

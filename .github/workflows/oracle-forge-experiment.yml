@@ -31,6 +31,11 @@ on:
           - trade_management
           - market_regime
         required: false
+      collect_empirical_costs:
+        description: Collect cTrader fill and quote evidence for every selected symbol (slower)
+        type: boolean
+        required: true
+        default: false
   schedule:
     - cron: "0 */6 * * *"
 
@@ -109,6 +114,7 @@ jobs:
           ORACLE_FORGE_SYMBOLS: ${{ inputs.symbol || 'ALL' }}
           ORACLE_FORGE_EXPERIMENT_TYPE: ${{ inputs.experiment_type || 'auto' }}
           ORACLE_FORGE_ABLATION_TARGET: ${{ inputs.ablation_target || '' }}
+          ORACLE_FORGE_COLLECT_EMPIRICAL_COSTS: ${{ inputs.collect_empirical_costs || 'false' }}
         run: python Oracle/tools/forge_experiment_runner.py
 
       - name: Stop API

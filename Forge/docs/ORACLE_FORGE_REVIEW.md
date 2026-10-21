@@ -22,10 +22,10 @@ interface is a `StrategyGenome`, not a PPO policy adapter.
 
 ## Required profile
 
-Forge blocks a recommendation unless the symbol has an explicit, versioned
-execution-cost profile. The scheduled runner queries cTrader for recent
-account deals and historical BID/ASK ticks, then passes a generated profile
-with that symbol's review. Each profile must include:
+Forge blocks a strategy experiment unless the symbol has an explicit, versioned
+execution-cost profile. The runner prefers a valid cTrader-observed profile;
+otherwise it can use a checked-in Pepperstone public-spread profile for
+research-only analysis. Each profile must include:
 
 - `broker` and `account_type`, recorded from the connected cTrader account;
 - `profile_version`, generated for the observation window;
@@ -35,7 +35,7 @@ with that symbol's review. Each profile must include:
 - `stress_slippage_bps` and `stress_spread_bps`, derived from p99 observations;
 - `price_basis`, exactly `mid`, `bid`, or `ask`, verified for the supplied OHLC data.
 
-The initial cost-sampling policy uses p95 for base costs and p99 for stress,
+The empirical cost-sampling policy uses p95 for base costs and p99 for stress,
 requires at least 100 matched spread quotes and 20 commission and slippage
 observations, and blocks truncated or incomplete data. Commission normalization
 currently requires a USD account. Symbols with a broker minimum commission are
@@ -64,15 +64,23 @@ profile declares `price_basis: "bid"` to match the current cTrader trendbar
 source.
 Never add credential values to a commit or workflow log.
 
-Every scheduled run stores raw broker metadata, cost observations, profile
-versions, and sample counts under `broker_cost_observations`. cTrader does not
-publish a universal slippage assumption; slippage is estimated only from
-actual account fills matched to historical quotes around order submission. The
-checked-in EURUSD profile remains available for explicit direct/manual requests,
-but the scheduled runner does not fall back to it when API evidence is missing.
-Until a complete, versioned profile is available, Forge continues to block that
-symbol's strategy experiment. Drift observations do not require execution-cost
-profiles.
+The checked-in `Oracle/config/forge_cost_profiles.json` records Pepperstone's
+published August 2026 average spreads for selected FX, index, metal and crypto
+symbols, together with explicit modeled slippage assumptions. The current
+profiles cover the directly named instruments in that file plus canonical
+aliases defined in `Oracle/config/ctrader_research_symbol_aliases.json`.
+Symbols without either a valid empirical profile or a manual profile remain
+blocked. Manual-profile results are labeled research-only, identify the
+published-data version and unit conversion, and cannot produce a promotion
+recommendation. cTrader does not publish a reliable per-symbol slippage rate;
+manual slippage is an assumption, not measured execution evidence.
+
+Scheduled runs use manual profiles by default and skip the slow all-symbol
+fill-history collection. When manually dispatching the workflow, enable
+`collect_empirical_costs` to request cTrader fill and quote evidence; a valid
+empirical profile takes precedence over a manual estimate. Drift observations do
+not require execution-cost profiles. Public spread data should be refreshed
+when Pepperstone publishes a newer monthly table.
 
 The six-hour GitHub Action checks out `oracle-v2`, rotates one research mode
 across the watchlist, and commits a JSON report under

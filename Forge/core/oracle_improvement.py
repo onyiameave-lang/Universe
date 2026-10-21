@@ -188,6 +188,15 @@ class OracleImprovementService:
                 "profile_status": str(costs.get("profile_status", "unverified")),
                 "price_basis": costs["price_basis"],
                 "spread_model": "full spread used once to derive the opposite executable quote from the supplied price basis",
+                "commission_source": costs.get("commission_source"),
+                "spread_source": costs.get("spread_source"),
+                "slippage_source": costs.get("slippage_source"),
+                "manual_cost_data_version": costs.get("manual_cost_data_version"),
+                "manual_cost_source_period": costs.get("manual_cost_source_period"),
+                "manual_cost_sources": costs.get("manual_cost_sources"),
+                "manual_cost_broker_symbol": costs.get("manual_cost_broker_symbol"),
+                "manual_cost_unit_conversion": costs.get("manual_cost_unit_conversion"),
+                "promotion_eligible": costs.get("promotion_eligible", True),
             },
             "oracle_risk_policy": {
                 "source": str(risk_policy["source"]),
@@ -353,11 +362,22 @@ class OracleImprovementService:
                 recommendation = "ablation_inconclusive_insufficient_trade_sample"
                 interpretation = "inconclusive_insufficient_trade_sample"
             elif ablation_targets and recommend:
-                recommendation = "ablation_review_required"
-                interpretation = "guardrails_passed_requires_separate_review"
+                recommendation = (
+                    "ablation_research_pass_review_only"
+                    if costs.get("profile_status") == "published_spread_estimated_slippage_research_only"
+                    else "ablation_review_required"
+                )
+                interpretation = (
+                    "research_only_estimated_execution_costs"
+                    if costs.get("profile_status") == "published_spread_estimated_slippage_research_only"
+                    else "guardrails_passed_requires_separate_review"
+                )
             elif ablation_targets:
                 recommendation = "ablation_failed_guardrails"
                 interpretation = "guardrails_failed"
+            elif recommend and costs.get("profile_status") == "published_spread_estimated_slippage_research_only":
+                recommendation = "candidate_for_research_review_only"
+                interpretation = "research_only_estimated_execution_costs"
             elif recommend:
                 recommendation = "candidate_for_governed_review"
                 interpretation = "guardrails_passed_requires_separate_review"
@@ -369,6 +389,11 @@ class OracleImprovementService:
                 "recommendation": recommendation,
                 "interpretation": interpretation,
                 "promotion_performed": False,
+                "promotion_block_reason": (
+                    "manual profile includes modeled slippage and cannot authorize promotion"
+                    if costs.get("profile_status") == "published_spread_estimated_slippage_research_only"
+                    else None
+                ),
                 "guardrails": guardrails,
                 "trade_sample": {
                     "minimum_required": minimum_trades,
