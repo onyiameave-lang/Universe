@@ -470,6 +470,7 @@ class OracleAgent(BaseAgent):
                     min(500, int(os.getenv("ORACLE_FORGE_MAXIMUM_SLIPPAGE_DEALS", "100"))),
                 )
                 attempted_slippage_deals = 0
+                fill_quote_scale_mismatches = 0
                 ordered_deals = sorted(
                     symbol_deals,
                     key=lambda item: int(item.get("execution_timestamp_ms") or 0),
@@ -516,6 +517,16 @@ class OracleAgent(BaseAgent):
                                 )
                                 if (abs(quote["timestamp_ms"] - reference_timestamp)
                                         <= quote_tolerance_ms and quote["price"] > 0):
+                                    lower_price = min(float(execution_price), float(quote["price"]))
+                                    higher_price = max(float(execution_price), float(quote["price"]))
+                                    # A fill and its execution-time quote should be on
+                                    # the same price scale. A >10x difference indicates
+                                    # malformed or misdecoded market data, not usable
+                                    # slippage evidence. Fail closed instead of turning
+                                    # it into a gigantic but apparently valid cost.
+                                    if lower_price <= 0 or higher_price / lower_price > 10.0:
+                                        fill_quote_scale_mismatches += 1
+                                        continue
                                     adverse = (
                                         float(execution_price) - quote["price"]
                                         if trade_side == 1
@@ -564,6 +575,15 @@ class OracleAgent(BaseAgent):
                     commission_base = (float(precise_rate) / 1e5) * 100.0
                 else:
                     reasons.append(f"unsupported cTrader commission type: {commission_type}")
+                if (commission_base is not None
+                        and (not math.isfinite(commission_base)
+                             or commission_base < 0 or commission_base > 10000)):
+                    reasons.append("derived commission cost is outside supported [0, 10000] bps bounds")
+                if fill_quote_scale_mismatches:
+                    reasons.append(
+                        f"{fill_quote_scale_mismatches} fill quotes differ from execution prices by more than 10x; "
+                        "market price scale is invalid"
+                    )
                 if not bid_complete or not ask_complete:
                     reasons.append("complete, non-truncated bid and ask tick windows are required")
                 if len(paired_spreads) < minimum_quotes:
@@ -618,6 +638,7 @@ class OracleAgent(BaseAgent):
                                 "deal_history_request_count": deals_result.get("request_count"),
                                 "commission_deals": len(commission_bps_samples),
                                 "matched_slippage_deals": len(slippage_bps_samples),
+                                "fill_quote_scale_mismatches": fill_quote_scale_mismatches,
                                 "commission_type": metadata.get("commissionType"),
                                 "precise_trading_commission_rate": metadata.get("preciseTradingCommissionRate"),
                                 "minimum_commission": metadata.get("preciseMinCommission"),
@@ -639,6 +660,7 @@ class OracleAgent(BaseAgent):
                                "slippage_deals_checked": attempted_slippage_deals,
                                "commission_observations": len(commission_bps_samples),
                                "matched_slippage_deals": len(slippage_bps_samples),
+                               "fill_quote_scale_mismatches": fill_quote_scale_mismatches,
                                "bid_tick_status": "complete" if bid_complete else "incomplete",
                                "ask_tick_status": "complete" if ask_complete else "incomplete"},
                     "cost_profile": profile,
