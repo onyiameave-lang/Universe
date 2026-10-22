@@ -46,6 +46,7 @@ See ctrader_get_token.py to obtain your access token before first run.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -84,6 +85,7 @@ log = logging.getLogger("oracle.ctrader_demo")
 _symbol_slots = None
 _symbol_futures = {}
 _symbol_executor_lock = threading.RLock()
+_shadow_log_lock = threading.Lock()
 
 
 def _env_int(name: str, default: int) -> int:
@@ -454,6 +456,11 @@ class CTraderDemoTrader:
         self.max_trades = max_trades if max_trades is not None else _env_int(
             "ORACLE_MAX_TRADES_PER_SESSION", 10)
         self.confirm_live = confirm_live
+        # V2 starts observation-only. Order placement requires an explicit
+        # opt-in after shadow review and account isolation.
+        self.shadow_mode = os.getenv("ORACLE_CTRADER_SHADOW_MODE", "true").strip().lower() not in {
+            "0", "false", "no", "off",
+        }
         self.broker = CTraderBroker()
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
@@ -578,6 +585,9 @@ class CTraderDemoTrader:
             entry_regime = "ranging"
             entry_atr = None
         entry_streams = dict(self._open_context.get(symbol, {}) or {})
+        technical_stream = entry_streams.get("technical", {})
+        strategy_id = technical_stream.get("genome") if isinstance(technical_stream, dict) else None
+        timeframe_policy_id = technical_stream.get("timeframe_policy_id") if isinstance(technical_stream, dict) else None
         entry_term_evidence = {"bullish": [], "bearish": []}
         try:
             news = self.sentinel.act("news.credibility", {"topics": [symbol], "_sender": "ctrader_demo"}) \
@@ -594,7 +604,9 @@ class CTraderDemoTrader:
                 symbol=symbol, direction=dir_norm, entry_price=entry_price,
                 initial_stop=stop, initial_target=target, entry_confidence=confidence,
                 entry_regime=entry_regime, entry_streams=entry_streams, entry_atr=entry_atr,
-                entry_term_evidence=entry_term_evidence)
+                entry_term_evidence=entry_term_evidence, strategy_id=strategy_id,
+                timeframe_policy_id=timeframe_policy_id,
+                execution_environment=str(getattr(self.broker.status, "account_type", "unknown")))
             # Trade Journal (roadmap Phase 3 groundwork): reasons for
             # entering this trade, wired to Chronicle, linked to its
             # eventual win/loss outcome via the returned journal_id.
@@ -733,6 +745,9 @@ class CTraderDemoTrader:
         log.info("CTM thread stopped")
 
     def start_trade_manager(self):
+        if self.shadow_mode:
+            log.info("Oracle cTrader shadow mode enabled; position management is disabled")
+            return
         if self._manage_thread is not None and self._manage_thread.is_alive():
             return
         self._manage_stop_event.clear()
@@ -745,6 +760,8 @@ class CTraderDemoTrader:
             self._manage_thread.join(timeout=5)
 
     def _close_all_positions(self):
+        if self.shadow_mode:
+            return {"status": "blocked", "reason": "shadow mode forbids broker close requests"}
         results = []
         try:
             for pos in self.broker.positions():
@@ -766,7 +783,7 @@ class CTraderDemoTrader:
         print(f"\ncTrader demo trader started. Symbols={self.symbols} interval={self.interval}s")
         print(f"Account: {status.get('account_type')} | login={status.get('login')} | "
               f"currency={status.get('currency', '?')}")
-        print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades}")
+        print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades} | shadow={self.shadow_mode}")
         print(f"CTM: polling every {self._manage_interval:.0f}s")
         print("Press Ctrl+C to stop.\n")
         self.start_trade_manager()
@@ -783,6 +800,7 @@ class CTraderDemoTrader:
                       f"{summary['trades']} trade(s) | {summary['holds']} hold | "
                       f"{summary['rejects']} reject | {summary['errors']} error | "
                       f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
+                        f"{summary['shadowed']} shadowed | "
                         f"{summary['managed']} managed | {summary['market_closed']} not open")
                 if summary["kill_switch"]:
                     print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
@@ -800,7 +818,7 @@ class CTraderDemoTrader:
     def _tick(self):
         summary = dict(scanned=0, trades=0, holds=0, rejects=0,
                    errors=0, timeouts=0, unmapped=0, managed=0,
-                   market_closed=0, kill_switch=False)
+                   market_closed=0, shadowed=0, kill_switch=False)
         duplicate_mappings = _duplicate_broker_symbol_mappings(
             self.symbols, self._sym_mapper)
         if self._kill_switch_check():
@@ -851,6 +869,10 @@ class CTraderDemoTrader:
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
+                if self.shadow_mode:
+                    # Shadow mode must not adopt or attribute positions opened
+                    # by another trader/account process.
+                    continue
                 if symbol not in self._managed_positions:
                     entry_price = existing_pos.get("price_open") or existing_pos.get("price") or 0.0
                     direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
@@ -935,6 +957,13 @@ class CTraderDemoTrader:
             conf_str = f"conf={s.get('confidence', 0):.3f}"
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym
+            if self.shadow_mode:
+                summary["shadowed"] += 1
+                print(f"[{symbol}->{broker_sym}] SHADOW direction={plan['direction']} "
+                      f"conf={s.get('confidence', 0):.3f} size={plan.get('size', 0)} "
+                      f"stop={plan.get('stop')} target={plan.get('target')}; no order sent")
+                self._record_shadow_proposal(symbol, broker_sym, sig, market_state)
+                continue
             if self.broker.status.connected:
                 result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
                 res_status = result.get("status", "unknown")
@@ -1022,6 +1051,8 @@ class CTraderDemoTrader:
         return self._ks_fired
 
     def _learn_from_closed(self):
+        if self.shadow_mode:
+            return
         for canon_sym, streams in self._open_context.items():
             broker_sym = self._sym_mapper.translate(canon_sym) or canon_sym
             poss = [p for p in self.broker.positions()
@@ -1033,7 +1064,46 @@ class CTraderDemoTrader:
                                              "realized_direction": realized,
                                              "_sender": "ctrader_demo"})
 
+    def _record_shadow_proposal(self, symbol, broker_symbol, response, market_state):
+        """Append a non-executable Oracle decision to Chronicle's research area."""
+        signal = response.get("signal") or {}
+        plan = response.get("plan") or {}
+        streams = response.get("_streams") or {}
+        technical = streams.get("technical") if isinstance(streams, dict) else {}
+        technical = technical if isinstance(technical, dict) else {}
+        record = {
+            "schema": "oracle.ctrader.shadow_proposal.v1",
+            "observed_at_unix": time.time(),
+            "symbol": symbol,
+            "broker_symbol": broker_symbol,
+            "strategy_id": technical.get("genome"),
+            "regime": response.get("regime") or technical.get("regime"),
+            "direction": plan.get("direction"),
+            "confidence": signal.get("confidence"),
+            "entry": plan.get("entry"),
+            "size": plan.get("size"),
+            "stop": plan.get("stop"),
+            "target": plan.get("target"),
+            "market_state": {
+                key: market_state.get(key)
+                for key in ("state", "sessions", "overlap", "updated_at_utc")
+            },
+            "execution_mode": "shadow_no_order_sent",
+        }
+        path = _ECO_ROOT / "Chronicle" / "research" / "oracle_shadow" / "proposals.jsonl"
+        try:
+            encoded = json.dumps(record, sort_keys=True, separators=(",", ":"),
+                                 ensure_ascii=False, allow_nan=False)
+            with _shadow_log_lock:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as output:
+                    output.write(encoded + "\n")
+        except (OSError, TypeError, ValueError) as exc:
+            log.warning("[%s] could not persist shadow proposal: %s", symbol, type(exc).__name__)
+
     def kill(self):
+        if self.shadow_mode:
+            return {"status": "blocked", "reason": "shadow mode forbids broker close requests"}
         return self._close_all_positions()
 
     def shutdown(self):

@@ -57,6 +57,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -191,8 +192,13 @@ class CTraderBroker:
         self._client = None                 # ctrader_open_api.Client, set in connect()
         self._symbol_id_by_name: Dict[str, int] = {}
         self._symbol_name_by_id: Dict[int, str] = {}
+        self._symbol_base_asset_by_name: Dict[str, int] = {}
+        self._symbol_quote_asset_by_name: Dict[str, int] = {}
+        self._asset_name_by_id: Dict[int, str] = {}
         self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
         self._symbol_constraints: Dict[int, Dict[str, Any]] = {}
+        self._spot_waiters: Dict[int, Dict[str, Any]] = {}
+        self._spot_lock = threading.Lock()
         self._positions_cache: Dict[int, Dict[str, Any]] = {}
         self._positions_last_refresh_ok = False
         self._cache_lock = threading.Lock()
@@ -201,6 +207,8 @@ class CTraderBroker:
         # clientMsgId -> {"event": threading.Event, "result": [payload_or_None]}
         self._pending: Dict[str, Dict[str, Any]] = {}
         self._pending_lock = threading.Lock()
+        self._historical_request_lock = threading.Lock()
+        self._last_historical_request_at = 0.0
 
         self._reactor_thread: Optional[threading.Thread] = None
         self._reactor_started = threading.Event()
@@ -218,7 +226,7 @@ class CTraderBroker:
             from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
             from ctrader_open_api.messages.OpenApiMessages_pb2 import (
                 ProtoOAApplicationAuthReq, ProtoOAAccountAuthReq, ProtoOASymbolsListReq,
-                ProtoOASymbolByIdReq, ProtoOATraderReq,
+                ProtoOASymbolByIdReq, ProtoOATraderReq, ProtoOAAssetListReq,
                 ProtoOAApplicationAuthRes, ProtoOAAccountAuthRes,
                 ProtoOAErrorRes,
             )
@@ -245,7 +253,7 @@ class CTraderBroker:
             req = ProtoOAApplicationAuthReq()
             req.clientId = self._client_id
             req.clientSecret = self._client_secret
-            d = client.send(req)
+            d = client.send(req, responseTimeoutInSeconds=_AUTH_TIMEOUT_SEC)
             def _app_auth_err(f):
                 auth_error.append(str(f))
                 auth_failure.set()
@@ -270,7 +278,7 @@ class CTraderBroker:
                 acc_req = ProtoOAAccountAuthReq()
                 acc_req.ctidTraderAccountId = self._account_id
                 acc_req.accessToken = self._access_token
-                d = client.send(acc_req)
+                d = client.send(acc_req, responseTimeoutInSeconds=_AUTH_TIMEOUT_SEC)
                 def _acc_auth_err(f):
                     auth_error.append(str(f))
                     auth_failure.set()
@@ -311,6 +319,7 @@ class CTraderBroker:
 
         # Pull the symbol list once — needed to translate symbol name <-> id.
         self._load_symbols(ProtoOASymbolsListReq)
+        self._load_assets(ProtoOAAssetListReq)
 
         account_info = self._fetch_balance(ProtoOATraderReq)
         if account_info is None:
@@ -353,6 +362,17 @@ class CTraderBroker:
 
         # Keep our local position cache current on every execution/reconcile.
         self._update_cache_from_payload(payload)
+        # Live quote events are not correlated to the subscribe request's
+        # clientMsgId. Route them separately to the waiting symbol snapshot.
+        symbol_id = getattr(payload, "symbolId", None)
+        bid = getattr(payload, "bid", None)
+        ask = getattr(payload, "ask", None)
+        if symbol_id and bid and ask:
+            with self._spot_lock:
+                waiter = self._spot_waiters.get(int(symbol_id))
+                if waiter is not None:
+                    waiter["quote"][0] = {"bid": int(bid), "ask": int(ask)}
+                    waiter["event"].set()
 
     def _load_symbols(self, ProtoOASymbolsListReq) -> None:
         # Retry once: found on first live connection that the FIRST request
@@ -366,13 +386,32 @@ class CTraderBroker:
             payload = self._send_and_wait(req, timeout=_DEFAULT_TIMEOUT_SEC)
             if payload is not None:
                 for sym in getattr(payload, "symbol", []):
-                    self._symbol_id_by_name[sym.symbolName.upper()] = sym.symbolId
+                    name = sym.symbolName.upper()
+                    self._symbol_id_by_name[name] = sym.symbolId
                     self._symbol_name_by_id[sym.symbolId] = sym.symbolName
+                    if getattr(sym, "baseAssetId", None) is not None:
+                        self._symbol_base_asset_by_name[name] = int(sym.baseAssetId)
+                    if getattr(sym, "quoteAssetId", None) is not None:
+                        self._symbol_quote_asset_by_name[name] = int(sym.quoteAssetId)
                 return
             if attempt == 1:
                 log.info("cTrader: symbol list fetch timed out on first attempt, retrying once...")
                 time.sleep(1.0)
         log.warning("cTrader: symbol list fetch timed out twice; symbol translation will fail")
+
+    def _load_assets(self, ProtoOAAssetListReq) -> None:
+        """Cache broker asset IDs so account deposit currency is explicit."""
+        request = ProtoOAAssetListReq()
+        request.ctidTraderAccountId = self._account_id
+        payload = self._send_and_wait(request, timeout=_DEFAULT_TIMEOUT_SEC)
+        if payload is None:
+            log.warning("cTrader: asset list unavailable; account currency cannot be verified")
+            return
+        self._asset_name_by_id = {
+            int(getattr(asset, "assetId")): str(getattr(asset, "name", "")).upper()
+            for asset in getattr(payload, "asset", [])
+            if getattr(asset, "assetId", None) is not None and getattr(asset, "name", None)
+        }
 
     def load_market_schedules(self, symbol_names: List[str]) -> None:
         """Fetch authoritative cTrader schedules for only the configured symbols."""
@@ -420,6 +459,220 @@ class CTraderBroker:
 
     # ── the sync bridge ───────────────────────────────────────────────────
 
+    def historical_bars(self, symbol: str, from_timestamp_ms: int, to_timestamp_ms: int,
+                        period: str = "D1", count: int = 2000,
+                        timeout: float = 45.0) -> Dict[str, Any]:
+        """Fetch read-only cTrader OHLCV trendbars for the requested range."""
+        if not self.status.connected or self._client is None:
+            return {"status": "error", "message": "cTrader account is not connected"}
+        symbol_id = self._symbol_id_by_name.get(symbol.upper())
+        if symbol_id is None:
+            return {"status": "error", "message": f"cTrader does not list symbol {symbol}"}
+        if (isinstance(from_timestamp_ms, bool) or isinstance(to_timestamp_ms, bool)
+                or not isinstance(from_timestamp_ms, int) or not isinstance(to_timestamp_ms, int)
+                or from_timestamp_ms < 0 or to_timestamp_ms <= from_timestamp_ms):
+            return {"status": "error", "message": "invalid cTrader history timestamp range"}
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            return {"status": "error", "message": "cTrader history count must be positive"}
+
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAGetTrendbarsReq
+            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATrendbarPeriod
+            period_value = ProtoOATrendbarPeriod.Value(str(period).upper())
+        except (ImportError, ValueError, AttributeError) as exc:
+            return {
+                "status": "error",
+                "message": f"cTrader historical bars are unavailable: {type(exc).__name__}: {exc}",
+            }
+
+        request = ProtoOAGetTrendbarsReq()
+        request.ctidTraderAccountId = self._account_id
+        request.symbolId = symbol_id
+        request.period = period_value
+        request.fromTimestamp = from_timestamp_ms
+        request.toTimestamp = to_timestamp_ms
+        request.count = count
+        payload = self._send_and_wait(request, timeout=timeout)
+        if payload is None:
+            return {"status": "error", "message": "cTrader historical-bar request timed out or failed"}
+        if getattr(payload, "errorCode", None):
+            detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
+            return {"status": "error", "message": f"cTrader rejected historical-bar request: {detail}"}
+
+        constraints = self._get_symbol_constraints(symbol_id, symbol.upper())
+        digits = constraints.get("digits")
+        if not isinstance(digits, int) or digits < 0:
+            return {"status": "error", "message": "cTrader did not provide symbol precision for historical bars"}
+
+        bars = []
+        for item in getattr(payload, "trendbar", []):
+            timestamp_minutes = int(getattr(item, "utcTimestampInMinutes", 0) or 0)
+            if timestamp_minutes <= 0:
+                return {"status": "error", "message": "cTrader returned a bar without a valid UTC timestamp"}
+            low_relative = int(item.low)
+            bars.append({
+                "timestamp": datetime.fromtimestamp(timestamp_minutes * 60, tz=timezone.utc).isoformat(),
+                "open": _round_price_to_digits((low_relative + int(item.deltaOpen)) / 100000.0, digits),
+                "high": _round_price_to_digits((low_relative + int(item.deltaHigh)) / 100000.0, digits),
+                "low": _round_price_to_digits(low_relative / 100000.0, digits),
+                "close": _round_price_to_digits((low_relative + int(item.deltaClose)) / 100000.0, digits),
+                "volume": float(item.volume),
+            })
+        bars.sort(key=lambda bar: bar["timestamp"])
+        if not bars:
+            return {"status": "error", "message": "cTrader returned no historical bars for the requested range"}
+        return {"status": "complete", "symbol": symbol.upper(), "source": "ctrader_open_api",
+                "price_basis": "bid", "period": str(period).upper(), "bars": bars,
+                "has_more": bool(getattr(payload, "hasMore", False))}
+
+    def historical_ticks(self, symbol: str, quote_type: str,
+                         from_timestamp_ms: int, to_timestamp_ms: int,
+                         timeout: float = 45.0) -> Dict[str, Any]:
+        """Fetch a bounded cTrader BID or ASK tick series for cost research.
+
+        cTrader limits each historical tick request to one week and may mark
+        a response as truncated. Truncated data is reported as incomplete so
+        downstream cost profiling cannot silently treat it as representative.
+        """
+        symbol = str(symbol).strip().upper()
+        quote_type = str(quote_type).strip().upper()
+        if not self.status.connected or self._client is None:
+            return {"status": "error", "message": "cTrader account is not connected"}
+        symbol_id = self._symbol_id_by_name.get(symbol)
+        if symbol_id is None:
+            return {"status": "error", "message": f"cTrader does not list symbol {symbol}"}
+        if quote_type not in {"BID", "ASK"}:
+            return {"status": "error", "message": "quote_type must be BID or ASK"}
+        if (isinstance(from_timestamp_ms, bool) or isinstance(to_timestamp_ms, bool)
+                or not isinstance(from_timestamp_ms, int) or not isinstance(to_timestamp_ms, int)
+                or from_timestamp_ms < 0 or to_timestamp_ms <= from_timestamp_ms
+                or to_timestamp_ms - from_timestamp_ms > 604800000):
+            return {"status": "error", "message": "tick history range must be positive and no longer than seven days"}
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAGetTickDataReq
+            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAQuoteType
+            quote_value = ProtoOAQuoteType.Value(quote_type)
+        except (ImportError, ValueError, AttributeError) as exc:
+            return {"status": "error", "message": f"cTrader historical ticks unavailable: {type(exc).__name__}"}
+        request = ProtoOAGetTickDataReq()
+        request.ctidTraderAccountId = self._account_id
+        request.symbolId = symbol_id
+        request.type = quote_value
+        request.fromTimestamp = from_timestamp_ms
+        request.toTimestamp = to_timestamp_ms
+        self._throttle_historical_request()
+        payload = self._send_and_wait(request, timeout=timeout)
+        if payload is None:
+            return {"status": "error", "message": "cTrader historical-tick request timed out or failed"}
+        if getattr(payload, "errorCode", None):
+            detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
+            return {"status": "error", "message": f"cTrader rejected tick-history request: {detail}"}
+        metadata = self._get_symbol_constraints(symbol_id, symbol)
+        digits = metadata.get("digits")
+        if not isinstance(digits, int) or digits < 0:
+            return {"status": "error", "message": "cTrader symbol precision is unavailable"}
+        ticks = []
+        timestamp_ms = None
+        for item in getattr(payload, "tickData", []):
+            encoded_timestamp = int(getattr(item, "timestamp", 0) or 0)
+            # cTrader encodes the first timestamp absolutely, then subsequent
+            # entries as signed time deltas (the sequence is newest first).
+            timestamp_ms = encoded_timestamp if timestamp_ms is None else timestamp_ms + encoded_timestamp
+            raw_tick = int(item.tick)
+            price = _round_price_to_digits(raw_tick / 100000.0, digits)
+            if from_timestamp_ms <= timestamp_ms <= to_timestamp_ms and price > 0:
+                ticks.append({"timestamp_ms": timestamp_ms, "price": price,
+                              "raw_tick": raw_tick})
+        ticks.sort(key=lambda item: item["timestamp_ms"])
+        if not ticks:
+            return {"status": "unavailable", "symbol": symbol, "quote_type": quote_type,
+                    "ticks": [], "has_more": bool(getattr(payload, "hasMore", False))}
+        truncated = bool(getattr(payload, "hasMore", False))
+        return {"status": "incomplete" if truncated else "complete",
+                "symbol": symbol, "quote_type": quote_type,
+                "ticks": ticks, "has_more": bool(getattr(payload, "hasMore", False)),
+                "from_timestamp_ms": from_timestamp_ms, "to_timestamp_ms": to_timestamp_ms}
+
+    def historical_deals(self, from_timestamp_ms: int, to_timestamp_ms: int,
+                         max_rows: int = 10000, timeout: float = 60.0) -> Dict[str, Any]:
+        """Fetch complete account deal history, splitting ranges when cTrader truncates them."""
+        if not self.status.connected or self._client is None:
+            return {"status": "error", "message": "cTrader account is not connected"}
+        if (isinstance(from_timestamp_ms, bool) or isinstance(to_timestamp_ms, bool)
+                or not isinstance(from_timestamp_ms, int) or not isinstance(to_timestamp_ms, int)
+                or from_timestamp_ms < 0 or to_timestamp_ms <= from_timestamp_ms):
+            return {"status": "error", "message": "invalid cTrader deal-history timestamp range"}
+        if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+            return {"status": "error", "message": "max_rows must be a positive integer"}
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADealListReq
+        except ImportError as exc:
+            return {"status": "error", "message": f"cTrader deal history unavailable: {type(exc).__name__}"}
+        request_count = 0
+
+        def fetch_range(start_ms: int, end_ms: int, depth: int = 0) -> Dict[str, Any]:
+            nonlocal request_count
+            request = ProtoOADealListReq()
+            request.ctidTraderAccountId = self._account_id
+            request.fromTimestamp = start_ms
+            request.toTimestamp = end_ms
+            request.maxRows = max_rows
+            self._throttle_historical_request()
+            request_count += 1
+            payload = self._send_and_wait(request, timeout=timeout)
+            if payload is None:
+                return {"status": "error", "message": "cTrader deal-history request timed out or failed", "deals": []}
+            if getattr(payload, "errorCode", None):
+                detail = getattr(payload, "description", "") or getattr(payload, "errorCode", "unknown error")
+                return {"status": "error", "message": f"cTrader rejected deal-history request: {detail}", "deals": []}
+
+            deals = []
+            for deal in getattr(payload, "deal", []):
+                symbol_id = int(getattr(deal, "symbolId", 0) or 0)
+                deals.append({
+                    "deal_id": int(getattr(deal, "dealId", 0) or 0),
+                    "symbol_id": symbol_id,
+                    "symbol": self._symbol_name_by_id.get(symbol_id),
+                    "execution_timestamp_ms": int(getattr(deal, "executionTimestamp", 0) or 0),
+                    "create_timestamp_ms": int(getattr(deal, "createTimestamp", 0) or 0),
+                    "execution_price": getattr(deal, "executionPrice", None),
+                    "trade_side": int(getattr(deal, "tradeSide", 0) or 0),
+                    "deal_status": int(getattr(deal, "dealStatus", 0) or 0),
+                    "filled_volume_cents": int(getattr(deal, "filledVolume", 0) or 0),
+                    "commission_raw": int(getattr(deal, "commission", 0) or 0),
+                    "money_digits": int(getattr(deal, "moneyDigits", 0) or 0),
+                    "base_to_usd_conversion_rate": getattr(deal, "baseToUsdConversionRate", None),
+                })
+            if not bool(getattr(payload, "hasMore", False)):
+                return {"status": "complete", "deals": deals}
+            if end_ms - start_ms <= 1 or depth >= 40:
+                return {"status": "incomplete", "deals": deals,
+                        "message": "cTrader deal history remains truncated at the smallest splittable time range"}
+
+            middle_ms = (start_ms + end_ms) // 2
+            left = fetch_range(start_ms, middle_ms, depth + 1)
+            right = fetch_range(middle_ms + 1, end_ms, depth + 1)
+            combined = deals + left.get("deals", []) + right.get("deals", [])
+            status = "complete" if left.get("status") == right.get("status") == "complete" else "incomplete"
+            return {"status": status, "deals": combined,
+                    "message": left.get("message") or right.get("message")}
+
+        result = fetch_range(from_timestamp_ms, to_timestamp_ms)
+        unique_deals = {deal["deal_id"]: deal for deal in result.get("deals", []) if deal.get("deal_id")}
+        deals = sorted(unique_deals.values(), key=lambda item: (item["execution_timestamp_ms"], item["deal_id"]))
+        return {"status": result.get("status", "error"), "deals": deals,
+                "has_more": result.get("status") != "complete", "request_count": request_count,
+                "message": result.get("message"),
+                "from_timestamp_ms": from_timestamp_ms, "to_timestamp_ms": to_timestamp_ms}
+
+    def _throttle_historical_request(self) -> None:
+        """Respect cTrader's five historical requests per second limit."""
+        with self._historical_request_lock:
+            wait_for = 0.21 - (time.monotonic() - self._last_historical_request_at)
+            if wait_for > 0:
+                time.sleep(wait_for)
+            self._last_historical_request_at = time.monotonic()
+
     def _send_and_wait(self, request, timeout: float = _DEFAULT_TIMEOUT_SEC):
         """Send a protobuf request, block this (calling) thread until the
         matching response/event arrives (via clientMsgId correlation) or
@@ -434,7 +687,11 @@ class CTraderBroker:
             self._pending[msg_id] = slot
 
         def _send():
-            d = self._client.send(request, clientMsgId=msg_id)
+            d = self._client.send(
+                request,
+                clientMsgId=msg_id,
+                responseTimeoutInSeconds=timeout,
+            )
             d.addErrback(lambda f: (slot.__setitem__("result", [None]), ev.set()))
 
         self._reactor.callFromThread(_send)
@@ -488,12 +745,117 @@ class CTraderBroker:
             "maxVolume": max(1, getattr(sym, "maxVolume", 10_000_000)),
             "stepVolume": max(1, getattr(sym, "stepVolume", 1)),
             "digits": getattr(sym, "digits", None),
+            "baseAssetId": (getattr(sym, "baseAssetId", None)
+                             or self._symbol_base_asset_by_name.get(symbol_name.upper())),
+            "quoteAssetId": (getattr(sym, "quoteAssetId", None)
+                              or self._symbol_quote_asset_by_name.get(symbol_name.upper())),
+            "pipPosition": getattr(sym, "pipPosition", None),
+            "lotSize": getattr(sym, "lotSize", None),
+            "commission": getattr(sym, "commission", None),
+            "commissionType": getattr(sym, "commissionType", None),
+            "preciseTradingCommissionRate": getattr(sym, "preciseTradingCommissionRate", None),
+            "minCommission": getattr(sym, "minCommission", None),
+            "minCommissionType": getattr(sym, "minCommissionType", None),
+            "minCommissionAsset": getattr(sym, "minCommissionAsset", None),
+            "preciseMinCommission": getattr(sym, "preciseMinCommission", None),
+            "swapLong": getattr(sym, "swapLong", None),
+            "swapShort": getattr(sym, "swapShort", None),
+            "swapCalculationType": getattr(sym, "swapCalculationType", None),
+            "pnlConversionFeeRate": getattr(sym, "pnlConversionFeeRate", None),
         }
+        constraints["baseAssetName"] = self._asset_name_by_id.get(
+            int(constraints["baseAssetId"])) if constraints["baseAssetId"] is not None else None
+        constraints["quoteAssetName"] = self._asset_name_by_id.get(
+            int(constraints["quoteAssetId"])) if constraints["quoteAssetId"] is not None else None
         if constraints["digits"] is not None:
             constraints["digits"] = int(constraints["digits"])
+        for field in ("pipPosition", "lotSize", "commission", "commissionType",
+                      "preciseTradingCommissionRate", "minCommission", "minCommissionType",
+                      "preciseMinCommission", "swapCalculationType", "pnlConversionFeeRate"):
+            if constraints[field] is not None:
+                constraints[field] = int(constraints[field])
         with self._constraints_lock:
             self._symbol_constraints[symbol_id] = constraints
         return constraints
+
+    def asset_name(self, asset_id: int) -> Optional[str]:
+        """Return the exact asset name from cTrader's authenticated asset catalog."""
+        try:
+            return self._asset_name_by_id.get(int(asset_id))
+        except (TypeError, ValueError):
+            return None
+
+    def symbol_metadata(self, symbol: str) -> Dict[str, Any]:
+        """Return broker-reported metadata for an exact listed symbol."""
+        symbol = str(symbol).strip().upper()
+        symbol_id = self._symbol_id_by_name.get(symbol)
+        if symbol_id is None:
+            raise ValueError(f"cTrader does not list symbol {symbol}")
+        return dict(self._get_symbol_constraints(symbol_id, symbol))
+
+    def execution_cost_observation(self, symbol: str, timeout: float = 10.0) -> Dict[str, Any]:
+        """Read broker commission metadata and one live bid/ask spread sample."""
+        symbol = str(symbol).strip().upper()
+        if not self.status.connected or self._client is None:
+            return {"status": "blocked", "symbol": symbol, "message": "cTrader account is not connected"}
+        symbol_id = self._symbol_id_by_name.get(symbol)
+        if symbol_id is None:
+            return {"status": "blocked", "symbol": symbol, "message": f"broker does not list symbol {symbol}"}
+        metadata = self._get_symbol_constraints(symbol_id, symbol)
+        if metadata.get("digits") is None:
+            return {"status": "blocked", "symbol": symbol, "message": "broker symbol metadata is unavailable"}
+        try:
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+                ProtoOASubscribeSpotsReq, ProtoOAUnsubscribeSpotsReq,
+            )
+        except ImportError as exc:
+            return {"status": "blocked", "symbol": symbol, "message": f"cTrader quote messages unavailable: {type(exc).__name__}"}
+
+        event = threading.Event()
+        quote_slot = [None]
+        with self._spot_lock:
+            self._spot_waiters[symbol_id] = {"event": event, "quote": quote_slot}
+        subscribe = ProtoOASubscribeSpotsReq()
+        subscribe.ctidTraderAccountId = self._account_id
+        subscribe.symbolId.append(symbol_id)
+        try:
+            if self._send_and_wait(subscribe, timeout=timeout) is None:
+                return {"status": "error", "symbol": symbol, "metadata": metadata,
+                        "message": "cTrader quote subscription failed"}
+            if not event.wait(timeout=max(0.1, timeout)) or not quote_slot[0]:
+                return {"status": "unavailable", "symbol": symbol, "metadata": metadata,
+                        "slippage": {"status": "unavailable", "reason": "a quote snapshot does not measure order execution slippage"},
+                        "message": "no complete live bid/ask quote received"}
+            scale = 100000.0
+            digits = int(metadata["digits"])
+            bid_price = _round_price_to_digits(quote_slot[0]["bid"] / scale, digits)
+            ask_price = _round_price_to_digits(quote_slot[0]["ask"] / scale, digits)
+            if bid_price <= 0 or ask_price < bid_price:
+                return {"status": "error", "symbol": symbol, "message": "broker returned invalid bid/ask quote"}
+            mid = (bid_price + ask_price) / 2.0
+            return {
+                "status": "complete", "symbol": symbol, "broker_symbol_id": symbol_id,
+                "metadata": metadata,
+                "quote": {"bid": bid_price, "ask": ask_price, "observed_at": datetime.now(timezone.utc).isoformat()},
+                "spread": {"price": ask_price - bid_price,
+                           "pips": ((ask_price - bid_price) * (10 ** int(metadata.get("pipPosition") or digits))),
+                           "bps_of_mid": ((ask_price - bid_price) / mid * 10000.0) if mid else None},
+                "slippage": {"status": "unavailable", "reason": "a quote snapshot does not measure order execution slippage"},
+            }
+        finally:
+            unsubscribe = ProtoOAUnsubscribeSpotsReq()
+            unsubscribe.ctidTraderAccountId = self._account_id
+            unsubscribe.symbolId.append(symbol_id)
+            try:
+                self._send_and_wait(unsubscribe, timeout=min(timeout, 5.0))
+            except Exception:
+                log.debug("cTrader quote unsubscribe failed for %s", symbol, exc_info=True)
+            with self._spot_lock:
+                self._spot_waiters.pop(symbol_id, None)
+
+    def symbol_catalog(self) -> List[str]:
+        """Return exact symbol names exposed by the connected cTrader account."""
+        return sorted(self._symbol_id_by_name)
 
     def _clamp_volume(self, raw_volume: float, symbol_id: int, symbol_name: str) -> int:
         cents = self._volume_to_cents(raw_volume)
@@ -799,7 +1161,9 @@ class CTraderBroker:
                 balance = raw_balance / scale
                 equity = balance   # no open positions' floating P&L folded in yet — see docstring above
                 deposit_asset_id = getattr(trader, "depositAssetId", None)
-                currency = f"asset_id:{deposit_asset_id}" if deposit_asset_id is not None else ""
+                currency = self._asset_name_by_id.get(int(deposit_asset_id), "") if deposit_asset_id is not None else ""
+                if not currency and deposit_asset_id is not None:
+                    currency = f"asset_id:{deposit_asset_id}"
                 return balance, equity, currency
             else:
                 log.warning("cTrader: account info fetch timed out twice; keeping last known balance/equity")

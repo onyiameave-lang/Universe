@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import abc
 import math
+import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -123,14 +124,16 @@ class SklearnBackend(TrainingBackend):
         from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
                                        RandomForestRegressor)
         X, y, task = data["X_train"], data["y_train"], data["task_type"]
+        seed = int(data.get("random_seed", 42))
         mt = hp.get("model_type", "auto")
         if task == "classification":
-            m = (RandomForestClassifier(n_estimators=hp.get("n_estimators", 100), random_state=42)
+            m = (RandomForestClassifier(n_estimators=hp.get("n_estimators", 100), random_state=seed)
                  if mt == "random_forest" else
-                 GradientBoostingClassifier(random_state=42) if mt == "gradient_boosting" else
-                 LogisticRegression(max_iter=hp.get("max_iter", 1000), C=hp.get("C", 1.0)))
+                 GradientBoostingClassifier(random_state=seed) if mt == "gradient_boosting" else
+                 LogisticRegression(max_iter=hp.get("max_iter", 1000), C=hp.get("C", 1.0),
+                                    random_state=seed))
         else:
-            m = (RandomForestRegressor(n_estimators=hp.get("n_estimators", 100), random_state=42)
+            m = (RandomForestRegressor(n_estimators=hp.get("n_estimators", 100), random_state=seed)
                  if mt == "random_forest" else LinearRegression())
         t = time.time(); m.fit(X, y)
         return m, {"backend": self.name, "seconds": round(time.time() - t, 3),
@@ -139,10 +142,19 @@ class SklearnBackend(TrainingBackend):
 
 class TorchMLPBackend(TrainingBackend):
     name = "pytorch_mlp"; kind = "supervised"; supports = ["classification", "regression"]
+    _rng_lock = threading.RLock()
     @property
     def available(self): return _HAS_TORCH and _HAS_NUMPY
     def train(self, data, hp):
         import torch, torch.nn as nn
+        seed = int(data.get("random_seed", 42))
+        # PyTorch uses process-global RNG state for module initialization. Serialize
+        # Forge PyTorch fits and restore the caller's RNG state after each run.
+        with self._rng_lock, torch.random.fork_rng(devices=[]):
+            torch.manual_seed(seed)
+            return self._train_seeded(data, hp, torch, nn)
+
+    def _train_seeded(self, data, hp, torch, nn):
         X = torch.tensor(data["X_train"], dtype=torch.float32); task = data["task_type"]
         nf = X.shape[1]; hidden = hp.get("hidden_size", 64); epochs = hp.get("epochs", 120)
         if task == "classification":
@@ -183,9 +195,15 @@ class PPOBackend(TrainingBackend):
         except Exception:
             import gym  # type: ignore
         env = env_fn() if env_fn else gym.make(env_id)
+        seed = int(data.get("random_seed", 42))
+        try:
+            env.reset(seed=seed)
+        except TypeError:
+            env.seed(seed)
         t = time.time()
         model = PPO("MlpPolicy", env, learning_rate=hp.get("learning_rate", 3e-4),
-                    n_steps=hp.get("n_steps", 2048), gamma=hp.get("gamma", 0.99), verbose=0)
+                    n_steps=hp.get("n_steps", 2048), gamma=hp.get("gamma", 0.99),
+                    seed=seed, verbose=0)
         model.learn(total_timesteps=hp.get("timesteps", 10000))
         return ({"policy": model, "env": env},
                 {"backend": self.name, "seconds": round(time.time() - t, 3),

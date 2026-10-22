@@ -18,11 +18,18 @@ FIXES IMPLEMENTED:
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
+import os
+import tempfile
+import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 try:
     from intelligence.technicals import analyze  # type: ignore
@@ -40,21 +47,45 @@ except ImportError:
 log = logging.getLogger("oracle.lab")
 
 
+class StrategyPromotionAuthorization(BaseModel):
+    """Aegis-signed authorization for one exact Oracle champion candidate."""
+
+    model_config = ConfigDict(frozen=True)
+
+    authorization_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    challenge_id: str
+    authorized_by: str
+    decision: str = "AUTHORIZED"
+    risk_category: str = "strategy_promotion"
+    issued_at: datetime
+    expires_at: datetime
+    issuer: str
+    audience: str = "oracle.strategy.promotion"
+    signature: str
+    nonce: str
+    claims: Dict[str, Any]
+
+
 class ScientificResearchLab:
     """Coordinates Oracle's hypothesis-led research workflow."""
 
-    def __init__(self, chronicle=None, atlas=None, storage_dir: str = "memory"):
+    def __init__(self, chronicle=None, atlas=None, storage_dir: str = "memory",
+                 promotion_verifier=None):
         self.chronicle = chronicle
         self.atlas = atlas
+        self._promotion_verifier = promotion_verifier
+        self._promotion_lock = threading.RLock()
         self.planner = StrategyPlanner()
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._journal_path = self._dir / "scientific_journal.json"
         self._journal: List[Dict[str, Any]] = self._load_list(self._journal_path)
+        self._last_persisted_at: Optional[float] = None
+        self._last_persist_error: Optional[str] = None
         # champion_library.json (current champion per symbol/regime) and
-        # champion_history.json (capped rolling history) are genuinely
-        # bounded state -- Chronicle is now their source of truth, the
-        # local file is the offline-fallback cache. scientific_journal.json
+        # champion_history.json (a bounded promotion cache) are durable state --
+        # Chronicle is their source of truth, the local file is the
+        # offline-fallback cache. scientific_journal.json
         # stays as-is above: it already syncs to Chronicle separately, one
         # entry at a time, via _store_to_chronicle() (confirmed working) --
         # a different mechanism because it's an unbounded, ever-growing log,
@@ -72,6 +103,7 @@ class ScientificResearchLab:
         self._history_store = ChronicleBackedStore(
             chronicle, "champion_history", self._history_path, owner="oracle")
         self.benchmark = BenchmarkEngine(storage_dir=str(self._dir.parent / "benchmarks"))
+        self._recover_authorized_promotions()
 
     @property
     def _champions(self) -> Dict[str, Dict[str, Any]]:
@@ -95,11 +127,15 @@ class ScientificResearchLab:
         return data.setdefault("entries", [])
 
     def _load_list(self, path):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-            return data if isinstance(data, list) else []
-        except Exception:
+        if not path.exists():
             return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError(f"Oracle research journal is unreadable: {path}") from exc
+        if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+            raise RuntimeError(f"Oracle research journal has an invalid schema: {path}")
+        return data
 
     def _load_dict(self, path):
         try:
@@ -108,18 +144,35 @@ class ScientificResearchLab:
         except Exception:
             return {}
 
-    def _persist(self):
+    def _persist(self, strict: bool = False):
+        temporary_path = None
         try:
-            self._journal_path.write_text(json.dumps(self._journal[-250:], indent=2), encoding="utf-8")
-            self._champions_store.save()
-            # Keep the same [-100:] cap that existed before -- Chronicle
-            # sync doesn't change the retention policy, just where the
-            # authoritative copy lives.
+            encoded = json.dumps(self._journal, indent=2, allow_nan=False)
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", dir=self._journal_path.parent,
+                prefix=f".{self._journal_path.name}.", suffix=".tmp", delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, self._journal_path)
+            self._champions_store.save(strict=strict)
             hist = self._history_store.data()
             hist["entries"] = hist.get("entries", [])[-100:]
-            self._history_store.save(hist)
+            self._history_store.save(hist, strict=strict)
+            self._last_persisted_at = time.time()
+            self._last_persist_error = None
         except Exception as exc:
+            self._last_persist_error = type(exc).__name__
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             log.error("Persist failed: %s", exc)
+            if strict:
+                raise RuntimeError("Oracle research state could not be persisted") from exc
 
     # ═══════════════════════════════════════════════════════════════
     # ISSUE 9: Champion Cache
@@ -262,6 +315,11 @@ class ScientificResearchLab:
         regime = context.get("regime", "unknown")
         key = self.champion_key(symbol, regime)
         genome = evolution_result.get("best_genome", {})
+        current = self._champions.get(key)
+        if current and current.get("experiment_id") == experiment_id:
+            if current.get("genome_id") == genome.get("genome_id"):
+                return current
+            raise RuntimeError("Promotion experiment ID is already bound to another champion genome")
         version = self._get_next_version(symbol, regime)
 
         # Get parent champion info
@@ -292,14 +350,183 @@ class ScientificResearchLab:
         self._champions[key] = champion_record
 
         # Append to history (never delete)
-        self._champion_history.append(champion_record)
+        history = self._champion_history
+        previous_history = list(history)
+        history.append(champion_record)
 
-        self._persist()
+        try:
+            self._persist(strict=True)
+        except Exception:
+            # If the champion store did not commit, do not leave the candidate
+            # active in memory. If it committed before a later store failed,
+            # retain it for idempotent recovery.
+            try:
+                champion_digest = self._champions_store._digest(
+                    self._champions_store.data()
+                )
+                champion_committed = (
+                    champion_digest == self._champions_store._last_synced_digest
+                )
+            except (TypeError, ValueError):
+                champion_committed = False
+            if not champion_committed:
+                if current is None:
+                    self._champions.pop(key, None)
+                else:
+                    self._champions[key] = current
+                history[:] = previous_history
+            raise
 
         log.info("CHAMPION V%d promoted: %s (%s/%s) parent=%s",
                  version, genome.get("genome_id"), symbol, regime, parent_id)
 
         return champion_record
+
+    @staticmethod
+    def _canonical_digest(value: Any) -> str:
+        encoded = json.dumps(
+            value, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _experiment_record(self, experiment_id: str) -> Optional[Dict[str, Any]]:
+        return next((
+            item for item in self._journal
+            if item.get("experiment_id") == experiment_id
+        ), None)
+
+    def promotion_authorization_claims(
+        self, experiment_id: str, authorized_by: str
+    ) -> Dict[str, Any]:
+        if not isinstance(authorized_by, str) or not authorized_by.strip():
+            raise ValueError("authorized_by must be a non-empty identity")
+        experiment = self._experiment_record(experiment_id)
+        if experiment is None:
+            raise ValueError(f"Oracle experiment {experiment_id} was not found")
+        if experiment.get("promotion_status") not in (
+            "PENDING_AUTHORIZATION", "AUTHORIZED_COMMITTING"
+        ):
+            raise ValueError("Experiment does not have an eligible candidate awaiting commit")
+        candidate_digest = experiment.get("candidate_digest")
+        if candidate_digest != self._canonical_digest({
+            "genome": experiment.get("best_genome"),
+            "evidence": experiment.get("evidence"),
+        }):
+            raise ValueError("Persisted candidate evidence digest is invalid")
+        key = self.champion_key(experiment["symbol"], experiment["regime"])
+        incumbent_digest = experiment.get("incumbent_digest")
+        if experiment.get("promotion_status") == "PENDING_AUTHORIZATION":
+            incumbent = self._champions.get(key)
+            current_digest = self._canonical_digest(incumbent) if incumbent else None
+            if current_digest != incumbent_digest:
+                raise ValueError("Incumbent changed since the candidate was evaluated")
+        return {
+            "action": "authorize_oracle_strategy_promotion",
+            "audience": "oracle.strategy.promotion",
+            "experiment_id": experiment_id,
+            "candidate_digest": candidate_digest,
+            "incumbent_digest": incumbent_digest,
+            "symbol": experiment["symbol"],
+            "regime": experiment["regime"],
+            "authorized_by": authorized_by.strip(),
+        }
+
+    def authorize_promotion(
+        self, experiment_id: str, authorization: StrategyPromotionAuthorization
+    ) -> Dict[str, Any]:
+        with self._promotion_lock:
+            return self._authorize_promotion_locked(experiment_id, authorization)
+
+    def _authorize_promotion_locked(
+        self, experiment_id: str, authorization: StrategyPromotionAuthorization
+    ) -> Dict[str, Any]:
+        verifier = self._promotion_verifier
+        if verifier is None:
+            raise PermissionError("Oracle strategy promotion authorization is not configured")
+        claims = self.promotion_authorization_claims(
+            experiment_id, authorization.authorized_by
+        )
+        if authorization.audience != "oracle.strategy.promotion":
+            raise PermissionError("Authorization audience must be oracle.strategy.promotion")
+        if authorization.claims != claims:
+            raise PermissionError("Authorization claims do not match the pending candidate")
+        if not verifier.verify_and_consume(authorization, claims):
+            raise PermissionError("Aegis rejected or already consumed the promotion authorization")
+
+        # Recheck after the signature/nonce operation. If another promotion
+        # raced this one, the incumbent digest changes and the candidate stays pending.
+        experiment = self._experiment_record(experiment_id)
+        if experiment is None or experiment.get("promotion_status") != "PENDING_AUTHORIZATION":
+            raise ValueError("Candidate is no longer pending authorization")
+        key = self.champion_key(experiment["symbol"], experiment["regime"])
+        incumbent = self._champions.get(key)
+        current_digest = self._canonical_digest(incumbent) if incumbent else None
+        if current_digest != claims["incumbent_digest"]:
+            raise ValueError("Incumbent changed before the authorized commit was recorded")
+        experiment["promotion_status"] = "AUTHORIZED_COMMITTING"
+        experiment["promotion_authorization"] = {
+            "authorization_id": authorization.authorization_id,
+            "authorized_by": authorization.authorized_by,
+            "issuer": authorization.issuer,
+            "nonce": authorization.nonce,
+            "claims_digest": self._canonical_digest(claims),
+        }
+        self._persist(strict=True)
+        return self._commit_authorized_promotion(experiment)
+
+    def _commit_authorized_promotion(self, experiment: Dict[str, Any]) -> Dict[str, Any]:
+        key = self.champion_key(experiment["symbol"], experiment["regime"])
+        current = self._champions.get(key)
+        if current and current.get("experiment_id") == experiment["experiment_id"]:
+            if current.get("genome_id") != experiment.get("best_genome", {}).get("genome_id"):
+                raise RuntimeError("Persisted champion does not match the authorized candidate")
+            champion_record = current
+            if not any(
+                item.get("experiment_id") == experiment["experiment_id"]
+                for item in self._champion_history
+            ):
+                self._champion_history.append(champion_record)
+                self._persist(strict=True)
+        else:
+            current_digest = self._canonical_digest(current) if current else None
+            if current_digest != experiment.get("incumbent_digest"):
+                raise ValueError("Incumbent changed before authorized promotion could commit")
+            evolution_result = {
+                "best_genome": experiment["best_genome"],
+                "in_sample_return": experiment.get("in_sample_return", 0),
+                "out_of_sample": experiment.get("out_of_sample", {}),
+            }
+            context = {"symbol": experiment["symbol"], "regime": experiment["regime"]}
+            champion_record = self._promote_champion(
+                context, evolution_result, experiment["evidence"],
+                experiment.get("hypotheses", []), experiment["experiment_id"],
+            )
+        experiment["promotion_status"] = "PROMOTED"
+        experiment["promoted_new_champion"] = True
+        experiment["champion_version"] = champion_record.get("version")
+        self._persist(strict=True)
+        return {"status": "promoted", "experiment_id": experiment["experiment_id"],
+                "champion": champion_record}
+
+    def _recover_authorized_promotions(self) -> None:
+        """Resume only commits with a previously verified, durably recorded Aegis receipt."""
+        for experiment in self._journal:
+            if experiment.get("promotion_status") != "AUTHORIZED_COMMITTING":
+                continue
+            try:
+                receipt = experiment.get("promotion_authorization") or {}
+                claims = self.promotion_authorization_claims(
+                    experiment["experiment_id"], receipt.get("authorized_by", "")
+                )
+                if receipt.get("claims_digest") != self._canonical_digest(claims):
+                    raise ValueError("Persisted Aegis receipt does not match candidate claims")
+                self._commit_authorized_promotion(experiment)
+            except Exception as exc:
+                log.critical(
+                    "Authorized Oracle promotion recovery is unresolved for %s (%s)",
+                    experiment.get("experiment_id"), type(exc).__name__,
+                )
 
     # ═══════════════════════════════════════════════════════════════
     # ISSUE 6: Chronicle Memory (store everything)
@@ -403,6 +630,20 @@ class ScientificResearchLab:
                 "Store winning module combination in Chronicle",
             ]
         else:
+            if result.get("candidate_eligible"):
+                reflection["conclusion"] = (
+                    "Candidate passed Oracle's current OOS comparison and is awaiting "
+                    "the owning agent's request-bound Aegis promotion authorization."
+                )
+                reflection["insights"] = [
+                    f"Candidate eligible: {result.get('best_genome', {}).get('genome_id', 'unknown')}",
+                    "Champion state remains unchanged until authorization commits.",
+                ]
+                reflection["directives"] = [
+                    "Review the evidence and comparison against the current champion",
+                    "Request strategy promotion authorization only after review",
+                ]
+                return reflection
             cert_audit = result.get("certification_audit", {})
             rejection = cert_audit.get("rejection_reason", "unknown")
 
@@ -561,7 +802,8 @@ class ScientificResearchLab:
         total_return = float(oos.get("total_return", 0) or 0)
         trades = int(oos.get("trades", 0) or 0)
         promoted = result.get("promoted_new_champion", False)
-        verdict = "accepted" if promoted else "rejected"
+        eligible = result.get("candidate_eligible", promoted)
+        verdict = "candidate_eligible" if eligible else "rejected"
         sharpe = float(oos.get("sharpe_proxy", 0) or 0)
         dd = float(oos.get("max_drawdown", 0) or 0)
         score = total_return * 2 + sharpe * 0.4 - dd * 1.5 + (1.0 if trades >= 1 else 0)
@@ -612,14 +854,16 @@ class ScientificResearchLab:
         # ═══════════════════════════════════════════════════════
         # POST-EVOLUTION: Comparison, Promotion, Reporting
         # ═══════════════════════════════════════════════════════
-        promoted = result.get("promoted_new_champion", False)
+        candidate_eligible = result.get("candidate_eligible", False)
+        promoted = False
+        candidate_pending = False
         best_genome = result.get("best_genome", {})
         oos = result.get("out_of_sample", {})
         experiment_id = f"exp-{uuid.uuid4().hex[:8]}"
         champion_record = None
         comparison = None
 
-        if promoted:
+        if candidate_eligible:
             genome_id = best_genome.get("genome_id", "unknown")
 
             # ISSUE 2: Duplicate detection
@@ -632,16 +876,13 @@ class ScientificResearchLab:
                 comparison = self.compare_champion(oos, symbol, regime)
                 if comparison["decision"] == "reject":
                     log.info("Candidate rejected: %s", comparison["reason"])
-                    promoted = False
-                    result["promoted_new_champion"] = False
                 else:
-                    # ISSUE 4: Promote with versioning
-                    evidence = self.score_evidence(result)
-                    champion_record = self._promote_champion(
-                        context, result, evidence, hypotheses, experiment_id
+                    candidate_pending = True
+                    log.info(
+                        "STATE: Candidate %s passed research comparison; "
+                        "awaiting request-bound Aegis authorization",
+                        genome_id,
                     )
-                    log.info("STATE: Evolution → Certification → Champion V%d ✅",
-                             champion_record.get("version", 0))
 
         # Record experiment (always, even on failure)
         evidence = self.score_evidence(result)
@@ -655,13 +896,30 @@ class ScientificResearchLab:
             "evidence": evidence,
             "best_genome": best_genome,  # ISSUE 1: Always include full genome
             "promoted_new_champion": promoted,
+            "promotion_status": (
+                "PENDING_AUTHORIZATION" if candidate_pending else
+                "NOT_ELIGIBLE" if not candidate_eligible else "REJECTED"
+            ),
+            "candidate_eligible": bool(candidate_eligible),
             "champion_comparison": comparison,
+            "in_sample_return": result.get("in_sample_return", 0),
+            "out_of_sample": oos,
             "champion_version": champion_record.get("version") if champion_record else None,
             "validation_summary": result.get("validation_summary", {}),
             "certification_audit": result.get("certification_audit", {}),
         }
+        key = self.champion_key(symbol, regime)
+        incumbent = self._champions.get(key)
+        experiment["incumbent_digest"] = (
+            self._canonical_digest(incumbent) if incumbent else None
+        )
+        if candidate_pending:
+            experiment["candidate_digest"] = self._canonical_digest({
+                "genome": best_genome,
+                "evidence": evidence,
+            })
         self._journal.append(experiment)
-        self._persist()
+        self._persist(strict=candidate_pending)
 
         # ISSUE 6: Store everything to Chronicle
         self._store_to_chronicle(experiment, champion_record)
@@ -692,6 +950,9 @@ class ScientificResearchLab:
             "champion": self.champion_info(context["symbol"], context["regime"]),
             "dna_report": dna_report,
             "champion_comparison": comparison,
+            "promotion_status": experiment["promotion_status"],
+            "promotion_authorization_required": candidate_pending,
+            "promotion_authorization_configured": self._promotion_verifier is not None,
         }
 
         # Benchmark update (automatic, never crashes Oracle)
@@ -729,5 +990,28 @@ class ScientificResearchLab:
         return max(candidates, key=lambda c: c.get("evidence", {}).get("score", -999)) if candidates else None
 
     def stats(self):
-        return {"experiments": len(self._journal), "champions": list(self._champions.keys()),
-                "champion_versions": len(self._champion_history)}
+        pending = [
+            item.get("experiment_id") for item in self._journal
+            if item.get("promotion_status") == "PENDING_AUTHORIZATION"
+        ]
+        committing = [
+            item.get("experiment_id") for item in self._journal
+            if item.get("promotion_status") == "AUTHORIZED_COMMITTING"
+        ]
+        return {
+            "experiments": len(self._journal),
+            "champions": list(self._champions.keys()),
+            "champion_versions": len(self._champion_history),
+            "persistence": {
+                "journal_file_ready": self._journal_path.is_file(),
+                "last_persisted_at": self._last_persisted_at,
+                "last_persist_error": self._last_persist_error,
+                "champion_store": self._champions_store.operational_status(),
+                "champion_history_store": self._history_store.operational_status(),
+            },
+            "promotion_authorization_configured": self._promotion_verifier is not None,
+            "pending_promotion_authorizations": len(pending),
+            "pending_experiment_ids": pending,
+            "authorized_commits_requiring_reconciliation": len(committing),
+            "reconciliation_experiment_ids": committing,
+        }

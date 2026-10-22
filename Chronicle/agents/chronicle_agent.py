@@ -406,18 +406,33 @@ class ChronicleAgent(BaseAgent):
             key = ctx.get("key")
             if not key:
                 return {"status": "error", "message": "key is required"}
-            return self.state.set(key, ctx.get("value"), owner=ctx.get("_sender", ""))
+            if "expected_revision" not in ctx:
+                return {
+                    "status": "error", "key": key,
+                    "message": "expected_revision is required; read state.get before writing",
+                }
+            return self.state.set(
+                key, ctx.get("value"), owner=ctx.get("_sender", ""),
+                expected_revision=ctx.get("expected_revision"),
+            )
         if task == "state.get":
             key = ctx.get("key")
             if not key:
                 return {"status": "error", "message": "key is required"}
-            value = self.state.get(key)
-            return {"status": "complete", "key": key, "value": value, "found": value is not None}
+            return {"status": "complete", "key": key, **self.state.get_with_revision(key)}
         if task == "state.delete":
             key = ctx.get("key")
             if not key:
                 return {"status": "error", "message": "key is required"}
-            return self.state.delete(key)
+            if "expected_revision" not in ctx:
+                return {
+                    "status": "error", "key": key,
+                    "message": "expected_revision is required; read state.get before deleting",
+                }
+            return self.state.delete(
+                key, expected_revision=ctx.get("expected_revision"),
+                owner=ctx.get("_sender", ""),
+            )
         if task == "state.list":
             return {"status": "complete", "keys": self.state.list_keys(ctx.get("prefix", ""))}
         if task == "state.history":

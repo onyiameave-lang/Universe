@@ -31,19 +31,37 @@ HypothesisQueue, etc.) get Chronicle as their real source of truth while
 keeping a fast local cache. ChronicleBackedStore only ever reads/writes
 the CURRENT value (via get()/set()) -- it doesn't need to know history
 exists at all; the history trail is purely additive.
+
+Each key has a monotonic storage revision. Remote clients can pass that
+revision to state.set as expected_revision so stale writers receive a conflict
+instead of overwriting newer state. State mutations use a process-shared lock
+and atomic file replacement; deleted keys retain a revision tombstone so an
+offline cache cannot silently recreate them. Oracle's learned-strategy keys are
+owner-bound to Oracle, and an existing key's owner cannot be changed by a write.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
-import shutil
+import tempfile
 import threading
 import time
+import copy
+import errno
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("chronicle.state_store")
+
+_OWNER_BOUND_KEYS = {
+    "champion_library": "oracle",
+    "champion_history": "oracle",
+    "evolved_strategies": "oracle",
+    "fusion_weights": "oracle",
+    "champion_confidence": "oracle",
+}
 
 
 class StateStore:
@@ -58,61 +76,237 @@ class StateStore:
             try:
                 data = json.loads(self.path.read_text())
             except (json.JSONDecodeError, OSError) as exc:
-                log.warning("state_store.json unreadable (%s); starting fresh", exc)
-                return {}
+                raise RuntimeError(f"Chronicle state store is unreadable: {self.path}") from exc
+            if not isinstance(data, dict):
+                raise RuntimeError(f"Chronicle state store has an invalid schema: {self.path}")
             # Migrate records written before history tracking existed --
             # old shape was {"value":..., "owner":..., "updated_at":...}
             # with no "history" key. Adopt in place rather than losing
             # the one value they already have.
             for key, rec in data.items():
-                if isinstance(rec, dict) and "history" not in rec:
+                if not isinstance(key, str) or not key or not isinstance(rec, dict) or "value" not in rec:
+                    raise RuntimeError(
+                        f"Chronicle state store contains an invalid record for key {key!r}"
+                    )
+                if "history" not in rec:
                     rec["history"] = []
+                rec.setdefault("revision", 0)
+                if (not isinstance(rec["revision"], int) or isinstance(rec["revision"], bool)
+                        or rec["revision"] < 0):
+                    raise RuntimeError(
+                        f"Chronicle state store contains an invalid revision for key {key!r}"
+                    )
+                if not isinstance(rec.get("deleted", False), bool):
+                    raise RuntimeError(
+                        f"Chronicle state store contains an invalid deletion marker for key {key!r}"
+                    )
+                if not isinstance(rec["history"], list) or any(
+                    not isinstance(entry, dict) or "value" not in entry
+                    for entry in rec["history"]
+                ):
+                    raise RuntimeError(
+                        f"Chronicle state store contains invalid history for key {key!r}"
+                    )
             return data
         return {}
 
-    def _save(self) -> None:
+    @contextmanager
+    def _file_lock(self):
+        """Serialize read/modify/write transactions across StateStore processes."""
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        with lock_path.open("a+b") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                while True:
+                    try:
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError as exc:
+                        if exc.errno not in (errno.EACCES, errno.EDEADLK, errno.EAGAIN):
+                            raise
+                        time.sleep(0.05)
+                unlock = lambda: msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                unlock = lambda: fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                unlock()
+
+    def _save(self) -> bool:
+        temporary_path = None
         try:
             if self.path.exists():
+                disk_data = json.loads(self.path.read_text())
+                if not isinstance(disk_data, dict):
+                    raise ValueError("existing state_store.json has an invalid top-level shape")
+                for key, disk_rec in disk_data.items():
+                    if not isinstance(key, str) or not key or not isinstance(disk_rec, dict) or "value" not in disk_rec:
+                        raise ValueError(f"existing state_store.json has an invalid record for key {key!r}")
+                    disk_revision = disk_rec.get("revision", 0)
+                    if (not isinstance(disk_revision, int) or isinstance(disk_revision, bool)
+                            or disk_revision < 0 or not isinstance(disk_rec.get("deleted", False), bool)):
+                        raise ValueError(f"existing state_store.json has invalid revision metadata for key {key!r}")
+                    disk_history = disk_rec.get("history", [])
+                    if not isinstance(disk_history, list) or any(
+                        not isinstance(entry, dict) or "value" not in entry
+                        for entry in disk_history
+                    ):
+                        raise ValueError(f"existing state_store.json has invalid history for key {key!r}")
+                    current = self._data.get(key)
+                    if current is None:
+                        self._data[key] = disk_rec
+                        continue
+                    disk_updated = disk_rec.get("updated_at", 0) if isinstance(disk_rec, dict) else 0
+                    current_updated = current.get("updated_at", 0) if isinstance(current, dict) else 0
+                    if disk_updated > current_updated:
+                        self._data[key] = disk_rec
+            encoded = json.dumps(self._data, indent=2, sort_keys=True, allow_nan=False)
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", dir=self.path.parent,
+                prefix=f".{self.path.name}.", suffix=".tmp", delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, self.path)
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            if temporary_path is not None:
                 try:
-                    disk_data = json.loads(self.path.read_text())
-                    if isinstance(disk_data, dict):
-                        for key, disk_rec in disk_data.items():
-                            current = self._data.get(key)
-                            if current is None:
-                                self._data[key] = disk_rec
-                                continue
-                            disk_updated = disk_rec.get("updated_at", 0) if isinstance(disk_rec, dict) else 0
-                            current_updated = current.get("updated_at", 0) if isinstance(current, dict) else 0
-                            if disk_updated > current_updated:
-                                self._data[key] = disk_rec
-                except Exception:
-                    log.warning("could not merge existing state_store.json before persist",
-                                exc_info=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self._data, indent=2, sort_keys=True))
-            try:
-                os.replace(str(tmp), str(self.path))
-            except (OSError, PermissionError):
-                shutil.move(str(tmp), str(self.path))
-        except OSError as exc:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             log.warning("could not persist state_store.json: %s", exc)
+            return False
 
-    def set(self, key: str, value: Any, owner: str = "") -> Dict[str, Any]:
+    def set(
+        self, key: str, value: Any, owner: str = "",
+        expected_revision: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Upserts the CURRENT value under key (get()/data() still return
         just this, unchanged, for every fast hot-path caller) -- but first
         appends whatever was there before to this key's history trail, so
         nothing is destroyed. Every entry in history is real: (old value,
-        when it stopped being current)."""
-        with self._lock:
+        when it stopped being current). If expected_revision is supplied, a
+        stale writer receives a conflict without changing the key."""
+        with self._lock, self._file_lock():
+            # Refresh under the process-shared lock so expected_revision is
+            # compared with the authoritative disk revision, not stale cache.
+            self._data = self._load()
+            previous_data = copy.deepcopy(self._data)
             existing = self._data.get(key)
+            current_revision = existing.get("revision", 0) if existing else 0
+            required_owner = _OWNER_BOUND_KEYS.get(key)
+            if required_owner is not None and owner != required_owner:
+                return {"status": "forbidden", "key": key,
+                        "message": "state key is owned by another agent"}
+            if existing and existing.get("owner") and existing["owner"] != owner:
+                return {"status": "forbidden", "key": key,
+                        "message": "state key owner cannot be changed"}
+            if expected_revision is not None:
+                if (not isinstance(expected_revision, int) or isinstance(expected_revision, bool)
+                        or expected_revision < 0):
+                    return {"status": "error", "key": key,
+                            "message": "expected_revision must be a non-negative integer"}
+                if expected_revision != current_revision:
+                    return {"status": "conflict", "key": key,
+                            "revision": current_revision,
+                            "message": "state revision changed before this write"}
             history: List[Dict[str, Any]] = existing.get("history", []) if existing else []
             if existing is not None:
                 history.append({"value": existing["value"], "owner": existing.get("owner", ""),
                                 "updated_at": existing.get("updated_at")})
-            self._data[key] = {"value": value, "owner": owner, "updated_at": time.time(),
-                               "history": history}
-            self._save()
-        return {"status": "complete", "key": key}
+            next_revision = current_revision + 1
+            self._data[key] = {
+                "value": value,
+                "owner": owner,
+                "updated_at": time.time(),
+                "history": history,
+                "revision": next_revision,
+            }
+            try:
+                persisted = self._save()
+            except Exception:
+                persisted = False
+            if not persisted:
+                self._data = previous_data
+                return {"status": "error", "key": key, "message": "state was not durably saved"}
+            stored = self._data.get(key, {})
+            if (
+                stored.get("revision") != next_revision
+                or stored.get("value") != value
+                or stored.get("owner", "") != owner
+            ):
+                self._data = previous_data
+                return {
+                    "status": "conflict", "key": key,
+                    "revision": stored.get("revision", 0),
+                    "message": "state changed concurrently before this write committed",
+                }
+        return {"status": "complete", "key": key, "revision": next_revision}
+
+    def compare_and_set_version(
+        self, key: str, expected_version: int, new_value: Any, owner: str = ""
+    ) -> bool:
+        """Atomically replace one key if its composite state revision matches.
+
+        Chronicle composite values use ``revision`` as a transaction revision,
+        incremented for every state change. For older composite values without
+        that field, ``version_number`` is used as a compatibility fallback.
+        A missing key has revision zero. Both the instance lock and a
+        process-shared file lock serialize this read/check/write operation.
+        """
+        with self._lock, self._file_lock():
+            self._data = self._load()
+            previous_data = copy.deepcopy(self._data)
+            existing = self._data.get(key)
+            required_owner = _OWNER_BOUND_KEYS.get(key)
+            if required_owner is not None and owner != required_owner:
+                return False
+            if existing and existing.get("owner") and existing["owner"] != owner:
+                return False
+            current_value = existing.get("value") if existing else None
+            if isinstance(current_value, dict):
+                current_version = current_value.get(
+                    "revision", current_value.get("version_number", 0)
+                )
+            else:
+                current_version = 0
+            if current_version != expected_version:
+                return False
+
+            history = list(existing.get("history", [])) if existing else []
+            if existing is not None:
+                history.append({
+                    "value": existing["value"],
+                    "owner": existing.get("owner", ""),
+                    "updated_at": existing.get("updated_at"),
+                })
+            self._data[key] = {
+                "value": new_value,
+                "owner": owner,
+                "updated_at": time.time(),
+                "history": history,
+                "revision": (existing.get("revision", 0) if existing else 0) + 1,
+            }
+            try:
+                persisted = self._save()
+            except Exception:
+                persisted = False
+            if not persisted:
+                self._data = previous_data
+                return False
+            return True
 
     def get(self, key: str) -> Optional[Any]:
         """Fast path -- just the current value, exactly as before. Every
@@ -120,7 +314,31 @@ class StateStore:
         unchanged; history is purely additive, never in this call's way."""
         with self._lock:
             rec = self._data.get(key)
-            return rec["value"] if rec is not None else None
+            return rec["value"] if rec is not None and not rec.get("deleted", False) else None
+
+    def get_with_revision(self, key: str) -> Dict[str, Any]:
+        """Return a consistent current value and revision for optimistic writes."""
+        with self._lock:
+            rec = self._data.get(key)
+            if rec is None or rec.get("deleted", False):
+                return {
+                    "value": None,
+                    "found": False,
+                    "deleted": bool(rec and rec.get("deleted", False)),
+                    "revision": rec.get("revision", 0) if rec else 0,
+                }
+            return {
+                "value": rec["value"],
+                "found": rec["value"] is not None,
+                "deleted": False,
+                "revision": rec.get("revision", 0),
+            }
+
+    def get_revision(self, key: str) -> int:
+        """Return the monotonic revision for a key; absent keys have revision zero."""
+        with self._lock:
+            rec = self._data.get(key)
+            return rec.get("revision", 0) if rec is not None else 0
 
     def get_history(self, key: str, include_current: bool = True) -> List[Dict[str, Any]]:
         """The full trajectory for a key, oldest first -- what Forge/Atlas
@@ -131,18 +349,69 @@ class StateStore:
             if rec is None:
                 return []
             trail = list(rec.get("history", []))
-            if include_current:
+            if include_current and not rec.get("deleted", False):
                 trail.append({"value": rec["value"], "owner": rec.get("owner", ""),
                               "updated_at": rec.get("updated_at")})
             return trail
 
-    def delete(self, key: str) -> Dict[str, Any]:
-        with self._lock:
-            existed = key in self._data
-            self._data.pop(key, None)
-            self._save()
-        return {"status": "complete", "deleted": existed}
+    def delete(
+        self, key: str, expected_revision: Optional[int] = None, owner: str = ""
+    ) -> Dict[str, Any]:
+        with self._lock, self._file_lock():
+            self._data = self._load()
+            previous_data = copy.deepcopy(self._data)
+            existing = self._data.get(key)
+            current_revision = existing.get("revision", 0) if existing else 0
+            required_owner = _OWNER_BOUND_KEYS.get(key)
+            if required_owner is not None and owner != required_owner:
+                return {"status": "forbidden", "deleted": False,
+                        "message": "state key is owned by another agent"}
+            if existing and existing.get("owner") and existing["owner"] != owner:
+                return {"status": "forbidden", "deleted": False,
+                        "message": "state key owner cannot be changed"}
+            if (not isinstance(expected_revision, int) or isinstance(expected_revision, bool)
+                    or expected_revision < 0):
+                return {"status": "error", "deleted": False,
+                        "message": "expected_revision must be a non-negative integer"}
+            if expected_revision != current_revision:
+                return {"status": "conflict", "deleted": False,
+                        "revision": current_revision,
+                        "message": "state revision changed before deletion"}
+            existed = existing is not None and not existing.get("deleted", False)
+            if not existed:
+                return {
+                    "status": "complete",
+                    "deleted": False,
+                    "revision": existing.get("revision", 0) if existing else 0,
+                }
+            history = list(existing.get("history", []))
+            history.append({
+                "value": existing["value"],
+                "owner": existing.get("owner", ""),
+                "updated_at": existing.get("updated_at"),
+            })
+            next_revision = existing.get("revision", 0) + 1
+            self._data[key] = {
+                "value": existing["value"],
+                "owner": existing.get("owner", ""),
+                "updated_at": time.time(),
+                "history": history,
+                "revision": next_revision,
+                "deleted": True,
+            }
+            try:
+                persisted = self._save()
+            except Exception:
+                persisted = False
+            if not persisted:
+                self._data = previous_data
+                return {"status": "error", "deleted": False,
+                        "message": "state deletion was not durably saved"}
+        return {"status": "complete", "deleted": existed, "revision": next_revision}
 
     def list_keys(self, prefix: str = "") -> list:
         with self._lock:
-            return [k for k in self._data if k.startswith(prefix)]
+            return [
+                key for key, record in self._data.items()
+                if key.startswith(prefix) and not record.get("deleted", False)
+            ]

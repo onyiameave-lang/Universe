@@ -3,24 +3,25 @@ Forge Hypothesis Queue
 ========================
 "The queue becomes the backlog of scientific questions." Every hypothesis
 has a bounded lifecycle:
-
-    untested -> testing -> confirmed | inconclusive | rejected
+untested -> testing -> confirmed | inconclusive | rejected
 
 Design notes (learned directly from a real bug found this session --
 Atlas's select_family() mutated a shared global dict in place, silently
 corrupting strategy selection forever):
-  - A hypothesis's EVIDENCE is append-only (a list of experiment results
-    over time), never overwritten. The current `status` is a derived
-    summary, not the source of truth -- you can always reconstruct why a
-    hypothesis reached its current status by reading its evidence list.
-  - Nothing here auto-applies a conclusion anywhere else in the ecosystem.
-    This is a record, not a trigger.
+- A hypothesis's EVIDENCE is append-only (a list of experiment results
+  over time), never overwritten. The current `status` is a derived
+  summary, not the source of truth -- you can always reconstruct why a
+  hypothesis reached its current status by reading its evidence list.
+- Nothing here auto-applies a conclusion anywhere else in the ecosystem.
+  This is a record, not a trigger.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
+
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -44,10 +45,12 @@ MIN_SAMPLE_SIZE_FOR_VERDICT = 30
 class Hypothesis:
     id: str
     statement: str
-    proposed_by: str          # which agent/process proposed this (e.g. "chronicle_research_director")
+    proposed_by: str  # which agent/process proposed this (e.g. "chronicle_research_director")
     status: str = "untested"
     created_at: float = field(default_factory=time.time)
-    evidence: List[Dict[str, Any]] = field(default_factory=list)   # append-only
+    evidence: List[Dict[str, Any]] = field(default_factory=list)  # append-only
+    # --- V2 Phase 1 Linking Field (Optional) ---
+    linked_experiment_ids: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -65,6 +68,7 @@ class HypothesisQueue:
                 return json.loads(self.store_path.read_text())
             except (json.JSONDecodeError, OSError) as exc:
                 log.warning("hypothesis_queue.json unreadable (%s); starting fresh", exc)
+                return {}
         return {}
 
     def _save(self) -> None:
@@ -80,6 +84,7 @@ class HypothesisQueue:
         for existing in self._data.values():
             if existing["statement"] == statement and existing["status"] in ("untested", "testing"):
                 return Hypothesis(**existing)
+
         hid = hypothesis_id or f"HYP-{int(time.time())}-{len(self._data) + 1}"
         h = Hypothesis(id=hid, statement=statement, proposed_by=proposed_by)
         self._data[hid] = h.to_dict()
@@ -101,7 +106,7 @@ class HypothesisQueue:
             self._save()
 
     def record_evidence(self, hypothesis_id: str, experiment_template: str,
-                         result: Dict[str, Any], sample_size: int) -> Hypothesis:
+                        result: Dict[str, Any], sample_size: int) -> Hypothesis:
         """Appends one experiment's result to the hypothesis's evidence
         trail, then derives the new status from ALL evidence so far (never
         just the latest result) -- and never below MIN_SAMPLE_SIZE_FOR_VERDICT,

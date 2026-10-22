@@ -13,6 +13,8 @@ Validate trading intelligence scientifically, preserve evidence, and maintain re
 - `research.cycle`
 - `hypothesis.generate`
 - `strategy.champion`
+- `strategy.promotion.authorization_request`
+- `strategy.promotion.authorize`
 - `risk.assess`
 - `portfolio.status`
 
@@ -62,3 +64,22 @@ hypotheses, consults Chronicle before repeating work, escalates stagnant runs to
 Atlas, evaluates strategies with risk-adjusted evidence, and preserves both
 failed and successful experiments. Built on the constitutional BaseAgent
 (reasoning + learning + memory). See `constitutional/COMPLIANCE.md`.
+
+## Governed strategy evolution
+
+`strategy.evolve` can produce and persist an eligible candidate, but it does
+not write the champion library. Candidates remain pending until Oracle receives
+a signed Aegis authorization bound to the experiment ID, candidate evidence
+digest, symbol/regime, and incumbent digest. Obtain the exact claims with
+`strategy.promotion.authorization_request`, then submit the signed artifact with
+`strategy.promotion.authorize`. A stale incumbent, changed candidate, rejected
+signature, replayed nonce, or missing verifier prevents the promotion.
+
+Configure an independent trusted issuer set in
+`ORACLE_AEGIS_TRUSTED_ISSUERS_JSON` as a JSON object mapping issuer IDs to
+Ed25519 public keys (raw 32-byte keys or base64url). Aegis must sign for the
+`oracle.strategy.promotion` audience. Oracle stores consumed nonces in its own
+`Oracle/security/authorization_nonces.sqlite3` ledger. With no configured
+issuer, candidate promotion remains unavailable by design; existing champions
+remain readable and usable. Oracle persists an authorized commit intent before
+updating champion state and resumes an interrupted authorized commit at startup.

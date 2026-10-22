@@ -103,6 +103,12 @@ def main():
                 chronicle = inst # Set for subsequent agents
             elif name == "atlas":
                 inst = C(chronicle_client=chronicle)
+            elif name == "oracle":
+                inst = C(
+                    chronicle_client=chronicle,
+                    atlas_client=agents.get("atlas"),
+                    forge_client=agents.get("forge"),
+                )
             else:
                 # Generic case for most agents
                 try:

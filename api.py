@@ -22,6 +22,11 @@ FRONTEND_ROOT = ROOT / "frontend"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# Load root configuration before importing ecosystem/shared singletons. This
+# also uses the built-in parser when python-dotenv is absent from the venv.
+from shared.startup import load_dotenv_early
+load_dotenv_early(__file__)
+
 import ecosystem
 
 # Import agent interface routers
@@ -575,7 +580,9 @@ async def lifespan(app: FastAPI):
             elif name == "genesis":
                 inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"), aegis_client=AGENTS.get("aegis"), nexus_client=AGENTS.get("nexus"))
             elif name == "oracle":
-                inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"), sentinel_client=AGENTS.get("sentinel"), pulse_client=AGENTS.get("pulse"))
+                inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"),
+                         sentinel_client=AGENTS.get("sentinel"), pulse_client=AGENTS.get("pulse"),
+                         forge_client=AGENTS.get("forge"))
             elif name == "nexus":
                 inst = C(chronicle_client=chronicle, atlas_client=AGENTS.get("atlas"))
             else:
@@ -672,6 +679,156 @@ async def query_agent(name: str, request: Request):
     except Exception as exc:
         add_log(name, "error", str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/oracle/forge/experiment")
+async def oracle_forge_experiment(request: Request):
+    """Run a governed, read-only Oracle/Forge challenger or single-component ablation."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    targets = data.get("ablation_targets", [])
+    if not isinstance(targets, list) or len(targets) > 1 or any(not isinstance(item, str) for item in targets):
+        raise HTTPException(status_code=422, detail="Ablation requests accept at most one registered component")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    context = {
+        "symbol": symbol,
+        "reason": str(data.get("reason", "scheduled Forge research review")),
+        "ablation_targets": targets,
+        "_sender": "forge_action",
+    }
+    if isinstance(data.get("execution_costs"), dict):
+        context["execution_costs"] = data["execution_costs"]
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "strategy.improvement.request", context,
+            "Oracle Forge research request accepted.",
+        )
+        return _normalize_agent_response("oracle", "strategy.improvement.request", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle Forge research request failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/catalog")
+async def oracle_forge_strategy_catalog(request: Request):
+    """Snapshot Oracle's saved strategy catalog into Chronicle through Forge."""
+    oracle = AGENTS.get("oracle")
+    forge = AGENTS.get("forge")
+    if oracle is None or forge is None:
+        raise HTTPException(status_code=503, detail="Oracle and Forge must both be available")
+    try:
+        snapshot = await run_in_threadpool(
+            _call_agent, oracle, "strategy.catalog.snapshot", {"_sender": "forge_action"},
+            "Oracle strategy catalog snapshot unavailable.",
+        )
+        if not isinstance(snapshot, dict) or snapshot.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+            return _normalize_agent_response("oracle", "strategy.catalog.snapshot", {
+                "status": "blocked", "message": "Oracle did not return a valid strategy catalog snapshot",
+            })
+        result = await run_in_threadpool(
+            _call_agent, forge, "oracle.strategy.catalog.sync", {"catalog": snapshot, "_sender": "oracle"},
+            "Forge could not save the strategy catalog to Chronicle.",
+        )
+        if isinstance(result, dict) and result.get("status") == "complete":
+            # The workflow stores this Chronicle-owned immutable artifact on
+            # its durable branch because hosted Action runners are ephemeral.
+            result["catalog_snapshot"] = snapshot
+        return _normalize_agent_response("forge", "oracle.strategy.catalog.sync", result)
+    except Exception as exc:
+        add_log("forge", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle strategy catalog sync failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/import-v1-demo-outcome")
+async def oracle_forge_import_v1_demo_outcome(request: Request):
+    """Local-only one-way import of a verified V1 demo close into V2 Forge."""
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="V1 demo outcome import is restricted to the local machine")
+    data = await request.json()
+    outcome = data.get("outcome") if isinstance(data, dict) else None
+    if (not isinstance(outcome, dict)
+            or outcome.get("schema") != "oracle.strategy.demo_outcome.v1"
+            or outcome.get("feedback_source") != "oracle_v1_demo_import"
+            or outcome.get("execution_environment") != "demo"):
+        raise HTTPException(status_code=422, detail="A normalized V1 demo outcome is required")
+    forge = AGENTS.get("forge")
+    if forge is None:
+        raise HTTPException(status_code=503, detail="Forge is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, forge, "oracle.strategy.demo_outcome",
+            {"outcome": outcome, "_sender": "local_v1_import"},
+            "Forge could not record the imported V1 demo outcome.",
+        )
+        return _normalize_agent_response("forge", "oracle.strategy.demo_outcome", result)
+    except Exception as exc:
+        add_log("forge", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"V1 demo outcome import failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/drift")
+async def oracle_forge_drift(request: Request):
+    """Assess Oracle market-data distribution drift without generating trades."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "market.data.drift.assess",
+            {"symbol": symbol, "_sender": "forge_action"},
+            "Oracle market data drift assessment accepted.",
+        )
+        return _normalize_agent_response("oracle", "market.data.drift.assess", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle market drift assessment failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/window")
+async def oracle_forge_window(request: Request):
+    """Fingerprint the completed Oracle research window before doing work."""
+    data = await request.json()
+    symbol = str(data.get("symbol", "")).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "market.data.window.fingerprint",
+            {"symbol": symbol, "_sender": "forge_action"},
+            "Oracle research data fingerprint accepted.",
+        )
+        return _normalize_agent_response("oracle", "market.data.window.fingerprint", result)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Oracle research fingerprint failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/cost-observations")
+async def oracle_forge_cost_observations(request: Request):
+    """Read broker-reported symbol charges and live spread observations."""
+    data = await request.json()
+    symbols = data.get("symbols")
+    if (not isinstance(symbols, list) or not symbols or len(symbols) > 100
+            or any(not isinstance(item, str) or not re.fullmatch(r"[A-Z0-9._-]{1,24}", item.strip().upper())
+                   for item in symbols)):
+        raise HTTPException(status_code=422, detail="symbols must be a non-empty list of at most 100 valid symbol names")
+    agent = AGENTS.get("oracle")
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Oracle is not available")
+    context = {"symbols": list(dict.fromkeys(item.strip().upper() for item in symbols)), "_sender": "forge_action"}
+    try:
+        result = await run_in_threadpool(
+            _call_agent, agent, "broker.cost.observations", context,
+            "Oracle broker cost observations accepted.",
+        )
+        return _normalize_agent_response("oracle", "broker.cost.observations", result)
+    except Exception as exc:
+        add_log("oracle", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle cost observations failed: {type(exc).__name__}")
 
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):
@@ -785,4 +942,4 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, ws="wsproto")

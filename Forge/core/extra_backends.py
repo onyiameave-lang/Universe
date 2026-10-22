@@ -38,6 +38,7 @@ class XGBoostBackend(TrainingBackend):
     def train(self, data, hp):
         import xgboost as xgb
         X, y, task = data["X_train"], data["y_train"], data["task_type"]
+        seed = int(data.get("random_seed", 42))
         t = time.time()
         if task == "classification":
             classes = sorted(set(y), key=lambda v: str(v))
@@ -45,13 +46,15 @@ class XGBoostBackend(TrainingBackend):
             model = xgb.XGBClassifier(n_estimators=hp.get("n_estimators", 200),
                                      max_depth=hp.get("max_depth", 6),
                                      learning_rate=hp.get("learning_rate", 0.1),
+                                     random_state=seed, n_jobs=1,
                                      use_label_encoder=False, eval_metric="mlogloss")
             model.fit(X, [idx[v] for v in y])
             model._forge_classes = classes  # type: ignore
         else:
             model = xgb.XGBRegressor(n_estimators=hp.get("n_estimators", 200),
                                     max_depth=hp.get("max_depth", 6),
-                                    learning_rate=hp.get("learning_rate", 0.1))
+                                    learning_rate=hp.get("learning_rate", 0.1),
+                                    random_state=seed, n_jobs=1)
             model.fit(X, y)
             model._forge_classes = None  # type: ignore
         return model, {"backend": self.name, "seconds": round(time.time() - t, 3),
@@ -65,17 +68,22 @@ class LightGBMBackend(TrainingBackend):
     def train(self, data, hp):
         import lightgbm as lgb
         X, y, task = data["X_train"], data["y_train"], data["task_type"]
+        seed = int(data.get("random_seed", 42))
         t = time.time()
         if task == "classification":
             classes = sorted(set(y), key=lambda v: str(v))
             idx = {c: i for i, c in enumerate(classes)}
             model = lgb.LGBMClassifier(n_estimators=hp.get("n_estimators", 200),
-                                      learning_rate=hp.get("learning_rate", 0.1))
+                                      learning_rate=hp.get("learning_rate", 0.1),
+                                      random_state=seed, deterministic=True,
+                                      force_col_wise=True, n_jobs=1)
             model.fit(X, [idx[v] for v in y])
             model._forge_classes = classes  # type: ignore
         else:
             model = lgb.LGBMRegressor(n_estimators=hp.get("n_estimators", 200),
-                                     learning_rate=hp.get("learning_rate", 0.1))
+                                     learning_rate=hp.get("learning_rate", 0.1),
+                                     random_state=seed, deterministic=True,
+                                     force_col_wise=True, n_jobs=1)
             model.fit(X, y)
             model._forge_classes = None  # type: ignore
         return model, {"backend": self.name, "seconds": round(time.time() - t, 3),

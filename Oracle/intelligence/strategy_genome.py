@@ -165,6 +165,8 @@ class TrendModule(StrategyModule):
         Returns directional bias: 1.0 (bullish), -1.0 (bearish), or fractional.
         NEVER returns 0.0 for recognized types.
         """
+        if self.logic_type == "forge_ablation_neutral":
+            return 0.0
         if len(closes) < 5:
             return 0.0
 
@@ -300,6 +302,8 @@ class MomentumModule(StrategyModule):
         Returns momentum confirmation: 1.0, -1.0, or 0.0.
         0.0 means neutral (no confirmation, no rejection).
         """
+        if self.logic_type == "forge_ablation_neutral":
+            return 0.0
         if len(closes) < 5:
             return 0.0
 
@@ -542,7 +546,8 @@ class PositionModule(StrategyModule):
     def get_size(self, equity: float, risk_per_trade: float, sl_dist: float) -> float:
         if sl_dist == 0:
             return 0.0
-        return (equity * risk_per_trade) / sl_dist
+        effective_risk = float(self.params.get("risk_fraction", risk_per_trade))
+        return (equity * effective_risk) / sl_dist
 
 
 @dataclass
@@ -637,6 +642,10 @@ class StrategyGenome:
         exit_params = dict(self.exit.params)
         exit_params.setdefault("sl_mult", 2.0)
         exit_params.setdefault("tp_mult", 3.0)
+        risk_params = dict(self.risk.params)
+        risk_params.setdefault("max_dd_limit", 0.2)
+        position_params = dict(self.position.params)
+        position_params.setdefault("risk_fraction", 0.01)
 
         return {
             "genome_id": self.genome_id,
@@ -653,8 +662,8 @@ class StrategyGenome:
                 "volatility": {"logic_type": self.volatility.logic_type, "params": self.volatility.params},
                 "entry": {"logic_type": self.entry.logic_type, "params": self.entry.params},
                 "exit": {"logic_type": self.exit.logic_type, "params": exit_params},
-                "risk": {"logic_type": self.risk.logic_type, "params": self.risk.params},
-                "position": {"logic_type": self.position.logic_type, "params": self.position.params},
+                "risk": {"logic_type": self.risk.logic_type, "params": risk_params},
+                "position": {"logic_type": self.position.logic_type, "params": position_params},
                 "trade_management": {"logic_type": self.trade_management.logic_type, "params": self.trade_management.params},
                 "execution": {"logic_type": self.execution.logic_type, "params": self.execution.params},
             }
