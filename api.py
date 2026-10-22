@@ -711,6 +711,61 @@ async def oracle_forge_experiment(request: Request):
         add_log("oracle", "error", str(exc))
         raise HTTPException(status_code=500, detail=f"Oracle Forge research request failed: {type(exc).__name__}")
 
+@app.post("/oracle/forge/catalog")
+async def oracle_forge_strategy_catalog(request: Request):
+    """Snapshot Oracle's saved strategy catalog into Chronicle through Forge."""
+    oracle = AGENTS.get("oracle")
+    forge = AGENTS.get("forge")
+    if oracle is None or forge is None:
+        raise HTTPException(status_code=503, detail="Oracle and Forge must both be available")
+    try:
+        snapshot = await run_in_threadpool(
+            _call_agent, oracle, "strategy.catalog.snapshot", {"_sender": "forge_action"},
+            "Oracle strategy catalog snapshot unavailable.",
+        )
+        if not isinstance(snapshot, dict) or snapshot.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+            return _normalize_agent_response("oracle", "strategy.catalog.snapshot", {
+                "status": "blocked", "message": "Oracle did not return a valid strategy catalog snapshot",
+            })
+        result = await run_in_threadpool(
+            _call_agent, forge, "oracle.strategy.catalog.sync", {"catalog": snapshot, "_sender": "oracle"},
+            "Forge could not save the strategy catalog to Chronicle.",
+        )
+        if isinstance(result, dict) and result.get("status") == "complete":
+            # The workflow stores this Chronicle-owned immutable artifact on
+            # its durable branch because hosted Action runners are ephemeral.
+            result["catalog_snapshot"] = snapshot
+        return _normalize_agent_response("forge", "oracle.strategy.catalog.sync", result)
+    except Exception as exc:
+        add_log("forge", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Oracle strategy catalog sync failed: {type(exc).__name__}")
+
+@app.post("/oracle/forge/import-v1-demo-outcome")
+async def oracle_forge_import_v1_demo_outcome(request: Request):
+    """Local-only one-way import of a verified V1 demo close into V2 Forge."""
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="V1 demo outcome import is restricted to the local machine")
+    data = await request.json()
+    outcome = data.get("outcome") if isinstance(data, dict) else None
+    if (not isinstance(outcome, dict)
+            or outcome.get("schema") != "oracle.strategy.demo_outcome.v1"
+            or outcome.get("feedback_source") != "oracle_v1_demo_import"
+            or outcome.get("execution_environment") != "demo"):
+        raise HTTPException(status_code=422, detail="A normalized V1 demo outcome is required")
+    forge = AGENTS.get("forge")
+    if forge is None:
+        raise HTTPException(status_code=503, detail="Forge is not available")
+    try:
+        result = await run_in_threadpool(
+            _call_agent, forge, "oracle.strategy.demo_outcome",
+            {"outcome": outcome, "_sender": "local_v1_import"},
+            "Forge could not record the imported V1 demo outcome.",
+        )
+        return _normalize_agent_response("forge", "oracle.strategy.demo_outcome", result)
+    except Exception as exc:
+        add_log("forge", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"V1 demo outcome import failed: {type(exc).__name__}")
+
 @app.post("/oracle/forge/drift")
 async def oracle_forge_drift(request: Request):
     """Assess Oracle market-data distribution drift without generating trades."""

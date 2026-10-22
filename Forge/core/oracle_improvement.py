@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import logging
 import math
@@ -15,6 +16,7 @@ import random
 import tempfile
 import threading
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -42,6 +44,344 @@ class OracleImprovementService:
         self._lock = threading.Lock()
         self._inflight: set[str] = set()
 
+    @staticmethod
+    def _persist_topdown_dataset(symbol: str, bars_by_timeframe: Dict[str, list],
+                                 fingerprints: Dict[str, str], coverage: Dict[str, Any],
+                                 combined_fingerprint: str, data_as_of: str) -> Dict[str, Any]:
+        """Persist the replayable OHLCV bundle inside Chronicle's data area.
+
+        GitHub Actions checks out the research branch for each fresh runner. The
+        stable per-symbol/timeframe files are updated atomically and the
+        content-addressed manifest ties every experiment to the exact bar set.
+        Git history preserves earlier file snapshots until Chronicle's external
+        dataset store is available.
+        """
+        import re
+
+        safe_symbol = str(symbol).strip().upper()
+        if not re.fullmatch(r"[A-Z0-9._-]{1,24}", safe_symbol):
+            return {"status": "blocked", "message": "symbol is not safe for a Chronicle dataset path"}
+        root = Path(__file__).resolve().parents[2] / "Chronicle" / "research" / "oracle_market_data"
+        fieldnames = ("timestamp", "open", "high", "low", "close", "volume")
+        dataset_paths = {}
+        try:
+            for period, bars in bars_by_timeframe.items():
+                directory = root / safe_symbol
+                directory.mkdir(parents=True, exist_ok=True)
+                target = directory / f"{period}.csv"
+                buffer = io.StringIO(newline="")
+                writer = csv.DictWriter(buffer, fieldnames=fieldnames, lineterminator="\n")
+                writer.writeheader()
+                writer.writerows(bars)
+                encoded = buffer.getvalue().encode("utf-8")
+                if not target.exists() or target.read_bytes() != encoded:
+                    temporary = None
+                    try:
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb", dir=directory, prefix=f".{period}.", suffix=".tmp", delete=False
+                        ) as output:
+                            temporary = Path(output.name)
+                            output.write(encoded)
+                            output.flush()
+                        temporary.replace(target)
+                    finally:
+                        if temporary is not None:
+                            temporary.unlink(missing_ok=True)
+                dataset_paths[period] = str(target.relative_to(root.parent.parent.parent)).replace("\\", "/")
+        except OSError as exc:
+            return {"status": "blocked", "message": f"Chronicle dataset write failed: {type(exc).__name__}"}
+
+        manifest = {
+            "schema": "oracle.topdown_dataset_manifest.v1",
+            "symbol": safe_symbol,
+            "history_target": "5y",
+            "source": "ctrader_open_api_bid",
+            "price_basis": "bid",
+            "data_as_of": data_as_of,
+            "data_fingerprint": combined_fingerprint,
+            "timeframe_fingerprints": fingerprints,
+            "timeframe_coverage": coverage,
+            "datasets": dataset_paths,
+            "storage_backend": "chronicle_research_branch_snapshot",
+            "future_backend_target": "chronicle_approved_dataset_store",
+        }
+        manifest_fingerprint = hashlib.sha256(json.dumps(
+            manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        manifest["manifest_fingerprint"] = manifest_fingerprint
+        manifest_dir = root / "manifests"
+        encoded_manifest = (json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+        try:
+            manifest_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = manifest_dir / f"{safe_symbol}-{combined_fingerprint}.json"
+            if not manifest_path.exists() or manifest_path.read_bytes() != encoded_manifest:
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="wb", dir=manifest_dir, prefix=".manifest.", suffix=".tmp", delete=False
+                    ) as output:
+                        temporary = Path(output.name)
+                        output.write(encoded_manifest)
+                        output.flush()
+                    temporary.replace(manifest_path)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+        except OSError as exc:
+            return {"status": "blocked", "message": f"Chronicle dataset manifest write failed: {type(exc).__name__}"}
+        return {
+            "status": "complete", "data_fingerprint": combined_fingerprint,
+            "manifest_fingerprint": manifest_fingerprint,
+            "manifest_path": str(manifest_path.relative_to(root.parent.parent.parent)).replace("\\", "/"),
+            "datasets": dataset_paths,
+        }
+
+    def sync_strategy_catalog(self, catalog: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist an immutable Oracle strategy snapshot and pointer in Chronicle.
+
+        Forge keeps no durable catalog copy: its working set is reconstructed
+        from Chronicle after restart. Identical snapshots are idempotent.
+        """
+        if not isinstance(catalog, dict) or catalog.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+            return {"status": "error", "message": "a supported Oracle strategy catalog snapshot is required"}
+        fingerprint = catalog.get("catalog_fingerprint")
+        records = catalog.get("records")
+        templates = catalog.get("family_templates")
+        if (not isinstance(fingerprint, str) or len(fingerprint) != 64
+                or not isinstance(records, list) or not isinstance(templates, list)):
+            return {"status": "error", "message": "strategy catalog snapshot is incomplete"}
+        try:
+            import hashlib
+            canonical = {key: value for key, value in catalog.items()
+                         if key not in {"catalog_fingerprint", "record_count",
+                                        "family_template_count", "source_error_count"}}
+            encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"),
+                                 ensure_ascii=False, allow_nan=False).encode("utf-8")
+            actual_fingerprint = hashlib.sha256(encoded).hexdigest()
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "strategy catalog contains non-canonical values"}
+        if fingerprint != actual_fingerprint:
+            return {"status": "error", "message": "strategy catalog fingerprint does not match its contents"}
+        chronicle = getattr(self._forge, "chronicle", None)
+        if chronicle is None or not hasattr(chronicle, "act"):
+            return {"status": "blocked", "message": "Chronicle persistence is unavailable"}
+
+        version_key = f"forge.oracle.strategy_catalog.version.{fingerprint}"
+        current_key = "forge.oracle.strategy_catalog.current"
+        version_state = chronicle.act("state.get", {"key": version_key, "_sender": "forge"})
+        if not isinstance(version_state, dict) or version_state.get("status") != "complete":
+            return {"status": "blocked", "message": "Chronicle strategy catalog lookup failed"}
+        if not version_state.get("found"):
+            saved = chronicle.act("state.set", {
+                "key": version_key, "value": catalog,
+                "expected_revision": 0, "_sender": "forge",
+            })
+            if not isinstance(saved, dict) or saved.get("status") != "complete":
+                # A concurrent identical sync is safe; confirm that it won.
+                version_state = chronicle.act("state.get", {"key": version_key, "_sender": "forge"})
+                existing = version_state.get("value") if isinstance(version_state, dict) else None
+                if not isinstance(existing, dict) or existing.get("catalog_fingerprint") != fingerprint:
+                    return {"status": "blocked", "message": "Chronicle could not persist the strategy catalog version"}
+
+        current_state = chronicle.act("state.get", {"key": current_key, "_sender": "forge"})
+        if not isinstance(current_state, dict) or current_state.get("status") != "complete":
+            return {"status": "blocked", "message": "Chronicle strategy catalog pointer lookup failed"}
+        current_value = current_state.get("value") if current_state.get("found") else None
+        if isinstance(current_value, dict) and current_value.get("catalog_fingerprint") == fingerprint:
+            return {
+                "status": "complete", "catalog_fingerprint": fingerprint,
+                "record_count": len(records), "family_template_count": len(templates),
+                "already_current": True, "chronicle_key": version_key,
+            }
+        pointer_value = {
+            "schema": "forge.oracle.strategy_catalog.pointer.v1",
+            "catalog_fingerprint": fingerprint,
+            "version_key": version_key,
+            "record_count": len(records),
+            "family_template_count": len(templates),
+        }
+        updated = chronicle.act("state.set", {
+            "key": current_key, "value": pointer_value,
+            "expected_revision": current_state.get("revision", 0), "_sender": "forge",
+        })
+        if not isinstance(updated, dict) or updated.get("status") != "complete":
+            return {"status": "blocked", "message": "Chronicle could not update the current strategy catalog pointer"}
+        return {
+            "status": "complete", "catalog_fingerprint": fingerprint,
+            "record_count": len(records), "family_template_count": len(templates),
+            "already_current": False, "chronicle_key": version_key,
+        }
+
+    def record_demo_outcome(self, outcome: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist idempotent demo feedback against one strategy/symbol/regime."""
+        if not isinstance(outcome, dict) or outcome.get("schema") != "oracle.strategy.demo_outcome.v1":
+            return {"status": "error", "message": "a supported Oracle demo outcome is required"}
+        strategy_id = str(outcome.get("strategy_id", "")).strip()
+        symbol = str(outcome.get("symbol", "")).strip().upper()
+        regime = str(outcome.get("regime", "")).strip()
+        close_event_id = str(outcome.get("close_event_id", "")).strip()
+        try:
+            pnl_r = float(outcome["pnl_r"])
+            closed_at_unix = float(outcome.get("closed_at_unix", 0.0))
+        except (KeyError, TypeError, ValueError):
+            return {"status": "error", "message": "demo outcome pnl_r must be finite"}
+        if (not strategy_id or len(strategy_id) > 160 or not symbol or len(symbol) > 32
+                or not regime or len(regime) > 64 or not close_event_id
+                or len(close_event_id) > 240 or not math.isfinite(pnl_r)
+                or not math.isfinite(closed_at_unix)):
+            return {"status": "error", "message": "demo outcome identity or pnl_r is invalid"}
+        if (outcome.get("execution_environment") != "demo"
+                or outcome.get("feedback_source") not in {
+                    "oracle_demo_execution", "oracle_v1_demo_import",
+                }):
+            return {"status": "blocked", "message": "only identified demo outcomes may update strategy fitness evidence"}
+        chronicle = getattr(self._forge, "chronicle", None)
+        if chronicle is None or not hasattr(chronicle, "act"):
+            return {"status": "blocked", "message": "Chronicle persistence is unavailable"}
+
+        scope = f"{strategy_id}::{symbol}::{regime}"
+        scope_hash = hashlib.sha256(scope.encode("utf-8")).hexdigest()
+        event_hash = hashlib.sha256(close_event_id.encode("utf-8")).hexdigest()
+        event_key = f"forge.oracle.demo_trade.{event_hash}"
+        aggregate_key = f"forge.oracle.strategy_feedback.{scope_hash}"
+        event_record = {
+            **outcome, "strategy_scope_hash": scope_hash,
+            "schema": "forge.oracle.demo_trade_outcome.v1",
+            "strategy_id": strategy_id, "symbol": symbol, "regime": regime,
+            "pnl_r": pnl_r, "observed_at_unix": closed_at_unix,
+        }
+        saved_event = chronicle.act("state.set", {
+            "key": event_key, "value": event_record, "expected_revision": 0,
+            "_sender": "forge",
+        })
+        if not isinstance(saved_event, dict) or saved_event.get("status") != "complete":
+            existing = chronicle.act("state.get", {"key": event_key, "_sender": "forge"})
+            existing_value = existing.get("value") if isinstance(existing, dict) else None
+            if not isinstance(existing_value, dict) or existing_value.get("close_event_id") != close_event_id:
+                return {"status": "blocked", "message": "Chronicle could not persist the demo trade event"}
+
+        for _ in range(5):
+            current = chronicle.act("state.get", {"key": aggregate_key, "_sender": "forge"})
+            if not isinstance(current, dict) or current.get("status") != "complete":
+                return {"status": "blocked", "message": "Chronicle strategy feedback lookup failed"}
+            value = current.get("value") if current.get("found") else {
+                "schema": "forge.oracle.strategy_demo_feedback.v1",
+                "strategy_id": strategy_id, "symbol": symbol, "regime": regime,
+                "trades": 0, "wins": 0, "losses": 0, "total_pnl_r": 0.0,
+                "negative_r_total": 0.0, "seen_close_event_ids": [],
+                "cost_normalized_trades": 0,
+            }
+            if not isinstance(value, dict):
+                return {"status": "blocked", "message": "Chronicle strategy feedback record is malformed"}
+            seen = list(value.get("seen_close_event_ids", []))
+            duplicate = close_event_id in seen
+            if not duplicate:
+                value["trades"] = int(value.get("trades", 0)) + 1
+                value["wins"] = int(value.get("wins", 0)) + int(pnl_r > 0)
+                value["losses"] = int(value.get("losses", 0)) + int(pnl_r <= 0)
+                value["total_pnl_r"] = float(value.get("total_pnl_r", 0.0)) + pnl_r
+                value["negative_r_total"] = float(value.get("negative_r_total", 0.0)) + max(0.0, -pnl_r)
+                cost_normalized = outcome.get("cost_status") == "verified_net"
+                value["cost_normalized_trades"] = int(value.get("cost_normalized_trades", 0)) + int(cost_normalized)
+                value["pnl_basis"] = str(outcome.get("pnl_basis", "unspecified_R_basis"))
+                value["cost_status"] = (
+                    "verified_net" if value["cost_normalized_trades"] == value["trades"]
+                    else "unavailable_provisional"
+                )
+                seen.append(close_event_id)
+                value["seen_close_event_ids"] = seen
+                n = value["trades"]
+                mean_r = value["total_pnl_r"] / n
+                value.update({
+                    "mean_pnl_r": mean_r,
+                    "demo_penalty_r": max(0.0, -mean_r) * math.sqrt(n / (n + 10.0)),
+                    "confidence_status": (
+                        "observed" if n >= 10 and value["cost_status"] == "verified_net"
+                        else "provisional"
+                    ),
+                    "minimum_trades_for_status": 10,
+                    "last_close_event_id": close_event_id,
+                    "last_closed_at_unix": event_record["observed_at_unix"],
+                })
+            stored = chronicle.act("state.set", {
+                "key": aggregate_key, "value": value,
+                "expected_revision": current.get("revision", 0), "_sender": "forge",
+            })
+            if isinstance(stored, dict) and stored.get("status") == "complete":
+                return {
+                    "status": "complete", "strategy_id": strategy_id,
+                    "symbol": symbol, "regime": regime, "trades": value["trades"],
+                    "mean_pnl_r": value.get("mean_pnl_r"),
+                    "demo_penalty_r": value.get("demo_penalty_r", 0.0),
+                    "confidence_status": value.get("confidence_status", "provisional"),
+                    "duplicate": duplicate,
+                    "chronicle_key": aggregate_key,
+                }
+        return {"status": "blocked", "message": "Chronicle strategy feedback changed concurrently; retry the outcome"}
+
+    @staticmethod
+    def _persist_learned_timeframe_policies(chronicle: Any, original: Dict[str, Any],
+                                             update: Dict[str, Any]) -> Dict[str, Any]:
+        result = update.get("result") or {}
+        evidence = result.get("evidence") or {}
+        policies = evidence.get("learned_timeframe_policies") or {}
+        if not isinstance(policies, dict) or not policies:
+            return {}
+        saved = {}
+        candidate = update.get("candidate_genome") or original.get("candidate_genome") or {}
+        strategy_ids = {"baseline": (original.get("baseline_genome") or {}).get("genome_id"),
+                        "treatment": candidate.get("genome_id")}
+        for role, policy in policies.items():
+            if not isinstance(policy, dict):
+                continue
+            strategy_id = strategy_ids.get(role)
+            if not strategy_id:
+                continue
+            record = {
+                "schema": "forge.oracle.strategy_timeframe_policy.v1",
+                "policy": policy, "strategy_id": strategy_id,
+                "symbol": original.get("symbol"), "regime": original.get("regime"),
+                "experiment_id": original.get("experiment_id"), "policy_role": role,
+                "dataset_fingerprint": original.get("dataset_fingerprint"),
+                "fit_boundary": "development_prefix_only; holdout excluded",
+                "promotion_performed": False,
+            }
+            fingerprint = hashlib.sha256(json.dumps(
+                record, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")).hexdigest()
+            version_key = f"forge.oracle.timeframe_policy.version.{fingerprint}"
+            existing = chronicle.act("state.get", {"key": version_key, "_sender": "forge"})
+            if not isinstance(existing, dict) or existing.get("status") != "complete":
+                continue
+            if not existing.get("found"):
+                version_saved = chronicle.act("state.set", {
+                    "key": version_key, "value": {**record, "policy_fingerprint": fingerprint},
+                    "expected_revision": 0, "_sender": "forge",
+                })
+                if not isinstance(version_saved, dict) or version_saved.get("status") != "complete":
+                    continue
+            pointer_id = hashlib.sha256(
+                f"{strategy_id}::{original.get('symbol')}::{original.get('regime')}".encode("utf-8")
+            ).hexdigest()
+            pointer_key = f"forge.oracle.timeframe_policy.latest_experiment.{pointer_id}"
+            pointer = chronicle.act("state.get", {"key": pointer_key, "_sender": "forge"})
+            if not isinstance(pointer, dict) or pointer.get("status") != "complete":
+                continue
+            pointer_value = {"schema": "forge.oracle.timeframe_policy_experiment_pointer.v1",
+                              "strategy_id": strategy_id, "symbol": original.get("symbol"),
+                              "regime": original.get("regime"), "policy_fingerprint": fingerprint,
+                              "version_key": version_key, "experiment_id": original.get("experiment_id")}
+            pointed = chronicle.act("state.set", {
+                "key": pointer_key, "value": pointer_value,
+                "expected_revision": pointer.get("revision", 0), "_sender": "forge",
+            })
+            if isinstance(pointed, dict) and pointed.get("status") == "complete":
+                saved[role] = {"policy_fingerprint": fingerprint, "version_key": version_key,
+                               "pointer_key": pointer_key, "strategy_id": strategy_id}
+        return saved
+
     def request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(request, dict):
             return {"status": "error", "message": "request must be an object"}
@@ -66,13 +406,16 @@ class OracleImprovementService:
 
     def _run(self, request: Dict[str, Any], symbol: str, regime: str) -> Dict[str, Any]:
         from Forge.core.experimentation import fingerprint_dataset_file
+        from datetime import timedelta
 
         genome_data = request.get("baseline_genome")
-        bars = request.get("bars")
+        timeframe_bars = request.get("bars_by_timeframe")
         if not isinstance(genome_data, dict) or not isinstance(genome_data.get("modules"), dict):
             return {"status": "error", "message": "a serialized active Oracle genome is required"}
-        if not isinstance(bars, list) or len(bars) < 75:
-            return {"status": "blocked", "message": "at least 75 real OHLCV bars are required"}
+        periods = {"W1": 7 * 24 * 60, "D1": 24 * 60, "H4": 4 * 60,
+                   "H1": 60, "M45": 45, "M30": 30, "M15": 15}
+        if not isinstance(timeframe_bars, dict) or set(timeframe_bars) != set(periods):
+            return {"status": "blocked", "message": "all seven top-down timeframe datasets are required"}
         costs = request.get("execution_costs")
         if not isinstance(costs, dict):
             return {"status": "blocked", "message": "a versioned broker/account execution-cost profile is required"}
@@ -108,16 +451,94 @@ class OracleImprovementService:
         if chronicle is None or not hasattr(chronicle, "act"):
             return {"status": "blocked", "message": "Chronicle persistence is unavailable"}
 
+        strategy_scope_hash = hashlib.sha256(
+            f"{genome_data.get('genome_id', '')}::{symbol}::{regime}".encode("utf-8")
+        ).hexdigest()
+        demo_feedback_state = chronicle.act("state.get", {
+            "key": f"forge.oracle.strategy_feedback.{strategy_scope_hash}", "_sender": "forge",
+        })
+        if not isinstance(demo_feedback_state, dict) or demo_feedback_state.get("status") != "complete":
+            return {"status": "blocked", "message": "Chronicle demo strategy feedback lookup failed"}
+        demo_feedback_record = demo_feedback_state.get("value") if demo_feedback_state.get("found") else {
+            "trades": 0, "wins": 0, "losses": 0, "mean_pnl_r": None,
+            "demo_penalty_r": 0.0, "confidence_status": "no_demo_evidence",
+        }
+        demo_feedback = {key: demo_feedback_record.get(key) for key in (
+            "strategy_id", "symbol", "regime", "trades", "wins", "losses",
+            "total_pnl_r", "mean_pnl_r", "demo_penalty_r", "confidence_status",
+            "minimum_trades_for_status", "last_closed_at_unix", "cost_status",
+            "cost_normalized_trades", "pnl_basis",
+        ) if key in demo_feedback_record}
+
         try:
             from Oracle.intelligence.strategy_genome import StrategyGenome
             from Forge.core.adapters.oracle_adapter import build_default_oracle_experiment_adapter
 
             baseline = StrategyGenome.from_dict(genome_data)
-            canonical_bars = self._normalize_bars(bars)
+            canonical_by_timeframe = {
+                period: self._normalize_bars(timeframe_bars[period])
+                for period in periods
+            }
+            as_of = datetime.fromisoformat(str(request.get("data_as_of", "")).replace("Z", "+00:00"))
+            if as_of.tzinfo is None:
+                raise ValueError("timeframe bundle must declare a timezone-aware data_as_of")
+            target_start = as_of - timedelta(days=5 * 365)
+            parsed_by_timeframe = {}
+            for period, items in canonical_by_timeframe.items():
+                if len(items) < 40:
+                    return {"status": "blocked", "message": f"{period} has fewer than 40 completed bars"}
+                parsed = []
+                for index, item in enumerate(items):
+                    timestamp = datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00"))
+                    if timestamp.tzinfo is None:
+                        raise ValueError(f"{period} bar {index} has no timezone")
+                    if parsed and timestamp <= parsed[-1][0]:
+                        raise ValueError(f"{period} timestamps must be unique and increasing")
+                    parsed.append((timestamp, item))
+                coverage_tolerance = max(timedelta(days=4), timedelta(minutes=periods[period] * 3))
+                if parsed[0][0] > target_start + coverage_tolerance:
+                    return {"status": "blocked", "message": f"{period} does not cover the five-year target"}
+                if parsed[-1][0] < as_of - timedelta(days=7):
+                    return {"status": "blocked", "message": f"{period} data is stale"}
+                parsed_by_timeframe[period] = parsed
+
+            # Keep M15 execution rows within the dates covered by all seven
+            # datasets. Higher-timeframe context is then sampled as-of each
+            # completed M15 close by the adapter.
+            common_start = max(items[0][0] for items in parsed_by_timeframe.values())
+            common_end = min(items[-1][0] + timedelta(minutes=periods[period])
+                             for period, items in parsed_by_timeframe.items())
+            evaluation_by_timeframe = {
+                period: [item for timestamp, item in parsed_by_timeframe[period]
+                         if timestamp >= common_start
+                         and timestamp + timedelta(minutes=periods[period]) <= common_end]
+                for period in periods
+            }
+            canonical_bars = evaluation_by_timeframe["M15"]
+            if len(canonical_bars) < 75:
+                return {"status": "blocked", "message": "shared timeframe overlap contains fewer than 75 M15 bars"}
+            timeframe_fingerprints = {
+                period: self._fingerprint(items)
+                for period, items in canonical_by_timeframe.items()
+            }
+            combined_fingerprint = hashlib.sha256(json.dumps(
+                {"symbol": symbol.upper(), "period_fingerprints": timeframe_fingerprints,
+                 "price_basis": "bid", "schema": "oracle.topdown_ohlcv.v1"},
+                sort_keys=True, separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")).hexdigest()
+            if request.get("data_fingerprint") != combined_fingerprint:
+                raise ValueError("top-down bundle fingerprint does not match its timeframe bars")
+            dataset_artifact = self._persist_topdown_dataset(
+                symbol, canonical_by_timeframe,
+                timeframe_fingerprints, request.get("timeframe_coverage", {}),
+                combined_fingerprint, str(request.get("data_as_of")),
+            )
+            if dataset_artifact.get("status") != "complete":
+                return {"status": "blocked", "message": dataset_artifact.get("message", "Chronicle dataset persistence failed")}
         except Exception as exc:
             return {"status": "error", "message": f"invalid Oracle research input: {type(exc).__name__}: {exc}"}
 
-        data_fingerprint = self._fingerprint(canonical_bars)
+        data_fingerprint = combined_fingerprint
         holdout_start = max(40, int(len(canonical_bars) * 0.6))
         if holdout_start >= len(canonical_bars) - 30:
             return {"status": "blocked", "message": "the predeclared evaluation suffix needs at least 30 bars"}
@@ -172,8 +593,18 @@ class OracleImprovementService:
             "trigger": str(request.get("reason", "performance_review")),
             "baseline_metrics": request.get("performance_metrics", {}),
             "baseline_genome": genome_data,
+            "baseline_demo_feedback": demo_feedback,
             "candidate_genome": candidate.to_dict(),
             "dataset_fingerprint": data_fingerprint,
+            "execution_dataset_fingerprint": self._fingerprint(canonical_bars),
+            "timeframe_fingerprints": timeframe_fingerprints,
+            "timeframe_coverage": request.get("timeframe_coverage", {}),
+            "history_target": "5y",
+            "dataset_manifest": dataset_artifact,
+            "shared_overlap": {
+                "start": common_start.isoformat(), "end": common_end.isoformat(),
+                "execution_period": "M15", "execution_bars": len(canonical_bars),
+            },
             "holdout_fingerprint": holdout_fingerprint,
             "data_source": request.get("data_source", "unknown"),
             "execution_costs_bps": {
@@ -235,11 +666,15 @@ class OracleImprovementService:
 
         try:
             with tempfile.TemporaryDirectory(prefix="forge-oracle-") as directory:
-                dataset_path = Path(directory) / "ohlcv.csv"
-                with dataset_path.open("w", encoding="utf-8", newline="") as output:
-                    writer = csv.DictWriter(output, fieldnames=("timestamp", "open", "high", "low", "close", "volume"))
-                    writer.writeheader()
-                    writer.writerows(canonical_bars)
+                timeframe_datasets = {}
+                for period, period_bars in evaluation_by_timeframe.items():
+                    dataset_path = Path(directory) / f"ohlcv-{period.lower()}.csv"
+                    with dataset_path.open("w", encoding="utf-8", newline="") as output:
+                        writer = csv.DictWriter(output, fieldnames=("timestamp", "open", "high", "low", "close", "volume"))
+                        writer.writeheader()
+                        writer.writerows(period_bars)
+                    timeframe_datasets[period] = str(dataset_path)
+                dataset_path = Path(timeframe_datasets["M15"])
                 canonical_path, fingerprint = fingerprint_dataset_file(dataset_path)
                 contract = ExperimentContract(
                     experiment_id=experiment_id,
@@ -256,6 +691,11 @@ class OracleImprovementService:
                         "stress_slippage_bps": float(stress_slippage),
                         "stress_spread_bps": float(stress_spread),
                         "price_basis": costs["price_basis"],
+                        "timeframe_datasets": timeframe_datasets,
+                        "timeframe_fingerprints": timeframe_fingerprints,
+                        "history_target": "5y",
+                        "shared_overlap_start": common_start.isoformat(),
+                        "shared_overlap_end": common_end.isoformat(),
                     },
                     data=ExperimentData(
                         dataset_id=f"oracle:{symbol}:{regime}",
@@ -421,7 +861,10 @@ class OracleImprovementService:
         current = chronicle.act("state.get", {"key": record_key, "_sender": "forge"})
         if not isinstance(current, dict) or current.get("status") != "complete" or not current.get("found"):
             return {"status": "error", "message": "Chronicle experiment record could not be read back"}
-        final = {**original, **update}
+        persisted_policies = OracleImprovementService._persist_learned_timeframe_policies(
+            chronicle, original, update
+        )
+        final = {**original, **update, "persisted_timeframe_policies": persisted_policies}
         saved = chronicle.act("state.set", {
             "key": record_key, "value": final,
             "expected_revision": current.get("revision"), "_sender": "forge",
@@ -431,6 +874,10 @@ class OracleImprovementService:
         return {"status": update.get("status", "complete"), "experiment_id": original["experiment_id"],
                 "symbol": original["symbol"], "regime": original["regime"],
                 "dataset_fingerprint": original.get("dataset_fingerprint"),
+                "timeframe_fingerprints": original.get("timeframe_fingerprints"),
+                "timeframe_coverage": original.get("timeframe_coverage"),
+                "shared_overlap": original.get("shared_overlap"),
+                "dataset_manifest": original.get("dataset_manifest"),
                 "holdout_fingerprint": original.get("holdout_fingerprint"),
                 "recommendation": update.get("recommendation", "none"),
                 "promotion_performed": False,
@@ -441,6 +888,11 @@ class OracleImprovementService:
                 "candidate_genome": update.get("candidate_genome", original.get("candidate_genome")),
                 "evaluation": update.get("evaluation"),
                 "result_metrics": (update.get("result") or {}).get("metrics"),
+                "learned_timeframe_policies": (
+                    (update.get("result") or {}).get("evidence") or {}
+                ).get("learned_timeframe_policies"),
+                "persisted_timeframe_policies": persisted_policies,
+                "baseline_demo_feedback": original.get("baseline_demo_feedback"),
                 "record_key": record_key,
                 "message": update.get("error")}
 

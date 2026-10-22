@@ -42,6 +42,15 @@ from typing import Any, Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CTRADER_RESEARCH_ALIASES_FILE = _REPO_ROOT / "config" / "ctrader_research_symbol_aliases.json"
+_RESEARCH_TIMEFRAMES = {
+    "W1": 7 * 24 * 60 * 60 * 1000,
+    "D1": 24 * 60 * 60 * 1000,
+    "H4": 4 * 60 * 60 * 1000,
+    "H1": 60 * 60 * 1000,
+    "M45": 45 * 60 * 1000,
+    "M30": 30 * 60 * 1000,
+    "M15": 15 * 60 * 1000,
+}
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -185,6 +194,7 @@ class OracleAgent(BaseAgent):
     capabilities = ["market.analyze", "trade.signal", "trade.propose", "trade.execute",
                     "strategy.evolve", "strategy.champion", "strategy.backtest",
                     "strategy.research", "research.cycle", "strategy.improvement.request",
+                    "strategy.catalog.snapshot",
                     "broker.cost.observations", "market.data.drift.assess",
                     "market.data.window.fingerprint",
                     "hypothesis.generate",
@@ -206,6 +216,7 @@ class OracleAgent(BaseAgent):
         self.data = MarketData()
         self._forge_ctrader_broker = None
         self._forge_ctrader_history_lock = threading.Lock()
+        self._research_bundle_cache: Dict[str, Any] = {}
         self.risk = RiskManager(equity=equity)
         self.backtester = Backtester(risk_per_trade=self.risk.risk_per_trade, starting_equity=equity)
         self.evolution = EvolutionLab(chronicle=chronicle_client, atlas=atlas_client,
@@ -746,23 +757,169 @@ class OracleAgent(BaseAgent):
                 "bars": len(series.bars), "price_basis": "bid",
                 "broker_symbol": broker_symbol}
 
+    def _get_ctrader_research_bundle(self, symbol: str) -> Dict[str, Any]:
+        """Fetch five years of completed cTrader bars for the top-down stack.
+
+        Trendbar requests are split adaptively: backend range limits and response
+        caps vary by timeframe and account. A chunk that is rejected or truncated
+        is bisected until complete; irreducible gaps block the bundle.
+        """
+        import hashlib
+
+        key = str(symbol).strip().upper()
+        cached = self._research_bundle_cache.get(key)
+        if isinstance(cached, dict) and (datetime.now(timezone.utc) - cached["cached_at"]).total_seconds() < 20 * 60:
+            return cached["value"]
+
+        connection = self._ensure_ctrader_research_broker()
+        if connection.get("status") != "complete":
+            return connection
+        broker = connection["broker"]
+        broker_symbol = _ctrader_research_aliases().get(key, key)
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=5 * 365 + 2)
+        start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+        collected: Dict[str, List[Dict[str, Any]]] = {}
+        fingerprints: Dict[str, str] = {}
+        coverage: Dict[str, Dict[str, Any]] = {}
+
+        with self._forge_ctrader_history_lock:
+            for period, interval_ms in _RESEARCH_TIMEFRAMES.items():
+                # Limit initial windows both by expected bar count and broad
+                # calendar duration. Failures/truncation trigger finer splits.
+                chunk_ms = min(interval_ms * 1800, 365 * 24 * 60 * 60 * 1000)
+                windows = []
+                cursor = start_ms
+                while cursor < end_ms:
+                    boundary = min(end_ms, cursor + chunk_ms)
+                    windows.append((cursor, boundary, 0))
+                    cursor = boundary
+                pieces: List[Dict[str, Any]] = []
+                requests = 0
+                while windows:
+                    left, right, depth = windows.pop()
+                    requests += 1
+                    history = broker.historical_bars(
+                        symbol=broker_symbol, from_timestamp_ms=left,
+                        to_timestamp_ms=right, period=period, count=2000,
+                        timeout=60.0,
+                    )
+                    split = (left + right) // 2
+                    too_wide = not isinstance(history, dict) or history.get("status") != "complete"
+                    truncated = (isinstance(history, dict) and history.get("status") == "complete"
+                                 and bool(history.get("has_more")))
+                    can_split = depth < 16 and right - left > interval_ms * 2 and split > left and split < right
+                    detail = (str(history.get("message", "")) if isinstance(history, dict) else "")
+                    lower_detail = detail.lower()
+                    range_limited = any(marker in lower_detail for marker in (
+                        "range", "too large", "maximum", "max distance", "timestamp constraint",
+                        "period constraint", "historical request limit", "invalid request",
+                    ))
+                    if requests > 1000:
+                        return {"status": "blocked", "symbol": key,
+                                "message": f"{period} history exceeded the bounded request budget"}
+                    if ((truncated or (too_wide and range_limited)) and can_split):
+                        windows.extend(((left, split, depth + 1), (split, right, depth + 1)))
+                        continue
+                    if too_wide:
+                        return {"status": "blocked", "symbol": key,
+                                "message": f"{period} history unavailable: {detail or 'invalid cTrader trendbar response'}"}
+                    if truncated:
+                        return {"status": "blocked", "symbol": key,
+                                "message": f"{period} history remains truncated at the minimum request window"}
+                    pieces.extend(history.get("bars", []))
+
+                by_timestamp = {item["timestamp"]: item for item in pieces}
+                bars = [by_timestamp[timestamp] for timestamp in sorted(by_timestamp)]
+                completed = []
+                for item in bars:
+                    try:
+                        opened = datetime.fromisoformat(str(item["timestamp"]).replace("Z", "+00:00"))
+                    except (TypeError, ValueError):
+                        return {"status": "blocked", "symbol": key,
+                                "message": f"{period} contains an invalid timestamp"}
+                    if opened.tzinfo is None:
+                        opened = opened.replace(tzinfo=timezone.utc)
+                    if opened + timedelta(milliseconds=interval_ms) <= end:
+                        completed.append(item)
+                if not completed:
+                    return {"status": "blocked", "symbol": key,
+                            "message": f"{period} contains no completed bars"}
+                first = datetime.fromisoformat(str(completed[0]["timestamp"]).replace("Z", "+00:00"))
+                last = datetime.fromisoformat(str(completed[-1]["timestamp"]).replace("Z", "+00:00"))
+                if first.tzinfo is None:
+                    first = first.replace(tzinfo=timezone.utc)
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                if first > start + timedelta(milliseconds=interval_ms * 3):
+                    return {"status": "blocked", "symbol": key,
+                            "message": f"{period} does not provide the requested five-year history"}
+                if last < end - timedelta(days=7):
+                    return {"status": "blocked", "symbol": key,
+                            "message": f"{period} history is stale; latest completed bar is {last.isoformat()}"}
+                try:
+                    series = Series(
+                        symbol=key,
+                        bars=[Bar(ts=str(item["timestamp"]), open=float(item["open"]),
+                                  high=float(item["high"]), low=float(item["low"]),
+                                  close=float(item["close"]), volume=float(item.get("volume", 0.0)))
+                              for item in completed],
+                        source="ctrader_open_api_bid",
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    return {"status": "blocked", "symbol": key,
+                            "message": f"{period} OHLCV is invalid: {type(exc).__name__}"}
+                invalid = self.data._series_validation_error(series)
+                if invalid:
+                    return {"status": "blocked", "symbol": key,
+                            "message": f"{period} OHLCV validation failed: {invalid}"}
+                payload = [{"timestamp": bar.ts, "open": bar.open, "high": bar.high,
+                            "low": bar.low, "close": bar.close, "volume": bar.volume}
+                           for bar in series.bars]
+                encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                                     allow_nan=False).encode("utf-8")
+                collected[period] = payload
+                fingerprints[period] = hashlib.sha256(encoded).hexdigest()
+                coverage[period] = {
+                    "bars": len(payload), "first_completed_bar": series.bars[0].ts,
+                    "last_completed_bar": series.bars[-1].ts,
+                    "history_start": series.bars[0].ts,
+                    "history_end": series.bars[-1].ts,
+                    "request_count": requests,
+                }
+
+        combined = hashlib.sha256(json.dumps(
+            {"symbol": key, "period_fingerprints": fingerprints,
+             "price_basis": "bid", "schema": "oracle.topdown_ohlcv.v1"},
+            sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        value = {
+            "status": "complete", "symbol": key, "broker_symbol": broker_symbol,
+            "source": "ctrader_open_api_bid", "price_basis": "bid",
+            "history_target": "5y", "schema": "oracle.topdown_ohlcv.v1",
+            "timeframes": collected, "timeframe_fingerprints": fingerprints,
+            "timeframe_coverage": coverage, "data_fingerprint": combined,
+            "as_of": end.isoformat(),
+        }
+        self._research_bundle_cache.clear()
+        self._research_bundle_cache[key] = {"cached_at": end, "value": value}
+        return value
+
     def research_window_fingerprint(self, symbol: str) -> Dict[str, Any]:
         """Return a stable data-window fingerprint for scheduled deduplication."""
-        import hashlib
-        market = self._get_ctrader_research_series(symbol)
+        market = self._get_ctrader_research_bundle(symbol)
         if market.get("status") != "complete":
             return {"status": "blocked", "symbol": symbol, "message": market.get("message")}
-        series = market["series"]
-        payload = [{
-            "timestamp": bar.ts, "open": bar.open, "high": bar.high,
-            "low": bar.low, "close": bar.close, "volume": bar.volume,
-        } for bar in series.bars]
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        daily = market["timeframes"]["D1"]
         return {"status": "complete", "symbol": symbol.upper(),
-                "data_fingerprint": hashlib.sha256(encoded).hexdigest(),
-                "last_completed_bar": str(series.bars[-1].ts), "bars": len(series.bars),
-                "latest_close": float(series.bars[-1].close),
-                "price_basis": "bid"}
+                "data_fingerprint": market["data_fingerprint"],
+                "timeframe_fingerprints": market["timeframe_fingerprints"],
+                "timeframe_coverage": market["timeframe_coverage"],
+                "last_completed_bar": daily[-1]["timestamp"],
+                "bars": {period: coverage["bars"]
+                         for period, coverage in market["timeframe_coverage"].items()},
+                "latest_close": float(daily[-1]["close"]), "price_basis": "bid",
+                "history_target": market["history_target"], "broker_symbol": market["broker_symbol"]}
 
     def assess_market_data_drift(self, symbol: str) -> Dict[str, Any]:
         """Compare recent completed daily return/range distributions with history.
@@ -844,15 +1001,27 @@ class OracleAgent(BaseAgent):
         """Send Forge a read-only incumbent snapshot for governed research."""
         if self.forge is None:
             return {"status": "blocked", "message": "Forge is not connected to Oracle"}
-        research_market = self._get_ctrader_research_series(symbol)
+        research_market = self._get_ctrader_research_bundle(symbol)
         if not isinstance(research_market, dict) or research_market.get("status") != "complete":
             detail = research_market.get("message") if isinstance(research_market, dict) else None
-            return {"status": "blocked", "message": detail or "Oracle could not obtain five-year cTrader research history"}
-        series = research_market.get("series")
-        if series is None or not getattr(series, "bars", None):
-            return {"status": "blocked", "message": "Oracle five-year research history is empty"}
-        if str(getattr(series, "source", "")).lower().startswith("synthetic"):
-            return {"status": "blocked", "message": "synthetic data cannot be evaluated by Forge"}
+            return {"status": "blocked", "message": detail or "Oracle could not obtain five-year cTrader history across all seven timeframes"}
+        bars_by_timeframe = research_market.get("timeframes")
+        if not isinstance(bars_by_timeframe, dict) or set(bars_by_timeframe) != set(_RESEARCH_TIMEFRAMES):
+            return {"status": "blocked", "message": "Oracle five-year top-down dataset is incomplete"}
+        try:
+            daily_bars = bars_by_timeframe["D1"]
+            series = Series(
+                symbol=str(symbol).upper(),
+                bars=[Bar(ts=item["timestamp"], open=float(item["open"]),
+                          high=float(item["high"]), low=float(item["low"]),
+                          close=float(item["close"]), volume=float(item.get("volume", 0.0)))
+                      for item in daily_bars],
+                source="ctrader_open_api_bid",
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return {"status": "blocked", "message": f"Oracle daily context is invalid: {type(exc).__name__}"}
+        if not series.bars:
+            return {"status": "blocked", "message": "Oracle five-year daily context is empty"}
 
         if not regime:
             regime = (analyze(series).get("regime") or {}).get("regime", "unknown")
@@ -920,9 +1089,15 @@ class OracleAgent(BaseAgent):
                 "close": bar.close,
                 "volume": bar.volume,
             } for bar in series.bars],
+            "bars_by_timeframe": bars_by_timeframe,
+            "timeframe_fingerprints": research_market["timeframe_fingerprints"],
+            "timeframe_coverage": research_market["timeframe_coverage"],
+            "data_fingerprint": research_market["data_fingerprint"],
+            "data_as_of": research_market["as_of"],
+            "history_target": "5y",
             "data_source": getattr(series, "source", "unknown"),
             "research_period": "5y",
-            "research_interval": "1d",
+            "research_timeframes": list(_RESEARCH_TIMEFRAMES),
             "execution_costs": execution_costs,
             "minimum_executed_trades": minimum_executed_trades,
             "ablation_targets": list(ablation_targets or []),
@@ -933,10 +1108,21 @@ class OracleAgent(BaseAgent):
         }
         try:
             from shared.forge_client import ForgeClient
-            return ForgeClient(self.forge).request_oracle_improvement(request)
+            try:
+                return ForgeClient(self.forge).request_oracle_improvement(request)
+            finally:
+                self._research_bundle_cache.pop(str(symbol).strip().upper(), None)
         except Exception as exc:
             log.warning("Forge Oracle improvement request failed for %s::%s: %s", symbol, regime, exc)
             return {"status": "error", "message": f"Forge request failed: {type(exc).__name__}"}
+
+    def strategy_catalog_snapshot(self) -> Dict[str, Any]:
+        """Export Oracle's saved strategy identities for Forge to persist in Chronicle."""
+        try:
+            from Oracle.intelligence.strategy_catalog import build_strategy_catalog_snapshot
+        except ImportError:
+            from intelligence.strategy_catalog import build_strategy_catalog_snapshot  # type: ignore
+        return build_strategy_catalog_snapshot()
 
     # ---- BaseAgent contract ----
 
@@ -966,6 +1152,8 @@ class OracleAgent(BaseAgent):
                 minimum_executed_trades=ctx.get("minimum_executed_trades"),
                 ablation_targets=ctx.get("ablation_targets"),
             )
+        if task == "strategy.catalog.snapshot":
+            return self.strategy_catalog_snapshot()
         if task == "market.data.drift.assess":
             return self.assess_market_data_drift(symbol)
         if task == "market.data.window.fingerprint":

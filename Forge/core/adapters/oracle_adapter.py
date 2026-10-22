@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import json
 import math
+from bisect import bisect_right
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -45,6 +46,7 @@ class OracleExperimentAdapter:
         ablation_handlers: Dict[str, Callable[[Any], None]],
         data_loader: Callable[[str], Any],
         provenance_files: Optional[List[str]] = None,
+        policy_trainer: Optional[Callable] = None,
     ):
         self._backtester = backtester
         self._Genome = genome_class
@@ -53,6 +55,7 @@ class OracleExperimentAdapter:
         self._ablation_handlers = ablation_handlers
         self._data_loader = data_loader
         self.provenance_files = list(provenance_files or ())
+        self._policy_trainer = policy_trainer
 
     def execute(self, contract: ExperimentContract, run: ExperimentRun) -> ExperimentResult:
         def failed(message: str, evidence: Optional[dict] = None) -> ExperimentResult:
@@ -124,13 +127,48 @@ class OracleExperimentAdapter:
             evaluation_fingerprint = self._fingerprint_bars(bars[evaluation_start_index:])
             baseline_genome = self._build_genome(baseline_config, [])
             treatment_genome = self._build_genome(treatment_config, contract.ablation_targets)
+            timeframe_datasets = contract.variables.get("timeframe_datasets")
+            if not isinstance(timeframe_datasets, dict) or set(timeframe_datasets) != {
+                "W1", "D1", "H4", "H1", "M45", "M30", "M15",
+            }:
+                return failed("Oracle top-down experiments require all seven timeframe datasets")
+            timeframe_series = {
+                period: self._data_loader(path)
+                for period, path in timeframe_datasets.items()
+            }
+            for period, context_series in timeframe_series.items():
+                if not isinstance(getattr(context_series, "bars", None), list) or len(context_series.bars) < 40:
+                    return failed(f"Oracle {period} timeframe dataset is incomplete")
+            if self._fingerprint_bars(timeframe_series["M15"].bars) != self._fingerprint_bars(bars):
+                return failed("M15 execution dataset does not match the declared top-down dataset")
+            if self._policy_trainer is None:
+                return failed("Forge timeframe policy trainer is unavailable")
+            entry_threshold = float(baseline_genome.entry.params.get(
+                "threshold", baseline_genome.entry.params.get("base_threshold", threshold),
+            ))
+            baseline_timeframe_policy = self._policy_trainer(
+                baseline_genome, timeframe_series, evaluation_start_index, entry_threshold,
+                commission_bps, slippage_bps, spread_bps,
+            )
+            if contract.ablation_targets:
+                # Keep the learned context policy fixed during a component
+                # ablation so the changed component is the treatment.
+                treatment_timeframe_policy = copy.deepcopy(baseline_timeframe_policy)
+            else:
+                treatment_threshold = float(treatment_genome.entry.params.get(
+                    "threshold", treatment_genome.entry.params.get("base_threshold", threshold),
+                ))
+                treatment_timeframe_policy = self._policy_trainer(
+                    treatment_genome, timeframe_series, evaluation_start_index, treatment_threshold,
+                    commission_bps, slippage_bps, spread_bps,
+                )
         except Exception as exc:
-            return failed(f"Oracle setup failed: {exc}")
+            return failed(f"Oracle setup or Forge timeframe training failed: {exc}")
 
         try:
             baseline_result = self._run_backtest(
                 series, baseline_genome, effective_warmup, threshold,
-                commission_bps, slippage_bps, spread_bps, price_basis,
+                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series, baseline_timeframe_policy,
             )
             if baseline_result.get("status") != "complete":
                 return failed(
@@ -139,7 +177,7 @@ class OracleExperimentAdapter:
                 )
             treatment_result = self._run_backtest(
                 series, treatment_genome, effective_warmup, threshold,
-                commission_bps, slippage_bps, spread_bps, price_basis,
+                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series, treatment_timeframe_policy,
             )
             if treatment_result.get("status") != "complete":
                 return failed(
@@ -148,11 +186,11 @@ class OracleExperimentAdapter:
                 )
             baseline_stress_result = self._run_backtest(
                 series, baseline_genome, effective_warmup, threshold,
-                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis,
+                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis, timeframe_series, baseline_timeframe_policy,
             )
             treatment_stress_result = self._run_backtest(
                 series, treatment_genome, effective_warmup, threshold,
-                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis,
+                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis, timeframe_series, treatment_timeframe_policy,
             )
             if (baseline_stress_result.get("status") != "complete"
                     or treatment_stress_result.get("status") != "complete"):
@@ -212,6 +250,10 @@ class OracleExperimentAdapter:
                 "treatment_full_result": treatment_result,
                 "baseline_stress_result": baseline_stress_result,
                 "treatment_stress_result": treatment_stress_result,
+                "learned_timeframe_policies": {
+                    "baseline": baseline_timeframe_policy,
+                    "treatment": treatment_timeframe_policy,
+                },
                 "dataset_fingerprint": contract.data.data_fingerprint,
                 "random_seed": contract.environment.random_seed,
                 "environment_fingerprint": run.environment_fingerprint,
@@ -252,6 +294,10 @@ class OracleExperimentAdapter:
                     "bootstrap_method": bootstrap["method"],
                     "bootstrap_block_length": bootstrap["block_length"],
                     "bootstrap_seed": bootstrap["random_seed"],
+                    "timeframe_periods": ["W1", "D1", "H4", "H1", "M45", "M30", "M15"],
+                    "timeframe_decision_policy": "forge_learned_ridge_policy_v1",
+                    "timeframe_policy_training": "development_prefix_only_with_chronological_validation",
+                    "higher_timeframe_information_cutoff": "bar_close_at_or_before_M15_signal_close",
                 },
             },
         )
@@ -296,8 +342,12 @@ class OracleExperimentAdapter:
         return genome
 
     def _run_backtest(self, series, genome, warmup, threshold, commission_bps, slippage_bps,
-                      spread_bps, price_basis):
-        decision = self._decision_factory(genome, {"warmup": warmup, "threshold": threshold})
+                      spread_bps, price_basis, timeframe_series, timeframe_policy):
+        decision = self._decision_factory(genome, {
+            "warmup": warmup, "threshold": threshold,
+            "timeframe_series": timeframe_series,
+            "timeframe_policy": timeframe_policy,
+        })
         return self._backtester.run(
             series, decision, warmup=warmup, capture_bar_returns=True,
             execution_mode="next_open", commission_bps=commission_bps,
@@ -337,6 +387,7 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
     from Oracle.core.market_data import Bar, Series
     from Oracle.intelligence.strategy_genome import StrategyGenome
     from Oracle.intelligence.technicals import analyze as analyze_regime
+    from Forge.core.timeframe_policy import fit_timeframe_policy, score_timeframe_policy
     from Forge.core.ablation import ComponentDeclaration, ComponentManifest, ComponentType
     class _DecisionSeries:
         def __init__(self, closes, highs, lows, symbol):
@@ -406,16 +457,92 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
         if not math.isfinite(threshold) or not 0 <= threshold <= 1:
             raise ValueError("Oracle experiment threshold must be finite and between 0 and 1")
 
+        timeframe_series = parameters.get("timeframe_series", {})
+        timeframe_policy = parameters.get("timeframe_policy")
+        timeframe_end_times = {}
+        timeframe_intervals = {
+            "W1": 7 * 24 * 60, "D1": 24 * 60, "H4": 4 * 60,
+            "H1": 60, "M45": 45, "M30": 30, "M15": 15,
+        }
+        module_periods = []
+        for module_name in ("market_regime", "trend", "momentum", "volatility", "entry",
+                            "exit", "risk", "position", "trade_management"):
+            module = getattr(genome, module_name, None)
+            params = getattr(module, "params", {}) or {}
+            if isinstance(params, dict):
+                module_periods.extend(
+                    value for key, value in params.items()
+                    if key.lower() in {"period", "fast", "slow", "signal", "k_period", "d_period"}
+                    and isinstance(value, int) and not isinstance(value, bool) and value > 0
+                )
+        context_window = max(100, min(2000, max(module_periods or [50]) + 50))
+        cached_votes = {}
+
+        for period, context_series in timeframe_series.items():
+            ends = []
+            for bar in context_series.bars:
+                opened = datetime.fromisoformat(str(bar.ts).replace("Z", "+00:00"))
+                if opened.tzinfo is None:
+                    opened = opened.replace(tzinfo=timezone.utc)
+                ends.append(opened.timestamp() + timeframe_intervals[period] * 60)
+            timeframe_end_times[period] = ends
+
         def decide(closes, highs, lows, **kwargs):
-            decision_series = _DecisionSeries(closes, highs, lows, "CONTRACT_DATA")
-            vote = genome.vote(decision_series)
-            if not math.isfinite(vote):
-                raise ValueError("Oracle genome produced a non-finite decision score")
+            decision_series = _DecisionSeries(
+                closes[-context_window:], highs[-context_window:], lows[-context_window:],
+                "CONTRACT_DATA_M15",
+            )
             if kwargs.get("current_stop") is not None:
                 updated_stop = genome.trade_management.update_stop(
                     closes[-1], kwargs["current_stop"], kwargs["direction"], kwargs["atr_val"]
                 )
                 return {"updated_stop": updated_stop}
+            # A signal is evaluated after the current M15 bar closes. For each
+            # context timeframe, select only bars whose close is no later than
+            # that decision instant; this prevents higher-timeframe lookahead.
+            execution_index = len(closes) - 1
+            execution_series = timeframe_series.get("M15")
+            signal_close = None
+            if execution_series is not None and execution_index < len(execution_series.bars):
+                signal_open = datetime.fromisoformat(
+                    str(execution_series.bars[execution_index].ts).replace("Z", "+00:00")
+                )
+                if signal_open.tzinfo is None:
+                    signal_open = signal_open.replace(tzinfo=timezone.utc)
+                signal_close = signal_open.timestamp() + 15 * 60
+            if signal_close is None:
+                return {"call": "hold"}
+
+            votes = {}
+            for period, context_series in timeframe_series.items():
+                if period == "M15":
+                    end_index = execution_index + 1
+                    context_closes = closes[-context_window:]
+                    context_highs = highs[-context_window:]
+                    context_lows = lows[-context_window:]
+                else:
+                    end_index = bisect_right(timeframe_end_times[period], signal_close)
+                    if end_index < 40:
+                        return {"call": "hold"}
+                    context_bars = context_series.bars[max(0, end_index - context_window):end_index]
+                    context_closes = [bar.close for bar in context_bars]
+                    context_highs = [bar.high for bar in context_bars]
+                    context_lows = [bar.low for bar in context_bars]
+                if cached_votes.get(period, (None, None))[0] == end_index:
+                    votes[period] = cached_votes[period][1]
+                    continue
+                context = _DecisionSeries(context_closes, context_highs, context_lows,
+                                          f"CONTRACT_DATA_{period}")
+                current_vote = float(genome.vote(context))
+                if not math.isfinite(current_vote):
+                    raise ValueError(f"Oracle genome produced a non-finite {period} decision score")
+                votes[period] = current_vote
+                cached_votes[period] = (end_index, current_vote)
+
+            if not isinstance(timeframe_policy, dict):
+                raise ValueError("Forge learned timeframe policy is required for Oracle evaluation")
+            vote = score_timeframe_policy(timeframe_policy, votes)
+
             if not genome.volatility.filter(decision_series):
                 return {"call": "hold"}
             regime_info = analyze_regime(decision_series)
@@ -424,9 +551,6 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
                 float(regime_info.get("volatility", 0.0)),
             ):
                 return {"call": "hold"}
-            genome_threshold = float(genome.entry.params.get("threshold", threshold))
-            if not math.isfinite(genome_threshold) or not 0 <= genome_threshold <= 1:
-                raise ValueError("Oracle genome entry threshold must be finite and between 0 and 1")
             if not genome.entry.should_enter(vote):
                 return {"call": "hold"}
             if abs(vote) <= 1e-12:
@@ -479,4 +603,5 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
         ablation_handlers=handlers,
         data_loader=load_series,
         provenance_files=[path for path in dependency_paths if path],
+        policy_trainer=fit_timeframe_policy,
     )

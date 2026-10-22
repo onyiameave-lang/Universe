@@ -2,11 +2,12 @@
 
 Scheduled runs rotate one mode per six-hour UTC slot and process symbols
 sequentially. This is research-only: it never places orders or promotes a
-strategy. Completed daily-data windows are not evaluated twice.
+strategy. Completed seven-timeframe data windows are not evaluated twice.
 """
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import re
@@ -27,7 +28,9 @@ ABLATIONS = (
     "trade_management", "market_regime",
 )
 ROTATION = ("challenger", *[f"ablation:{name}" for name in ABLATIONS], "drift")
-REPORT_DIR = ROOT / "Forge" / "reports" / "oracle_experiments"
+REPORT_DIR = ROOT / "Chronicle" / "research" / "oracle_forge_experiments"
+LEGACY_REPORT_DIR = ROOT / "Forge" / "reports" / "oracle_experiments"
+CATALOG_DIR = ROOT / "Chronicle" / "research" / "oracle_strategy_catalogs"
 COST_PROFILE_FILE = ROOT / "Oracle" / "config" / "forge_cost_profiles.json"
 SYMBOL_ALIASES_FILE = ROOT / "Oracle" / "config" / "ctrader_research_symbol_aliases.json"
 
@@ -120,17 +123,65 @@ def _cycle():
 
 def _previous_windows():
     seen = set()
-    for path in REPORT_DIR.glob("*.json"):
-        try:
-            report = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        for item in report.get("results", []):
-            fingerprint = item.get("data_fingerprint")
-            if fingerprint and item.get("status") == "complete":
-                seen.add((item.get("symbol"), item.get("experiment_type"), item.get("ablation_target"),
-                          fingerprint, item.get("cost_profile_version")))
+    for directory in (REPORT_DIR, LEGACY_REPORT_DIR):
+        for path in directory.glob("*.json"):
+            try:
+                report = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for item in report.get("results", []):
+                fingerprint = item.get("data_fingerprint")
+                if fingerprint and item.get("status") == "complete":
+                    seen.add((item.get("symbol"), item.get("experiment_type"), item.get("ablation_target"),
+                              fingerprint, item.get("cost_profile_version")))
     return seen
+
+
+def _persist_catalog_artifact(sync_result):
+    """Write a content-addressed catalog under Chronicle's durable research area."""
+    data = sync_result.get("data", {}) if isinstance(sync_result, dict) else {}
+    catalog = data.get("catalog_snapshot") if isinstance(data, dict) else None
+    if not isinstance(catalog, dict) or catalog.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+        return {"status": "blocked", "message": "Chronicle catalog snapshot was not returned"}
+    fingerprint = catalog.get("catalog_fingerprint")
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        return {"status": "blocked", "message": "catalog fingerprint is invalid"}
+    canonical = {key: value for key, value in catalog.items()
+                 if key not in {"catalog_fingerprint", "record_count",
+                                "family_template_count", "source_error_count"}}
+    try:
+        encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"),
+                             ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return {"status": "blocked", "message": "catalog contains non-canonical values"}
+    if hashlib.sha256(encoded).hexdigest() != fingerprint:
+        return {"status": "blocked", "message": "catalog fingerprint does not match its contents"}
+    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+    artifact = CATALOG_DIR / f"{fingerprint}.json"
+    if artifact.exists():
+        try:
+            existing = json.loads(artifact.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"status": "blocked", "message": "existing Chronicle catalog artifact is unreadable"}
+        existing_body = {key: value for key, value in existing.items()
+                         if key not in {"catalog_fingerprint", "record_count",
+                                        "family_template_count", "source_error_count"}}
+        existing_encoded = json.dumps(existing_body, sort_keys=True, separators=(",", ":"),
+                                      ensure_ascii=False, allow_nan=False).encode("utf-8")
+        if (existing.get("catalog_fingerprint") != fingerprint
+                or hashlib.sha256(existing_encoded).hexdigest() != fingerprint):
+            return {"status": "blocked", "message": "catalog artifact fingerprint does not match its content"}
+        return {"status": "complete", "catalog_fingerprint": fingerprint,
+                "record_count": len(catalog.get("records", [])), "already_saved": True}
+    temporary = artifact.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(artifact)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        return {"status": "blocked", "message": f"could not persist catalog artifact: {type(exc).__name__}"}
+    return {"status": "complete", "catalog_fingerprint": fingerprint,
+            "record_count": len(catalog.get("records", [])), "already_saved": False}
 
 
 def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
@@ -138,16 +189,21 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
     drift = mode == "drift"
     window = mode == "window"
     cost_observations = mode == "cost-observations"
+    catalog_sync = mode == "catalog-sync"
     endpoint = os.getenv(
-        "ORACLE_FORGE_DRIFT_API_URL" if drift else "ORACLE_FORGE_WINDOW_API_URL" if window
+        "ORACLE_FORGE_CATALOG_API_URL" if catalog_sync
+        else "ORACLE_FORGE_DRIFT_API_URL" if drift else "ORACLE_FORGE_WINDOW_API_URL" if window
         else "ORACLE_FORGE_COST_OBSERVATIONS_API_URL" if cost_observations else "ORACLE_FORGE_API_URL",
-        "http://127.0.0.1:8000/oracle/forge/drift" if drift
+        "http://127.0.0.1:8000/oracle/forge/catalog" if catalog_sync
+        else "http://127.0.0.1:8000/oracle/forge/drift" if drift
         else "http://127.0.0.1:8000/oracle/forge/window" if window
         else "http://127.0.0.1:8000/oracle/forge/cost-observations" if cost_observations
         else "http://127.0.0.1:8000/oracle/forge/experiment",
     )
     payload = {"symbol": symbol}
-    if cost_observations:
+    if catalog_sync:
+        payload = {}
+    elif cost_observations:
         payload = {"symbols": list(symbols or [])}
     elif not drift and not window:
         payload.update({
@@ -162,7 +218,7 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
         headers={"Content-Type": "application/json"}, method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=2700 if cost_observations else 900) as response:
+        with urllib.request.urlopen(request, timeout=2700) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         try:
@@ -212,6 +268,27 @@ def main() -> int:
             "status": "skipped", "message": "empirical cost collection disabled for this cycle",
             "observations": [], "cost_profiles": {},
         }}
+    print("Syncing Oracle strategy catalog to Chronicle through Forge", flush=True)
+    catalog_sync_result = _post("", "", "catalog-sync", None)
+    catalog_sync_data = catalog_sync_result.get("data", {}) if isinstance(catalog_sync_result, dict) else {}
+    catalog_store_result = _persist_catalog_artifact(catalog_sync_result)
+    catalog_sync_ok = (
+        isinstance(catalog_sync_result, dict)
+        and catalog_sync_result.get("status") == "complete"
+        and isinstance(catalog_sync_data, dict)
+        and catalog_sync_data.get("status") == "complete"
+        and catalog_store_result.get("status") == "complete"
+    )
+    catalog_sync_summary = {
+        "status": "complete" if catalog_sync_ok else "blocked",
+        "catalog_fingerprint": catalog_store_result.get("catalog_fingerprint"),
+        "record_count": catalog_store_result.get("record_count"),
+        "already_saved": catalog_store_result.get("already_saved"),
+        "artifact_status": catalog_store_result.get("status"),
+        "artifact_message": catalog_store_result.get("message"),
+        "chronicle_state_status": catalog_sync_data.get("status") if isinstance(catalog_sync_data, dict) else None,
+        "chronicle_state_message": catalog_sync_data.get("message") if isinstance(catalog_sync_data, dict) else None,
+    }
     cost_data = cost_observation_result.get("data", {}) if isinstance(cost_observation_result, dict) else {}
     cost_profiles = cost_data.get("cost_profiles", {}) if isinstance(cost_data, dict) else {}
     if not isinstance(cost_profiles, dict):
@@ -222,6 +299,8 @@ def main() -> int:
         print(f"[{index}/{len(symbols)}] {symbol}: {mode_spec}", flush=True)
         fingerprint = None
         status = None
+        timeframe_coverage = None
+        timeframe_fingerprints = None
         execution_costs = cost_profiles.get(symbol)
         cost_profile_source = "ctrader_observed" if isinstance(execution_costs, dict) else None
         if mode == "cost-observations":
@@ -231,6 +310,37 @@ def main() -> int:
                         "data": {"status": "complete" if isinstance(execution_costs, dict) else "blocked",
                                  "cost_profile": execution_costs, "cost_observation": observation}}
             status = response["status"]
+        elif mode not in {"drift", "cost-observations"} and not catalog_sync_ok:
+            response = {"status": "blocked", "data": {
+                "status": "blocked",
+                "message": "Oracle strategy catalog was not durably persisted to Chronicle; refusing strategy research",
+                "catalog_sync": catalog_sync_summary,
+            }}
+            status = "blocked"
+        elif mode == "drift":
+            response = _post("", symbol, "drift", None)
+            drift_data = response.get("data", {}) if isinstance(response, dict) else {}
+            fingerprint = drift_data.get("window_fingerprint") if isinstance(drift_data, dict) else None
+            status = response.get("status", "unknown") if isinstance(response, dict) else "unknown"
+            if fingerprint and status == "complete":
+                drift_key = (symbol, mode, None, fingerprint, None)
+                if drift_key in seen:
+                    response = {"status": "skipped", "data": {
+                        "status": "skipped", "message": "this completed daily drift window was already assessed",
+                        "data_fingerprint": fingerprint,
+                    }}
+                    status = "skipped"
+                else:
+                    seen.add(drift_key)
+            results.append({
+                "symbol": symbol, "experiment_type": mode,
+                "ablation_target": None, "status": status,
+                "cost_profile_source": None, "cost_profile_version": None,
+                "execution_costs": None, "data_fingerprint": fingerprint,
+                "timeframe_fingerprints": None, "timeframe_coverage": None,
+                "result": _redact(response),
+            })
+            continue
         elif (mode != "drift" and not isinstance(execution_costs, dict)
               and aliases.get(symbol, symbol) not in manual_profiles):
             response = {"status": "blocked", "data": {
@@ -253,6 +363,8 @@ def main() -> int:
                 status = response["status"]
             else:
                 fingerprint = preflight_data.get("data_fingerprint")
+                timeframe_coverage = preflight_data.get("timeframe_coverage")
+                timeframe_fingerprints = preflight_data.get("timeframe_fingerprints")
                 if mode != "drift" and not isinstance(execution_costs, dict):
                     execution_costs = _manual_profile_for(
                         symbol, preflight_data.get("latest_close"),
@@ -291,6 +403,8 @@ def main() -> int:
             "cost_profile_version": execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
             "execution_costs": _redact(execution_costs),
             "data_fingerprint": fingerprint,
+            "timeframe_fingerprints": timeframe_fingerprints,
+            "timeframe_coverage": timeframe_coverage,
             "result": _redact(response),
         })
 
@@ -304,6 +418,7 @@ def main() -> int:
         "symbol_count": len(symbols), "symbols": symbols,
         "research_only": True, "promotion_performed": False,
         "results": results,
+        "strategy_catalog_sync": catalog_sync_summary,
         "broker_cost_observations": _redact(cost_observation_result),
         "generated_cost_profile_count": len(cost_profiles),
         "manual_cost_profile_version": cost_document.get("data_version"),

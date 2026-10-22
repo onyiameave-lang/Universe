@@ -142,6 +142,7 @@ class ForgeAgent(BaseAgent):
                     "experiment.contract.execute", "experiment.contract.evaluate",
                     "experiment.contract.report", "experiment.reconciliation.authorization_request",
                     "experiment.reconciliation.reconcile", "oracle.improvement.request",
+                    "oracle.strategy.demo_outcome",
                     "hypothesis.add", "hypothesis.list",
                     # Universal Training Institution (§26)
                     "training.request.submit", "training.request.status",
@@ -670,6 +671,10 @@ class ForgeAgent(BaseAgent):
         ctx = context
         if task == "oracle.improvement.request":
             return self.oracle_improvement.request(ctx.get("request", {}))
+        if task == "oracle.strategy.demo_outcome":
+            return self.oracle_improvement.record_demo_outcome(ctx.get("outcome", {}))
+        if task == "oracle.strategy.catalog.sync":
+            return self.oracle_improvement.sync_strategy_catalog(ctx.get("catalog", {}))
         if task == "knowledge.outbox.drain":
             try:
                 result = self.knowledge_outbox.drain(

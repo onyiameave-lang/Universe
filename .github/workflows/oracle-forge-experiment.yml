@@ -126,10 +126,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p Forge/reports/oracle_experiments
+          mkdir -p Chronicle/research/oracle_forge_experiments Chronicle/research/oracle_strategy_catalogs Chronicle/research/oracle_market_data
           git config user.name "oracle-forge-research-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add Forge/reports/oracle_experiments/
+          git add Chronicle/research/oracle_forge_experiments/ Chronicle/research/oracle_strategy_catalogs/ Chronicle/research/oracle_market_data/
           if ! git diff --cached --quiet; then
             git commit -m "Forge Oracle research report $(date -u +'%Y-%m-%d %H:%M UTC')"
             git push origin HEAD:oracle-v2

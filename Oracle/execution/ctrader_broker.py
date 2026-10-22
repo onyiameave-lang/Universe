@@ -253,7 +253,7 @@ class CTraderBroker:
             req = ProtoOAApplicationAuthReq()
             req.clientId = self._client_id
             req.clientSecret = self._client_secret
-            d = client.send(req)
+            d = client.send(req, responseTimeoutInSeconds=_AUTH_TIMEOUT_SEC)
             def _app_auth_err(f):
                 auth_error.append(str(f))
                 auth_failure.set()
@@ -278,7 +278,7 @@ class CTraderBroker:
                 acc_req = ProtoOAAccountAuthReq()
                 acc_req.ctidTraderAccountId = self._account_id
                 acc_req.accessToken = self._access_token
-                d = client.send(acc_req)
+                d = client.send(acc_req, responseTimeoutInSeconds=_AUTH_TIMEOUT_SEC)
                 def _acc_auth_err(f):
                     auth_error.append(str(f))
                     auth_failure.set()
@@ -522,7 +522,8 @@ class CTraderBroker:
         if not bars:
             return {"status": "error", "message": "cTrader returned no historical bars for the requested range"}
         return {"status": "complete", "symbol": symbol.upper(), "source": "ctrader_open_api",
-                "price_basis": "bid", "period": str(period).upper(), "bars": bars}
+                "price_basis": "bid", "period": str(period).upper(), "bars": bars,
+                "has_more": bool(getattr(payload, "hasMore", False))}
 
     def historical_ticks(self, symbol: str, quote_type: str,
                          from_timestamp_ms: int, to_timestamp_ms: int,
@@ -686,7 +687,11 @@ class CTraderBroker:
             self._pending[msg_id] = slot
 
         def _send():
-            d = self._client.send(request, clientMsgId=msg_id)
+            d = self._client.send(
+                request,
+                clientMsgId=msg_id,
+                responseTimeoutInSeconds=timeout,
+            )
             d.addErrback(lambda f: (slot.__setitem__("result", [None]), ev.set()))
 
         self._reactor.callFromThread(_send)

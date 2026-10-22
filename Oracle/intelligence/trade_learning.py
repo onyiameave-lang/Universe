@@ -50,7 +50,8 @@ _closed_trade_keys_lock = threading.Lock()
 def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
                             won: bool, pnl_r: float, chronicle_client=None,
                             position=None, exit_price: Optional[float] = None,
-                            exit_reason: Optional[str] = None) -> None:
+                            exit_reason: Optional[str] = None,
+                            close_event_id: Optional[str] = None) -> None:
     _EXPERIMENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {"symbol": symbol, "entry_streams": entry_streams or {}, "won": won,
               "pnl_r": pnl_r, "timestamp": time.time()}
@@ -67,6 +68,10 @@ def _append_experiment_log(symbol: str, entry_streams: Optional[Dict[str, Any]],
             "position_size_raw": float(position.size),
             "position_size_unit": "strategy_or_broker_native_unverified",
             "exit_reason": str(exit_reason or "unknown"),
+            "strategy_id": getattr(position, "strategy_id", None),
+            "timeframe_policy_id": getattr(position, "timeframe_policy_id", None),
+            "execution_environment": getattr(position, "execution_environment", "unknown"),
+            "close_event_id": close_event_id,
         })
     with _experiment_log_lock:
         with _EXPERIMENT_LOG_PATH.open("a") as f:
@@ -344,13 +349,14 @@ class TradeLearningEngine:
                 return None
             outcome = self.record_close(
                 oracle_agent, pos, exit_price, exit_confidence,
-                exit_regime, exit_reason)
+                exit_regime, exit_reason, close_event_id=close_key)
             keys.add(close_key)
             self._save_closed_trade_keys(keys)
             return outcome
 
     def record_close(self, oracle_agent, pos, exit_price: float, exit_confidence: float,
-                      exit_regime: str, exit_reason: str) -> TradeOutcome:
+                      exit_regime: str, exit_reason: str,
+                      close_event_id: Optional[str] = None) -> TradeOutcome:
         risk_per_unit = abs(pos.entry_price - pos.initial_stop) or 1e-9
         if pos.direction.value == "buy":
             pnl_r = (exit_price - pos.entry_price) / risk_per_unit
@@ -468,8 +474,35 @@ class TradeLearningEngine:
                 pos.symbol, pos.entry_streams, won, outcome.pnl_r,
                 chronicle_client=getattr(oracle_agent, "chronicle", None),
                 position=pos, exit_price=exit_price, exit_reason=exit_reason,
+                close_event_id=close_event_id,
             )
         except Exception as exc:
             log.warning("[%s] experiment log write failed: %s", pos.symbol, exc)
+
+        # 8. Feed Forge's per-strategy learner only with an identified demo
+        #    trade. A loss updates that strategy's evidence; it never applies
+        #    a global timeframe penalty or changes the active champion.
+        if (getattr(pos, "execution_environment", "unknown") == "demo"
+                and getattr(pos, "strategy_id", None) and close_event_id):
+            try:
+                from shared.forge_client import ForgeClient
+                ForgeClient(oracle_agent.forge).record_oracle_demo_outcome({
+                    "schema": "oracle.strategy.demo_outcome.v1",
+                    "close_event_id": str(close_event_id),
+                    "strategy_id": str(pos.strategy_id),
+                    "timeframe_policy_id": getattr(pos, "timeframe_policy_id", None),
+                    "symbol": str(pos.symbol),
+                    "regime": str(pos.entry_regime),
+                    "execution_environment": str(pos.execution_environment),
+                    "pnl_r": float(outcome.pnl_r),
+                    "won": bool(outcome.won),
+                    "closed_at_unix": time.time(),
+                    "exit_reason": str(exit_reason),
+                    "feedback_source": "oracle_demo_execution",
+                    "pnl_basis": "price_return_in_initial_stop_r; broker costs not normalized",
+                    "cost_status": "unavailable_provisional",
+                })
+            except Exception as exc:
+                log.warning("[%s] Forge demo strategy feedback failed: %s", pos.symbol, exc)
 
         return outcome

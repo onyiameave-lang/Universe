@@ -367,6 +367,15 @@ class ForgeClient:
             "_sender": "oracle",
         })
 
+    def record_oracle_demo_outcome(self, outcome: Dict[str, Any]) -> Dict[str, Any]:
+        """Send one identified Oracle demo-trade result to Forge for learning."""
+        if not isinstance(outcome, dict):
+            raise TypeError("Oracle demo outcome must be a dictionary")
+        return self._forge.act("oracle.strategy.demo_outcome", {
+            "outcome": outcome,
+            "_sender": "oracle",
+        })
+
     def get_report(self, request_id: str) -> Optional[Dict[str, Any]]:
         """Get the training report for a completed request.
 
