@@ -39,18 +39,24 @@ from typing import Any, Dict, List, Optional, Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from Forge.core.metrics import finite_metric_value
+from Forge.core.storage_paths import migrate_legacy_storage
 
 log = logging.getLogger(__name__)
 
 # ==============================================================================
 # 1. PERSISTENCE CONFIGURATION
 # ==============================================================================
-EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "experiments"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+EXPERIMENTS_DIR = _FORGE_ROOT / "memory" / "experiments"
 EXPERIMENTS_FILE = EXPERIMENTS_DIR / "experiments.json"
 RESULTS_FILE = EXPERIMENTS_DIR / "results.json"
 EXPERIMENTS_DB = EXPERIMENTS_DIR / "experiments.sqlite3"
 
 EXPERIMENTS_DIR.mkdir(parents=True, exist_ok=True)
+migrate_legacy_storage(
+    _FORGE_ROOT / "experiments", EXPERIMENTS_DIR,
+    ("experiments.json", "results.json", "experiments.sqlite3"),
+)
 
 
 # ==============================================================================

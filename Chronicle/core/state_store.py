@@ -48,6 +48,7 @@ import tempfile
 import threading
 import time
 import copy
+import hashlib
 import errno
 from contextlib import contextmanager
 from pathlib import Path
@@ -167,7 +168,11 @@ class StateStore:
                         continue
                     disk_updated = disk_rec.get("updated_at", 0) if isinstance(disk_rec, dict) else 0
                     current_updated = current.get("updated_at", 0) if isinstance(current, dict) else 0
-                    if disk_updated > current_updated:
+                    disk_revision = disk_rec.get("revision", 0)
+                    current_revision = current.get("revision", 0)
+                    if (disk_revision > current_revision
+                            or (disk_revision == current_revision
+                                and disk_updated > current_updated)):
                         self._data[key] = disk_rec
             encoded = json.dumps(self._data, indent=2, sort_keys=True, allow_nan=False)
             with tempfile.NamedTemporaryFile(
@@ -408,6 +413,106 @@ class StateStore:
                 return {"status": "error", "deleted": False,
                         "message": "state deletion was not durably saved"}
         return {"status": "complete", "deleted": existed, "revision": next_revision}
+
+    def export_snapshot(self, prefix: str) -> Dict[str, Any]:
+        """Export a namespace with revisions and history for external durability.
+
+        Callers should choose a narrow owner namespace. The Oracle Forge
+        Actions workflow uses only ``forge.oracle.`` so it never exports
+        unrelated agents' Chronicle state.
+        """
+        if not isinstance(prefix, str) or not prefix.strip():
+            raise ValueError("a non-empty Chronicle snapshot prefix is required")
+        with self._lock, self._file_lock():
+            self._data = self._load()
+            records = {
+                key: copy.deepcopy(record)
+                for key, record in self._data.items()
+                if key.startswith(prefix)
+            }
+        records_json = json.dumps(records, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        snapshot = {
+            "schema": "chronicle.state_snapshot.v1",
+            "prefix": prefix,
+            "records": records,
+            "record_count": len(records),
+            "records_sha256": hashlib.sha256(records_json.encode("utf-8")).hexdigest(),
+        }
+        encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(encoded.encode("utf-8")) > 100 * 1024 * 1024:
+            raise ValueError("Chronicle state snapshot exceeds the 100 MiB limit")
+        return snapshot
+
+    def restore_snapshot(self, snapshot: Dict[str, Any], prefix: str) -> Dict[str, Any]:
+        """Merge a validated namespace snapshot without rolling back newer state."""
+        if (not isinstance(prefix, str) or not prefix.strip()
+                or not isinstance(snapshot, dict)
+                or snapshot.get("schema") != "chronicle.state_snapshot.v1"
+                or snapshot.get("prefix") != prefix
+                or not isinstance(snapshot.get("records"), dict)):
+            return {"status": "error", "message": "Chronicle state snapshot schema or namespace is invalid"}
+        records = snapshot["records"]
+        try:
+            encoded = json.dumps(records, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "Chronicle state snapshot contains invalid JSON values"}
+        if (snapshot.get("record_count") != len(records)
+                or snapshot.get("records_sha256") != hashlib.sha256(
+                    encoded.encode("utf-8")).hexdigest()):
+            return {"status": "error", "message": "Chronicle state snapshot count or fingerprint is invalid"}
+        if len(encoded.encode("utf-8")) > 100 * 1024 * 1024:
+            return {"status": "error", "message": "Chronicle state snapshot exceeds the 100 MiB limit"}
+
+        for key, record in records.items():
+            if not isinstance(key, str) or not key.startswith(prefix) or not key:
+                return {"status": "error", "message": "Chronicle state snapshot contains a key outside its namespace"}
+            if (not isinstance(record, dict) or "value" not in record
+                    or not isinstance(record.get("owner", ""), str)
+                    or not isinstance(record.get("revision"), int)
+                    or isinstance(record.get("revision"), bool) or record["revision"] < 0
+                    or not isinstance(record.get("history", []), list)
+                    or not isinstance(record.get("deleted", False), bool)):
+                return {"status": "error", "message": f"Chronicle snapshot record {key!r} is malformed"}
+            if any(not isinstance(item, dict) or "value" not in item
+                   for item in record.get("history", [])):
+                return {"status": "error", "message": f"Chronicle snapshot history for {key!r} is malformed"}
+            required_owner = _OWNER_BOUND_KEYS.get(key)
+            if required_owner is not None and record.get("owner", "") != required_owner:
+                return {"status": "error", "message": f"Chronicle snapshot owner for {key!r} is invalid"}
+
+        with self._lock, self._file_lock():
+            self._data = self._load()
+            previous_data = copy.deepcopy(self._data)
+            restored = 0
+            skipped_newer = 0
+            for key, record in records.items():
+                existing = self._data.get(key)
+                if existing is not None:
+                    if (existing.get("owner") and record.get("owner")
+                            and existing["owner"] != record["owner"]):
+                        self._data = previous_data
+                        return {"status": "error", "message": f"Chronicle snapshot owner conflicts for {key!r}"}
+                    current_revision = int(existing.get("revision", 0))
+                    incoming_revision = record["revision"]
+                    if current_revision > incoming_revision:
+                        skipped_newer += 1
+                        continue
+                    if current_revision == incoming_revision:
+                        if existing != record:
+                            self._data = previous_data
+                            return {"status": "conflict", "message": f"Chronicle snapshot revision conflicts for {key!r}"}
+                        continue
+                self._data[key] = copy.deepcopy(record)
+                restored += 1
+            try:
+                persisted = self._save()
+            except Exception:
+                persisted = False
+            if not persisted:
+                self._data = previous_data
+                return {"status": "error", "message": "Chronicle state snapshot could not be durably restored"}
+        return {"status": "complete", "restored": restored,
+                "skipped_newer": skipped_newer, "record_count": len(records)}
 
     def list_keys(self, prefix: str = "") -> list:
         with self._lock:

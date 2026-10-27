@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import pickle
+import shutil
 import sqlite3
 import threading
 import time
@@ -28,8 +29,11 @@ log = logging.getLogger("forge.model_registry")
 
 
 class ModelRegistry:
-    def __init__(self, storage_dir: str = "models"):
-        self.storage_dir = Path(storage_dir).resolve()
+    def __init__(self, storage_dir: Optional[str] = None,
+                 legacy_storage_dir: Optional[str] = None):
+        forge_root = Path(__file__).resolve().parents[1]
+        default_dir = forge_root / "memory" / "models"
+        self.storage_dir = Path(storage_dir or default_dir).resolve()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.artifacts = self.storage_dir / "artifacts"
         self.artifacts.mkdir(parents=True, exist_ok=True)
@@ -39,8 +43,42 @@ class ModelRegistry:
         self._lock = threading.RLock()
         self._models: Dict[str, Dict[str, Any]] = {}
         self._experiments: Dict[str, Dict[str, Any]] = {}
+        if legacy_storage_dir is None and storage_dir is None:
+            legacy_storage_dir = str(forge_root / "models")
+        if legacy_storage_dir:
+            self._migrate_legacy_storage(Path(legacy_storage_dir).resolve())
         self._initialize_database()
         self._load()
+
+    def _migrate_legacy_storage(self, legacy_dir: Path) -> None:
+        """Copy the former Forge/models registry into Forge/memory/models once."""
+        if legacy_dir == self.storage_dir or not legacy_dir.is_dir():
+            return
+        legacy_db = legacy_dir / "registry.sqlite3"
+        if not self._database.exists() and legacy_db.is_file():
+            try:
+                with closing(sqlite3.connect(str(legacy_db), timeout=30.0)) as source, \
+                        closing(sqlite3.connect(str(self._database), timeout=30.0)) as target:
+                    source.backup(target)
+                    check = target.execute("PRAGMA integrity_check").fetchone()
+                    if not check or check[0] != "ok":
+                        raise RuntimeError("legacy model registry failed SQLite integrity check")
+            except Exception as exc:
+                self._database.unlink(missing_ok=True)
+                raise RuntimeError("Could not safely migrate Forge/models registry") from exc
+
+        for name in ("registry.json", "experiments.json"):
+            source = legacy_dir / name
+            target = self.storage_dir / name
+            if source.is_file() and not target.exists():
+                shutil.copy2(source, target)
+
+        source_artifacts = legacy_dir / "artifacts"
+        if source_artifacts.is_dir() and not any(self.artifacts.iterdir()):
+            try:
+                shutil.copytree(source_artifacts, self.artifacts, dirs_exist_ok=True)
+            except OSError as exc:
+                raise RuntimeError("Could not safely migrate Forge model artifacts") from exc
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(

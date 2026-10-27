@@ -58,16 +58,22 @@ from Forge.core.challenger import (
     ChallengeStatus,
     ChampionRegistry,
 )
+from Forge.core.storage_paths import migrate_legacy_storage
 
 
 # ==============================================================================
 # 1. PERSISTENCE CONFIGURATION
 # ==============================================================================
-CHALLENGER_DIR = Path(__file__).resolve().parents[1] / "challenger"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+CHALLENGER_DIR = _FORGE_ROOT / "memory" / "challenger"
 CHALLENGE_RESULTS_FILE = CHALLENGER_DIR / "challenge_results.json"
 CHALLENGES_DB = CHALLENGER_DIR / "challenges.sqlite3"
 
 CHALLENGER_DIR.mkdir(parents=True, exist_ok=True)
+migrate_legacy_storage(
+    _FORGE_ROOT / "challenger", CHALLENGER_DIR,
+    ("challenge_results.json", "challenges.sqlite3"),
+)
 log = logging.getLogger("forge.challenger")
 
 

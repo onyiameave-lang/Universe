@@ -132,6 +132,27 @@ def _round_price_to_digits(price: float, digits: int) -> float:
     return float(Decimal(str(price)).quantize(quantum, rounding=ROUND_HALF_UP))
 
 
+def _decode_relative_ticks(tick_data, from_timestamp_ms: int, to_timestamp_ms: int,
+                           digits: int) -> List[Dict[str, Any]]:
+    """Decode cTrader's newest-first tick stream, whose time and price are deltas."""
+    ticks = []
+    timestamp_ms = None
+    absolute_tick = None
+    for item in tick_data:
+        encoded_timestamp = int(getattr(item, "timestamp", 0) or 0)
+        encoded_tick = int(getattr(item, "tick", 0) or 0)
+        timestamp_ms = (encoded_timestamp if timestamp_ms is None
+                        else timestamp_ms + encoded_timestamp)
+        absolute_tick = (encoded_tick if absolute_tick is None
+                         else absolute_tick + encoded_tick)
+        price = _round_price_to_digits(absolute_tick / 100000.0, digits)
+        if from_timestamp_ms <= timestamp_ms <= to_timestamp_ms and price > 0:
+            ticks.append({"timestamp_ms": timestamp_ms, "price": price,
+                          "raw_tick": absolute_tick})
+    ticks.sort(key=lambda item: item["timestamp_ms"])
+    return ticks
+
+
 def _volume_cents_within_constraints(
         cents: int, constraints: Dict[str, Any]) -> int:
     min_volume = constraints["minVolume"]
@@ -492,6 +513,7 @@ class CTraderBroker:
         request.fromTimestamp = from_timestamp_ms
         request.toTimestamp = to_timestamp_ms
         request.count = count
+        self._throttle_historical_request()
         payload = self._send_and_wait(request, timeout=timeout)
         if payload is None:
             return {"status": "error", "message": "cTrader historical-bar request timed out or failed"}
@@ -571,19 +593,10 @@ class CTraderBroker:
         digits = metadata.get("digits")
         if not isinstance(digits, int) or digits < 0:
             return {"status": "error", "message": "cTrader symbol precision is unavailable"}
-        ticks = []
-        timestamp_ms = None
-        for item in getattr(payload, "tickData", []):
-            encoded_timestamp = int(getattr(item, "timestamp", 0) or 0)
-            # cTrader encodes the first timestamp absolutely, then subsequent
-            # entries as signed time deltas (the sequence is newest first).
-            timestamp_ms = encoded_timestamp if timestamp_ms is None else timestamp_ms + encoded_timestamp
-            raw_tick = int(item.tick)
-            price = _round_price_to_digits(raw_tick / 100000.0, digits)
-            if from_timestamp_ms <= timestamp_ms <= to_timestamp_ms and price > 0:
-                ticks.append({"timestamp_ms": timestamp_ms, "price": price,
-                              "raw_tick": raw_tick})
-        ticks.sort(key=lambda item: item["timestamp_ms"])
+        # cTrader encodes the first timestamp/price absolutely; subsequent
+        # newest-first entries carry signed deltas from the preceding entry.
+        ticks = _decode_relative_ticks(
+            getattr(payload, "tickData", []), from_timestamp_ms, to_timestamp_ms, digits)
         if not ticks:
             return {"status": "unavailable", "symbol": symbol, "quote_type": quote_type,
                     "ticks": [], "has_more": bool(getattr(payload, "hasMore", False))}

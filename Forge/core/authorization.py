@@ -20,6 +20,7 @@ from typing import Any, Dict, Mapping, Union
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from Forge.core.storage_paths import migrate_legacy_storage
 
 log = logging.getLogger("forge.authorization")
 
@@ -59,8 +60,14 @@ class Ed25519AuthorizationVerifier:
         self._database_path = (
             Path(database_path).resolve()
             if database_path is not None
-            else Path(__file__).resolve().parents[1] / "security" / "authorization_nonces.sqlite3"
+            else Path(__file__).resolve().parents[1] / "memory" / "security" / "authorization_nonces.sqlite3"
         )
+        if database_path is None:
+            forge_root = Path(__file__).resolve().parents[1]
+            migrate_legacy_storage(
+                forge_root / "security", self._database_path.parent,
+                ("authorization_nonces.sqlite3",),
+            )
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._initialize_database()

@@ -6,8 +6,8 @@ CSV trade logger + session summary for Oracle MT5 demo trading.
 Drop this file into:  Universal_AI/Oracle/tools/mt5_logger.py
 
 Produces two CSV files (paths from mt5_config.py):
-  logs/mt5_demo_trades.csv    — one row per trade signal (filled or rejected)
-  logs/mt5_demo_sessions.csv  — one row per completed session summary
+  memory/logs/mt5_demo_trades.csv    — one row per trade signal (filled or rejected)
+  memory/logs/mt5_demo_sessions.csv  — one row per completed session summary
 """
 from __future__ import annotations
 
@@ -71,8 +71,8 @@ class TradeLogger:
     Append-only CSV logger for Oracle MT5 demo trades.
 
     Usage:
-        logger = TradeLogger(trade_log="logs/mt5_demo_trades.csv",
-                             session_log="logs/mt5_demo_sessions.csv")
+        logger = TradeLogger(trade_log="memory/logs/mt5_demo_trades.csv",
+                             session_log="memory/logs/mt5_demo_sessions.csv")
         logger.start_session(start_equity=10000.0)
         logger.log_trade(cycle=1, symbol="EURUSD", broker_symbol="EURUSD",
                          direction="long", confidence=0.72, ...)

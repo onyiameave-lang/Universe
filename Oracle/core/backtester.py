@@ -17,6 +17,33 @@ import math
 from typing import Any, Callable, Dict, List, Optional
 
 
+class _PrefixView:
+    """Read-only list-like view over a history prefix without copying it."""
+
+    __slots__ = ("_values", "_length")
+
+    def __init__(self, values: List[float], length: int):
+        self._values = values
+        self._length = length
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start, stop, step = index.indices(self._length)
+            return self._values[start:stop:step]
+        if index < 0:
+            index += self._length
+        if index < 0 or index >= self._length:
+            raise IndexError("history prefix index out of range")
+        return self._values[index]
+
+    def __iter__(self):
+        for index in range(self._length):
+            yield self._values[index]
+
+
 class Backtester:
     def __init__(self, risk_per_trade: float = 0.01, starting_equity: float = 10000.0):
         self.risk_per_trade = risk_per_trade
@@ -173,6 +200,11 @@ class Backtester:
         commission_rate = float(commission_bps) / 10000.0
         slippage_rate = float(slippage_bps) / 10000.0
         spread_rate = float(spread_bps) / 10000.0
+        use_prefix_views = getattr(decide_fn, "supports_prefix_views", False) is True
+
+        def history_prefix(values, end):
+            return _PrefixView(values, end) if use_prefix_views else values[:end]
+
         opens, closes, highs, lows = series.opens, series.closes, series.highs, series.lows
         n = len(closes)
         if n < warmup + 20:
@@ -305,7 +337,8 @@ class Backtester:
 
             if position is not None:
                 management = decide_fn(
-                    closes[:i + 1], highs[:i + 1], lows[:i + 1],
+                    history_prefix(closes, i + 1), history_prefix(highs, i + 1),
+                    history_prefix(lows, i + 1),
                     current_stop=position["stop"], direction=position["dir"],
                     atr_val=atr_at(i),
                 )
@@ -317,7 +350,10 @@ class Backtester:
                     position["stop"] = updated_stop
 
             if position is None and i < n - 1:
-                decision = decide_fn(closes[:i + 1], highs[:i + 1], lows[:i + 1])
+                decision = decide_fn(
+                    history_prefix(closes, i + 1), history_prefix(highs, i + 1),
+                    history_prefix(lows, i + 1),
+                )
                 call = decision.get("call", "hold") if isinstance(decision, dict) else "hold"
                 if call in ("buy", "sell"):
                     pending_entry = {

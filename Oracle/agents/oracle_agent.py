@@ -674,10 +674,12 @@ class OracleAgent(BaseAgent):
                                 "window_start_ms": window_start_ms, "window_end_ms": now_ms,
                                 "window_hours": window_hours,
                                 "matched_spread_quotes": len(paired_spreads),
+                                "symbol_filled_deals": len(symbol_deals),
                                 "deal_history_records": len(all_deals),
                                 "deal_history_days": deal_history_days,
                                 "deal_history_request_count": deals_result.get("request_count"),
                                 "commission_deals": len(commission_bps_samples),
+                                "slippage_deals_checked": attempted_slippage_deals,
                                 "matched_slippage_deals": len(slippage_bps_samples),
                                 "fill_quote_scale_mismatches": fill_quote_scale_mismatches,
                                 "commission_type": metadata.get("commissionType"),
@@ -1025,33 +1027,44 @@ class OracleAgent(BaseAgent):
                                   slippage_bps: Optional[float] = None,
                                   execution_costs: Optional[Dict[str, Any]] = None,
                                   minimum_executed_trades: Optional[int] = None,
-                                  ablation_targets: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Send Forge a read-only incumbent snapshot for governed research."""
+                                  ablation_targets: Optional[List[str]] = None,
+                                  research_data_owner: str = "oracle",
+                                  evaluation_mode: str = "lockbox_confirmation") -> Dict[str, Any]:
+        """Send Forge an incumbent snapshot; Forge owns research data when requested."""
         if self.forge is None:
             return {"status": "blocked", "message": "Forge is not connected to Oracle"}
-        research_market = self._get_ctrader_research_bundle(symbol)
-        if not isinstance(research_market, dict) or research_market.get("status") != "complete":
-            detail = research_market.get("message") if isinstance(research_market, dict) else None
-            return {"status": "blocked", "message": detail or "Oracle could not obtain five-year cTrader history across all seven timeframes"}
-        bars_by_timeframe = research_market.get("timeframes")
-        if not isinstance(bars_by_timeframe, dict) or set(bars_by_timeframe) != set(_RESEARCH_TIMEFRAMES):
-            return {"status": "blocked", "message": "Oracle five-year top-down dataset is incomplete"}
-        try:
-            daily_bars = bars_by_timeframe["D1"]
-            series = Series(
-                symbol=str(symbol).upper(),
-                bars=[Bar(ts=item["timestamp"], open=float(item["open"]),
-                          high=float(item["high"]), low=float(item["low"]),
-                          close=float(item["close"]), volume=float(item.get("volume", 0.0)))
-                      for item in daily_bars],
-                source="ctrader_open_api_bid",
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            return {"status": "blocked", "message": f"Oracle daily context is invalid: {type(exc).__name__}"}
-        if not series.bars:
-            return {"status": "blocked", "message": "Oracle five-year daily context is empty"}
+        forge_owns_data = research_data_owner == "forge"
+        research_market = None
+        series = None
+        if not forge_owns_data:
+            research_market = self._get_ctrader_research_bundle(symbol)
+            if not isinstance(research_market, dict) or research_market.get("status") != "complete":
+                detail = research_market.get("message") if isinstance(research_market, dict) else None
+                return {"status": "blocked", "message": detail or "Oracle could not obtain five-year cTrader history across all seven timeframes"}
+            bars_by_timeframe = research_market.get("timeframes")
+            if not isinstance(bars_by_timeframe, dict) or set(bars_by_timeframe) != set(_RESEARCH_TIMEFRAMES):
+                return {"status": "blocked", "message": "Oracle five-year top-down dataset is incomplete"}
+            try:
+                daily_bars = bars_by_timeframe["D1"]
+                series = Series(
+                    symbol=str(symbol).upper(),
+                    bars=[Bar(ts=item["timestamp"], open=float(item["open"]),
+                              high=float(item["high"]), low=float(item["low"]),
+                              close=float(item["close"]), volume=float(item.get("volume", 0.0)))
+                          for item in daily_bars],
+                    source="ctrader_open_api_bid",
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                return {"status": "blocked", "message": f"Oracle daily context is invalid: {type(exc).__name__}"}
+            if not series.bars:
+                return {"status": "blocked", "message": "Oracle five-year daily context is empty"}
 
-        if not regime:
+        if not regime and forge_owns_data:
+            incumbent_record = self.evolution.champion_info(symbol) or self.lab.champion_info(symbol)
+            regime = str(incumbent_record.get("regime", "")).strip() if isinstance(incumbent_record, dict) else ""
+            if not regime:
+                return {"status": "blocked", "message": "Oracle has no saved incumbent regime for Forge to review"}
+        elif not regime:
             regime = (analyze(series).get("regime") or {}).get("regime", "unknown")
         champion = self.evolution.champion(symbol, regime)
         if champion is None:
@@ -1080,8 +1093,9 @@ class OracleAgent(BaseAgent):
                         execution_costs[key] = float(execution_costs[key])
         except (TypeError, ValueError, json.JSONDecodeError):
             execution_costs = None
+        expected_price_basis = research_market.get("price_basis") if research_market else "bid"
         if (isinstance(execution_costs, dict)
-                and execution_costs.get("price_basis") != research_market.get("price_basis")):
+                and execution_costs.get("price_basis") != expected_price_basis):
             return {
                 "status": "blocked",
                 "message": (
@@ -1109,31 +1123,31 @@ class OracleAgent(BaseAgent):
                 "current_drawdown_r": confidence.get("current_drawdown_r"),
                 "as_of": confidence.get("last_updated"),
             },
-            "bars": [{
-                "timestamp": bar.ts,
-                "open": bar.open,
-                "high": bar.high,
-                "low": bar.low,
-                "close": bar.close,
-                "volume": bar.volume,
-            } for bar in series.bars],
-            "bars_by_timeframe": bars_by_timeframe,
-            "timeframe_fingerprints": research_market["timeframe_fingerprints"],
-            "timeframe_coverage": research_market["timeframe_coverage"],
-            "data_fingerprint": research_market["data_fingerprint"],
-            "data_as_of": research_market["as_of"],
-            "history_target": "5y",
-            "data_source": getattr(series, "source", "unknown"),
-            "research_period": "5y",
-            "research_timeframes": list(_RESEARCH_TIMEFRAMES),
             "execution_costs": execution_costs,
             "minimum_executed_trades": minimum_executed_trades,
             "ablation_targets": list(ablation_targets or []),
+            "evaluation_mode": evaluation_mode,
             "risk_policy": {
                 "source": "Oracle RiskManager.max_drawdown",
                 "max_drawdown_fraction": getattr(self.risk, "max_drawdown", None),
             },
         }
+        if research_market is not None and series is not None:
+            request.update({
+                "bars": [{
+                    "timestamp": bar.ts, "open": bar.open, "high": bar.high,
+                    "low": bar.low, "close": bar.close, "volume": bar.volume,
+                } for bar in series.bars],
+                "bars_by_timeframe": research_market["timeframes"],
+                "timeframe_fingerprints": research_market["timeframe_fingerprints"],
+                "timeframe_coverage": research_market["timeframe_coverage"],
+                "data_fingerprint": research_market["data_fingerprint"],
+                "data_as_of": research_market["as_of"],
+                "history_target": "5y",
+                "data_source": getattr(series, "source", "unknown"),
+                "research_period": "5y",
+                "research_timeframes": list(_RESEARCH_TIMEFRAMES),
+            })
         try:
             from shared.forge_client import ForgeClient
             try:
@@ -1179,6 +1193,8 @@ class OracleAgent(BaseAgent):
                 execution_costs=ctx.get("execution_costs"),
                 minimum_executed_trades=ctx.get("minimum_executed_trades"),
                 ablation_targets=ctx.get("ablation_targets"),
+                research_data_owner=ctx.get("research_data_owner", "oracle"),
+                evaluation_mode=ctx.get("evaluation_mode", "lockbox_confirmation"),
             )
         if task == "strategy.catalog.snapshot":
             return self.strategy_catalog_snapshot()

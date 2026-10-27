@@ -142,7 +142,10 @@ class ForgeAgent(BaseAgent):
                     "experiment.contract.execute", "experiment.contract.evaluate",
                     "experiment.contract.report", "experiment.reconciliation.authorization_request",
                     "experiment.reconciliation.reconcile", "oracle.improvement.request",
-                    "oracle.strategy.demo_outcome",
+                    "oracle.ablation.select",
+                    "oracle.strategy.demo_outcome", "oracle.decision.observation",
+                    "oracle.trader.heartbeat",
+                    "oracle.cost.observations",
                     "hypothesis.add", "hypothesis.list",
                     # Universal Training Institution (§26)
                     "training.request.submit", "training.request.status",
@@ -177,7 +180,11 @@ class ForgeAgent(BaseAgent):
                         storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.loader = DatasetLoader()
         self.validator = DataValidator()
-        self.registry = ModelRegistry(storage_dir=storage_dir or str(_REPO_ROOT / "models"))
+        registry_dir = storage_dir or str(_REPO_ROOT / "memory" / "models")
+        self.registry = ModelRegistry(
+            storage_dir=registry_dir,
+            legacy_storage_dir=(str(_REPO_ROOT / "models") if storage_dir is None else None),
+        )
         self.knowledge_outbox = KnowledgeOutbox(self.registry.database_path)
         self.deployment_controller = deployment_controller or DeploymentController(
             self.registry,
@@ -193,7 +200,8 @@ class ForgeAgent(BaseAgent):
         self._backends.update(discovery_backends())
         # Evidence Engine (Hypothesis Queue + Experiment Templates) --
         # Forge's ecosystem-wide role, not just ML training.
-        self.hypothesis_queue = HypothesisQueue()
+        self.hypothesis_queue = HypothesisQueue(
+            chronicle=chronicle_client, require_chronicle=True)
         self.experiment_runner = experiment_runner or ExperimentRunner(
             reconciliation_verifier=experiment_reconciliation_verifier,
             max_concurrent_runs=experiment_max_concurrent_runs,
@@ -392,6 +400,20 @@ class ForgeAgent(BaseAgent):
                     log.info("Chronicle outbox startup retry delivered %d memories", result["delivered"])
             except Exception:
                 log.exception("Chronicle outbox startup retry failed")
+        try:
+            recovered = self.oracle_improvement.resume_pending_no_trade_jobs()
+            if recovered.get("resumed"):
+                log.info("Forge resumed %d durable Oracle no-trade research job(s)",
+                         recovered["resumed"])
+            elif recovered.get("status") != "complete":
+                log.warning("Forge could not recover Oracle research jobs: %s",
+                            recovered.get("message", recovered.get("status")))
+        except Exception:
+            log.exception("Forge Oracle diagnosis-job recovery failed")
+        self.oracle_improvement.start_supervisor()
+
+    def on_stop(self) -> None:
+        self.oracle_improvement.stop_supervisor()
 
     # ---- cross-validated score for any backend (used by tuning + discovery) ----
 
@@ -671,8 +693,25 @@ class ForgeAgent(BaseAgent):
         ctx = context
         if task == "oracle.improvement.request":
             return self.oracle_improvement.request(ctx.get("request", {}))
+        if task == "oracle.ablation.select":
+            return self.oracle_improvement.select_oracle_ablation(ctx.get("request", {}))
         if task == "oracle.strategy.demo_outcome":
             return self.oracle_improvement.record_demo_outcome(ctx.get("outcome", {}))
+        if task == "oracle.decision.observation":
+            return self.oracle_improvement.record_decision_observation(
+                ctx.get("observation", {}))
+        if task == "oracle.trader.heartbeat":
+            return self.oracle_improvement.record_trader_heartbeat(
+                ctx.get("heartbeat", {}))
+        if task == "oracle.cost.observations":
+            return self.oracle_improvement.collect_cost_observations(ctx.get("symbols", []))
+        if task == "oracle.market.data.window.fingerprint":
+            symbol = str(ctx.get("symbol", "")).strip().upper()
+            if not symbol:
+                return {"status": "error", "message": "symbol is required"}
+            return self.oracle_improvement.research_window_fingerprint(symbol)
+        if task == "oracle.market.data.drift.assess":
+            return self.oracle_improvement.assess_market_data_drift(ctx.get("symbol", ""))
         if task == "oracle.strategy.catalog.sync":
             return self.oracle_improvement.sync_strategy_catalog(ctx.get("catalog", {}))
         if task == "knowledge.outbox.drain":

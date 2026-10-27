@@ -102,7 +102,7 @@ class ScientificResearchLab:
             chronicle, "champion_library", self._champions_path, owner="oracle")
         self._history_store = ChronicleBackedStore(
             chronicle, "champion_history", self._history_path, owner="oracle")
-        self.benchmark = BenchmarkEngine(storage_dir=str(self._dir.parent / "benchmarks"))
+        self.benchmark = BenchmarkEngine(storage_dir=str(self._dir / "benchmarks"))
         self._recover_authorized_promotions()
 
     @property

@@ -22,11 +22,17 @@ from pydantic import BaseModel, ConfigDict
 
 from Forge.core.drift import DriftPolicyResolver, DriftReport, DriftSeverity
 from Forge.core.promotion import AuthorizationToken
+from Forge.core.storage_paths import migrate_legacy_storage
 
 
-DRIFT_DIR = Path(__file__).resolve().parents[1] / "drift"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+DRIFT_DIR = _FORGE_ROOT / "memory" / "drift"
 INVESTIGATIONS_FILE = DRIFT_DIR / "investigations.json"
 INVESTIGATIONS_DB = DRIFT_DIR / "investigations.sqlite3"
+migrate_legacy_storage(
+    _FORGE_ROOT / "drift", DRIFT_DIR,
+    ("investigations.json", "investigations.sqlite3"),
+)
 
 
 class InvestigationType(str, Enum):

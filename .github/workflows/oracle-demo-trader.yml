@@ -40,13 +40,13 @@ jobs:
         # of expecting a file the script never creates.
         working-directory: .
         run: |
-          mkdir -p Oracle/logs
+          mkdir -p Oracle/memory/logs
           RUN_STAMP=$(date -u +'%Y-%m-%d_%H%M')
           python -m Oracle.execution.mt5_demo_trader \
             --cycles 1 \
             --interval 0 \
             --max-trades 20 \
-            2>&1 | tee "Oracle/logs/demo_run_${RUN_STAMP}.log"
+            2>&1 | tee "Oracle/memory/logs/demo_run_${RUN_STAMP}.log"
           echo "RUN_STAMP=${RUN_STAMP}" >> "$GITHUB_ENV"
         env:
           ORACLE_PAPER_TRADING: "true"
@@ -59,7 +59,7 @@ jobs:
         run: |
           git config user.name "oracle-demo-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add "Oracle/logs/demo_run_${RUN_STAMP}.log" Oracle/data_cache/ || true
+          git add "Oracle/memory/logs/demo_run_${RUN_STAMP}.log" Oracle/memory/data_cache/ || true
           git diff --cached --quiet || git commit -m "Demo trader run: ${RUN_STAMP} UTC"
           git push
 
@@ -68,7 +68,7 @@ jobs:
         run: |
           echo "## Oracle Demo Trader — Signal Summary (${RUN_STAMP} UTC)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          LOG="Oracle/logs/demo_run_${RUN_STAMP}.log"
+          LOG="Oracle/memory/logs/demo_run_${RUN_STAMP}.log"
           if [ -f "$LOG" ]; then
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             grep -E "^Cycle .* done" "$LOG" | tail -5 >> "$GITHUB_STEP_SUMMARY" || true

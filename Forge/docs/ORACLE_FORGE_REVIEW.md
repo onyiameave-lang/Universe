@@ -84,7 +84,7 @@ when Pepperstone publishes a newer monthly table.
 
 The six-hour GitHub Action checks out `oracle-v2`, rotates one research mode
 across the watchlist, and commits a JSON report under
-`Forge/reports/oracle_experiments/`.
+`Chronicle/memory/research/oracle_forge_experiments/`.
 Scheduled workflows must also be present on the repository default branch.
 Each run uses a fresh hosted runner; Chronicle's local state is not durable
 between runs, while the committed report is. This initial Action is an

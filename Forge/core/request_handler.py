@@ -48,9 +48,20 @@ log = logging.getLogger("forge.request_handler")
 # 1. PERSISTENCE
 # ==============================================================================
 
-_REQUESTS_DIR = Path(__file__).resolve().parents[1] / "training_requests"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+_REQUESTS_DIR = _FORGE_ROOT / "memory" / "training_requests"
 _REQUESTS_DB = _REQUESTS_DIR / "requests.sqlite3"
 _REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
+
+_LEGACY_REQUESTS_DB = _FORGE_ROOT / "training_requests" / "requests.sqlite3"
+if _LEGACY_REQUESTS_DB.is_file() and not _REQUESTS_DB.exists():
+    with closing(sqlite3.connect(str(_LEGACY_REQUESTS_DB))) as source_db, \
+            closing(sqlite3.connect(str(_REQUESTS_DB))) as target_db:
+        source_db.backup(target_db)
+        result = target_db.execute("PRAGMA integrity_check").fetchone()
+        if not result or result[0] != "ok":
+            _REQUESTS_DB.unlink(missing_ok=True)
+            raise RuntimeError("Forge request database migration failed integrity check")
 
 
 def _connect(path: Path) -> sqlite3.Connection:

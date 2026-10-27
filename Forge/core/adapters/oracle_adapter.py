@@ -546,9 +546,12 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
             if not genome.volatility.filter(decision_series):
                 return {"call": "hold"}
             regime_info = analyze_regime(decision_series)
+            regime = regime_info.get("regime", {}) if isinstance(regime_info, dict) else {}
+            regime_name = regime.get("regime", "unknown") if isinstance(regime, dict) else "unknown"
+            regime_volatility = regime.get("volatility", 0.0) if isinstance(regime, dict) else 0.0
             if not genome.market_regime.is_allowed(
-                regime_info.get("regime", "unknown"),
-                float(regime_info.get("volatility", 0.0)),
+                regime_name,
+                float(regime_volatility),
             ):
                 return {"call": "hold"}
             if not genome.entry.should_enter(vote):
@@ -557,6 +560,10 @@ def build_default_oracle_experiment_adapter() -> OracleExperimentAdapter:
                 return {"call": "hold"}
             return {"call": "buy" if vote > 0 else "sell"}
 
+        # Oracle's backtester can pass zero-copy history prefixes to this
+        # decision callback; it only reads the trailing context window and
+        # uses the prefix length as the global M15 index.
+        decide.supports_prefix_views = True
         return decide
 
     dependency_paths = [

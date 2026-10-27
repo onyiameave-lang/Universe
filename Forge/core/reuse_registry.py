@@ -233,9 +233,20 @@ class ReuseCompatibilityPolicy(Protocol):
 # 3. REUSE REGISTRY
 # ==============================================================================
 
-_REUSE_DIR = Path(__file__).resolve().parents[1] / "reuse"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+_REUSE_DIR = _FORGE_ROOT / "memory" / "reuse"
 _REUSE_DB = _REUSE_DIR / "reuse_registry.sqlite3"
 _REUSE_DIR.mkdir(parents=True, exist_ok=True)
+
+_LEGACY_REUSE_DB = _FORGE_ROOT / "reuse" / "reuse_registry.sqlite3"
+if _LEGACY_REUSE_DB.is_file() and not _REUSE_DB.exists():
+    with closing(sqlite3.connect(str(_LEGACY_REUSE_DB))) as source_db, \
+            closing(sqlite3.connect(str(_REUSE_DB))) as target_db:
+        source_db.backup(target_db)
+        result = target_db.execute("PRAGMA integrity_check").fetchone()
+        if not result or result[0] != "ok":
+            _REUSE_DB.unlink(missing_ok=True)
+            raise RuntimeError("Forge reuse database migration failed integrity check")
 
 
 class ReuseRegistry:

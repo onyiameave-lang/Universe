@@ -6,6 +6,8 @@ Bridges the autonomous agent backend with the HTML frontends.
 import sys
 import logging
 import re
+import os
+import hmac
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request
@@ -559,7 +561,12 @@ async def lifespan(app: FastAPI):
     logger.info("Booting AI Ecosystem...")
     add_log("system", "boot", "Starting AI Ecosystem")
     AGENTS.clear()
-    boot_order = ["chronicle", "atlas", "nexus", "aegis", "sentinel", "pulse", "forge", "genesis", "oracle"]
+    # A local Forge V2 bridge can run beside the V1 trading process without
+    # starting another Oracle agent. Forge and Chronicle are the only required
+    # agents; Atlas remains available for Forge's optional research support.
+    bridge_only = os.getenv("ORACLE_FORGE_BRIDGE_ONLY", "false").strip().lower() in {"1", "true", "yes"}
+    boot_order = (["chronicle", "atlas", "forge"] if bridge_only else
+                  ["chronicle", "atlas", "nexus", "aegis", "sentinel", "pulse", "forge", "genesis", "oracle"])
     chronicle = None
     for name in boot_order:
         ecosystem._unload_conflicting_modules()
@@ -631,6 +638,113 @@ async def root():
 async def health():
     return {"status": "online", "ecosystem": "Universal AI", "active_agents": list(AGENTS.keys()), "version": "1.0.0"}
 
+
+@app.post("/internal/forge/act")
+async def forge_bridge_act(request: Request):
+    """Authenticated loopback bridge for Oracle V1 -> Forge V2.
+
+    This exposes a bounded allowlist of Oracle research, demo feedback, and
+    decision-observation tasks. It never exposes trading execution or promotion.
+    """
+    peer = request.client.host if request.client else ""
+    if peer not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="loopback clients only")
+
+    expected_token = os.getenv("ORACLE_FORGE_BRIDGE_TOKEN", "").strip()
+    provided_token = request.headers.get("x-oracle-forge-token", "")
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="Forge bridge token is not configured")
+    if not hmac.compare_digest(provided_token, expected_token):
+        raise HTTPException(status_code=401, detail="invalid bridge credentials")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="request body must be an object")
+    task = body.get("task")
+    context = body.get("context")
+    if task not in {"oracle.strategy.demo_outcome", "oracle.improvement.request",
+                    "oracle.ablation.select",
+                    "oracle.decision.observation",
+                    "oracle.trader.heartbeat",
+                    "oracle.cost.observations", "oracle.strategy.catalog.sync",
+                    "oracle.market.data.drift.assess"}:
+        raise HTTPException(status_code=400, detail="unsupported Forge bridge task")
+    if not isinstance(context, dict):
+        raise HTTPException(status_code=400, detail="context must be an object")
+    if task == "oracle.strategy.demo_outcome":
+        outcome = context.get("outcome")
+        if not isinstance(outcome, dict) or outcome.get("schema") != "oracle.strategy.demo_outcome.v1":
+            raise HTTPException(status_code=400, detail="valid Oracle demo outcome is required")
+    if task == "oracle.decision.observation":
+        observation = context.get("observation")
+        if (not isinstance(observation, dict)
+                or observation.get("schema") != "oracle.decision.observation.v1"):
+            raise HTTPException(status_code=400, detail="valid Oracle decision observation is required")
+    if task == "oracle.trader.heartbeat":
+        heartbeat = context.get("heartbeat")
+        if (not isinstance(heartbeat, dict)
+                or heartbeat.get("schema") != "oracle.trader.heartbeat.v1"):
+            raise HTTPException(status_code=400, detail="valid Oracle trader heartbeat is required")
+    if task == "oracle.cost.observations":
+        symbols = context.get("symbols")
+        if (not isinstance(symbols, list) or not symbols or len(symbols) > 100
+                or any(not isinstance(item, str)
+                       or not re.fullmatch(r"[A-Z0-9._-]{1,24}", item.strip().upper())
+                       for item in symbols)):
+            raise HTTPException(status_code=400, detail="valid cost observation symbols are required")
+    if task == "oracle.strategy.catalog.sync":
+        catalog = context.get("catalog")
+        if (not isinstance(catalog, dict)
+                or catalog.get("schema") != "oracle.strategy_catalog.snapshot.v1"):
+            raise HTTPException(status_code=400, detail="valid Oracle strategy catalog snapshot is required")
+    if task == "oracle.market.data.drift.assess":
+        symbol = context.get("symbol")
+        if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol.strip().upper()):
+            raise HTTPException(status_code=400, detail="valid drift assessment symbol is required")
+
+    forge = AGENTS.get("forge")
+    if forge is None:
+        raise HTTPException(status_code=503, detail="Forge V2 is not initialized")
+    context = dict(context)
+    context["_sender"] = "oracle_v1_bridge"
+    try:
+        result = await run_in_threadpool(_call_agent, forge, task, context, "Forge received the request.")
+    except Exception as exc:
+        logger.warning("Forge bridge task failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Forge could not process the request")
+    result_status = result.get("status") if isinstance(result, dict) else None
+    return {"agent": "forge", "task": task,
+            "status": result_status if result_status in {"complete", "blocked", "error"} else "complete",
+            "result": result}
+
+
+@app.get("/internal/forge/oracle/training-status")
+async def oracle_forge_training_status(request: Request):
+    """Authenticated loopback status for Oracle heartbeat and Forge diagnosis work."""
+    peer = request.client.host if request.client else ""
+    if peer not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="loopback clients only")
+    expected_token = os.getenv("ORACLE_FORGE_BRIDGE_TOKEN", "").strip()
+    provided_token = request.headers.get("x-oracle-forge-token", "")
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="Forge bridge token is not configured")
+    if not hmac.compare_digest(provided_token, expected_token):
+        raise HTTPException(status_code=401, detail="invalid bridge credentials")
+    forge = AGENTS.get("forge")
+    if forge is None:
+        raise HTTPException(status_code=503, detail="Forge V2 is not initialized")
+    try:
+        result = await run_in_threadpool(forge.oracle_improvement.get_oracle_training_status)
+    except Exception as exc:
+        logger.warning("Forge Oracle status lookup failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Forge could not read Oracle training status")
+    if not isinstance(result, dict) or result.get("status") != "complete":
+        raise HTTPException(status_code=503, detail="Chronicle Oracle training status is unavailable")
+    return result
+
 @app.get("/api/status")
 async def api_status():
     return await health()
@@ -697,6 +811,7 @@ async def oracle_forge_experiment(request: Request):
         "symbol": symbol,
         "reason": str(data.get("reason", "scheduled Forge research review")),
         "ablation_targets": targets,
+        "research_data_owner": "forge",
         "_sender": "forge_action",
     }
     if isinstance(data.get("execution_costs"), dict):
@@ -789,23 +904,23 @@ async def oracle_forge_drift(request: Request):
 
 @app.post("/oracle/forge/window")
 async def oracle_forge_window(request: Request):
-    """Fingerprint the completed Oracle research window before doing work."""
+    """Fingerprint Forge-owned cTrader history before starting an experiment."""
     data = await request.json()
     symbol = str(data.get("symbol", "")).strip().upper()
     if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
         raise HTTPException(status_code=422, detail="A supported Oracle symbol is required")
-    agent = AGENTS.get("oracle")
+    agent = AGENTS.get("forge")
     if agent is None:
-        raise HTTPException(status_code=503, detail="Oracle is not available")
+        raise HTTPException(status_code=503, detail="Forge is not available")
     try:
         result = await run_in_threadpool(
-            _call_agent, agent, "market.data.window.fingerprint",
+            _call_agent, agent, "oracle.market.data.window.fingerprint",
             {"symbol": symbol, "_sender": "forge_action"},
-            "Oracle research data fingerprint accepted.",
+            "Forge research data fingerprint accepted.",
         )
-        return _normalize_agent_response("oracle", "market.data.window.fingerprint", result)
+        return _normalize_agent_response("forge", "oracle.market.data.window.fingerprint", result)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Oracle research fingerprint failed: {type(exc).__name__}")
+        raise HTTPException(status_code=500, detail=f"Forge research fingerprint failed: {type(exc).__name__}")
 
 @app.post("/oracle/forge/cost-observations")
 async def oracle_forge_cost_observations(request: Request):
@@ -816,19 +931,20 @@ async def oracle_forge_cost_observations(request: Request):
             or any(not isinstance(item, str) or not re.fullmatch(r"[A-Z0-9._-]{1,24}", item.strip().upper())
                    for item in symbols)):
         raise HTTPException(status_code=422, detail="symbols must be a non-empty list of at most 100 valid symbol names")
-    agent = AGENTS.get("oracle")
-    if agent is None:
-        raise HTTPException(status_code=503, detail="Oracle is not available")
+    task_agent = AGENTS.get("forge")
+    if task_agent is None:
+        raise HTTPException(status_code=503, detail="Forge V2 is not available")
     context = {"symbols": list(dict.fromkeys(item.strip().upper() for item in symbols)), "_sender": "forge_action"}
+    task_name = "oracle.cost.observations"
     try:
         result = await run_in_threadpool(
-            _call_agent, agent, "broker.cost.observations", context,
-            "Oracle broker cost observations accepted.",
+            _call_agent, task_agent, task_name, context,
+            "Forge broker cost observations accepted.",
         )
-        return _normalize_agent_response("oracle", "broker.cost.observations", result)
+        return _normalize_agent_response("forge", task_name, result)
     except Exception as exc:
-        add_log("oracle", "error", str(exc))
-        raise HTTPException(status_code=500, detail=f"Oracle cost observations failed: {type(exc).__name__}")
+        add_log("forge", "error", str(exc))
+        raise HTTPException(status_code=500, detail=f"Forge cost observations failed: {type(exc).__name__}")
 
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):
@@ -942,4 +1058,5 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, ws="wsproto")
+    bridge_only = os.getenv("ORACLE_FORGE_BRIDGE_ONLY", "false").strip().lower() in {"1", "true", "yes"}
+    uvicorn.run(app, host="127.0.0.1" if bridge_only else "0.0.0.0", port=8000, ws="wsproto")

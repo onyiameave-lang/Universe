@@ -2,7 +2,7 @@
 Oracle/tools/evolution_soak.py
 ===============================
 Runs repeated evolve cycles across symbols on real historical data and logs
-results to logs/evolution_soak.csv. No broker, no live risk — pure research.
+results to memory/logs/evolution_soak.csv. No broker, no live risk — pure research.
 
 Two things this script is careful about, based on what we learned watching
 main.py's output:
@@ -59,7 +59,7 @@ DEFAULT_SYMBOLS = [
 ]
 DEFAULT_GENERATIONS = 15
 MIN_TRADES = 15  # below this, treat the verdict as low-confidence
-LOG_PATH = _REPO_ROOT / "logs" / "evolution_soak.csv"
+LOG_PATH = _REPO_ROOT / "memory" / "logs" / "evolution_soak.csv"
 
 FIELDS = [
     "timestamp", "symbol", "regime", "bars",

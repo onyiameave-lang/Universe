@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from Forge.core.benchmark import BenchmarkReport, BenchmarkStatus
 from Forge.core.model_registry import ModelRegistry
+from Forge.core.storage_paths import migrate_legacy_storage
 
 log = logging.getLogger("forge.deployment")
 
@@ -217,11 +218,18 @@ class DeploymentController:
         self._registry = registry
         self._authorization_verifier = authorization_verifier
         self._health_gate = health_gate
+        default_database = Path(__file__).resolve().parents[1] / "memory" / "deployments" / "deployments.sqlite3"
         self._database_path = (
             Path(database_path).resolve()
             if database_path is not None
-            else Path(__file__).resolve().with_name("deployments.sqlite3")
+            else default_database
         )
+        if database_path is None:
+            migrate_legacy_storage(
+                Path(__file__).resolve().parent,
+                default_database.parent,
+                ("deployments.sqlite3",),
+            )
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._canary_percent = canary_percent

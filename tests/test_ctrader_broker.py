@@ -3,6 +3,7 @@ import threading
 
 from Oracle.execution.ctrader_broker import (
     _execution_error_reason,
+    _decode_relative_ticks,
     _normalize_order_direction,
     _position_amendment_error,
     _round_price_to_digits,
@@ -65,6 +66,22 @@ def test_usdjpy_price_is_rounded_to_broker_digits():
     assert _round_price_to_digits(153.2705, 3) == 153.271
 
 
+def test_historical_tick_price_and_time_deltas_are_reconstructed_before_sorting():
+    # cTrader returns newest first: element zero is absolute, later entries
+    # are signed deltas from the previous item for both time and price.
+    encoded = [
+        SimpleNamespace(timestamp=2_000, tick=112_335),
+        SimpleNamespace(timestamp=-1_000, tick=1),
+        SimpleNamespace(timestamp=-500, tick=-2),
+    ]
+
+    assert _decode_relative_ticks(encoded, 0, 2_000, 5) == [
+        {"timestamp_ms": 500, "price": 1.12334, "raw_tick": 112334},
+        {"timestamp_ms": 1_000, "price": 1.12336, "raw_tick": 112336},
+        {"timestamp_ms": 2_000, "price": 1.12335, "raw_tick": 112335},
+    ]
+
+
 def test_order_volume_below_broker_minimum_is_not_upsized():
     constraints = {
         "minVolume": 100_000,
@@ -107,9 +124,64 @@ def test_send_and_wait_removes_a_request_after_timeout(monkeypatch):
     broker = broker_module.CTraderBroker.__new__(broker_module.CTraderBroker)
     broker._pending = {}
     broker._pending_lock = threading.Lock()
-    broker._client = SimpleNamespace(send=lambda request, clientMsgId: Deferred())
+    broker._client = SimpleNamespace(send=lambda request, **kwargs: Deferred())
     broker._reactor = SimpleNamespace(callFromThread=lambda callback: callback())
     monkeypatch.setattr(broker_module, "threading", SimpleNamespace(Event=ImmediateTimeoutEvent))
 
     assert broker._send_and_wait(object(), timeout=0.01) is None
     assert broker._pending == {}
+
+
+def test_historical_bar_requests_use_shared_history_throttle(monkeypatch):
+    import sys
+    from types import ModuleType
+    from Oracle.execution.ctrader_broker import CTraderBroker
+
+    api_package = ModuleType("ctrader_open_api")
+    api_package.__path__ = []
+    messages_package = ModuleType("ctrader_open_api.messages")
+    messages_package.__path__ = []
+    open_api_messages = ModuleType("ctrader_open_api.messages.OpenApiMessages_pb2")
+    model_messages = ModuleType("ctrader_open_api.messages.OpenApiModelMessages_pb2")
+
+    class Request:
+        pass
+
+    class Period:
+        @staticmethod
+        def Value(name):
+            return name
+
+    open_api_messages.ProtoOAGetTrendbarsReq = Request
+    model_messages.ProtoOATrendbarPeriod = Period
+    monkeypatch.setitem(sys.modules, "ctrader_open_api", api_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages", messages_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiMessages_pb2", open_api_messages)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiModelMessages_pb2", model_messages)
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker.status = SimpleNamespace(connected=True)
+    broker._client = object()
+    broker._symbol_id_by_name = {"EURUSD": 7}
+    broker._account_id = 42
+    throttled = []
+    broker._throttle_historical_request = lambda: throttled.append(True)
+    broker._get_symbol_constraints = lambda *_args: {"digits": 5}
+    broker._send_and_wait = lambda *_args, **_kwargs: SimpleNamespace(
+        errorCode=None,
+        trendbar=[SimpleNamespace(
+            utcTimestampInMinutes=29_000_000, low=112_000,
+            deltaOpen=5, deltaHigh=20, deltaClose=10, volume=12,
+        )],
+    )
+
+    result = broker.historical_bars("EURUSD", 1, 2, period="M15")
+
+    assert throttled == [True]
+    assert result["status"] == "complete"
+
+
+def test_trendbar_request_timeouts_are_eligible_for_bounded_bisection():
+    from Forge.core.oracle_research_data import _history_error_can_be_bisected
+
+    assert _history_error_can_be_bisected("cTrader historical-bar request timed out or failed")

@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from Forge.core.experimentation import ExperimentContract
+from Forge.core.storage_paths import migrate_legacy_storage
 
 if TYPE_CHECKING:
     from Forge.core.promotion import CommitResult
@@ -40,12 +41,18 @@ if TYPE_CHECKING:
 # ==============================================================================
 # 1. PERSISTENCE CONFIGURATION
 # ==============================================================================
-CHALLENGER_DIR = Path(__file__).resolve().parents[1] / "challenger"
+_FORGE_ROOT = Path(__file__).resolve().parents[1]
+CHALLENGER_DIR = _FORGE_ROOT / "memory" / "challenger"
 CHAMPIONS_FILE = CHALLENGER_DIR / "champions.json"
 CHALLENGES_FILE = CHALLENGER_DIR / "challenges.json"
 RESULTS_FILE = CHALLENGER_DIR / "challenge_results.json"
 
 CHALLENGER_DIR.mkdir(parents=True, exist_ok=True)
+migrate_legacy_storage(
+    _FORGE_ROOT / "challenger", CHALLENGER_DIR,
+    ("champions.json", "champions.sqlite3", "challenges.json", "challenge_results.json",
+     "challenges.sqlite3"),
+)
 
 
 _KNOWN_DOMAIN_OWNERS = {

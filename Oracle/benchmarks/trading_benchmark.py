@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -32,7 +33,8 @@ from typing import Any, Dict, Optional
 
 log = logging.getLogger("oracle.trading_benchmark")
 
-DEFAULT_STORE_DIR = Path(__file__).resolve().parent  # Oracle/benchmarks/
+DEFAULT_STORE_DIR = Path(__file__).resolve().parents[1] / "memory" / "benchmarks"
+LEGACY_STORE_DIR = Path(__file__).resolve().parent
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -56,6 +58,11 @@ class TradingBenchmark:
     def __init__(self, storage_dir: Optional[Path] = None):
         self._dir = storage_dir or DEFAULT_STORE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
+        if self._dir.resolve() == DEFAULT_STORE_DIR.resolve():
+            for name in ("trading_benchmark.json", "TRADING_BENCHMARKS.md"):
+                source, target = LEGACY_STORE_DIR / name, self._dir / name
+                if source.is_file() and not target.exists():
+                    shutil.copy2(source, target)
         self._json_path = self._dir / "trading_benchmark.json"
         self._markdown_path = self._dir / "TRADING_BENCHMARKS.md"
         self._data = self._load_or_init()
