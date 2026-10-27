@@ -50,6 +50,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import sys
 import time
 import threading
@@ -1090,8 +1091,12 @@ class CTraderDemoTrader:
             },
             "execution_mode": "shadow_no_order_sent",
         }
-        path = _ECO_ROOT / "Chronicle" / "research" / "oracle_shadow" / "proposals.jsonl"
+        path = _ECO_ROOT / "Chronicle" / "memory" / "research" / "oracle_shadow" / "proposals.jsonl"
         try:
+            legacy_path = _ECO_ROOT / "Chronicle" / "research" / "oracle_shadow" / "proposals.jsonl"
+            if legacy_path.is_file() and not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_path, path)
             encoded = json.dumps(record, sort_keys=True, separators=(",", ":"),
                                  ensure_ascii=False, allow_nan=False)
             with _shadow_log_lock:

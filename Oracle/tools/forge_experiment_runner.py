@@ -47,7 +47,7 @@ def _migrate_chronicle_research_artifacts() -> None:
     for name in (
             "oracle_cost_profiles", "oracle_forge_experiments",
             "oracle_market_data", "oracle_strategy_catalogs",
-            "oracle_ablation_learning", "oracle_state"):
+            "oracle_ablation_learning", "oracle_state", "oracle_shadow"):
         source_dir = LEGACY_CHRONICLE_RESEARCH_DIR / name
         target_dir = CHRONICLE_RESEARCH_DIR / name
         if not source_dir.is_dir():
