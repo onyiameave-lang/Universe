@@ -29,6 +29,7 @@ import csv
 import datetime
 import importlib.util
 import sys
+import shutil
 import time
 from pathlib import Path
 
@@ -59,7 +60,11 @@ DEFAULT_SYMBOLS = [
 ]
 DEFAULT_GENERATIONS = 15
 MIN_TRADES = 15  # below this, treat the verdict as low-confidence
-LOG_PATH = _REPO_ROOT / "logs" / "evolution_soak.csv"
+LOG_PATH = _REPO_ROOT / "memory" / "logs" / "evolution_soak.csv"
+_LEGACY_LOG_PATH = _REPO_ROOT / "logs" / "evolution_soak.csv"
+if _LEGACY_LOG_PATH.is_file() and not LOG_PATH.exists():
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_LEGACY_LOG_PATH, LOG_PATH)
 
 FIELDS = [
     "timestamp", "symbol", "regime", "bars",

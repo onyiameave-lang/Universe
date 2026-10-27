@@ -136,8 +136,8 @@ For each symbol every cycle:
 ## Output Files
 
 ```
-Oracle/logs/mt5_demo_trades.csv    — one row per signal (all outcomes)
-Oracle/logs/mt5_demo_sessions.csv  — one row per session summary
+Oracle/memory/memory/logs/mt5_demo_trades.csv    — one row per signal (all outcomes)
+Oracle/memory/memory/logs/mt5_demo_sessions.csv  — one row per session summary
 ```
 
 ### Trade log columns

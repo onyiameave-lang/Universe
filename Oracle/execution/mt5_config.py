@@ -155,7 +155,7 @@ CONFIDENCE_FLOOR_LIVE:  float = float(os.getenv("ORACLE_CONFIDENCE_FLOOR_LIVE", 
 #  LOGGING
 # ─────────────────────────────────────────────────────────────────────────────
 # CSV trade log path (relative to Oracle/ directory).
-TRADE_LOG_PATH: str = "logs/mt5_demo_trades.csv"
+TRADE_LOG_PATH: str = "memory/logs/mt5_demo_trades.csv"
 
 # Session summary log path.
-SESSION_LOG_PATH: str = "logs/mt5_demo_sessions.csv"
+SESSION_LOG_PATH: str = "memory/logs/mt5_demo_sessions.csv"

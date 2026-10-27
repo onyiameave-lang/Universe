@@ -6,14 +6,15 @@ CSV trade logger + session summary for Oracle MT5 demo trading.
 Drop this file into:  Universal_AI/Oracle/tools/mt5_logger.py
 
 Produces two CSV files (paths from mt5_config.py):
-  logs/mt5_demo_trades.csv    — one row per trade signal (filled or rejected)
-  logs/mt5_demo_sessions.csv  — one row per completed session summary
+  memory/logs/mt5_demo_trades.csv    — one row per trade signal (filled or rejected)
+  memory/logs/mt5_demo_sessions.csv  — one row per completed session summary
 """
 from __future__ import annotations
 
 import csv
 import datetime
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -71,8 +72,8 @@ class TradeLogger:
     Append-only CSV logger for Oracle MT5 demo trades.
 
     Usage:
-        logger = TradeLogger(trade_log="logs/mt5_demo_trades.csv",
-                             session_log="logs/mt5_demo_sessions.csv")
+        logger = TradeLogger(trade_log="memory/logs/mt5_demo_trades.csv",
+                             session_log="memory/logs/mt5_demo_sessions.csv")
         logger.start_session(start_equity=10000.0)
         logger.log_trade(cycle=1, symbol="EURUSD", broker_symbol="EURUSD",
                          direction="long", confidence=0.72, ...)
@@ -83,6 +84,15 @@ class TradeLogger:
         root = oracle_root or Path(__file__).resolve().parents[1]
         self._trade_path   = root / trade_log
         self._session_path = root / session_log
+        legacy_trade = root / "logs" / self._trade_path.name
+        legacy_session = root / "logs" / self._session_path.name
+        if self._trade_path.parent.name == "logs" and self._trade_path.parent.parent.name == "memory":
+            if legacy_trade.is_file() and not self._trade_path.exists():
+                self._trade_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_trade, self._trade_path)
+            if legacy_session.is_file() and not self._session_path.exists():
+                self._session_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_session, self._session_path)
         self._trade_path.parent.mkdir(parents=True, exist_ok=True)
         self._session_path.parent.mkdir(parents=True, exist_ok=True)
 
