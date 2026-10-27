@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -88,7 +89,17 @@ class AegisAgent(BaseAgent):
                  storage_dir: Optional[str] = None, monitor: bool = False, **kw):
         super().__init__(chronicle_client=chronicle_client, atlas_client=atlas_client,
                         storage_dir=storage_dir or str(_REPO_ROOT / "memory"), **kw)
-        sdir = storage_dir or str(_REPO_ROOT / "security")
+        sdir = storage_dir or str(_REPO_ROOT / "memory" / "security")
+        if storage_dir is None:
+            memory_security = Path(sdir)
+            legacy_security = _REPO_ROOT / "security"
+            memory_security.mkdir(parents=True, exist_ok=True)
+            if legacy_security.is_dir():
+                for source in legacy_security.iterdir():
+                    target = memory_security / source.name
+                    if (source.is_file() and source.suffix in {".json", ".jsonl"}
+                            and not target.exists()):
+                        shutil.copy2(source, target)
         self.audit_log = AuditLog(storage_dir=sdir)
         # Constitutional fix: wire Chronicle into AuditLog for cross-ecosystem
         # mirroring (Principles 2 & 6 — Everything Communicates / Nothing Dies).

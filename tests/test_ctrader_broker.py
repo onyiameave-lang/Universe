@@ -107,9 +107,19 @@ def test_send_and_wait_removes_a_request_after_timeout(monkeypatch):
     broker = broker_module.CTraderBroker.__new__(broker_module.CTraderBroker)
     broker._pending = {}
     broker._pending_lock = threading.Lock()
-    broker._client = SimpleNamespace(send=lambda request, clientMsgId: Deferred())
+    send_options = {}
+
+    def send(request, clientMsgId, responseTimeoutInSeconds):
+        send_options.update(
+            clientMsgId=clientMsgId,
+            responseTimeoutInSeconds=responseTimeoutInSeconds,
+        )
+        return Deferred()
+
+    broker._client = SimpleNamespace(send=send)
     broker._reactor = SimpleNamespace(callFromThread=lambda callback: callback())
     monkeypatch.setattr(broker_module, "threading", SimpleNamespace(Event=ImmediateTimeoutEvent))
 
     assert broker._send_and_wait(object(), timeout=0.01) is None
     assert broker._pending == {}
+    assert send_options["responseTimeoutInSeconds"] == 0.01

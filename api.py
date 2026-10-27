@@ -6,6 +6,9 @@ Bridges the autonomous agent backend with the HTML frontends.
 import sys
 import logging
 import re
+import os
+import hmac
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request
@@ -624,6 +627,122 @@ async def root():
 async def health():
     return {"status": "online", "ecosystem": "Universal AI", "active_agents": list(AGENTS.keys()), "version": "1.0.0"}
 
+
+def _authorize_forge_local_request(request: Request) -> None:
+    peer = request.client.host if request.client else ""
+    if peer not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="local clients only")
+    expected = os.getenv("ORACLE_FORGE_BRIDGE_TOKEN", "").strip()
+    supplied = request.headers.get("x-oracle-forge-token", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Oracle to Forge bridge token is not configured")
+    if not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="invalid bridge credentials")
+
+
+@app.get("/internal/oracle/forge/catalog")
+async def oracle_forge_catalog(request: Request):
+    """Return a read-only snapshot of persisted V1 strategy records to local Forge."""
+    _authorize_forge_local_request(request)
+    try:
+        from Oracle.intelligence.strategy_catalog import build_strategy_catalog_snapshot
+        snapshot = await run_in_threadpool(build_strategy_catalog_snapshot)
+    except Exception as exc:
+        logger.warning("Could not export Oracle strategy catalog: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Oracle strategy catalog export failed")
+    if not isinstance(snapshot, dict) or snapshot.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+        raise HTTPException(status_code=500, detail="Oracle strategy catalog snapshot is invalid")
+    return {"status": "complete", "catalog": snapshot}
+
+
+@app.post("/internal/oracle/forge/incumbent")
+async def oracle_forge_incumbent(request: Request):
+    """Expose one persisted V1 champion and its evidence to local Forge research."""
+    _authorize_forge_local_request(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="request body must be JSON")
+    symbol = str(body.get("symbol", "")).strip().upper() if isinstance(body, dict) else ""
+    if not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol):
+        raise HTTPException(status_code=422, detail="a valid Oracle symbol is required")
+    oracle = AGENTS.get("oracle")
+    if oracle is None:
+        raise HTTPException(status_code=503, detail="Oracle V1 is not initialized")
+    evolution = getattr(oracle, "evolution", None)
+    lab = getattr(oracle, "lab", None)
+    record = None
+    # Read the same durable V1 files used by the running trader so an API
+    # process started separately does not serve a stale in-memory champion.
+    source_paths = [getattr(evolution, "_path", None), getattr(lab, "_champions_path", None)]
+    for source_path in source_paths:
+        if not source_path:
+            continue
+        try:
+            stored_records = json.loads(Path(source_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(stored_records, dict):
+            continue
+        candidates = [value for value in stored_records.values()
+                      if isinstance(value, dict) and str(value.get("symbol", "")).upper() == symbol
+                      and isinstance(value.get("genome"), dict)]
+        if candidates:
+            record = max(candidates, key=lambda value: (
+                (value.get("out_of_sample") or {}).get("total_return", -999)
+                if isinstance(value.get("out_of_sample"), dict)
+                else (value.get("evidence") or {}).get("score", -999)
+                if isinstance(value.get("evidence"), dict) else -999
+            ))
+            break
+    genome = record.get("genome") if isinstance(record, dict) else None
+    regime = str(record.get("regime", "")).strip() if isinstance(record, dict) else ""
+    if not regime and isinstance(record, dict):
+        # Champion map keys are SYMBOL::REGIME when the persisted record omits it.
+        key = next((str(k) for k, value in getattr(evolution, "_champions", {}).items()
+                    if value is record), "") if evolution is not None else ""
+        if key.upper().startswith(symbol + "::"):
+            regime = key.split("::", 1)[1]
+    if not regime or not isinstance(genome, dict) or not isinstance(genome.get("modules"), dict):
+        raise HTTPException(status_code=404, detail="Oracle V1 has no saved champion genome for this symbol")
+    confidence_tracker = getattr(oracle, "_champion_confidence", None)
+    confidence = {}
+    confidence_path = getattr(confidence_tracker, "store_path", None)
+    if confidence_path:
+        try:
+            all_confidence = json.loads(Path(confidence_path).read_text(encoding="utf-8"))
+            if isinstance(all_confidence, dict):
+                confidence = all_confidence.get(f"{symbol}::{regime}", {})
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not isinstance(confidence, dict):
+        confidence = {}
+    risk = getattr(oracle, "risk", None)
+    max_drawdown = getattr(risk, "max_drawdown", None)
+    if isinstance(max_drawdown, bool) or not isinstance(max_drawdown, (int, float)):
+        raise HTTPException(status_code=503, detail="Oracle's authoritative drawdown limit is unavailable")
+    try:
+        from Oracle.intelligence.strategy_catalog import build_strategy_catalog_snapshot
+        catalog = await run_in_threadpool(build_strategy_catalog_snapshot)
+    except Exception as exc:
+        logger.warning("Could not export Oracle strategy catalog: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Oracle strategy catalog export failed")
+    wins = int(confidence.get("wins", 0) or 0)
+    losses = int(confidence.get("losses", 0) or 0)
+    metrics = {
+        "observed_trades": wins + losses, "wins": wins, "losses": losses,
+        "observed_win_rate": wins / (wins + losses) if wins + losses else None,
+        "bayesian_live_confidence": confidence.get("live_confidence"),
+        "current_drawdown_r": confidence.get("current_drawdown_r"),
+        "as_of": confidence.get("last_updated"),
+        "backtest_evidence": record.get("out_of_sample", record.get("evidence", {})),
+    }
+    return {"status": "complete", "symbol": symbol, "regime": regime,
+            "baseline_genome": genome, "performance_metrics": metrics,
+            "risk_policy": {"source": "Oracle V1 RiskManager.max_drawdown",
+                            "max_drawdown_fraction": float(max_drawdown)},
+            "minimum_executed_trades": 100, "catalog": catalog}
+
 @app.get("/api/status")
 async def api_status():
     return await health()
@@ -785,4 +904,5 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=os.getenv("ORACLE_API_HOST", "0.0.0.0"),
+                port=int(os.getenv("ORACLE_API_PORT", "8000")))

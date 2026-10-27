@@ -103,6 +103,52 @@ def test_valid_equity_loss_still_triggers_kill_switch():
     assert trader._ks_fired is True
 
 
+def test_decision_observation_is_queued_to_forge_without_a_network_call():
+    calls = []
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    trader.oracle = SimpleNamespace(forge=SimpleNamespace(
+        act=lambda task, context: calls.append((task, context)) or {"status": "queued"}))
+
+    decision_context = {"schema": "oracle.decision_context.v1",
+                        "fused": {"call": "hold", "confidence": 0.31}}
+    trader._report_forge_decision("EURUSD", "no_setup", confidence=0.31,
+                                  decision_context=decision_context)
+
+    assert len(calls) == 1
+    task, context = calls[0]
+    assert task == "oracle.decision.observation"
+    observation = context["observation"]
+    assert observation["schema"] == "oracle.decision.observation.v1"
+    assert observation["symbol"] == "EURUSD"
+    assert observation["outcome_code"] == "no_setup"
+    assert observation["execution_environment"] == "demo"
+    assert observation["details"]["decision_context"] == decision_context
+    assert trader._forge_cycle_outcomes == {"EURUSD": {"no_setup": 1}}
+
+
+def test_trader_heartbeat_is_queued_to_forge_without_a_network_call():
+    calls = []
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    trader.oracle = SimpleNamespace(forge=SimpleNamespace(
+        act=lambda task, context: calls.append((task, context)) or {"status": "queued"}))
+    trader._forge_trader_instance_id = "runtime-test"
+    trader.symbols = ["EURUSD"]
+    trader._forge_cycle_outcomes = {"EURUSD": {"no_setup": 1}}
+
+    trader._report_forge_heartbeat(7, {"scanned": 1, "trades": 0, "errors": 0})
+
+    assert len(calls) == 1
+    task, context = calls[0]
+    assert task == "oracle.trader.heartbeat"
+    heartbeat = context["heartbeat"]
+    assert heartbeat["schema"] == "oracle.trader.heartbeat.v1"
+    assert heartbeat["instance_id"] == "runtime-test"
+    assert heartbeat["cycle"] == 7
+    assert heartbeat["symbols"] == ["EURUSD"]
+    assert heartbeat["summary"]["per_symbol_outcomes"] == {
+        "EURUSD": {"no_setup": 1}}
+
+
 def test_first_valid_account_refresh_sets_session_baseline():
     trader = _kill_switch_trader(
         {"account_info_available": True, "equity": 12_500.0},

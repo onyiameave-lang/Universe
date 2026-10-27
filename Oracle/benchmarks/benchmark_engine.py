@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -25,6 +26,19 @@ from typing import Any, Dict, List, Optional
 log = logging.getLogger("oracle.benchmark")
 
 ORACLE_VERSION = "1.0.0"
+DEFAULT_STORE_DIR = Path(__file__).resolve().parents[1] / "memory" / "benchmarks"
+LEGACY_STORE_DIR = Path(__file__).resolve().parent
+
+
+def _migrate_legacy_store(target_dir: Path) -> None:
+    """Seed Chronicle-independent benchmark memory from the former code directory."""
+    if target_dir.resolve() != DEFAULT_STORE_DIR.resolve():
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("benchmark.json", "benchmark_history.json", "BENCHMARKS.md"):
+        source, target = LEGACY_STORE_DIR / name, target_dir / name
+        if source.is_file() and not target.exists():
+            shutil.copy2(source, target)
 
 
 def _atomic_write(path: Path, content: str):
@@ -68,9 +82,10 @@ class BenchmarkEngine:
     Observer-only. Does not modify evolution, Chronicle, Atlas, or Forge.
     """
 
-    def __init__(self, storage_dir: str = "benchmark"):
-        self._dir = Path(storage_dir)
+    def __init__(self, storage_dir: Optional[str] = None):
+        self._dir = Path(storage_dir) if storage_dir is not None else DEFAULT_STORE_DIR
         self._dir.mkdir(parents=True, exist_ok=True)
+        _migrate_legacy_store(self._dir)
         self._benchmark_path = self._dir / "benchmark.json"
         self._history_path = self._dir / "benchmark_history.json"
         self._markdown_path = self._dir / "BENCHMARKS.md"

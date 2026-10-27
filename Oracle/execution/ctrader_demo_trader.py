@@ -52,6 +52,7 @@ import os
 import sys
 import time
 import threading
+import uuid
 import concurrent.futures as _cf
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -449,6 +450,8 @@ class CTraderDemoTrader:
     def __init__(self, symbols, interval_sec=300, session_max_loss_pct=0.05,
                  max_trades=None, confirm_live=False):
         self.symbols = [s.upper() for s in symbols]
+        self._forge_trader_instance_id = uuid.uuid4().hex
+        self._forge_cycle_outcomes: Dict[str, Dict[str, int]] = {}
         self.interval = interval_sec
         self.session_max_loss_pct = session_max_loss_pct
         self.max_trades = max_trades if max_trades is not None else _env_int(
@@ -497,6 +500,11 @@ class CTraderDemoTrader:
         self.oracle = OracleAgent(
             chronicle_client=self.chronicle, sentinel_client=self.sentinel,
             pulse_client=self.pulse, atlas_client=self.atlas)
+        from shared.forge_bridge_client import ForgeBridgeClient  # type: ignore
+        self.forge_bridge = ForgeBridgeClient()
+        # The V1 trader talks to Forge V2 over loopback HTTP; it deliberately
+        # does not load or use the older Forge bundled in this checkout.
+        self.oracle.forge = self.forge_bridge
         self.oracle.start()
         self._trade_learning.confidence = self.oracle._champion_confidence
 
@@ -578,6 +586,8 @@ class CTraderDemoTrader:
             entry_regime = "ranging"
             entry_atr = None
         entry_streams = dict(self._open_context.get(symbol, {}) or {})
+        technical_stream = entry_streams.get("technical", {})
+        technical_stream = technical_stream if isinstance(technical_stream, dict) else {}
         entry_term_evidence = {"bullish": [], "bearish": []}
         try:
             news = self.sentinel.act("news.credibility", {"topics": [symbol], "_sender": "ctrader_demo"}) \
@@ -594,7 +604,12 @@ class CTraderDemoTrader:
                 symbol=symbol, direction=dir_norm, entry_price=entry_price,
                 initial_stop=stop, initial_target=target, entry_confidence=confidence,
                 entry_regime=entry_regime, entry_streams=entry_streams, entry_atr=entry_atr,
-                entry_term_evidence=entry_term_evidence)
+                entry_term_evidence=entry_term_evidence,
+                strategy_id=technical_stream.get("genome"),
+                timeframe_policy_id=technical_stream.get("timeframe_policy_id"),
+                execution_environment=str(
+                    getattr(self.broker.status, "account_type", "unknown")
+                ).strip().lower())
             # Trade Journal (roadmap Phase 3 groundwork): reasons for
             # entering this trade, wired to Chronicle, linked to its
             # eventual win/loss outcome via the returned journal_id.
@@ -779,6 +794,7 @@ class CTraderDemoTrader:
                 print(f"  Cycle {cycle_label} — scanning {len(self.symbols)} symbols")
                 print(f"{'─'*56}")
                 summary = self._tick()
+                self._report_forge_heartbeat(cycle, summary)
                 print(f"\nCycle {cycle_label} done — scanned {summary['scanned']} symbols | "
                       f"{summary['trades']} trade(s) | {summary['holds']} hold | "
                       f"{summary['rejects']} reject | {summary['errors']} error | "
@@ -797,7 +813,71 @@ class CTraderDemoTrader:
             self._learn_from_closed()
             self.shutdown()
 
+    def _report_forge_decision(self, symbol: str, outcome_code: str,
+                               **details: Any) -> None:
+        """Append decision evidence to the local outbox; never call Forge inline."""
+        normalized_symbol = str(symbol).strip().upper()
+        cycle_outcomes = getattr(self, "_forge_cycle_outcomes", None)
+        if not isinstance(cycle_outcomes, dict):
+            cycle_outcomes = {}
+            self._forge_cycle_outcomes = cycle_outcomes
+        counts = cycle_outcomes.setdefault(normalized_symbol, {})
+        counts[outcome_code] = int(counts.get(outcome_code, 0)) + 1
+        bridge = getattr(getattr(self, "oracle", None), "forge", None)
+        act = getattr(bridge, "act", None)
+        if not callable(act):
+            return
+        observation = {
+            "schema": "oracle.decision.observation.v1",
+            "event_id": str(uuid.uuid4()),
+            "symbol": normalized_symbol,
+            "evaluated_at_unix": time.time(),
+            "outcome_code": outcome_code,
+            "execution_environment": "demo",
+            "details": {key: value for key, value in details.items() if value is not None},
+        }
+        try:
+            result = act("oracle.decision.observation", {"observation": observation})
+            if isinstance(result, dict) and result.get("status") == "error":
+                log.warning("[%s] Forge decision observation could not be queued", symbol)
+        except Exception as exc:
+            log.debug("[%s] Forge decision report could not be queued: %s",
+                      symbol, type(exc).__name__)
+
+    def _report_forge_heartbeat(self, cycle: int, summary: Dict[str, Any]) -> None:
+        """Report that this trader process completed a scan cycle to Forge V2."""
+        bridge = getattr(getattr(self, "oracle", None), "forge", None)
+        act = getattr(bridge, "act", None)
+        if not callable(act):
+            return
+        heartbeat = {
+            "schema": "oracle.trader.heartbeat.v1",
+            "event_id": str(uuid.uuid4()),
+            "instance_id": self._forge_trader_instance_id,
+            "observed_at_unix": time.time(),
+            "cycle": int(cycle),
+            "cycle_interval_sec": float(getattr(self, "interval", 300.0)),
+            "symbols": list(self.symbols[:100]),
+            "summary": {
+                **{key: value for key, value in summary.items()
+                   if isinstance(value, (str, int, float, bool)) or value is None},
+                "per_symbol_outcomes": {
+                    symbol: dict(outcomes)
+                    for symbol, outcomes in getattr(self, "_forge_cycle_outcomes", {}).items()
+                },
+            },
+        }
+        try:
+            result = act("oracle.trader.heartbeat", {"heartbeat": heartbeat})
+            if isinstance(result, dict) and result.get("status") == "error":
+                log.warning("Forge trader heartbeat could not be queued")
+        except Exception as exc:
+            log.debug("Forge trader heartbeat could not be queued: %s", type(exc).__name__)
+
     def _tick(self):
+        # This heartbeat projection lets Forge distinguish a symbol that was
+        # scanned and deliberately held from one the cycle never evaluated.
+        self._forge_cycle_outcomes = {}
         summary = dict(scanned=0, trades=0, holds=0, rejects=0,
                    errors=0, timeouts=0, unmapped=0, managed=0,
                    market_closed=0, kill_switch=False)
@@ -805,10 +885,14 @@ class CTraderDemoTrader:
             self.symbols, self._sym_mapper)
         if self._kill_switch_check():
             summary["kill_switch"] = True
+            for symbol in self.symbols:
+                self._report_forge_decision(symbol, "kill_switch_active")
             return summary
         if self._ks_check_unavailable:
             summary["errors"] += 1
             log.warning("Skipping new entries because cTrader account equity is unavailable")
+            for symbol in self.symbols:
+                self._report_forge_decision(symbol, "account_risk_check_unavailable")
             return summary
         open_positions = []
         if self.broker.status.connected:
@@ -817,10 +901,15 @@ class CTraderDemoTrader:
             except Exception as exc:
                 log.warning("Could not refresh open positions for scan: %s", exc)
                 summary["errors"] += 1
+                for symbol in self.symbols:
+                    self._report_forge_decision(symbol, "positions_unavailable",
+                                                error_type=type(exc).__name__)
                 return summary
             if not getattr(self.broker, "_positions_last_refresh_ok", True):
                 log.warning("cTrader position reconciliation failed; skipping new-entry scan")
                 summary["errors"] += 1
+                for symbol in self.symbols:
+                    self._report_forge_decision(symbol, "positions_unavailable")
                 return summary
 
         for symbol in self.symbols:
@@ -830,11 +919,13 @@ class CTraderDemoTrader:
             if self._ks_check_unavailable:
                 summary["errors"] += 1
                 log.warning("Stopping scan because cTrader account equity is unavailable")
+                self._report_forge_decision(symbol, "account_risk_check_unavailable")
                 return summary
             broker_sym = self._sym_mapper.translate(symbol)
             if broker_sym is None:
                 print(f"[{symbol}] UNMAPPED — add BROKER_SYMBOL_MAP={symbol}:<name> to .env")
                 summary["unmapped"] += 1
+                self._report_forge_decision(symbol, "symbol_unmapped")
                 continue
             duplicate_of = duplicate_mappings.get(symbol)
             if duplicate_of is not None:
@@ -845,12 +936,15 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] SKIP duplicate broker mapping "
                       f"(covered by {duplicate_of})")
                 summary["holds"] += 1
+                self._report_forge_decision(symbol, "duplicate_broker_mapping",
+                                            duplicate_of=duplicate_of)
                 continue
             summary["scanned"] += 1
             existing_pos = self._get_open_position(broker_sym, open_positions)
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
+                self._report_forge_decision(symbol, "already_in_position")
                 if symbol not in self._managed_positions:
                     entry_price = existing_pos.get("price_open") or existing_pos.get("price") or 0.0
                     direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
@@ -866,20 +960,26 @@ class CTraderDemoTrader:
                          symbol, broker_sym)
                 print(f"[{symbol}->{broker_sym}] SKIP trading disabled by cTrader")
                 summary["market_closed"] += 1
+                self._report_forge_decision(symbol, "trading_disabled")
                 continue
             if len(open_positions) >= self.max_trades:
                 log.info("[%s] new entry skipped — max open positions reached; "
                          "existing positions remain monitored", symbol)
+                self._report_forge_decision(symbol, "max_positions_reached")
                 continue
             if self._pos_log.has_open_position(symbol, broker_sym):
                 print(f"[{symbol}->{broker_sym}] DEDUP: Chronicle shows open position")
                 summary["holds"] += 1
+                self._report_forge_decision(symbol, "duplicate_position_detected")
                 continue
             market_state = self.broker.market_state(broker_sym)
             if not market_state["can_open"]:
                 log.info("[%s] new entry skipped — market state=%s (%s)",
                          symbol, market_state["state"], market_state["reason"])
                 summary["market_closed"] += 1
+                self._report_forge_decision(symbol, "market_closed",
+                                            market_state=market_state["state"],
+                                            reason=market_state["reason"])
                 continue
             print(f"[{symbol}->{broker_sym}] evaluating entry...")
             proposal_started = time.monotonic()
@@ -894,6 +994,8 @@ class CTraderDemoTrader:
             except Exception as exc:
                 print(f"[{symbol}] ERROR  {exc}")
                 summary["errors"] += 1
+                self._report_forge_decision(symbol, "signal_exception",
+                                            error_type=type(exc).__name__)
                 continue
             if timed_out:
                 elapsed = time.monotonic() - proposal_started
@@ -904,6 +1006,10 @@ class CTraderDemoTrader:
                 else:
                     print(f"[{symbol}] SKIP after {elapsed:.1f}s (proposal {reason})")
                     summary["errors"] += 1
+                self._report_forge_decision(
+                    symbol, "signal_timeout" if reason == "deadline_exceeded" else "signal_cancelled",
+                    timeout_seconds=self._symbol_timeout, timeout_reason=reason,
+                )
                 continue
             status = (sig or {}).get("status")
             if status != "complete":
@@ -913,6 +1019,14 @@ class CTraderDemoTrader:
                 if "hold" in message.lower():
                     print(f"[{symbol}] HOLD   ({message})")
                     summary["holds"] += 1
+                    signal = (sig or {}).get("signal") or {}
+                    self._report_forge_decision(
+                        symbol, "no_setup", message=message,
+                        call=signal.get("call"), confidence=signal.get("confidence"),
+                        regime=(sig or {}).get("regime"),
+                        strategy_id=((signal.get("streams") or {}).get("technical") or {}).get("genome"),
+                        decision_context=(sig or {}).get("decision_context"),
+                    )
                 elif "risk gate" in message.lower() or reasons:
                     conf_str = ""
                     try:
@@ -921,9 +1035,19 @@ class CTraderDemoTrader:
                         pass
                     print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
                     summary["rejects"] += 1
+                    signal = (sig or {}).get("signal") or {}
+                    self._report_forge_decision(
+                        symbol, "risk_rejected", reasons=reasons,
+                        call=signal.get("call"), confidence=signal.get("confidence"),
+                        regime=(sig or {}).get("regime"),
+                        strategy_id=(sig or {}).get("strategy_id") or
+                        ((signal.get("streams") or {}).get("technical") or {}).get("genome"),
+                        decision_context=(sig or {}).get("decision_context"),
+                    )
                 else:
                     print(f"[{symbol}] ERROR  {message}")
                     summary["errors"] += 1
+                    self._report_forge_decision(symbol, "signal_error", message=message)
                 continue
             plan = sig["plan"]
             s = sig["signal"]
@@ -942,6 +1066,12 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  -> {res_status}  {res_reason}")
                 if res_status == "filled":
+                    self._report_forge_decision(
+                        symbol, "trade_opened", call=s.get("call"),
+                        confidence=s.get("confidence"), regime=sig.get("regime"),
+                        direction=plan.get("direction"),
+                        strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                    )
                     self._trades_this_session += 1
                     summary["trades"] += 1
                     ticket = result.get("order") or result.get("ticket") or 0
@@ -971,6 +1101,12 @@ class CTraderDemoTrader:
                     self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:
                     summary["rejects"] += 1
+                    self._report_forge_decision(
+                        symbol, "execution_rejected", broker_status=res_status,
+                        reason=str(res_reason)[:240], direction=plan.get("direction"),
+                        regime=sig.get("regime"),
+                        strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                    )
                     if _is_trading_disabled_rejection(result):
                         self._trading_disabled_symbols.add(broker_sym.upper())
                         log.warning(
@@ -982,6 +1118,11 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  (cTrader not connected)")
                 summary["trades"] += 1
+                self._report_forge_decision(
+                    symbol, "execution_unavailable", direction=plan.get("direction"),
+                    regime=sig.get("regime"),
+                    strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                )
         if self._kill_switch_check():
             summary["kill_switch"] = True
         elif self._ks_check_unavailable:
@@ -1048,6 +1189,8 @@ class CTraderDemoTrader:
                     peer.stop()
                 except Exception:
                     pass
+        if getattr(self, "forge_bridge", None):
+            self.forge_bridge.stop()
 
 
 def main():

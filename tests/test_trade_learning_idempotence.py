@@ -72,3 +72,47 @@ def test_record_close_uses_price_direction_for_fusion_learning(monkeypatch):
         assert captured[0][0] == "fusion.learn"
         assert captured[0][1]["realized_direction"] == expected_direction
         assert captured[0][1]["trade_won"] is expected_win
+
+
+def test_demo_feedback_sends_normalized_entry_context_to_forge(monkeypatch):
+    engine = trade_learning.TradeLearningEngine.__new__(trade_learning.TradeLearningEngine)
+    engine.confidence = SimpleNamespace(
+        record_outcome=lambda *args: {
+            "live_confidence": 0.5, "demo_trades": 1, "wins": 0, "losses": 1,
+        },
+        maybe_trigger_reevolution=lambda *args: None,
+    )
+    engine.benchmark = SimpleNamespace(record_trade=lambda _outcome: None)
+    forge_calls = []
+    oracle = SimpleNamespace(
+        act=lambda *_args, **_kwargs: None,
+        sentinel=None,
+        chronicle=None,
+        forge=SimpleNamespace(act=lambda task, context: forge_calls.append(
+            (task, context)) or {"status": "queued"}),
+    )
+    pos = SimpleNamespace(
+        symbol="EURUSD", direction=SimpleNamespace(value="buy"),
+        entry_price=1.1000, initial_stop=1.0950, initial_target=1.1100,
+        entry_time=time.time() - 1800, entry_streams={
+            "technical": {"direction": 0.6, "confidence": 0.8,
+                          "source": "evolved_champion"}},
+        entry_term_evidence={}, entry_regime="trending_up", entry_confidence=0.72,
+        entry_atr=0.002, journal_id=None, strategy_id="genome-1",
+        timeframe_policy_id="policy-1", execution_environment="demo",
+    )
+    monkeypatch.setattr(trade_learning, "_append_experiment_log", lambda *args, **kwargs: None)
+
+    engine.record_close(
+        oracle, pos, 1.0950, 0.4, "trending_down", "stop_loss",
+        close_event_id="demo-close-context-1")
+
+    task, request = forge_calls[0]
+    context = request["outcome"]["trade_context"]
+    assert task == "oracle.strategy.demo_outcome"
+    assert request["outcome"]["pnl_basis"].startswith("price_return")
+    assert context["stop_distance_atr"] == 2.5
+    assert context["target_distance_atr"] == 5.0
+    assert context["target_to_stop_ratio"] == 2.0
+    assert context["technical_vote"] == 0.6
+    assert context["technical_confidence"] == 0.8

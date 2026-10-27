@@ -21,6 +21,7 @@ import math
 import time
 import urllib.parse
 import urllib.request
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -314,8 +315,16 @@ class MarketData:
 
     def __init__(self, cache_dir: Optional[str] = None):
         self.sources = [YFinanceSource(), StooqSource()]
-        self.cache_dir = Path(cache_dir or (Path(__file__).resolve().parent.parent / "data_cache"))
+        oracle_root = Path(__file__).resolve().parents[1]
+        self.cache_dir = Path(cache_dir) if cache_dir else oracle_root / "memory" / "data_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if cache_dir is None:
+            legacy_cache = oracle_root / "data_cache"
+            if legacy_cache.is_dir():
+                for source in legacy_cache.glob("*.json"):
+                    target = self.cache_dir / source.name
+                    if not target.exists():
+                        shutil.copy2(source, target)
 
     def _cache_path(self, symbol: str) -> Path:
         safe = symbol.upper().replace("/", "_")

@@ -32,6 +32,7 @@ FIX O-3 (2026-07-17): Wire SignalFusion as the stream builder.
 from __future__ import annotations
 
 import logging
+import math
 import sys
 import time
 from pathlib import Path
@@ -278,6 +279,118 @@ class OracleAgent(BaseAgent):
                 "atr": atr,
                 "_technicals": market["technicals"]}
 
+    @staticmethod
+    def _decision_context(signal_result: Dict[str, Any], *,
+                          effective_confidence: Optional[float] = None,
+                          risk: Optional[Dict[str, Any]] = None,
+                          news_impact: Optional[str] = None,
+                          social_risk: Optional[str] = None) -> Dict[str, Any]:
+        """Build compact, non-text decision evidence for Forge's diagnosis loop.
+
+        Raw news articles, social posts, memory summaries, and provider payloads
+        are deliberately excluded. This is observability only; it does not
+        change the signal or risk decision.
+        """
+        def finite_number(value: Any) -> Optional[float]:
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                number = float(value)
+                return number if math.isfinite(number) else None
+            return None
+
+        fused = signal_result.get("signal") or {}
+        technicals = signal_result.get("_technicals") or {}
+        fused_context: Dict[str, Any] = {}
+        call = fused.get("call")
+        if call in {"buy", "sell", "hold"}:
+            fused_context["call"] = call
+        for field in ("direction", "confidence", "agreement", "entry_threshold"):
+            number = finite_number(fused.get(field))
+            if number is not None:
+                fused_context[field] = number
+        effective = finite_number(effective_confidence)
+        if effective is not None:
+            fused_context["effective_confidence"] = effective
+        weights = fused.get("learned_weights")
+        if isinstance(weights, dict):
+            safe_weights = {
+                str(name): number
+                for name, value in weights.items()
+                if name in {"technical", "news", "social", "memory"}
+                and (number := finite_number(value)) is not None
+            }
+            if safe_weights:
+                fused_context["learned_weights"] = safe_weights
+
+        market: Dict[str, Any] = {}
+        regime = signal_result.get("regime")
+        if isinstance(regime, str) and regime.strip():
+            market["regime"] = regime.strip()[:64]
+        last_price = finite_number(signal_result.get("last"))
+        atr = finite_number(signal_result.get("atr"))
+        if last_price is not None:
+            market["last_price"] = last_price
+        if atr is not None:
+            market["atr_14"] = atr
+        regime_details = technicals.get("regime") if isinstance(technicals, dict) else None
+        if isinstance(regime_details, dict):
+            for source, target in (("slope_20", "slope_20"),
+                                   ("volatility", "realized_volatility")):
+                number = finite_number(regime_details.get(source))
+                if number is not None:
+                    market[target] = number
+            if isinstance(regime_details.get("high_volatility"), bool):
+                market["high_volatility"] = regime_details["high_volatility"]
+        for field in ("rsi_14",):
+            number = finite_number(technicals.get(field)) if isinstance(technicals, dict) else None
+            if number is not None:
+                market[field] = number
+
+        streams: Dict[str, Any] = {}
+        raw_streams = fused.get("streams")
+        if isinstance(raw_streams, dict):
+            for name in ("technical", "news", "social", "memory"):
+                raw = raw_streams.get(name)
+                if not isinstance(raw, dict):
+                    continue
+                item: Dict[str, Any] = {}
+                for field in ("direction", "confidence"):
+                    number = finite_number(raw.get(field))
+                    if number is not None:
+                        item[field] = number
+                for field in ("source", "evidence_state"):
+                    value = raw.get(field)
+                    if isinstance(value, str) and value.strip():
+                        item[field] = value.strip()[:64]
+                for field in ("cross_source", "manipulation_warning"):
+                    if isinstance(raw.get(field), bool):
+                        item[field] = raw[field]
+                count_field = {"news": "articles", "social": "posts", "memory": "memories"}.get(name)
+                count = raw.get(count_field) if count_field else None
+                if isinstance(count, int) and not isinstance(count, bool) and 0 <= count <= 1_000_000:
+                    item["evidence_count"] = count
+                if item:
+                    streams[name] = item
+
+        result: Dict[str, Any] = {
+            "schema": "oracle.decision_context.v1",
+            "fused": fused_context,
+            "market": market,
+            "streams": streams,
+        }
+        if isinstance(risk, dict):
+            risk_context: Dict[str, Any] = {}
+            mode = risk.get("mode")
+            if mode in {"paper", "live"}:
+                risk_context["mode"] = mode
+            floor = finite_number(risk.get("confidence_floor"))
+            if floor is not None:
+                risk_context["confidence_floor"] = floor
+            result["risk"] = risk_context
+        for key, value in (("news_impact", news_impact), ("social_risk", social_risk)):
+            if isinstance(value, str) and value in {"none", "low", "medium", "high", "critical", "unknown"}:
+                result[key] = value
+        return result
+
     # ---- BaseAgent contract ----
 
     def execute(self, task, context):
@@ -356,7 +469,8 @@ class OracleAgent(BaseAgent):
                 return sig
             s = sig["signal"]
             if s["call"] == "hold":
-                return {"status": "error", "message": "signal is hold", "signal": s}
+                return {"status": "error", "message": "signal is hold", "signal": s,
+                        "decision_context": self._decision_context(sig)}
 
             # News Intelligence (Phase 1 roadmap item 2): never ignore major
             # news. A high-impact event drives confidence to 0, which makes
@@ -398,7 +512,12 @@ class OracleAgent(BaseAgent):
                     symbol, direction, effective_confidence, plan.get("reasons", []))
                 return {"status": "error", "message": "risk gate rejected", "risk": plan,
                         "news_impact": news.level, "news_reason": news.reason,
-                        "social_risk": social.level, "social_reason": social.reason}
+                        "social_risk": social.level, "social_reason": social.reason,
+                        "signal": s, "regime": sig.get("regime"),
+                        "strategy_id": ((streams.get("technical") or {}).get("genome")),
+                        "decision_context": self._decision_context(
+                            sig, effective_confidence=effective_confidence, risk=plan,
+                            news_impact=news.level, social_risk=social.level)}
             return {"status": "complete", "plan": plan, "signal": s,
                     "effective_confidence": effective_confidence,
                     "using_evolved_champion": sig["using_evolved_champion"],

@@ -59,7 +59,10 @@ class AgentFactory:
         self.output_root = Path(output_root) if output_root else _REPO_ROOT.parent
         self.synth = CodeSynthesizer(llm=llm)
         self.sandbox = Sandbox(self.output_root)
-        self.registry = CreatedAgentRegistry(storage_dir=str(_REPO_ROOT / "registry"))
+        self.registry = CreatedAgentRegistry(
+            storage_dir=str(_REPO_ROOT / "memory" / "registry"),
+            legacy_storage_dir=str(_REPO_ROOT / "registry"),
+        )
         self._blueprints: Dict[str, Dict[str, Any]] = {}
         self._pending: Dict[str, Dict[str, Any]] = {}   # birth records awaiting deploy approval
 

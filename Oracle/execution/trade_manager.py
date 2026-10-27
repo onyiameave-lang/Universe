@@ -89,6 +89,9 @@ class Position:
     entry_atr: Optional[float] = None   # volatility at entry, for Volatility Exit (roadmap Phase 2 item 8)
     journal_id: Optional[str] = None    # links this position's Trade Journal entry to its eventual outcome
     last_journaled_hold_reason: Optional[str] = None   # dedup: only journal a hold when the reason changes
+    strategy_id: Optional[str] = None   # evolved Oracle genome active when the position opened
+    timeframe_policy_id: Optional[str] = None  # timeframe policy active at entry, if available
+    execution_environment: str = "unknown"  # only verified demo outcomes may update Forge V2
 
     # Mutable trailing state -- the manager updates these as it runs.
     current_stop: float = field(init=False)

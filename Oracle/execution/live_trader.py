@@ -92,6 +92,7 @@ import os
 import sys
 import time
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -903,6 +904,32 @@ class LiveTrader:
 
     # ── per-cycle tick ────────────────────────────────────────────────────────
 
+    def _report_forge_decision(self, symbol: str, outcome_code: str,
+                               **details: Any) -> None:
+        """Queue structured decision evidence; Forge never sits in the trade path."""
+        bridge = getattr(self.oracle, "forge", None)
+        act = getattr(bridge, "act", None)
+        if not callable(act):
+            return
+        now = time.time()
+        observation = {
+            "schema": "oracle.decision.observation.v1",
+            "event_id": str(uuid.uuid4()),
+            "symbol": str(symbol).strip().upper(),
+            "evaluated_at_unix": now,
+            "outcome_code": outcome_code,
+            "execution_environment": "signal_only" if self.signal_only else "configured",
+            "details": {key: value for key, value in details.items() if value is not None},
+        }
+        try:
+            result = act("oracle.decision.observation", {"observation": observation})
+            if isinstance(result, dict) and result.get("status") == "error":
+                log.warning("[%s] Forge decision observation could not be queued", symbol)
+        except Exception as exc:
+            # Learning telemetry must not alter a trading decision.
+            log.debug("[%s] Forge decision report could not be queued: %s",
+                      symbol, type(exc).__name__)
+
     def _tick(self) -> Dict[str, int]:
         """
         Scan every symbol once.  Never hangs — each oracle.act() call is wrapped
@@ -939,6 +966,7 @@ class LiveTrader:
                 print(f"[{symbol}] UNMAPPED  (no broker symbol found — add "
                       f"BROKER_SYMBOL_MAP={symbol}:<broker_name> to .env to fix)")
                 summary["unmapped"] += 1
+                self._report_forge_decision(symbol, "symbol_unmapped")
                 continue
 
             summary["scanned"] += 1
@@ -952,6 +980,7 @@ class LiveTrader:
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
+                self._report_forge_decision(symbol, "already_in_position")
                 if symbol not in self._managed_positions:
                     # Orphaned position (adopted from a prior run, or opened
                     # by another script) — the CTM doesn't know about it yet.
@@ -998,6 +1027,7 @@ class LiveTrader:
             if len(self._managed_positions) >= self.max_trades:
                 log.info("[%s] new entry skipped — max open positions reached; "
                          "existing positions remain monitored", symbol)
+                self._report_forge_decision(symbol, "max_positions_reached")
                 continue
 
             # ── FIX-DEDUP: check Chronicle for cross-script open positions ────
@@ -1007,6 +1037,7 @@ class LiveTrader:
                 print(f"[{symbol}→{broker_sym}] DEDUP: Chronicle shows open position "
                       f"from another trader — skipping entry (TRADER_ID={_TRADER_ID})")
                 summary["holds"] += 1
+                self._report_forge_decision(symbol, "duplicate_position_detected")
                 continue
             # ── end FIX-DEDUP ─────────────────────────────────────────────────
 
@@ -1025,6 +1056,8 @@ class LiveTrader:
                 log.warning("[%s] ERROR during oracle.act: %s", symbol, exc)
                 print(f"[{symbol}] ERROR  {exc}")
                 summary["errors"] += 1
+                self._report_forge_decision(symbol, "signal_exception",
+                                            error_type=type(exc).__name__)
                 continue
 
             # FIX-2: timeout path
@@ -1032,6 +1065,8 @@ class LiveTrader:
                 log.warning("[%s] TIMEOUT after %.0fs — skipping", symbol, self._symbol_timeout)
                 print(f"[{symbol}] TIMEOUT after {self._symbol_timeout:.0f}s — skipping")
                 summary["timeouts"] += 1
+                self._report_forge_decision(symbol, "signal_timeout",
+                                            timeout_seconds=self._symbol_timeout)
                 continue
 
             # ── 2. Classify the signal outcome ────────────────────────────────
@@ -1047,6 +1082,13 @@ class LiveTrader:
                     log.info("[%s] HOLD   (%s)", symbol, message)
                     print(f"[{symbol}] HOLD   ({message})")
                     summary["holds"] += 1
+                    signal = (sig or {}).get("signal") or {}
+                    self._report_forge_decision(
+                        symbol, "no_setup", message=message,
+                        call=signal.get("call"), confidence=signal.get("confidence"),
+                        regime=signal.get("regime"),
+                        strategy_id=((signal.get("streams") or {}).get("technical") or {}).get("genome"),
+                    )
 
                 elif "risk gate" in message.lower() or reasons:
                     conf_str = ""
@@ -1057,11 +1099,19 @@ class LiveTrader:
                     log.info("[%s] REJECT %sreasons=%s", symbol, conf_str, reasons)
                     print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
                     summary["rejects"] += 1
+                    signal = (sig or {}).get("signal") or {}
+                    self._report_forge_decision(
+                        symbol, "risk_rejected", reasons=reasons,
+                        call=signal.get("call"), confidence=signal.get("confidence"),
+                        regime=signal.get("regime"),
+                        strategy_id=((signal.get("streams") or {}).get("technical") or {}).get("genome"),
+                    )
 
                 else:
                     log.info("[%s] ERROR  %s", symbol, message)
                     print(f"[{symbol}] ERROR  {message}")
                     summary["errors"] += 1
+                    self._report_forge_decision(symbol, "signal_error", message=message)
 
                 continue   # always move to next symbol — never freeze here
 
@@ -1083,6 +1133,12 @@ class LiveTrader:
                         "streams": sig.get("_streams", {}),
                     })
                 summary["signals"] += 1
+                self._report_forge_decision(
+                    symbol, "signal_only", call=s.get("call"),
+                    confidence=sig.get("effective_confidence", s.get("confidence")),
+                    regime=sig.get("regime"), direction=plan.get("direction"),
+                    strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                )
                 log.info("[%s→%s] SIGNAL ONLY direction=%s %s Telegram=%s",
                          symbol, broker_sym, plan["direction"], conf_str,
                          "sent" if delivered else ("configured; delivery skipped/failed" if self.telegram.enabled else "not configured"))
@@ -1107,6 +1163,13 @@ class LiveTrader:
                 print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  -> {res_status}  {res_reason}")
                 if res_status == "filled":
+                    self._report_forge_decision(
+                        symbol, "trade_opened", call=s.get("call"),
+                        confidence=sig.get("effective_confidence", s.get("confidence")),
+                        regime=sig.get("regime"), direction=plan.get("direction"),
+                        strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                        broker_status=res_status,
+                    )
                     self._trades_this_session += 1
                     summary["trades"] += 1
                     # FIX-DEDUP: log opened event to Chronicle so other script sees it
@@ -1140,9 +1203,20 @@ class LiveTrader:
                 else:
                     # broker rejected (e.g. market closed, insufficient margin)
                     summary["rejects"] += 1
+                    self._report_forge_decision(
+                        symbol, "execution_rejected", broker_status=res_status,
+                        reason=str(res_reason)[:240], direction=plan.get("direction"),
+                        regime=sig.get("regime"),
+                        strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                    )
             else:
                 log.info("[%s→%s] TRADE  direction=%s %s (execution disabled: MT5 not connected)",
                          symbol, broker_sym, plan["direction"], conf_str)
+                self._report_forge_decision(
+                    symbol, "execution_unavailable", direction=plan.get("direction"),
+                    regime=sig.get("regime"),
+                    strategy_id=((s.get("streams") or {}).get("technical") or {}).get("genome"),
+                )
                 print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  (execution disabled: MT5 not connected)")
                 # count as a "trade signal" even though we couldn't execute

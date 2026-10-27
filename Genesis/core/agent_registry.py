@@ -27,8 +27,15 @@ from typing import Any, Dict, List, Optional
 
 
 class CreatedAgentRegistry:
-    def __init__(self, storage_dir: str = "registry"):
-        self.storage_dir = Path(storage_dir)
+    def __init__(self, storage_dir: Optional[str] = None,
+                 legacy_storage_dir: Optional[str] = None):
+        genesis_root = Path(__file__).resolve().parents[1]
+        default_dir = genesis_root / "memory" / "registry"
+        self.storage_dir = Path(storage_dir or default_dir)
+        if legacy_storage_dir is None and storage_dir is None:
+            legacy_storage_dir = str(genesis_root / "registry")
+        if legacy_storage_dir:
+            self._migrate_legacy_storage(Path(legacy_storage_dir))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.versions_dir = self.storage_dir / "versions"
         self.versions_dir.mkdir(parents=True, exist_ok=True)
@@ -36,6 +43,19 @@ class CreatedAgentRegistry:
         self._lock = threading.RLock()
         self._agents: Dict[str, Dict[str, Any]] = {}
         self._load()
+
+    def _migrate_legacy_storage(self, legacy_dir: Path) -> None:
+        """Preserve the old registry while moving its runtime store under memory/."""
+        if legacy_dir.resolve() == self.storage_dir.resolve() or not legacy_dir.is_dir():
+            return
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        source, target = legacy_dir / "created_agents.json", self.storage_dir / "created_agents.json"
+        if source.is_file() and not target.exists():
+            shutil.copy2(source, target)
+        source_versions = legacy_dir / "versions"
+        target_versions = self.storage_dir / "versions"
+        if source_versions.is_dir() and not target_versions.exists():
+            shutil.copytree(source_versions, target_versions)
 
     def _load(self) -> None:
         if self._path.exists():

@@ -28,6 +28,7 @@ moment a close is detected, whenever that happens to be.
 from __future__ import annotations
 
 import json
+import math
 import logging
 import threading
 import time
@@ -328,13 +329,14 @@ class TradeLearningEngine:
                 return None
             outcome = self.record_close(
                 oracle_agent, pos, exit_price, exit_confidence,
-                exit_regime, exit_reason)
+                exit_regime, exit_reason, close_event_id=close_key)
             keys.add(close_key)
             self._save_closed_trade_keys(keys)
             return outcome
 
     def record_close(self, oracle_agent, pos, exit_price: float, exit_confidence: float,
-                      exit_regime: str, exit_reason: str) -> TradeOutcome:
+                      exit_regime: str, exit_reason: str,
+                      close_event_id: Optional[str] = None) -> TradeOutcome:
         risk_per_unit = abs(pos.entry_price - pos.initial_stop) or 1e-9
         if pos.direction.value == "buy":
             pnl_r = (exit_price - pos.entry_price) / risk_per_unit
@@ -452,5 +454,73 @@ class TradeLearningEngine:
                                     chronicle_client=getattr(oracle_agent, "chronicle", None))
         except Exception as exc:
             log.warning("[%s] experiment log write failed: %s", pos.symbol, exc)
+
+        # 8. Send an identified demo result to Forge V2 through the durable
+        #    loopback outbox. V1 retains control of its active strategy.
+        if (getattr(pos, "execution_environment", "unknown") == "demo"
+                and getattr(pos, "strategy_id", None) and close_event_id
+                and getattr(oracle_agent, "forge", None) is not None):
+            try:
+                stop_distance = abs(float(pos.entry_price) - float(pos.initial_stop))
+                target_distance = abs(float(pos.initial_target) - float(pos.entry_price))
+                try:
+                    entry_atr = float(getattr(pos, "entry_atr", None))
+                except (TypeError, ValueError):
+                    entry_atr = None
+                if entry_atr is not None and (not math.isfinite(entry_atr) or entry_atr <= 0):
+                    entry_atr = None
+                trade_context = {
+                    "schema": "oracle.demo_trade_context.v1",
+                    "direction": str(getattr(getattr(pos, "direction", None), "value", "unknown")),
+                    "entry_confidence": float(pos.entry_confidence),
+                    "duration_sec": max(0.0, time.time() - float(pos.entry_time)),
+                    "stop_distance_atr": round(stop_distance / entry_atr, 8) if entry_atr else None,
+                    "target_distance_atr": round(target_distance / entry_atr, 8) if entry_atr else None,
+                    "target_to_stop_ratio": round(target_distance / stop_distance, 8) if stop_distance > 0 else None,
+                }
+                entry_streams = getattr(pos, "entry_streams", {})
+                technical = (entry_streams.get("technical", {})
+                             if isinstance(entry_streams, dict) else {})
+                if isinstance(technical, dict):
+                    vote = technical.get("direction")
+                    confidence = technical.get("confidence")
+                    if isinstance(vote, (int, float)) and not isinstance(vote, bool) and math.isfinite(float(vote)):
+                        trade_context["technical_vote"] = float(vote)
+                    if isinstance(confidence, (int, float)) and not isinstance(confidence, bool) and math.isfinite(float(confidence)):
+                        trade_context["technical_confidence"] = float(confidence)
+                    for key in ("source", "champion_source"):
+                        value = technical.get(key)
+                        if isinstance(value, str) and value.strip():
+                            trade_context[key] = value.strip()[:80]
+                trade_context = {
+                    key: value for key, value in trade_context.items()
+                    if value is not None and (not isinstance(value, float) or math.isfinite(value))
+                }
+                response = oracle_agent.forge.act("oracle.strategy.demo_outcome", {
+                    "outcome": {
+                        "schema": "oracle.strategy.demo_outcome.v1",
+                        "close_event_id": str(close_event_id),
+                        "strategy_id": str(pos.strategy_id),
+                        "timeframe_policy_id": getattr(pos, "timeframe_policy_id", None),
+                        "symbol": str(pos.symbol),
+                        "regime": str(pos.entry_regime),
+                        "execution_environment": "demo",
+                        "pnl_r": float(outcome.pnl_r),
+                        "won": bool(outcome.won),
+                        "closed_at_unix": time.time(),
+                        "exit_reason": str(exit_reason),
+                        "feedback_source": "oracle_demo_execution",
+                        "pnl_basis": "price_return_in_initial_stop_r; broker costs not normalized",
+                        "cost_status": "unavailable_provisional",
+                        "trade_context": trade_context,
+                    },
+                    "_sender": "oracle_v1_trade_learning",
+                })
+                if not isinstance(response, dict) or response.get("status") not in {"queued", "complete"}:
+                    log.warning("[%s] Forge V2 did not queue demo outcome: %s",
+                                pos.symbol, (response or {}).get("status", "invalid response"))
+            except Exception as exc:
+                log.warning("[%s] Forge V2 demo feedback could not be queued: %s",
+                            pos.symbol, type(exc).__name__)
 
         return outcome
