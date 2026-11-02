@@ -1028,14 +1028,19 @@ class CTraderDemoTrader:
                         decision_context=(sig or {}).get("decision_context"),
                     )
                 elif "risk gate" in message.lower() or reasons:
-                    conf_str = ""
-                    try:
-                        conf_str = f"conf={sig['signal']['confidence']:.3f}  "
-                    except Exception:
-                        pass
+                    signal = (sig or {}).get("signal") or {}
+                    decision_context = (sig or {}).get("decision_context") or {}
+                    fused_context = decision_context.get("fused") or {}
+                    raw_confidence = signal.get("confidence")
+                    effective_confidence = fused_context.get("effective_confidence")
+                    confidence_parts = []
+                    if isinstance(raw_confidence, (int, float)):
+                        confidence_parts.append(f"raw_conf={raw_confidence:.3f}")
+                    if isinstance(effective_confidence, (int, float)):
+                        confidence_parts.append(f"effective_conf={effective_confidence:.3f}")
+                    conf_str = (" ".join(confidence_parts) + "  ") if confidence_parts else ""
                     print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
                     summary["rejects"] += 1
-                    signal = (sig or {}).get("signal") or {}
                     self._report_forge_decision(
                         symbol, "risk_rejected", reasons=reasons,
                         call=signal.get("call"), confidence=signal.get("confidence"),

@@ -50,10 +50,13 @@ class ForgeBridgeClient:
     @staticmethod
     def _timeout_seconds() -> float:
         try:
-            value = float(os.getenv("ORACLE_FORGE_BRIDGE_TIMEOUT_SEC", "3"))
-            return min(10.0, max(0.5, value))
+            # This worker is independent of Oracle's trading loop and posts
+            # idempotent outbox events. Give Chronicle-backed Forge writes
+            # enough time to finish before the durable outbox retries them.
+            value = float(os.getenv("ORACLE_FORGE_BRIDGE_TIMEOUT_SEC", "30"))
+            return min(60.0, max(1.0, value))
         except ValueError:
-            return 3.0
+            return 30.0
 
     def start(self) -> None:
         if self._worker and self._worker.is_alive():
@@ -153,15 +156,22 @@ class ForgeBridgeClient:
                 "X-Oracle-Forge-Token": self.token,
             },
         )
+        started = time.monotonic()
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
+            elapsed = time.monotonic() - started
+            if elapsed >= 5.0:
+                log.info("Forge V2 bridge task=%s completed in %.1fs", task, elapsed)
             return result if isinstance(result, dict) else {"status": "error", "message": "invalid Forge response"}
         except HTTPError as exc:
-            log.warning("Forge V2 bridge returned HTTP %s", exc.code)
+            log.warning("Forge V2 bridge task=%s returned HTTP %s after %.1fs",
+                        task, exc.code, time.monotonic() - started)
             return {"status": "unavailable", "http_status": exc.code}
         except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            log.warning("Forge V2 bridge unavailable: %s", type(exc).__name__)
+            log.warning("Forge V2 bridge task=%s unavailable after %.1fs "
+                        "(timeout=%.1fs): %s", task, time.monotonic() - started,
+                        self.timeout, type(exc).__name__)
             return {"status": "unavailable", "message": type(exc).__name__}
 
     @staticmethod
