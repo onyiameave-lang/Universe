@@ -72,6 +72,10 @@ class OracleExperimentAdapter:
             evaluation_start_index = contract.variables["evaluation_start_index"]
             threshold = contract.variables["threshold"]
             commission_bps = contract.variables["commission_bps"]
+            minimum_commission_per_side_usd = contract.variables.get(
+                "minimum_commission_per_side_usd", 0.0)
+            minimum_commission_reference_notional_usd = contract.variables.get(
+                "minimum_commission_reference_notional_usd", 0.0)
             slippage_bps = contract.variables["slippage_bps"]
             spread_bps = contract.variables["spread_bps"]
             stress_slippage_bps = contract.variables["stress_slippage_bps"]
@@ -104,6 +108,25 @@ class OracleExperimentAdapter:
                 return failed(
                     f"Oracle experiments require finite {name} in [0, 10000] basis points"
                 )
+        if (isinstance(minimum_commission_per_side_usd, bool)
+                or not isinstance(minimum_commission_per_side_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_per_side_usd))
+                or minimum_commission_per_side_usd < 0):
+            return failed("Oracle minimum per-side commission must be finite and non-negative")
+        if (isinstance(minimum_commission_reference_notional_usd, bool)
+                or not isinstance(minimum_commission_reference_notional_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_reference_notional_usd))
+                or minimum_commission_reference_notional_usd < 0
+                or (minimum_commission_per_side_usd > 0
+                    and minimum_commission_reference_notional_usd <= 0)):
+            return failed("Oracle minimum commission requires a positive USD notional reference")
+        policy_commission_bps = float(commission_bps)
+        if minimum_commission_per_side_usd > 0:
+            policy_commission_bps = max(
+                policy_commission_bps,
+                float(minimum_commission_per_side_usd)
+                / float(minimum_commission_reference_notional_usd) * 10000.0,
+            )
         if price_basis not in {"mid", "bid", "ask"}:
             return failed("Oracle spread evaluation requires OHLC explicitly identified as mid, bid, or ask prices")
         if (stress_slippage_bps < slippage_bps or stress_spread_bps < spread_bps
@@ -148,7 +171,7 @@ class OracleExperimentAdapter:
             ))
             baseline_timeframe_policy = self._policy_trainer(
                 baseline_genome, timeframe_series, evaluation_start_index, entry_threshold,
-                commission_bps, slippage_bps, spread_bps,
+                policy_commission_bps, slippage_bps, spread_bps,
             )
             if contract.ablation_targets:
                 # Keep the learned context policy fixed during a component
@@ -160,7 +183,7 @@ class OracleExperimentAdapter:
                 ))
                 treatment_timeframe_policy = self._policy_trainer(
                     treatment_genome, timeframe_series, evaluation_start_index, treatment_threshold,
-                    commission_bps, slippage_bps, spread_bps,
+                    policy_commission_bps, slippage_bps, spread_bps,
                 )
         except Exception as exc:
             return failed(f"Oracle setup or Forge timeframe training failed: {exc}")
@@ -168,7 +191,8 @@ class OracleExperimentAdapter:
         try:
             baseline_result = self._run_backtest(
                 series, baseline_genome, effective_warmup, threshold,
-                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series, baseline_timeframe_policy,
+                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series,
+                baseline_timeframe_policy, minimum_commission_per_side_usd,
             )
             if baseline_result.get("status") != "complete":
                 return failed(
@@ -177,7 +201,8 @@ class OracleExperimentAdapter:
                 )
             treatment_result = self._run_backtest(
                 series, treatment_genome, effective_warmup, threshold,
-                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series, treatment_timeframe_policy,
+                commission_bps, slippage_bps, spread_bps, price_basis, timeframe_series,
+                treatment_timeframe_policy, minimum_commission_per_side_usd,
             )
             if treatment_result.get("status") != "complete":
                 return failed(
@@ -186,11 +211,13 @@ class OracleExperimentAdapter:
                 )
             baseline_stress_result = self._run_backtest(
                 series, baseline_genome, effective_warmup, threshold,
-                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis, timeframe_series, baseline_timeframe_policy,
+                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis,
+                timeframe_series, baseline_timeframe_policy, minimum_commission_per_side_usd,
             )
             treatment_stress_result = self._run_backtest(
                 series, treatment_genome, effective_warmup, threshold,
-                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis, timeframe_series, treatment_timeframe_policy,
+                commission_bps, stress_slippage_bps, stress_spread_bps, price_basis,
+                timeframe_series, treatment_timeframe_policy, minimum_commission_per_side_usd,
             )
             if (baseline_stress_result.get("status") != "complete"
                     or treatment_stress_result.get("status") != "complete"):
@@ -284,6 +311,9 @@ class OracleExperimentAdapter:
                     "gap_stop_or_target_fill_policy": "current_bar_open",
                     "same_bar_stop_target_policy": "stop_first",
                     "commission_bps_per_side": float(commission_bps),
+                    "minimum_commission_per_side_usd": float(minimum_commission_per_side_usd),
+                    "minimum_commission_reference_notional_usd": float(minimum_commission_reference_notional_usd),
+                    "timeframe_policy_effective_commission_bps_per_side": policy_commission_bps,
                     "slippage_bps_per_side": float(slippage_bps),
                     "spread_bps_full": float(spread_bps),
                     "stress_slippage_bps_per_side": float(stress_slippage_bps),
@@ -342,7 +372,8 @@ class OracleExperimentAdapter:
         return genome
 
     def _run_backtest(self, series, genome, warmup, threshold, commission_bps, slippage_bps,
-                      spread_bps, price_basis, timeframe_series, timeframe_policy):
+                      spread_bps, price_basis, timeframe_series, timeframe_policy,
+                      minimum_commission_per_side_usd=0.0):
         decision = self._decision_factory(genome, {
             "warmup": warmup, "threshold": threshold,
             "timeframe_series": timeframe_series,
@@ -353,6 +384,7 @@ class OracleExperimentAdapter:
             execution_mode="next_open", commission_bps=commission_bps,
             slippage_bps=slippage_bps, spread_bps=spread_bps,
             price_basis=price_basis, strategy_genome=genome,
+            minimum_commission_per_side_usd=minimum_commission_per_side_usd,
         )
 
     @staticmethod

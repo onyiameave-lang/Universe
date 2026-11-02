@@ -57,7 +57,8 @@ class Backtester:
             slippage_bps: float = 0.0,
             spread_bps: float = 0.0,
             price_basis: Optional[str] = None,
-            strategy_genome: Optional[Any] = None) -> Dict[str, Any]:
+            strategy_genome: Optional[Any] = None,
+            minimum_commission_per_side_usd: float = 0.0) -> Dict[str, Any]:
         """
         ``decide_fn(closes_so_far, highs_so_far, lows_so_far)`` returns a call.
         Use ``execution_mode="next_open"`` when decisions observe the current
@@ -71,7 +72,10 @@ class Backtester:
             return self._run_next_open(
                 series, decide_fn, warmup, atr_period, capture_bar_returns,
                 commission_bps, slippage_bps, spread_bps, price_basis, strategy_genome,
+                minimum_commission_per_side_usd,
             )
+        if minimum_commission_per_side_usd != 0:
+            raise ValueError("minimum per-side commission is supported only in next_open execution mode")
         if execution_mode != "legacy_close":
             raise ValueError("execution_mode must be 'legacy_close' or 'next_open'")
         closes, highs, lows = series.closes, series.lows, series.highs  # note: guarded below
@@ -179,6 +183,7 @@ class Backtester:
         spread_bps: float,
         price_basis: str,
         strategy_genome: Optional[Any] = None,
+            minimum_commission_per_side_usd: float = 0.0,
     ) -> Dict[str, Any]:
         """Simulate close-derived signals with next-bar-open fills."""
         costs = {"commission_bps": commission_bps, "slippage_bps": slippage_bps,
@@ -189,6 +194,11 @@ class Backtester:
                 or not math.isfinite(float(value)) or not 0 <= float(value) <= 10000
             ):
                 raise ValueError(f"{name} must be finite and between 0 and 10000 basis points")
+        if (isinstance(minimum_commission_per_side_usd, bool)
+                or not isinstance(minimum_commission_per_side_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_per_side_usd))
+                or minimum_commission_per_side_usd < 0):
+            raise ValueError("minimum_commission_per_side_usd must be finite and non-negative")
         if price_basis is None and float(spread_bps) == 0:
             # Preserve legacy no-spread research calls. Forge evaluations require
             # an explicit price basis and a complete cost profile before running.
@@ -274,15 +284,34 @@ class Backtester:
                     stop_distance = abs(fill_price - stop_price)
                     if not math.isfinite(stop_distance) or stop_distance <= 0:
                         raise ValueError("strategy exit module produced an invalid stop distance")
-                    per_unit_risk = (
+                    base_per_unit_risk = (
                         stop_distance
-                        + 2 * abs(fill_price) * (commission_rate + slippage_rate)
+                        + 2 * abs(fill_price) * slippage_rate
                         + abs(fill_price) * spread_rate
                     )
+                    commission_per_unit = abs(fill_price) * commission_rate
+                    per_unit_risk = base_per_unit_risk + 2 * commission_per_unit
                     size = (position_module.get_size(equity, risk_fraction, per_unit_risk)
                             if position_module is not None else risk_budget / per_unit_risk)
+                    if minimum_commission_per_side_usd > 0:
+                        # Cap size so the risk budget includes the fixed minimum
+                        # commission on both entry and exit, not only its bps rate.
+                        if risk_budget <= 2 * minimum_commission_per_side_usd:
+                            minimum_fee_size_cap = 0.0
+                        else:
+                            percentage_fee_size = risk_budget / per_unit_risk
+                            if percentage_fee_size * commission_per_unit >= minimum_commission_per_side_usd:
+                                minimum_fee_size_cap = percentage_fee_size
+                            else:
+                                minimum_fee_size_cap = (
+                                    risk_budget - 2 * minimum_commission_per_side_usd
+                                ) / base_per_unit_risk
+                        size = min(size, max(0.0, minimum_fee_size_cap))
                     if size > 0:
-                        entry_fee = abs(fill_price * size) * commission_rate
+                        entry_fee = max(
+                            abs(fill_price * size) * commission_rate,
+                            float(minimum_commission_per_side_usd),
+                        )
                         equity -= entry_fee
                         position = {
                             "dir": direction,
@@ -325,7 +354,10 @@ class Backtester:
                     exit_price = target_price
                 if exit_price is not None:
                     fill_exit = exit_price * (1.0 - direction * slippage_rate)
-                    exit_fee = abs(fill_exit * position["size"]) * commission_rate
+                    exit_fee = max(
+                        abs(fill_exit * position["size"]) * commission_rate,
+                        float(minimum_commission_per_side_usd),
+                    )
                     gross_pnl = direction * (fill_exit - position["entry"]) * position["size"]
                     equity += gross_pnl - exit_fee
                     net_pnl = gross_pnl - exit_fee - position["entry_fee"]
@@ -368,7 +400,10 @@ class Backtester:
                 liquidation_fill = liquidation_quote * (1.0 - position["dir"] * slippage_rate)
                 marked_equity += (
                     position["dir"] * (liquidation_fill - position["entry"]) * position["size"]
-                    - abs(liquidation_fill * position["size"]) * commission_rate
+                    - max(
+                        abs(liquidation_fill * position["size"]) * commission_rate,
+                        float(minimum_commission_per_side_usd),
+                    )
                 )
             if marked_equity <= 0 or not math.isfinite(marked_equity):
                 raise ValueError("Backtest equity became non-positive or non-finite")
@@ -387,7 +422,10 @@ class Backtester:
             bid_close, ask_close = bid_ask(closes[-1])
             liquidation_quote = bid_close if position["dir"] == 1 else ask_close
             exit_price = liquidation_quote * (1.0 - position["dir"] * slippage_rate)
-            exit_fee = abs(exit_price * position["size"]) * commission_rate
+            exit_fee = max(
+                abs(exit_price * position["size"]) * commission_rate,
+                float(minimum_commission_per_side_usd),
+            )
             gross_pnl = position["dir"] * (exit_price - position["entry"]) * position["size"]
             equity += gross_pnl - exit_fee
             net_pnl = gross_pnl - exit_fee - position["entry_fee"]
@@ -406,6 +444,7 @@ class Backtester:
             result["bar_observation_count"] = len(bar_returns)
         result["execution_mode"] = "next_open"
         result["commission_bps_per_side"] = commission_bps
+        result["minimum_commission_per_side_usd"] = float(minimum_commission_per_side_usd)
         result["slippage_bps_per_side"] = slippage_bps
         result["spread_bps_full"] = spread_bps
         result["price_basis"] = price_basis or "unspecified_no_spread"

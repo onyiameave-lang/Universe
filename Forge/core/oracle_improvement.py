@@ -3050,6 +3050,8 @@ class OracleImprovementService:
 
             cost_fields = {
                 "commission_bps": "commission_per_side",
+                "minimum_commission_per_side_usd": "minimum_commission_per_side_usd",
+                "minimum_commission_reference_notional_usd": "minimum_commission_reference_notional_usd",
                 "slippage_bps": "slippage_per_side",
                 "spread_bps": "spread_full",
                 "stress_slippage_bps": "stress_slippage_per_side",
@@ -3061,7 +3063,11 @@ class OracleImprovementService:
                                   for field in ("broker", "account_type", "profile_version", "price_basis"))
                           and all(isinstance(profile.get(field), (int, float))
                                   and not isinstance(profile.get(field), bool)
-                                  and float(profile[field]) == float(stored_costs.get(stored_field, float("nan")))
+                                  and float(profile[field]) == float(stored_costs.get(
+                                      stored_field, 0.0 if field in {
+                                          "minimum_commission_per_side_usd",
+                                          "minimum_commission_reference_notional_usd",
+                                      } else float("nan")))
                                   for field, stored_field in cost_fields.items()))
             same_risk = (isinstance(risk_policy, dict) and isinstance(stored_risk, dict)
                          and risk_policy.get("source") == stored_risk.get("source")
@@ -3236,6 +3242,27 @@ class OracleImprovementService:
             return {"status": "blocked", "symbol": symbol,
                     "message": "a versioned broker/account execution-cost profile is required"}
         profile = request["execution_costs"]
+        minimum_commission_per_side_usd = profile.get("minimum_commission_per_side_usd", 0.0)
+        minimum_commission_reference_notional_usd = profile.get(
+            "minimum_commission_reference_notional_usd", 0.0)
+        if (isinstance(minimum_commission_per_side_usd, bool)
+                or not isinstance(minimum_commission_per_side_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_per_side_usd))
+                or minimum_commission_per_side_usd < 0):
+            return {"status": "blocked", "symbol": symbol,
+                    "message": "minimum per-side commission must be finite and non-negative USD"}
+        if (isinstance(minimum_commission_reference_notional_usd, bool)
+                or not isinstance(minimum_commission_reference_notional_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_reference_notional_usd))
+                or minimum_commission_reference_notional_usd < 0
+                or (minimum_commission_per_side_usd > 0
+                    and minimum_commission_reference_notional_usd <= 0)):
+            return {"status": "blocked", "symbol": symbol,
+                    "message": "a positive USD notional reference is required when minimum commission applies"}
+        profile["minimum_commission_per_side_usd"] = float(minimum_commission_per_side_usd)
+        profile["minimum_commission_reference_notional_usd"] = float(
+            minimum_commission_reference_notional_usd)
+        request["execution_costs"] = profile
         evidence = profile.get("evidence")
         if (profile.get("profile_status") != "api_observed_costs"
                 or not isinstance(evidence, dict)
@@ -3332,6 +3359,9 @@ class OracleImprovementService:
         if not isinstance(costs, dict):
             return {"status": "blocked", "message": "a versioned broker/account execution-cost profile is required"}
         commission = costs.get("commission_bps")
+        minimum_commission_per_side_usd = costs.get("minimum_commission_per_side_usd", 0.0)
+        minimum_commission_reference_notional_usd = costs.get(
+            "minimum_commission_reference_notional_usd", 0.0)
         slippage = costs.get("slippage_bps")
         spread = costs.get("spread_bps")
         stress_slippage = costs.get("stress_slippage_bps")
@@ -3341,6 +3371,18 @@ class OracleImprovementService:
                             ("stress_spread_bps", stress_spread)):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or float(value) < 0:
                 return {"status": "blocked", "message": f"valid explicit {name} is required"}
+        if (isinstance(minimum_commission_per_side_usd, bool)
+                or not isinstance(minimum_commission_per_side_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_per_side_usd))
+                or minimum_commission_per_side_usd < 0):
+            return {"status": "blocked", "message": "valid minimum per-side commission in USD is required"}
+        if (isinstance(minimum_commission_reference_notional_usd, bool)
+                or not isinstance(minimum_commission_reference_notional_usd, (int, float))
+                or not math.isfinite(float(minimum_commission_reference_notional_usd))
+                or minimum_commission_reference_notional_usd < 0
+                or (minimum_commission_per_side_usd > 0
+                    and minimum_commission_reference_notional_usd <= 0)):
+            return {"status": "blocked", "message": "a positive USD notional reference is required when minimum commission applies"}
         if (stress_slippage < slippage or stress_spread < spread
                 or (stress_slippage == slippage and stress_spread == spread)):
             return {"status": "blocked", "message": "stress spread/slippage must be no lower than base and worsen at least one cost"}
@@ -3573,6 +3615,8 @@ class OracleImprovementService:
             "data_source": request.get("data_source", "unknown"),
             "execution_costs_bps": {
                 "commission_per_side": float(commission), "slippage_per_side": float(slippage),
+                "minimum_commission_per_side_usd": float(minimum_commission_per_side_usd),
+                "minimum_commission_reference_notional_usd": float(minimum_commission_reference_notional_usd),
                 "spread_full": float(spread),
                 "stress_slippage_per_side": float(stress_slippage),
                 "stress_spread_full": float(stress_spread),
@@ -3704,6 +3748,8 @@ class OracleImprovementService:
                         "evaluation_start_index": evaluation_start_index,
                         "threshold": float((baseline.entry.params or {}).get("base_threshold", 0.25)),
                         "commission_bps": float(commission),
+                        "minimum_commission_per_side_usd": float(minimum_commission_per_side_usd),
+                        "minimum_commission_reference_notional_usd": float(minimum_commission_reference_notional_usd),
                         "slippage_bps": float(slippage),
                         "spread_bps": float(spread),
                         "stress_slippage_bps": float(stress_slippage),

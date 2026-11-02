@@ -344,17 +344,27 @@ class CTraderBroker:
 
         account_info = self._fetch_balance(ProtoOATraderReq)
         if account_info is None:
-            self.status.account_info_available = False
-            balance, equity, currency = 0.0, 0.0, ""
-        else:
-            balance, equity, currency = account_info
-            self.status.account_info_available = True
+            # An authenticated socket without a confirmed account snapshot is
+            # not a usable trading connection. In particular, do not report
+            # "connected" after a stale token/account authorization failure.
+            self.status = BrokerStatus(
+                connected=False,
+                account_type="demo" if self._use_demo else "live",
+                login=self._account_id,
+                reason="cTrader authenticated but account balance could not be confirmed",
+                account_info_available=False,
+            )
+            log.error("cTrader account %s authenticated but account info was unavailable; "
+                      "marking connection unusable", self._account_id)
+            return self.status.to_dict()
+
+        balance, equity, currency = account_info
 
         self.status = BrokerStatus(connected=True,
                                     account_type="demo" if self._use_demo else "live",
                                     login=self._account_id, balance=balance,
                                     equity=equity, currency=currency,
-                                    account_info_available=account_info is not None)
+                                    account_info_available=True)
         log.info("cTrader connected: account %s (%s)", self._account_id,
                  "demo" if self._use_demo else "live")
         return self.status.to_dict()

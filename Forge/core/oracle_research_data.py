@@ -309,7 +309,8 @@ class OracleResearchDataProvider:
         broker_catalog = set(broker.symbol_catalog())
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         window_hours = max(1, min(24, int(os.getenv("ORACLE_FORGE_COST_WINDOW_HOURS", "6"))))
-        window_start_ms = now_ms - window_hours * 60 * 60 * 1000
+        window_ms = window_hours * 60 * 60 * 1000
+        lookback_days = max(1, min(14, int(os.getenv("ORACLE_FORGE_TICK_LOOKBACK_DAYS", "7"))))
         deal_history_days = max(7, min(3650, int(os.getenv("ORACLE_FORGE_DEAL_HISTORY_DAYS", "1827"))))
         deals_result = broker.historical_deals(
             now_ms - deal_history_days * 24 * 60 * 60 * 1000,
@@ -406,21 +407,111 @@ class OracleResearchDataProvider:
                 chunk_ms = chunk_minutes * 60 * 1000
                 bid_ticks, ask_ticks = [], []
                 bid_statuses, ask_statuses = [], []
+                quote_tolerance_ms = max(100, int(os.getenv("ORACLE_FORGE_QUOTE_MATCH_TOLERANCE_MS", "1000")))
+                minimum_quotes = max(20, int(os.getenv("ORACLE_FORGE_MINIMUM_COST_QUOTES", "100")))
+                selected_window_start_ms, selected_window_end_ms = now_ms - window_ms, now_ms
+                best_window = None
+
+                def pair_quote_ticks(candidate_bids, candidate_asks):
+                    candidate_asks = sorted(
+                        {item["timestamp_ms"]: item for item in candidate_asks}.values(),
+                        key=lambda item: item["timestamp_ms"],
+                    )
+                    ask_times = [item["timestamp_ms"] for item in candidate_asks]
+                    spreads, mids = [], []
+                    for bid_tick in candidate_bids:
+                        idx = bisect.bisect_left(ask_times, bid_tick["timestamp_ms"])
+                        candidates = candidate_asks[max(0, idx - 1):min(len(candidate_asks), idx + 1)]
+                        if not candidates:
+                            continue
+                        ask_tick = min(candidates, key=lambda item: abs(item["timestamp_ms"] - bid_tick["timestamp_ms"]))
+                        if abs(ask_tick["timestamp_ms"] - bid_tick["timestamp_ms"]) > quote_tolerance_ms:
+                            continue
+                        mid = (float(bid_tick["price"]) + float(ask_tick["price"])) / 2.0
+                        if mid > 0 and ask_tick["price"] >= bid_tick["price"]:
+                            spreads.append((ask_tick["price"] - bid_tick["price"]) / mid * 10000.0)
+                            mids.append(mid)
+                    return spreads, mids
+
                 if fill_eligible:
-                    cursor = window_start_ms
-                    while cursor < now_ms:
-                        chunk_end = min(now_ms, cursor + chunk_ms)
-                        bid_chunk = broker.historical_ticks(broker_symbol, "BID", cursor, chunk_end, timeout=60.0)
-                        ask_chunk = broker.historical_ticks(broker_symbol, "ASK", cursor, chunk_end, timeout=60.0)
-                        bid_statuses.append(bid_chunk.get("status"))
-                        ask_statuses.append(ask_chunk.get("status"))
-                        bid_ticks.extend(bid_chunk.get("ticks", []))
-                        ask_ticks.extend(ask_chunk.get("ticks", []))
-                        cursor = chunk_end
+                    # A weekend has no ticks in the immediate window even though
+                    # the account and historical API are healthy. Probe small
+                    # windows every six hours, then fetch the full sample in
+                    # short chunks only after finding live trading activity.
+                    probe_ms = 15 * 60 * 1000
+                    for offset_hours in range(0, lookback_days * 24, 6):
+                        probe_end = max(0, now_ms - offset_hours * 60 * 60 * 1000)
+                        probe_start = max(0, probe_end - probe_ms)
+                        probe_bid = broker.historical_ticks(
+                            broker_symbol, "BID", probe_start, probe_end, timeout=15.0
+                        )
+                        probe_ask = broker.historical_ticks(
+                            broker_symbol, "ASK", probe_start, probe_end, timeout=15.0
+                        )
+                        probe_spreads, _ = pair_quote_ticks(
+                            probe_bid.get("ticks", []), probe_ask.get("ticks", [])
+                        )
+                        if (probe_bid.get("status") != "complete"
+                                or probe_ask.get("status") != "complete"
+                                or len(probe_spreads) < minimum_quotes):
+                            continue
+
+                        candidate_end = probe_end
+                        candidate_start = max(0, candidate_end - window_ms)
+                        candidate_bids, candidate_asks = [], []
+                        candidate_bid_statuses, candidate_ask_statuses = [], []
+                        cursor = candidate_start
+                        while cursor < candidate_end:
+                            chunk_end = min(candidate_end, cursor + chunk_ms)
+                            bid_chunk = broker.historical_ticks(
+                                broker_symbol, "BID", cursor, chunk_end, timeout=30.0
+                            )
+                            ask_chunk = broker.historical_ticks(
+                                broker_symbol, "ASK", cursor, chunk_end, timeout=30.0
+                            )
+                            candidate_bid_statuses.append(bid_chunk.get("status"))
+                            candidate_ask_statuses.append(ask_chunk.get("status"))
+                            candidate_bids.extend(bid_chunk.get("ticks", []))
+                            candidate_asks.extend(ask_chunk.get("ticks", []))
+                            cursor = chunk_end
+
+                        candidate_bids = sorted(
+                            {item["timestamp_ms"]: item for item in candidate_bids}.values(),
+                            key=lambda item: item["timestamp_ms"],
+                        )
+                        candidate_asks = sorted(
+                            {item["timestamp_ms"]: item for item in candidate_asks}.values(),
+                            key=lambda item: item["timestamp_ms"],
+                        )
+                        candidate_spreads, candidate_mids = pair_quote_ticks(candidate_bids, candidate_asks)
+                        bid_window_complete = bool(candidate_bid_statuses) and all(
+                            value in {"complete", "unavailable"} for value in candidate_bid_statuses
+                        )
+                        ask_window_complete = bool(candidate_ask_statuses) and all(
+                            value in {"complete", "unavailable"} for value in candidate_ask_statuses
+                        )
+                        candidate = {
+                            "bids": candidate_bids, "asks": candidate_asks,
+                            "bid_statuses": candidate_bid_statuses,
+                            "ask_statuses": candidate_ask_statuses,
+                            "spreads": candidate_spreads, "mids": candidate_mids,
+                            "start_ms": candidate_start, "end_ms": candidate_end,
+                            "complete": bid_window_complete and ask_window_complete,
+                        }
+                        if best_window is None or len(candidate_spreads) > len(best_window["spreads"]):
+                            best_window = candidate
+                        if candidate["complete"] and len(candidate_spreads) >= minimum_quotes:
+                            best_window = candidate
+                            break
+
+                    if best_window is not None:
+                        bid_ticks, ask_ticks = best_window["bids"], best_window["asks"]
+                        bid_statuses, ask_statuses = best_window["bid_statuses"], best_window["ask_statuses"]
+                        selected_window_start_ms, selected_window_end_ms = best_window["start_ms"], best_window["end_ms"]
                 bid_ticks = sorted({item["timestamp_ms"]: item for item in bid_ticks}.values(), key=lambda item: item["timestamp_ms"])
                 ask_ticks = sorted({item["timestamp_ms"]: item for item in ask_ticks}.values(), key=lambda item: item["timestamp_ms"])
-                bid_complete = bool(bid_statuses) and all(value == "complete" for value in bid_statuses)
-                ask_complete = bool(ask_statuses) and all(value == "complete" for value in ask_statuses)
+                bid_complete = bool(bid_statuses) and all(value in {"complete", "unavailable"} for value in bid_statuses)
+                ask_complete = bool(ask_statuses) and all(value in {"complete", "unavailable"} for value in ask_statuses)
                 bid_raw_ticks = [int(item["raw_tick"]) for item in bid_ticks if isinstance(item.get("raw_tick"), int)]
                 ask_raw_ticks = [int(item["raw_tick"]) for item in ask_ticks if isinstance(item.get("raw_tick"), int)]
                 raw_tick_count = len(bid_ticks) + len(ask_ticks)
@@ -429,23 +520,8 @@ class OracleResearchDataProvider:
                 ask_ticks = [item for item in ask_ticks
                              if 0.1 <= float(item.get("price", 0)) / reference_mid <= 10.0]
                 rejected_scale_ticks = raw_tick_count - len(bid_ticks) - len(ask_ticks)
-                ask_times = [item["timestamp_ms"] for item in ask_ticks]
                 pip_position = metadata.get("pipPosition")
-                paired_spreads = []
-                paired_mids = []
-                quote_tolerance_ms = max(100, int(os.getenv("ORACLE_FORGE_QUOTE_MATCH_TOLERANCE_MS", "1000")))
-                for bid_tick in bid_ticks:
-                    idx = bisect.bisect_left(ask_times, bid_tick["timestamp_ms"])
-                    candidates = ask_ticks[max(0, idx - 1):min(len(ask_ticks), idx + 1)]
-                    if not candidates:
-                        continue
-                    ask_tick = min(candidates, key=lambda item: abs(item["timestamp_ms"] - bid_tick["timestamp_ms"]))
-                    if abs(ask_tick["timestamp_ms"] - bid_tick["timestamp_ms"]) > quote_tolerance_ms:
-                        continue
-                    mid = (float(bid_tick["price"]) + float(ask_tick["price"])) / 2.0
-                    if mid > 0 and ask_tick["price"] >= bid_tick["price"]:
-                        paired_spreads.append((ask_tick["price"] - bid_tick["price"]) / mid * 10000.0)
-                        paired_mids.append(mid)
+                paired_spreads, paired_mids = pair_quote_ticks(bid_ticks, ask_ticks)
 
                 base_asset = str(metadata.get("baseAssetName") or "").upper()
                 quote_asset = str(metadata.get("quoteAssetName") or "").upper()
@@ -454,7 +530,7 @@ class OracleResearchDataProvider:
                     add_conversion(base_asset, quote_asset, current_mid)
                 commission_price_reference = current_mid or reference_mid
 
-                commission_bps_samples, slippage_bps_samples = [], []
+                commission_bps_samples, commission_notional_usd_samples, slippage_bps_samples = [], [], []
                 maximum_slippage_deals = max(
                     minimum_deals,
                     min(500, int(os.getenv("ORACLE_FORGE_MAXIMUM_SLIPPAGE_DEALS", "100"))),
@@ -475,6 +551,8 @@ class OracleResearchDataProvider:
                     if (isinstance(execution_price, (int, float)) and execution_price > 0
                             and units > 0 and isinstance(conversion, (int, float)) and conversion > 0):
                         notional_usd = units * float(conversion)
+                        if math.isfinite(notional_usd) and notional_usd > 0:
+                            commission_notional_usd_samples.append(notional_usd)
                         money_digits = deal.get("money_digits")
                         commission = (abs(float(deal.get("commission_raw") or 0)) / (10 ** int(money_digits))
                                       if isinstance(money_digits, int) and 1 <= money_digits <= 12 else 0.0)
@@ -568,6 +646,30 @@ class OracleResearchDataProvider:
                         and (not math.isfinite(commission_base)
                              or commission_base < 0 or commission_base > 10000)):
                     reasons.append("derived commission cost is outside supported [0, 10000] bps bounds")
+                minimum_commission_raw = metadata.get("preciseMinCommission")
+                minimum_commission_type = metadata.get("minCommissionType")
+                minimum_commission_amount = (
+                    float(minimum_commission_raw) / 1e8
+                    if isinstance(minimum_commission_raw, (int, float))
+                    and not isinstance(minimum_commission_raw, bool) else None
+                )
+                minimum_commission_asset = str(metadata.get("minCommissionAsset") or "").upper()
+                minimum_commission_per_side_usd = 0.0
+                if minimum_commission_amount is not None and minimum_commission_amount > 0:
+                    if minimum_commission_type == 2:  # QUOTE_CURRENCY
+                        minimum_commission_asset = quote_asset
+                    elif minimum_commission_type != 1:  # CURRENCY
+                        reasons.append("cTrader minimum commission type is unavailable or unsupported")
+                    if not minimum_commission_asset:
+                        reasons.append("cTrader minimum commission currency is unavailable")
+                    else:
+                        minimum_fee_to_usd = conversion_to_usd(minimum_commission_asset)
+                        if minimum_fee_to_usd is None:
+                            reasons.append(
+                                f"cannot convert minimum commission currency {minimum_commission_asset} to USD"
+                            )
+                        else:
+                            minimum_commission_per_side_usd = minimum_commission_amount * minimum_fee_to_usd
                 if fill_quote_scale_mismatches:
                     reasons.append(
                         f"{fill_quote_scale_mismatches} fill quotes differ from execution prices by more than 10x; "
@@ -583,13 +685,17 @@ class OracleResearchDataProvider:
                     )
                 if len(paired_spreads) < minimum_quotes:
                     reasons.append(f"only {len(paired_spreads)} matched bid/ask observations; {minimum_quotes} required")
-                minimum_commission = metadata.get("preciseMinCommission")
-                if isinstance(minimum_commission, (int, float)) and minimum_commission > 0:
-                    reasons.append("symbol minimum commission requires per-trade modeling, which the current bps backtester does not support")
                 if len(slippage_bps_samples) < minimum_deals:
                     reasons.append(
                         f"only {len(slippage_bps_samples)} matched fill/slippage observations; {minimum_deals} required"
                     )
+                minimum_commission_reference_notional_usd = (
+                    min(commission_notional_usd_samples)
+                    if commission_notional_usd_samples else None
+                )
+                if (minimum_commission_per_side_usd > 0
+                        and minimum_commission_reference_notional_usd is None):
+                    reasons.append("cannot establish a USD notional reference for the minimum commission")
 
                 def percentile(values, fraction):
                     ordered = sorted(float(value) for value in values)
@@ -615,6 +721,8 @@ class OracleResearchDataProvider:
                             "promotion_eligible": False,
                             "price_basis": "bid",
                             "commission_bps": commission_base,
+                            "minimum_commission_per_side_usd": minimum_commission_per_side_usd,
+                            "minimum_commission_reference_notional_usd": minimum_commission_reference_notional_usd or 0.0,
                             "slippage_bps": slippage_base,
                             "spread_bps": spread_base,
                             "stress_slippage_bps": slippage_stress,
@@ -625,7 +733,8 @@ class OracleResearchDataProvider:
                             "method": "cTrader commission schedule and historical BID/ASK ticks; p95 base / p99 stress",
                             "evidence": {
                                 "observed_at": datetime.now(timezone.utc).isoformat(),
-                                "window_start_ms": window_start_ms, "window_end_ms": now_ms,
+                                "window_start_ms": selected_window_start_ms,
+                                "window_end_ms": selected_window_end_ms,
                                 "window_hours": window_hours,
                                 "matched_spread_quotes": len(paired_spreads),
                                 "symbol_filled_deals": len(symbol_deals),
@@ -633,12 +742,16 @@ class OracleResearchDataProvider:
                                 "deal_history_days": deal_history_days,
                                 "deal_history_request_count": deals_result.get("request_count"),
                                 "commission_deals": len(commission_bps_samples),
+                                "minimum_commission_reference_notional_usd": minimum_commission_reference_notional_usd,
                                 "slippage_deals_checked": attempted_slippage_deals,
                                 "matched_slippage_deals": len(slippage_bps_samples),
                                 "fill_quote_scale_mismatches": fill_quote_scale_mismatches,
                                 "commission_type": metadata.get("commissionType"),
                                 "precise_trading_commission_rate": metadata.get("preciseTradingCommissionRate"),
-                                "minimum_commission": metadata.get("preciseMinCommission"),
+                                "minimum_commission_amount": minimum_commission_amount,
+                                "minimum_commission_currency": minimum_commission_asset,
+                                "minimum_commission_type": minimum_commission_type,
+                                "minimum_commission_per_side_usd": minimum_commission_per_side_usd,
                                 "base_asset": base_asset, "quote_asset": quote_asset,
                                 "quote_asset_to_usd_rate": quote_to_usd,
                                 "median_mid_price": commission_price_reference,

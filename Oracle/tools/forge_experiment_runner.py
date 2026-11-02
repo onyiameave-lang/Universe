@@ -122,6 +122,19 @@ def _load_saved_empirical_profile(symbol: str, broker_symbol: str):
             or not isinstance(profile.get("profile_version"), str)
             or not profile["profile_version"].strip()):
         return None
+    minimum_commission = profile.get("minimum_commission_per_side_usd", 0.0)
+    minimum_commission_reference = profile.get("minimum_commission_reference_notional_usd", 0.0)
+    if (isinstance(minimum_commission, bool)
+            or not isinstance(minimum_commission, (int, float))
+            or not math.isfinite(float(minimum_commission)) or minimum_commission < 0
+            or isinstance(minimum_commission_reference, bool)
+            or not isinstance(minimum_commission_reference, (int, float))
+            or not math.isfinite(float(minimum_commission_reference))
+            or minimum_commission_reference < 0
+            or (minimum_commission > 0 and minimum_commission_reference <= 0)):
+        return None
+    profile["minimum_commission_per_side_usd"] = float(minimum_commission)
+    profile["minimum_commission_reference_notional_usd"] = float(minimum_commission_reference)
     return profile
 
 
@@ -151,6 +164,8 @@ def _manual_profile_for(symbol, reference_price, document, profiles, aliases):
         "promotion_eligible": False,
         "price_basis": "bid",
         "commission_bps": commission,
+        "minimum_commission_per_side_usd": 0.0,
+        "minimum_commission_reference_notional_usd": 0.0,
         "slippage_bps": slippage,
         "spread_bps": spread,
         "stress_slippage_bps": stress_slippage,

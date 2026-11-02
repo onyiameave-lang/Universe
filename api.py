@@ -710,11 +710,16 @@ async def forge_bridge_act(request: Request):
         raise HTTPException(status_code=503, detail="Forge V2 is not initialized")
     context = dict(context)
     context["_sender"] = "oracle_v1_bridge"
+    started = time.monotonic()
     try:
         result = await run_in_threadpool(_call_agent, forge, task, context, "Forge received the request.")
     except Exception as exc:
-        logger.warning("Forge bridge task failed: %s", type(exc).__name__)
+        logger.warning("Forge bridge task=%s failed after %.1fs: %s",
+                       task, time.monotonic() - started, type(exc).__name__)
         raise HTTPException(status_code=502, detail="Forge could not process the request")
+    elapsed = time.monotonic() - started
+    if elapsed >= 5.0:
+        logger.warning("Forge bridge task=%s completed in %.1fs", task, elapsed)
     result_status = result.get("status") if isinstance(result, dict) else None
     return {"agent": "forge", "task": task,
             "status": result_status if result_status in {"complete", "blocked", "error"} else "complete",
