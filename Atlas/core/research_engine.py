@@ -60,6 +60,8 @@ FIX LOG (phase4-atlas-engine-v1  2026-07-21):
 from __future__ import annotations
 
 import logging
+import concurrent.futures
+import hashlib
 import sys
 import time
 import uuid
@@ -84,9 +86,17 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from core.sources import SourceRegistry, Evidence  # type: ignore
+from core.chronicle_access import bounded_chronicle_search  # type: ignore
 from intelligence.analysis import (relevance, summarize, keywords, extract_claims,  # type: ignore
                                    compute_corroboration, compute_confidence)
 from intelligence.contradiction import ContradictionEngine  # type: ignore
+
+
+def stable_research_memory_id(domain: str, query: str) -> str:
+    """Use one Chronicle record for repeat runs of the same research question."""
+    identity = f"{str(domain).strip().lower()}\0{' '.join(str(query).split()).casefold()}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+    return f"atlas-research-{digest}"
 
 class ResearchEngine:
     def __init__(self, chronicle_client=None, llm=None, confidence_target: float = 0.6):
@@ -94,7 +104,7 @@ class ResearchEngine:
         self.llm = llm
         # FIX-P2-10: Pass chronicle_client to SourceRegistry so Memory First
         # is honoured at the source layer. (Book II Principle I.)
-        self.sources = SourceRegistry(chronicle_client=chronicle_client)
+        self.sources = SourceRegistry(chronicle_client=chronicle_client, llm=llm)
         self.contradiction = ContradictionEngine(llm=llm)
         self.confidence_target = confidence_target
         self._reports: Dict[str, Dict[str, Any]] = {}
@@ -104,7 +114,7 @@ class ResearchEngine:
 
     def investigate(self, query: str, domain: str = "general", depth: str = "standard",
                    sources: Optional[List[str]] = None, max_rounds: int = 1,
-                   deadline_sec: float = 20.0) -> Dict[str, Any]:
+                   deadline_sec: float = 20.0, preserve: bool = True) -> Dict[str, Any]:
         # FIX-ENG-V3-01: max_rounds default changed from 3 -> 1.
         # The old default of 3 rounds caused 3 sequential gather() calls, each
         # hitting Chronicle memories 3 times (logged as "Chronicle returned 3 prior
@@ -135,17 +145,25 @@ class ResearchEngine:
         # Chronicle's nightly Research Director) can pass a much larger
         # deadline_sec + max_rounds explicitly to get genuinely deeper
         # research out of the SAME engine, no rewrite needed.
-        _investigate_deadline = started + deadline_sec
+        try:
+            budget_sec = min(300.0, max(0.1, float(deadline_sec)))
+        except (TypeError, ValueError):
+            budget_sec = 20.0
+        _investigate_deadline = time.monotonic() + budget_sec
         report_id = f"rpt-{uuid.uuid4().hex[:10]}"
         
         # FIX-ENG-V4-01: Timing instrumentation
         _t_recall_start = time.time()
-        prior = self._recall(query, domain)
+        prior = self._recall(
+            query, domain,
+            timeout_sec=min(2.0, max(0.05, _investigate_deadline - time.monotonic() - 0.25)),
+        )
         _t_recall_elapsed = time.time() - _t_recall_start
         log.info("atlas.engine: investigate() _recall took %.2fs", _t_recall_elapsed)
 
         all_evidence: List[Evidence] = []
         source_status: Dict[str, Any] = {}
+        external_query_plans: List[Dict[str, Any]] = []
         rounds: List[Dict[str, Any]] = []
         depths = {"shallow": ["shallow"], "standard": ["standard", "deep"],
                   "deep": ["deep", "deep", "deep"]}.get(depth, ["standard", "deep"])
@@ -155,7 +173,8 @@ class ResearchEngine:
             # FIX-ENG-V3-01: Check wall-clock budget before starting each round.
             # If we're already past the deadline, return what we have rather than
             # starting another expensive gather() call.
-            if time.time() > _investigate_deadline:
+            remaining = _investigate_deadline - time.monotonic()
+            if remaining <= 0.25:
                 import logging
                 logging.getLogger("atlas.engine").info("atlas.engine: investigate() deadline hit after %d round(s) — "
                          "returning %d items (Book II Principle V Graceful Degradation)",
@@ -164,7 +183,11 @@ class ResearchEngine:
             round_depth = depths[min(round_idx, len(depths) - 1)]
             # FIX-ENG-V4-01: Timing instrumentation
             _t_gather_start = time.time()
-            gathered = self.sources.gather(query, domain=domain, depth=round_depth, sources=sources)
+            # Keep time for synthesis and report persistence. A gather timeout
+            # must not consume the complete investigation budget.
+            gather_budget = min(20.0, max(0.1, remaining - 8.0))
+            gathered = self.sources.gather(query, domain=domain, depth=round_depth,
+                                           sources=sources, deadline_sec=gather_budget)
             _t_gather_elapsed = time.time() - _t_gather_start
             log.info("atlas.engine: investigate() gather round %d took %.2fs (%d items)",
                      round_idx + 1, _t_gather_elapsed, len(gathered["evidence"]))
@@ -175,6 +198,9 @@ class ResearchEngine:
                 if (e.source, e.title) not in seen:
                     all_evidence.append(e)
             source_status.update(gathered["source_status"])
+            query_plan = gathered.get("external_query_plan")
+            if isinstance(query_plan, dict):
+                external_query_plans.append(query_plan)
 
             # score relevance + corroboration, then confidence
             for e in all_evidence:
@@ -201,8 +227,20 @@ class ResearchEngine:
         # (Book II Principle V Graceful Degradation — the desk never returns empty-handed
         # when the LLM itself is available and working.)
         llm_only_mode = False
-        if not all_evidence:
-            llm_fallback = self._llm_only_answer(query, domain)
+        if not all_evidence and time.monotonic() < _investigate_deadline - 0.5:
+            fallback_budget = min(5.0, max(0.1, _investigate_deadline - time.monotonic() - 0.25))
+            fallback_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            fallback_future = fallback_pool.submit(self._llm_only_answer, query, domain)
+            try:
+                llm_fallback = fallback_future.result(timeout=fallback_budget)
+            except concurrent.futures.TimeoutError:
+                llm_fallback = None
+                source_status["llm_fallback"] = {"gathered": 0, "status": "deadline"}
+                log.warning("atlas.engine: LLM-only fallback exceeded %.1fs; returning partial report",
+                            fallback_budget)
+            finally:
+                fallback_future.cancel()
+                fallback_pool.shutdown(wait=False, cancel_futures=True)
             if llm_fallback:
                 all_evidence = [llm_fallback]
                 source_status["_summary"] = "llm_only"
@@ -225,7 +263,11 @@ class ResearchEngine:
                 continue
             for c in extract_claims(e.text, max_claims=2):
                 claims_by_source.append((c, e.source, e.credibility))
-        agreement = self.contradiction.analyze(all_evidence, claims_by_source)
+        # Keep the deterministic contradiction analysis; the main synthesis is
+        # the only bounded LLM call in this request. A second narrative call here
+        # previously ran without the investigation deadline.
+        agreement = self.contradiction.analyze(all_evidence, claims_by_source,
+                                              allow_llm=False)
 
         corpus = " ".join(e.text for e in all_evidence[:6])
         # FIX-ATL-DS-01: pass Chronicle's recalled memories as a SEPARATE stream so
@@ -240,32 +282,33 @@ class ResearchEngine:
         # Constitutional law: Book II Principle V Graceful Degradation.
         _t_synth_start = time.time()
         if corpus:
-            import concurrent.futures as _cf
             def _do_synthesize():
                 return self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
                                         chronicle_memories=prior)
-            # Scales with whatever's left of deadline_sec, not a fixed 8s --
-            # a deep-research caller (large deadline_sec) should get a
-            # correspondingly larger synthesis budget too, or a longer
-            # gather phase just leaves less room for the LLM to actually
-            # think about what it gathered. Never below 8.0 (today's
-            # unchanged default behavior) or above 60.0 (a sane ceiling
-            # so a stuck call can't run away indefinitely).
-            _synth_timeout = max(8.0, min(60.0, _investigate_deadline - time.time() - 2.0))
+            _synth_timeout = min(8.0, _investigate_deadline - time.monotonic() - 0.25)
+            _synth_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            _sfut = None
             try:
-                with _cf.ThreadPoolExecutor(max_workers=1) as _sp:
-                    _sfut = _sp.submit(_do_synthesize)
-                    summary = _sfut.result(timeout=_synth_timeout)
-            except _cf.TimeoutError:
+                if _synth_timeout <= 0:
+                    raise concurrent.futures.TimeoutError()
+                _sfut = _synth_pool.submit(_do_synthesize)
+                summary = _sfut.result(timeout=_synth_timeout)
+            except concurrent.futures.TimeoutError:
                 log.warning("atlas.engine: synthesis LLM call exceeded %.0fs — using extractive fallback. "
-                            "FIX-ENG-V6-02. Constitutional: Book II Principle V Graceful Degradation.",
+                            "Returning a bounded partial report.",
                             _synth_timeout)
-                # Extractive fallback: one sentence per document (fast, no LLM)
-                summary = self._synthesize(query, corpus, agreement, domain, all_evidence[:6],
-                                           chronicle_memories=None)
+                summary = self._synthesize(query, corpus, agreement, domain,
+                                           all_evidence[:6], chronicle_memories=None,
+                                           allow_llm=False)
             except Exception as _se:
                 log.warning("atlas.engine: synthesis failed (%s) — using extractive fallback.", _se)
-                summary = ""
+                summary = self._synthesize(query, corpus, agreement, domain,
+                                           all_evidence[:6], chronicle_memories=None,
+                                           allow_llm=False)
+            finally:
+                if _sfut is not None:
+                    _sfut.cancel()
+                _synth_pool.shutdown(wait=False, cancel_futures=True)
         else:
             summary = ""
         _t_synth_elapsed = time.time() - _t_synth_start
@@ -295,6 +338,9 @@ class ResearchEngine:
                              f"{self.confidence_target} after {len(rounds)} round(s).")
         if len({e.source for e in all_evidence}) < 2:
             limitations.append("Single-source: corroboration weak.")
+        deadline_exceeded = time.monotonic() >= _investigate_deadline
+        if deadline_exceeded:
+            limitations.append("Investigation deadline reached; findings are partial and may omit sources.")
 
         report = {"report_id": report_id, "query": query, "domain": domain,
                   "summary": summary or "Insufficient evidence to synthesize.",
@@ -303,16 +349,19 @@ class ResearchEngine:
                   "agreement_narrative": agreement.get("narrative"),
                   "findings": findings, "key_terms": key_terms, "evidence": evidence,
                   "prior_memory": prior, "source_status": source_status,
+                  "external_query_plans": external_query_plans,
                   "confidence": conf["confidence"], "confidence_factors": conf["factors"],
                   "rounds": rounds, "limitations": limitations,
+                  "deadline_exceeded": deadline_exceeded,
                   "duration_sec": round(time.time() - started, 2)}
         self._reports[report_id] = report
-        self._preserve(report)
+        if preserve:
+            self._preserve(report)
         
         # FIX-ENG-V4-01: Log total investigate time
         _t_total = time.time() - started
         log.info("atlas.engine: investigate() complete in %.2fs (deadline=%.1fs remaining)",
-                 _t_total, max(0, _investigate_deadline - time.time()))
+                 _t_total, max(0, _investigate_deadline - time.monotonic()))
 
         # FIX-ATL-DS-01: BACKGROUND relevance feedback TO Chronicle (non-blocking).
         # The user NEVER waits for this -- it runs in a daemon thread AFTER the report
@@ -362,7 +411,6 @@ class ResearchEngine:
                 temperature=0.2, max_tokens=400,
             )
             if r.ok and r.text.strip():
-                from core.sources import Evidence, SOURCE_CREDIBILITY  # type: ignore
                 return Evidence(
                     source="llm_fallback",
                     title=f"LLM answer: {query[:80]}",
@@ -378,7 +426,8 @@ class ResearchEngine:
 
     def _synthesize(self, query: str, corpus: str, agreement: Dict, domain: str,
                    documents: Optional[List[Any]] = None,
-                   chronicle_memories: Optional[List[Dict[str, Any]]] = None) -> str:
+                   chronicle_memories: Optional[List[Dict[str, Any]]] = None,
+                   allow_llm: bool = True) -> str:
         """
         FIX-ATL-DS-01: DUAL-STREAM synthesis. The LLM receives TWO clearly separated,
         labelled streams:
@@ -396,7 +445,7 @@ class ResearchEngine:
         (Book II Principle I Memory First; Book II Ch IV grounded synthesis;
          Book II No Silent Failures.)
         """
-        if self.llm is not None and getattr(self.llm, "has_any", False):
+        if allow_llm and self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
 
@@ -701,18 +750,14 @@ class ResearchEngine:
                 "FIX-ENG-V3-02.", query[:60], exc)
             return None, f"relevance-check-error: {exc} (skipped, not defaulted)"
 
-    def _recall(self, query, domain):
+    def _recall(self, query, domain, timeout_sec: float = 2.0):
         if self.chronicle is None:
             return []
-        try:
-            res = self.chronicle.search(query=query, domain=domain, limit=3, requester="atlas")
-            return res if isinstance(res, list) else []
-        except Exception as exc:
-            import logging
-            logging.getLogger("atlas.engine").warning(
-                "atlas.engine: Chronicle search failed (non-fatal): %s "
-                "(Book II No Silent Failures — Chronicle read errors are visible)", exc)
-            return []
+        result = bounded_chronicle_search(
+            self.chronicle, query=query, domain=domain, limit=3,
+            requester="atlas", timeout_sec=timeout_sec,
+        )
+        return result if isinstance(result, list) else []
 
     def _preserve(self, report):
         # FIX-P2-11/12: Log errors at WARNING (No Silent Failures) and always
@@ -733,6 +778,8 @@ class ResearchEngine:
                 source_agent="atlas",
                 evidence=[e["url"] for e in report["evidence"] if e.get("url")],
                 tags=["atlas", "research"] + report["key_terms"][:5],
+                memory_id=stable_research_memory_id(report.get("domain", "general"),
+                                                   report.get("query", "")),
             )
         except Exception as exc:
             import logging

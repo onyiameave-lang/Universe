@@ -155,7 +155,10 @@ jobs:
             git add Chronicle/memory/research/oracle_state/forge_oracle_state.json
           fi
           mkdir -p Chronicle/memory/research/oracle_forge_experiments Chronicle/memory/research/oracle_strategy_catalogs Chronicle/memory/research/oracle_market_data Chronicle/memory/research/oracle_cost_profiles Chronicle/memory/research/oracle_ablation_learning Chronicle/memory/research/oracle_state
-          git add Chronicle/memory/research/oracle_forge_experiments/ Chronicle/memory/research/oracle_strategy_catalogs/ Chronicle/memory/research/oracle_market_data/ Chronicle/memory/research/oracle_cost_profiles/ Chronicle/memory/research/oracle_ablation_learning/ Chronicle/memory/research/oracle_state/
+          git add Chronicle/memory/research/oracle_forge_experiments/ Chronicle/memory/research/oracle_strategy_catalogs/ Chronicle/memory/research/oracle_market_data/ Chronicle/memory/research/oracle_ablation_learning/ Chronicle/memory/research/oracle_state/
+          if [[ -d Chronicle/memory/research/oracle_cost_profiles ]]; then
+            find Chronicle/memory/research/oracle_cost_profiles -mindepth 2 -maxdepth 2 -type f -name latest.json -print0 | xargs -0 -r git add --
+          fi
           if ! git diff --cached --quiet; then
             git commit -m "Forge Oracle research report $(date -u +'%Y-%m-%d %H:%M UTC')"
             git push origin HEAD:oracle-v2

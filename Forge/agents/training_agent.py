@@ -400,16 +400,10 @@ class ForgeAgent(BaseAgent):
                     log.info("Chronicle outbox startup retry delivered %d memories", result["delivered"])
             except Exception:
                 log.exception("Chronicle outbox startup retry failed")
-        try:
-            recovered = self.oracle_improvement.resume_pending_no_trade_jobs()
-            if recovered.get("resumed"):
-                log.info("Forge resumed %d durable Oracle no-trade research job(s)",
-                         recovered["resumed"])
-            elif recovered.get("status") != "complete":
-                log.warning("Forge could not recover Oracle research jobs: %s",
-                            recovered.get("message", recovered.get("status")))
-        except Exception:
-            log.exception("Forge Oracle diagnosis-job recovery failed")
+        # Do not resume Atlas research from on_start(): FastAPI lifespan startup
+        # must finish before Uvicorn binds its listening socket. The supervisor
+        # performs durable-job recovery on its first interval, after the API is
+        # serving health checks and bridge requests.
         self.oracle_improvement.start_supervisor()
 
     def on_stop(self) -> None:

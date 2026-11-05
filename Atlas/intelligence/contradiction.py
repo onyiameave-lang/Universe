@@ -62,8 +62,8 @@ class ContradictionEngine:
         self.cluster_threshold = cluster_threshold
         self.llm = llm
 
-    def analyze(self, evidence: List[Any], claims_by_source: List[Tuple[str, str, float]]
-               ) -> Dict[str, Any]:
+    def analyze(self, evidence: List[Any], claims_by_source: List[Tuple[str, str, float]],
+                allow_llm: bool = True) -> Dict[str, Any]:
         """
         claims_by_source: list of (claim_text, source_name, credibility).
         Returns consensus, dissent, and flagged contradiction pairs.
@@ -131,7 +131,7 @@ class ContradictionEngine:
             consensus = {"claim": top[0][0][:280], "source": top[0][1],
                         "credibility": round(top[1], 3), "corroborating_claims": top[2]}
 
-        narrative = self._narrate(consensus, dissent, contradictions)
+        narrative = self._narrate(consensus, dissent, contradictions, allow_llm=allow_llm)
         return {"consensus": consensus, "dissent": dissent[:5],
                "contradictions": contradictions[:5], "narrative": narrative,
                "clusters_found": len(clusters)}
@@ -148,8 +148,8 @@ class ContradictionEngine:
             return False
         return (hi - lo) / (abs(hi) + 1e-9) > 0.5
 
-    def _narrate(self, consensus, dissent, contradictions) -> str:
-        if self.llm is not None and getattr(self.llm, "has_any", False):
+    def _narrate(self, consensus, dissent, contradictions, allow_llm: bool = True) -> str:
+        if allow_llm and self.llm is not None and getattr(self.llm, "has_any", False):
             try:
                 from shared.llm import system_prompt
                 r = self.llm.complete(system_prompt("atlas"),

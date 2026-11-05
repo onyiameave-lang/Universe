@@ -30,6 +30,7 @@ ABLATIONS = (
 )
 ROTATION = ("challenger", *[f"ablation:{name}" for name in ABLATIONS], "drift")
 EVALUATION_ENGINE_VERSION = "oracle_topdown_v2_regime-fix-1"
+REQUIRED_RESEARCH_TIMEFRAMES = ("W1", "D1", "H4", "H1", "M45", "M30", "M15")
 CHRONICLE_RESEARCH_DIR = ROOT / "Chronicle" / "memory" / "research"
 LEGACY_CHRONICLE_RESEARCH_DIR = ROOT / "Chronicle" / "research"
 REPORT_DIR = CHRONICLE_RESEARCH_DIR / "oracle_forge_experiments"
@@ -91,15 +92,24 @@ def _load_saved_empirical_profile(symbol: str, broker_symbol: str):
     profile = record.get("profile") if isinstance(record, dict) else None
     evidence = profile.get("evidence") if isinstance(profile, dict) else None
     configured_account_id = os.getenv("CTRADER_ACCOUNT_ID", "").strip()
+    public_profile = (isinstance(record, dict)
+                      and record.get("schema") == "forge.oracle.cost_profile_record.public.v1"
+                      and record.get("account_scope") == "pepperstone-ctrader-demo-commission-based"
+                      and isinstance(profile, dict)
+                      and "account_id" not in record and "account_id" not in profile
+                      and profile.get("account_type") == "demo")
+    private_profile = (isinstance(record, dict)
+                       and record.get("schema") == "forge.oracle.cost_profile_record.v1"
+                       and bool(configured_account_id)
+                       and isinstance(profile, dict)
+                       and str(profile.get("account_id", "")) == configured_account_id
+                       and str(record.get("account_id", "")) == configured_account_id)
     if (not isinstance(record, dict)
-            or record.get("schema") != "forge.oracle.cost_profile_record.v1"
+            or not (public_profile or private_profile)
             or record.get("status") != "complete"
             or record.get("symbol") != symbol
             or not isinstance(profile, dict)
             or profile.get("profile_status") != "api_observed_costs"
-            or not configured_account_id
-            or str(profile.get("account_id", "")) != configured_account_id
-            or str(record.get("account_id", "")) != configured_account_id
             or profile.get("broker_symbol") != broker_symbol
             or not isinstance(evidence, dict)):
         return None
@@ -188,7 +198,9 @@ def _manual_profile_for(symbol, reference_price, document, profiles, aliases):
 def _redact(value):
     if isinstance(value, dict):
         return {
-            key: ("[REDACTED]" if re.search(r"secret|token|password|credential", str(key), re.I)
+            key: ("[REDACTED]" if re.search(
+                      r"secret|token|password|credential|account[_ -]?id|account[_ -]?number|login[_ -]?id",
+                      str(key), re.I)
                   else _redact(item))
             for key, item in value.items()
         }
@@ -200,6 +212,8 @@ def _redact(value):
             if secret:
                 value = value.replace(secret, "[REDACTED]")
         return value
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 
@@ -210,23 +224,163 @@ def _cycle():
 
 
 def _previous_windows():
-    seen = set()
+    """Index successful evaluations by their complete, reproducible input key."""
+    seen = {}
     for directory in (REPORT_DIR, LEGACY_REPORT_DIR):
         for path in directory.glob("*.json"):
             try:
                 report = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
-            for item in report.get("results", []):
+            report_results = report.get("results", [])
+            if not isinstance(report_results, list):
+                continue
+            for item in report_results:
+                if not isinstance(item, dict):
+                    continue
                 fingerprint = item.get("data_fingerprint")
                 if fingerprint and item.get("status") == "complete":
                     key = (item.get("symbol"), item.get("experiment_type"), item.get("ablation_target"),
                            fingerprint, item.get("cost_profile_version"))
-                    if item.get("experiment_type") == "drift":
-                        seen.add(key)
-                    else:
-                        seen.add((*key, item.get("evaluation_engine_version")))
+                    if item.get("experiment_type") != "drift":
+                        key = (*key, item.get("evaluation_engine_version"), item.get("incumbent_fingerprint"))
+                    seen[key] = {
+                        "report_file": str(path),
+                        "source": "prior_report",
+                        "recorded_at": report.get("recorded_at"),
+                        "experiment_id": _nested_value(item, "result", "data", "experiment_id"),
+                        "recommendation": _nested_value(item, "result", "data", "recommendation"),
+                        "result": item.get("result"),
+                    }
     return seen
+
+
+def _nested_value(value, *keys):
+    for key in keys:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _reuse_reference(entry):
+    if not isinstance(entry, dict):
+        return None
+    return {key: entry.get(key) for key in (
+        "source", "report_file", "recorded_at", "experiment_id", "recommendation",
+    ) if entry.get(key) is not None}
+
+
+def _incumbent_fingerprint(incumbent):
+    if not isinstance(incumbent, dict):
+        return None
+    baseline = incumbent.get("baseline_genome")
+    if not isinstance(baseline, dict):
+        return None
+    evaluation_baseline = {
+        key: incumbent.get(key) for key in (
+            "baseline_genome", "performance_metrics", "risk_policy", "regime",
+            "minimum_executed_trades", "strategy_id",
+        )
+    }
+    try:
+        encoded = json.dumps(evaluation_baseline, sort_keys=True, separators=(",", ":"),
+                             ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _result_status(response):
+    """Normalize upstream responses into the runner's small status vocabulary."""
+    outer = response.get("status") if isinstance(response, dict) else None
+    inner = _nested_value(response, "data", "status")
+    status = outer if outer in {"complete", "blocked", "error", "skipped", "reused"} else inner
+    return status if status in {"complete", "blocked", "error", "skipped", "reused"} else "error"
+
+
+def _outcome_fields(response):
+    data = response.get("data", {}) if isinstance(response, dict) else {}
+    if not isinstance(data, dict):
+        data = {}
+    promotion = data.get("promotion_performed")
+    return {
+        "experiment_id": data.get("experiment_id"),
+        "recommendation": data.get("recommendation"),
+        "promotion_performed": promotion if isinstance(promotion, bool) else None,
+        "result_message": data.get("message"),
+    }
+
+
+def _diagnostic_code(status, response, phase):
+    data = response.get("data", {}) if isinstance(response, dict) else {}
+    message = " ".join(str(part) for part in (
+        data.get("message") if isinstance(data, dict) else None,
+        response.get("error") if isinstance(response, dict) else None,
+        response.get("preflight_error") if isinstance(response, dict) else None,
+        response.get("response_body") if isinstance(response, dict) else None,
+    ) if part).lower()
+    if status == "complete":
+        return "EVALUATION_COMPLETE" if phase == "experiment" else "INPUTS_READY"
+    if status == "reused":
+        return "IDENTICAL_RESULT_REUSED"
+    if status == "skipped":
+        return "NO_WORK_REQUIRED"
+    if "cost profile" in message or "costs" in message:
+        return "COST_PROFILE_UNAVAILABLE"
+    if "catalog" in message:
+        return "STRATEGY_CATALOG_UNAVAILABLE"
+    if "history" in message or "timeframe" in message or "ohlcv" in message or "market data" in message:
+        return "MARKET_DATA_PREFLIGHT_FAILED"
+    if "already assessed" in message or "already used" in message or "holdout" in message:
+        return "EVALUATION_WINDOW_ALREADY_CONSUMED"
+    if status == "blocked":
+        return "UPSTREAM_BLOCKED"
+    if isinstance(response, dict) and response.get("http_status"):
+        return f"HTTP_{response['http_status']}"
+    return "UPSTREAM_ERROR"
+
+
+def _validate_window_preflight(data, symbol):
+    """Require the full seven-timeframe window before an experiment can run."""
+    reported_symbol = data.get("symbol") if isinstance(data, dict) else None
+    if not isinstance(data, dict) or not isinstance(reported_symbol, str) or reported_symbol.upper() != symbol:
+        return "preflight response does not identify the requested symbol"
+    if data.get("price_basis") != "bid" or data.get("history_target") != "5y":
+        return "preflight price basis or five-year history target is missing or unsupported"
+    if not re.fullmatch(r"[0-9a-f]{64}", str(data.get("data_fingerprint", ""))):
+        return "combined data fingerprint is missing or invalid"
+    fingerprints = data.get("timeframe_fingerprints")
+    coverage = data.get("timeframe_coverage")
+    if not isinstance(fingerprints, dict) or not isinstance(coverage, dict):
+        return "timeframe fingerprints or coverage are missing"
+    if set(fingerprints) != set(REQUIRED_RESEARCH_TIMEFRAMES) or set(coverage) != set(REQUIRED_RESEARCH_TIMEFRAMES):
+        return "preflight does not include exactly the required seven research timeframes"
+    for timeframe in REQUIRED_RESEARCH_TIMEFRAMES:
+        if not re.fullmatch(r"[0-9a-f]{64}", str(fingerprints.get(timeframe, ""))):
+            return f"{timeframe} fingerprint is missing or invalid"
+        item = coverage.get(timeframe)
+        bars = item.get("bars") if isinstance(item, dict) else None
+        if isinstance(bars, bool) or not isinstance(bars, int) or bars <= 0:
+            return f"{timeframe} completed-bar coverage is missing or invalid"
+        if not item.get("first_completed_bar") or not item.get("last_completed_bar"):
+            return f"{timeframe} completed-bar date range is missing"
+    return None
+
+
+def _run_outcome(results):
+    statuses = {item.get("status") for item in results}
+    if not statuses:
+        return "error"
+    if statuses <= {"complete", "reused", "skipped"} and "complete" in statuses:
+        return "complete"
+    if statuses <= {"reused", "skipped"}:
+        return "reused"
+    if statuses == {"blocked"}:
+        return "blocked"
+    if statuses == {"error"}:
+        return "error"
+    return "partial"
 
 
 def _persist_catalog_artifact(sync_result):
@@ -314,7 +468,10 @@ def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
     )
     try:
         with urllib.request.urlopen(request, timeout=2700) as response:
-            return json.loads(response.read().decode("utf-8"))
+            value = json.loads(response.read().decode("utf-8"))
+            return value if isinstance(value, dict) else {
+                "status": "error", "error": "Oracle Forge returned a non-object JSON response",
+            }
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read(4096).decode("utf-8", errors="replace")
@@ -404,9 +561,10 @@ def _catalog_sync_v1():
             "data": {**(data if isinstance(data, dict) else {}), "catalog_snapshot": catalog}}
 
 
-def _select_v1_ablation_target(symbol: str, cycle: int, data_fingerprint: str):
+def _select_v1_ablation_target(symbol: str, cycle: int, data_fingerprint: str,
+                              incumbent: dict | None = None):
     """Ask V2 Forge to select one target using the active V1 genome's evidence."""
-    incumbent = _v1_catalog_and_incumbent(symbol)
+    incumbent = incumbent or _v1_catalog_and_incumbent(symbol)
     if incumbent.get("status") != "complete":
         return {"status": incumbent.get("status", "error"), "data": incumbent}
     baseline = incumbent.get("baseline_genome")
@@ -591,6 +749,23 @@ def main() -> int:
         selected_ablation = ablation
         ablation_selection = None
         selected_incumbent = None
+        incumbent_fingerprint = None
+        reused_from = None
+        if (mode not in {"drift", "cost-observations"} and oracle_source == "v1"
+                and catalog_sync_ok and isinstance(execution_costs, dict)):
+            selected_incumbent = _v1_catalog_and_incumbent(symbol)
+            if selected_incumbent.get("status") != "complete":
+                response = {"status": selected_incumbent.get("status", "error"),
+                            "data": selected_incumbent}
+                status = _result_status(response)
+            else:
+                incumbent_fingerprint = _incumbent_fingerprint(selected_incumbent)
+                if incumbent_fingerprint is None:
+                    response = {"status": "blocked", "data": {
+                        "status": "blocked",
+                        "message": "V1 incumbent genome is missing or cannot be fingerprinted; refusing stale-result reuse",
+                    }}
+                    status = "blocked"
         if mode == "cost-observations":
             observation = next((item for item in cost_data.get("observations", [])
                                 if isinstance(item, dict) and item.get("symbol") == symbol), {})
@@ -614,20 +789,26 @@ def main() -> int:
             response = _v2_bridge_act("oracle.market.data.drift.assess", {"symbol": symbol})
             drift_data = response.get("data", {}) if isinstance(response, dict) else {}
             fingerprint = drift_data.get("window_fingerprint") if isinstance(drift_data, dict) else None
-            status = response.get("status", "unknown") if isinstance(response, dict) else "unknown"
+            status = _result_status(response)
             if fingerprint and status == "complete":
                 drift_key = (symbol, mode, None, fingerprint, None)
                 if drift_key in seen:
-                    response = {"status": "skipped", "data": {
-                        "status": "skipped", "message": "this completed daily drift window was already assessed",
+                    reused_from = seen[drift_key]
+                    response = {"status": "reused", "data": {
+                        "status": "reused", "message": "identical completed daily drift window reused",
                         "data_fingerprint": fingerprint,
+                        "prior_result_reference": _reuse_reference(reused_from),
                     }}
-                    status = "skipped"
+                    status = "reused"
                 else:
-                    seen.add(drift_key)
+                    seen[drift_key] = {"recorded_at": now.isoformat(), "result": response}
             results.append({
                 "symbol": symbol, "experiment_type": mode,
                 "ablation_target": None, "status": status,
+                "diagnostic_code": _diagnostic_code(status, response, "experiment"),
+                "experiment_executed": status == "complete" and not reused_from,
+                "reused_from": _reuse_reference(reused_from),
+                **_outcome_fields(response),
                 "cost_profile_source": None, "cost_profile_version": None,
                 "execution_costs": None, "data_fingerprint": fingerprint,
                 "timeframe_fingerprints": None, "timeframe_coverage": None,
@@ -640,15 +821,19 @@ def main() -> int:
                 "message": "no sample-qualified empirical cTrader cost profile is available; collect the required fills, spread quotes, and matched slippage observations",
             }}
             status = "blocked"
+        elif status is not None:
+            pass
         else:
             preflight = _post("", symbol, "window", None)
             preflight_data = preflight.get("data", {}) if isinstance(preflight, dict) else {}
             preflight_status = preflight.get("status") if isinstance(preflight, dict) else "error"
-            if preflight_status != "complete" or not isinstance(preflight_data, dict) or not preflight_data.get("data_fingerprint"):
+            validation_error = (_validate_window_preflight(preflight_data, symbol)
+                                if preflight_status == "complete" else None)
+            if preflight_status != "complete" or validation_error:
                 response = {
-                    "status": preflight_status or "error",
+                    "status": preflight_status if preflight_status in {"blocked", "error"} else "error",
                     "data": preflight_data if isinstance(preflight_data, dict) else {},
-                    "preflight_error": preflight.get("error") if isinstance(preflight, dict) else "invalid preflight response",
+                    "preflight_error": validation_error or (preflight.get("error") if isinstance(preflight, dict) else "invalid preflight response"),
                     "http_status": preflight.get("http_status") if isinstance(preflight, dict) else None,
                     "response_body": preflight.get("response_body") if isinstance(preflight, dict) else None,
                 }
@@ -675,7 +860,9 @@ def main() -> int:
                 }}
                 status = "blocked"
             elif learn_ablation_targets and fingerprint:
-                selection = _select_v1_ablation_target(symbol, cycle, fingerprint)
+                selection = _select_v1_ablation_target(
+                    symbol, cycle, fingerprint, incumbent=selected_incumbent,
+                )
                 if selection.get("status") != "complete":
                     response = {"status": selection.get("status", "blocked"),
                                 "data": selection.get("data", {})}
@@ -686,14 +873,20 @@ def main() -> int:
                     ablation_selection = selection["selection"]
             if status is not None:
                 pass
-            elif fingerprint and (symbol, mode, selected_ablation, fingerprint,
-                                  execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
-                                  EVALUATION_ENGINE_VERSION) in seen:
-                response = {"status": "skipped", "data": {
-                    "status": "skipped", "message": "this completed daily-data window was already assessed",
+            elif (fingerprint and incumbent_fingerprint is not None
+                  and (symbol, mode, selected_ablation, fingerprint,
+                       execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
+                       EVALUATION_ENGINE_VERSION, incumbent_fingerprint) in seen):
+                reuse_key = (symbol, mode, selected_ablation, fingerprint,
+                             execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
+                             EVALUATION_ENGINE_VERSION, incumbent_fingerprint)
+                reused_from = seen[reuse_key]
+                response = {"status": "reused", "data": {
+                    "status": "reused", "message": "identical completed seven-timeframe window and policy reused",
                     "data_fingerprint": fingerprint,
+                    "prior_result_reference": _reuse_reference(reused_from),
                 }}
-                status = "skipped"
+                status = "reused"
             else:
                 if oracle_source == "v1":
                     response = _request_v1_improvement(
@@ -702,15 +895,25 @@ def main() -> int:
                     )
                 else:
                     response = _post("", symbol, mode, selected_ablation, execution_costs=execution_costs)
-                status = response.get("status", "unknown") if isinstance(response, dict) else "unknown"
+                status = _result_status(response)
                 if fingerprint and status == "complete":
-                    seen.add((symbol, mode, selected_ablation, fingerprint,
-                              execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
-                              EVALUATION_ENGINE_VERSION))
+                    seen[(symbol, mode, selected_ablation, fingerprint,
+                          execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
+                          EVALUATION_ENGINE_VERSION, incumbent_fingerprint)] = {
+                        "source": "current_run", "recorded_at": now.isoformat(),
+                        "experiment_id": _nested_value(response, "data", "experiment_id"),
+                        "recommendation": _nested_value(response, "data", "recommendation"),
+                        "result": response,
+                    }
         results.append({
             "symbol": symbol, "experiment_type": mode,
             "evaluation_engine_version": EVALUATION_ENGINE_VERSION,
             "ablation_target": selected_ablation, "status": status,
+            "incumbent_fingerprint": incumbent_fingerprint,
+            "diagnostic_code": _diagnostic_code(status, response, "experiment"),
+            "experiment_executed": status == "complete" and not reused_from,
+            "reused_from": _reuse_reference(reused_from),
+            **_outcome_fields(response),
             "ablation_selection": _redact(ablation_selection),
             "cost_profile_source": cost_profile_source,
             "cost_profile_version": execution_costs.get("profile_version") if isinstance(execution_costs, dict) else None,
@@ -722,10 +925,12 @@ def main() -> int:
         })
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+    stamp = now.strftime("%Y%m%dT%H%M%S%fZ")
     report_path = REPORT_DIR / f"{stamp}-cycle-{cycle}-{mode_spec.replace(':', '-')}.json"
     report = {
         "schema": "forge.oracle.action_batch_report.v1",
+        "run_status": _run_outcome(results),
+        "reuse_policy": "same symbol, mode, target, seven-timeframe fingerprint, empirical cost profile, evaluation engine, and V1 incumbent-evaluation fingerprint",
         "recorded_at": now.isoformat(), "cycle_6h_utc": cycle,
         "rotation": list(ROTATION), "selected_mode": mode_spec,
         "oracle_source": oracle_source,
@@ -747,7 +952,16 @@ def main() -> int:
                     for status in sorted({item["status"] for item in results})},
         "workflow": "oracle-forge-experiment",
     }
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary_report = report_path.with_name(f".{report_path.name}.{os.getpid()}.tmp")
+    try:
+        temporary_report.write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary_report, report_path)
+    except (OSError, TypeError, ValueError):
+        temporary_report.unlink(missing_ok=True)
+        raise
     print(json.dumps({"report": str(report_path), "mode": mode_spec, "summary": report["summary"]}))
     return 0
 

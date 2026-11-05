@@ -54,7 +54,7 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-from core.research_engine import ResearchEngine  # type: ignore
+from core.research_engine import ResearchEngine, stable_research_memory_id  # type: ignore
 
 try:
     from shared.agent import BaseAgent
@@ -145,14 +145,8 @@ class AtlasAgent(BaseAgent):
                         and bool(report["evidence"]))
         ok = has_answer and (above_target or llm_only or bool(report.get("evidence")))
 
-        # FIX-P2-15: Send completed research to Chronicle (Everything Communicates).
-        if ok:
-            self._send_to_chronicle(
-                content=summary,
-                memory_type="semantic",
-                domain=context.get("domain", "general"),
-                tags=["atlas", "research", path] + report.get("key_terms", [])[:3],
-            )
+        # ResearchEngine is the single Chronicle write boundary for its reports.
+        # Re-storing the same result here created a second memory per investigation.
 
         return {"status": "complete" if ok else "error",
                "message": "" if ok else "below confidence target via this path",
@@ -163,16 +157,6 @@ class AtlasAgent(BaseAgent):
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
         if task == "research.investigate":
-            # FIX-P2-15: Memory First — retrieve prior research from Chronicle
-            # before starting a new investigation.
-            prior = self._receive_from_chronicle(
-                query=ctx.get("query", ""),
-                domain=ctx.get("domain", "general"),
-            )
-            if prior:
-                log.info("atlas: Chronicle returned %d prior memories for '%s'",
-                         len(prior), ctx.get("query", "")[:60])
-
             query = ctx.get("query", "")
             domain = ctx.get("domain", "general")
 
@@ -188,9 +172,13 @@ class AtlasAgent(BaseAgent):
                 report = self.engine.investigate(
                     query, domain=domain, depth="deep",
                     max_rounds=ctx.get("max_rounds", 3),
-                    deadline_sec=ctx.get("deadline_sec", 120.0))
-                self._remember_best_effort(report, domain)
-                return {"status": "complete", "report": report, "research_path": "deep_research"}
+                    deadline_sec=ctx.get("deadline_sec", 120.0),
+                    sources=ctx.get("sources"),
+                    preserve=ctx.get("_sender") != "forge")
+                return {"status": "complete",
+                        "report": report, "research_path": "deep_research",
+                        "research_status": "partial" if report.get("deadline_exceeded") else "complete",
+                        "deadline_exceeded": bool(report.get("deadline_exceeded"))}
 
             if self._is_explanatory_query(query) and not self._needs_fresh_evidence(query):
                 fallback_report = self._best_effort_report(query, domain)
@@ -424,4 +412,5 @@ class AtlasAgent(BaseAgent):
             memory_type=memory_type,
             domain=domain,
             tags=tags + report.get("key_terms", [])[:3],
+            memory_id=stable_research_memory_id(domain, report.get("query", "")),
         )

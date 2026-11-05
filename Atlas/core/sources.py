@@ -45,6 +45,7 @@ FIX LOG (Phase 2):
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import io
 import json
 import logging
@@ -62,6 +63,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("atlas.sources")
+
+from core.chronicle_access import bounded_chronicle_search  # type: ignore
 
 _USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
 _TIMEOUT = 5   # FIX-SRC-V3-01: reduced from 12s -> 5s per-source HTTP timeout
@@ -90,6 +93,97 @@ SOURCE_CREDIBILITY = {
     "wikipedia": 0.75, "gdelt": 0.65, "hackernews": 0.55, "web": 0.50,
     "pdf": 0.60, "unknown": 0.40, "chronicle": 0.85,
 }
+
+_EXTERNAL_QUERY_MAX_CHARS = 240
+_PLANNED_QUERY_MAX_CHARS = 180
+_EXTERNAL_QUERY_DETAIL_MARKERS = re.compile(
+    r"(?i)\b(?:recent decision evidence|aggregate decision diagnostics|"
+    r"point-in-time seven-timeframe|use the decision context|"
+    r"determine what the evidence supports|separate sourced evidence|"
+    r"do not recommend|do not infer)\b"
+)
+
+
+def _compact_external_query(query: str) -> str:
+    """Keep research instructions/data local; send providers a short search phrase."""
+    text = " ".join(str(query or "").split())
+    marker = _EXTERNAL_QUERY_DETAIL_MARKERS.search(text)
+    if marker:
+        text = text[:marker.start()].strip()
+    if len(text) > _EXTERNAL_QUERY_MAX_CHARS:
+        text = text[:_EXTERNAL_QUERY_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return text or "institutional research evidence"
+
+
+# One planner worker for the process. A slow LLM call can time out at the caller,
+# but it cannot be killed safely; retaining the single worker prevents timed-out
+# planner calls from accumulating threads or delaying source retrieval.
+_query_planner_pool = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="atlas-query-planner"
+)
+_query_planner_lock = threading.Lock()
+_query_planner_future = None
+_QUERY_FEEDBACK_KEY = "atlas.external_query_feedback.v1"
+
+
+def _short_source_query(value: Any, fallback: str) -> str:
+    text = " ".join(str(value or "").split()).strip(" \"'`.,;:")
+    if len(text) > _PLANNED_QUERY_MAX_CHARS:
+        text = text[:_PLANNED_QUERY_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return text or fallback
+
+
+def _llm_source_queries(llm, query: str, sources: List[str], feedback: Dict[str, Any]):
+    """Ask the configured LLM for concise retrieval phrases; never block callers."""
+    global _query_planner_future
+    if llm is None or not getattr(llm, "has_any", False) or len(query) <= 180:
+        return None, "not_needed_or_unavailable"
+    # Don't send serialized diagnostics to the planner. Keep only the deterministic
+    # task heading and bounded context; the full query remains with Atlas/Chronicle.
+    seed = _compact_external_query(query)[:1000]
+    prompt = (
+        "Create concise external search phrases for the listed search providers. "
+        "Preserve the subject and concrete research question. Remove instructions, "
+        "logs, serialized data, and trading decisions. Do not answer the question. "
+        "Return JSON exactly as {\"queries\": {\"source_name\": \"phrase\"}}. "
+        "Every phrase must be at most 180 characters. Use only listed source names.\n\n"
+        f"Source names: {', '.join(sources)}\n"
+        f"Prior retrieval yield for this same query: {json.dumps(feedback, ensure_ascii=True)[:800]}\n"
+        f"Research heading/context: {seed}"
+    )
+
+    def call():
+        return llm.complete_json(
+            "You are Atlas's search query planner. Produce retrieval phrases, not conclusions.",
+            prompt, temperature=0.0, max_tokens=180, essential=False,
+        )
+
+    with _query_planner_lock:
+        if _query_planner_future is not None and not _query_planner_future.done():
+            return None, "planner_busy_fallback"
+        _query_planner_future = _query_planner_pool.submit(call)
+        future = _query_planner_future
+    try:
+        parsed, result = future.result(timeout=2.0)
+    except concurrent.futures.TimeoutError:
+        return None, "planner_timeout_fallback"
+    except Exception as exc:
+        log.info("atlas.sources: query planner failed; using deterministic compaction (%s)",
+                 type(exc).__name__)
+        return None, "planner_error_fallback"
+    if not getattr(result, "ok", False) or not isinstance(parsed, dict):
+        return None, "planner_invalid_fallback"
+    raw_queries = parsed.get("queries")
+    if not isinstance(raw_queries, dict):
+        return None, "planner_invalid_fallback"
+    planned = {}
+    for source in sources:
+        candidate = raw_queries.get(source)
+        if isinstance(candidate, str) and candidate.strip():
+            planned[source] = _short_source_query(candidate, "")
+    if not planned:
+        return None, "planner_invalid_fallback"
+    return planned, "llm_planned"
 
 # FIX-P2-01: Per-source minimum gap between calls (seconds).
 # Prevents burst-firing the same API endpoint on repeated queries.
@@ -598,7 +692,7 @@ class SourceRegistry:
         "science":     ["wikipedia", "arxiv", "semantic_scholar", "pubmed"],
     }
 
-    def __init__(self, chronicle_client=None):
+    def __init__(self, chronicle_client=None, llm=None):
         self.sources = {
             "wikipedia": WikipediaSource(), "arxiv": ArxivSource(),
             "semantic_scholar": SemanticScholarSource(), "pubmed": PubMedSource(),
@@ -608,6 +702,81 @@ class SourceRegistry:
         self.pdf = PDFSource()
         # FIX-P2-07: Chronicle client for Memory First principle
         self.chronicle = chronicle_client
+        self.llm = llm
+
+    def _query_feedback(self, fingerprint: str) -> Dict[str, Any]:
+        """Read bounded, empirical retrieval-yield feedback from Chronicle state."""
+        state = getattr(self.chronicle, "state", None)
+        if state is None:
+            return {}
+        try:
+            payload = state.get(_QUERY_FEEDBACK_KEY) or {}
+            entry = (payload.get("queries") or {}).get(fingerprint, {})
+            feedback = {}
+            for name, stats in (entry.get("sources") or {}).items():
+                attempts = int(stats.get("attempts", 0))
+                successes = int(stats.get("success_runs", 0))
+                if attempts:
+                    feedback[name] = {
+                        "runs": attempts,
+                        "runs_with_results": successes,
+                        "result_rate": round(successes / attempts, 3),
+                        "last_successful_query": stats.get("last_successful_query", ""),
+                    }
+            return feedback
+        except Exception as exc:
+            log.info("atlas.sources: prior query feedback unavailable (%s)", type(exc).__name__)
+            return {}
+
+    def _record_query_outcomes(self, fingerprint: str, seed: str, queries: Dict[str, str],
+                               source_status: Dict[str, Any]) -> None:
+        """Store retrieval yield (not truth/quality) with revision-checked writes."""
+        state = getattr(self.chronicle, "state", None)
+        if state is None:
+            return
+        try:
+            for _ in range(3):
+                current = state.get_with_revision(_QUERY_FEEDBACK_KEY)
+                payload = current.get("value") or {"schema": "atlas.external_query_feedback.v1",
+                                                    "queries": {}}
+                payload = dict(payload)
+                entries = dict(payload.get("queries") or {})
+                entry = dict(entries.get(fingerprint) or {"seed": seed[:240], "sources": {}})
+                by_source = dict(entry.get("sources") or {})
+                for name, planned_query in queries.items():
+                    observed = source_status.get(name)
+                    if not isinstance(observed, dict):
+                        continue
+                    stats = dict(by_source.get(name) or {
+                        "attempts": 0, "success_runs": 0, "empty_runs": 0, "failed_runs": 0,
+                    })
+                    status = str(observed.get("status", "unknown"))
+                    gathered = int(observed.get("gathered", 0) or 0)
+                    stats["attempts"] = int(stats.get("attempts", 0)) + 1
+                    if gathered > 0:
+                        stats["success_runs"] = int(stats.get("success_runs", 0)) + 1
+                        stats["last_successful_query"] = planned_query[:_PLANNED_QUERY_MAX_CHARS]
+                    elif status == "no_results":
+                        stats["empty_runs"] = int(stats.get("empty_runs", 0)) + 1
+                    else:
+                        stats["failed_runs"] = int(stats.get("failed_runs", 0)) + 1
+                    stats["last_status"] = status[:40]
+                    by_source[name] = stats
+                entry["sources"] = by_source
+                entries[fingerprint] = entry
+                # Bound durable state. Keep most recently updated fingerprints.
+                if len(entries) > 200:
+                    entries = dict(list(entries.items())[-200:])
+                payload.update({"schema": "atlas.external_query_feedback.v1",
+                                "queries": entries})
+                result = state.set(_QUERY_FEEDBACK_KEY, payload,
+                                   owner="atlas.query_planner",
+                                   expected_revision=int(current.get("revision", 0)))
+                if result.get("status") == "complete":
+                    return
+            log.warning("atlas.sources: Chronicle query-feedback write conflicted repeatedly")
+        except Exception as exc:
+            log.warning("atlas.sources: could not persist query feedback: %s", exc)
 
     def sources_for(self, domain: str, override: Optional[List[str]] = None) -> List[str]:
         if override:
@@ -620,8 +789,10 @@ class SourceRegistry:
         if self.chronicle is None:
             return []
         try:
-            results = self.chronicle.search(query=query, domain=domain, limit=3,
-                                            requester="atlas.sources")
+            results = bounded_chronicle_search(
+                self.chronicle, query=query, domain=domain, limit=3,
+                requester="atlas.sources", timeout_sec=2.0,
+            )
             if not isinstance(results, list):
                 return []
             chronicle_evidence = []
@@ -644,7 +815,8 @@ class SourceRegistry:
             return []
 
     def gather(self, query: str, domain: str = "general", depth: str = "standard",
-               sources: Optional[List[str]] = None) -> Dict[str, Any]:
+               sources: Optional[List[str]] = None,
+               deadline_sec: float = 20.0) -> Dict[str, Any]:
         """
         Gather evidence from all chosen sources in parallel.
         FIX-P2-06: Uses _gather_safe() for every source — rate limiting,
@@ -661,10 +833,27 @@ class SourceRegistry:
         
         FIX-SRC-V4-04: Added timing instrumentation to diagnose bottlenecks.
         """
-        _gather_start = time.time()
-        _gather_deadline = _gather_start + 25.0  # FIX-SRC-V3-04: 25s wall clock
+        _gather_start = time.monotonic()
+        try:
+            budget = min(20.0, max(0.1, float(deadline_sec)))
+        except (TypeError, ValueError):
+            budget = 20.0
+        _gather_deadline = _gather_start + budget
         limit = {"shallow": 2, "standard": 3, "deep": 6}.get(depth, 3)
         chosen = self.sources_for(domain, sources)
+        source_query = _compact_external_query(query)
+        fingerprint = hashlib.sha256(source_query.casefold().encode("utf-8")).hexdigest()[:24]
+        prior_feedback = self._query_feedback(fingerprint)
+        planned_queries, planner_status = _llm_source_queries(
+            self.llm, query, chosen, prior_feedback
+        )
+        external_queries = {
+            name: _short_source_query((planned_queries or {}).get(name), source_query)
+            for name in chosen
+        }
+        if source_query != " ".join(str(query or "").split()) or planned_queries:
+            log.info("atlas.sources: compacted external query from %d to %d characters",
+                     len(str(query or "")), max((len(v) for v in external_queries.values()), default=0))
         evidence: List[Evidence] = []
         status: Dict[str, Any] = {}
 
@@ -675,18 +864,18 @@ class SourceRegistry:
             status["chronicle"] = {"gathered": len(chronicle_ev), "status": "ok"}
         
         # FIX-SRC-V4-04: Log Chronicle timing
-        _chronicle_elapsed = time.time() - _gather_start
+        _chronicle_elapsed = time.monotonic() - _gather_start
         log.info("atlas.sources: gather() Chronicle recall took %.2fs", _chronicle_elapsed)
 
         def _run(src_name: str) -> Tuple[str, List[Evidence], str]:
             # FIX-SRC-V3-04: Check deadline before starting each source.
-            if time.time() > _gather_deadline:
+            if time.monotonic() >= _gather_deadline:
                 return src_name, [], "skipped_deadline"
             src = self.sources.get(src_name)
             if not src or not getattr(src, "available", False):
                 return src_name, [], "unavailable"
             # FIX-P2-06: _gather_safe wraps with rate limiting + backoff
-            items, st = _gather_safe(src_name, src.gather, query, limit)
+            items, st = _gather_safe(src_name, src.gather, external_queries[src_name], limit)
             return src_name, items, st
 
         # FIX-SRC-V3-04: Use as_completed() instead of pool.map() so we can
@@ -701,25 +890,30 @@ class SourceRegistry:
         # the coordinator's budget for Atlas is now 28s. We need gather() to
         # complete in <=20s so research_engine.investigate() has 8s for synthesis.
         # Fixed 20s timeout is cleaner and more predictable than dynamic computation.
-        _sources_timeout = min(20.0, max(0.1, _gather_deadline - time.time()))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chosen), 6)) as pool:
+        _sources_timeout = max(0.0, _gather_deadline - time.monotonic())
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(len(chosen), 6)))
+        futures = {}
+        try:
             futures = {pool.submit(_run, src_name): src_name for src_name in chosen}
             for fut in concurrent.futures.as_completed(futures, timeout=_sources_timeout):
                 try:
                     src_name, items, st = fut.result()
                     status[src_name] = {"gathered": len(items), "status": st}
                     evidence.extend(items)
-                except concurrent.futures.TimeoutError:
-                    # Deadline hit — cancel remaining futures and return what we have
-                    for f in futures:
-                        f.cancel()
-                    log.info("atlas.sources: gather() deadline hit — returning %d items from %d sources "
-                             "(Book II Principle V Graceful Degradation)", len(evidence), len(status))
-                    status["_deadline_hit"] = True
-                    break
                 except Exception as exc:
                     src_name = futures.get(fut, "unknown")
-                    log.warning("atlas.sources: future for %s raised: %s", src_name, exc)
+                    log.warning("atlas.sources: future for %s raised: %s", src_name,
+                                type(exc).__name__)
+        except concurrent.futures.TimeoutError:
+            status["_deadline_hit"] = True
+            log.info("atlas.sources: gather() deadline hit — returning %d items from %d sources",
+                     len(evidence), len(status))
+        finally:
+            for future in futures:
+                future.cancel()
+            # ThreadPoolExecutor's context manager waits for running HTTP calls;
+            # that made a nominal timeout block until every slow source finished.
+            pool.shutdown(wait=False, cancel_futures=True)
 
         if not evidence:
             status["_summary"] = "no evidence gathered (sources unreachable or no matches)"
@@ -729,12 +923,25 @@ class SourceRegistry:
             status["_summary"] = f"ok ({len(ok_sources)} sources returned results)"
 
         # FIX-SRC-V4-04: Log total gather time
-        _gather_elapsed = time.time() - _gather_start
+        _gather_elapsed = time.monotonic() - _gather_start
         log.info("atlas.sources: gather() complete in %.2fs (%d items from %d sources, deadline=%.1fs remaining)",
                  _gather_elapsed, len(evidence), len([s for s in status if not s.startswith("_")]),
-                 max(0, _gather_deadline - time.time()))
+                 max(0, _gather_deadline - time.monotonic()))
 
-        return {"evidence": evidence, "source_status": status, "sources_used": chosen}
+        self._record_query_outcomes(fingerprint, source_query, external_queries, status)
+        query_plan = {
+            "schema": "atlas.external_query_plan.v1",
+            "query_fingerprint": fingerprint,
+            "planner_status": planner_status,
+            "queries": external_queries,
+            "retrieval_feedback": {
+                name: {"status": item.get("status"), "gathered": item.get("gathered", 0)}
+                for name, item in status.items()
+                if name in external_queries and isinstance(item, dict)
+            },
+        }
+        return {"evidence": evidence, "source_status": status, "sources_used": chosen,
+                "external_query_plan": query_plan}
 
     def fetch_url(self, url: str) -> Optional[Evidence]:
         if url.lower().endswith(".pdf"):
@@ -789,7 +996,7 @@ class CrossrefSource:
 
 # register crossref into any SourceRegistry instances created after import
 _orig_init = SourceRegistry.__init__
-def _patched_init(self, chronicle_client=None):
-    _orig_init(self, chronicle_client=chronicle_client)
+def _patched_init(self, chronicle_client=None, llm=None):
+    _orig_init(self, chronicle_client=chronicle_client, llm=llm)
     self.sources["crossref"] = CrossrefSource()
 SourceRegistry.__init__ = _patched_init

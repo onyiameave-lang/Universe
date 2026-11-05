@@ -16,6 +16,23 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("forge.oracle_research_data")
 
+
+def _public_cost_record_value(value: Any) -> Any:
+    """Remove account identifiers and credentials from committed cost evidence."""
+    if isinstance(value, dict):
+        return {
+            key: _public_cost_record_value(item)
+            for key, item in value.items()
+            if not re.search(
+                r"^(account[_ -]?id|account[_ -]?number|login[_ -]?id|client[_ -]?id|"
+                r"client[_ -]?secret|access[_ -]?token|password|credential)$",
+                str(key), re.I,
+            )
+        }
+    if isinstance(value, list):
+        return [_public_cost_record_value(item) for item in value]
+    return value
+
 TIMEFRAMES_MS = {
     "W1": 7 * 24 * 60 * 60 * 1000,
     "D1": 24 * 60 * 60 * 1000,
@@ -910,11 +927,12 @@ class OracleResearchDataProvider:
             version = profile.get("profile_version") if isinstance(profile, dict) else result.get("observed_at", "unknown")
             version_id = hashlib.sha256(str(version).encode("utf-8")).hexdigest()[:20]
             record = {
-                "schema": "forge.oracle.cost_profile_record.v1",
+                "schema": "forge.oracle.cost_profile_record.public.v1",
                 "symbol": symbol, "status": observation.get("status", "blocked"),
-                "account_id": profile.get("account_id") if isinstance(profile, dict) else None,
+                "account_scope": "pepperstone-ctrader-demo-commission-based",
                 "broker_symbol": observation.get("broker_symbol"),
-                "profile": profile, "observation": observation,
+                "profile": _public_cost_record_value(profile),
+                "observation": _public_cost_record_value(observation),
                 "observed_at": result.get("observed_at"),
                 "source": result.get("source", "ctrader_open_api"),
             }

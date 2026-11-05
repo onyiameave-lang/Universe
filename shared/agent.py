@@ -433,6 +433,7 @@ class BaseAgent(abc.ABC):
                 source_repository=getattr(self, "repository", self.name),
                 source_agent=self.name,
                 tags=tags or [],
+                memory_id=kw.get("memory_id"),
             )
             return True
         except Exception as exc:

@@ -718,9 +718,12 @@ async def forge_bridge_act(request: Request):
                        task, time.monotonic() - started, type(exc).__name__)
         raise HTTPException(status_code=502, detail="Forge could not process the request")
     elapsed = time.monotonic() - started
-    if elapsed >= 5.0:
-        logger.warning("Forge bridge task=%s completed in %.1fs", task, elapsed)
     result_status = result.get("status") if isinstance(result, dict) else None
+    if elapsed >= 5.0 or result_status != "complete":
+        logger.warning(
+            "Forge bridge task=%s returned result_status=%s in %.1fs",
+            task, result_status, elapsed,
+        )
     return {"agent": "forge", "task": task,
             "status": result_status if result_status in {"complete", "blocked", "error"} else "complete",
             "result": result}

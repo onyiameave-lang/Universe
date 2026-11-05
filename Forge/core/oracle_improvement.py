@@ -1665,7 +1665,8 @@ class OracleImprovementService:
                     chronicle, summary_key, summary,
                     time.time())
         except Exception as exc:
-            log.warning("Oracle no-trade diagnosis failed: %s", type(exc).__name__)
+            log.exception("Oracle no-trade diagnosis failed (%s): %s",
+                          type(exc).__name__, exc)
         finally:
             with self._diagnostic_lock:
                 self._diagnostic_inflight.discard(job_key)
@@ -1720,18 +1721,15 @@ class OracleImprovementService:
                     "strategy_experiment_performed": False}
 
         instance_id = str(snapshot.get("instance_id", ""))
-        symbols = snapshot.get("symbols", [])
+        raw_symbols = snapshot.get("symbols", [])
+        symbols = ([symbol.strip() for symbol in raw_symbols
+                    if isinstance(symbol, str) and symbol.strip()]
+                   if isinstance(raw_symbols, list) else [])
+        # Keep the full telemetry in the durable case snapshot, but use a short
+        # search query. Long prompts produced invalid HN/Scholar request URLs.
         query = (
-            f"Diagnose an Oracle cTrader demo runtime heartbeat gap for instance {instance_id}. "
-            f"Its last heartbeat was at {snapshot.get('last_seen_at_unix')} and Forge observed "
-            f"a gap of {snapshot.get('stale_for_sec')} seconds against a configured timeout of "
-            f"{snapshot.get('timeout_sec')} seconds. Last reported cycle: {snapshot.get('last_cycle')}; "
-            f"configured symbols: {symbols}; last reported summary: "
-            f"{json.dumps(snapshot.get('last_summary', {}), sort_keys=True, ensure_ascii=False)[:4000]}. "
-            "The available evidence cannot distinguish a stopped process, network or bridge failure, "
-            "or an undelivered local outbox. State that uncertainty clearly. Give an ordered, "
-            "read-only diagnostic checklist and identify which logs or health checks would resolve "
-            "the cause. Do not run a strategy experiment or change trading policy."
+            "Oracle cTrader demo heartbeat gap: read-only checks for process, bridge/network, "
+            "and outbox; cause unknown."
         )
         research: Dict[str, Any] = {"status": "unavailable", "reason": "Atlas is not connected"}
         atlas = getattr(self._forge, "atlas", None)
@@ -1739,9 +1737,10 @@ class OracleImprovementService:
             try:
                 response = atlas.handle({
                     "task": "research.investigate",
-                    "context": {"query": query, "domain": "trading system operations",
-                                "deep_research": True, "max_rounds": 2,
-                                "deadline_sec": 60.0},
+                    "context": {"query": query, "domain": "engineering",
+                                "sources": ["wikipedia", "hackernews"],
+                                "deep_research": True, "max_rounds": 1,
+                                "deadline_sec": 30.0},
                     "sender": "forge",
                 })
                 report = response.get("report", {}) if isinstance(response, dict) else {}
@@ -1757,6 +1756,8 @@ class OracleImprovementService:
                     contradictions = report.get("contradictions", [])
                     complete = (isinstance(response, dict)
                                 and response.get("status") in {"complete", "success"}
+                                and response.get("research_status") != "partial"
+                                and not report.get("deadline_exceeded", False)
                                 and bool(summary_text) and bool(sources))
                     research = {
                         "status": "complete" if complete else "partial",
@@ -1771,10 +1772,19 @@ class OracleImprovementService:
             except Exception as exc:
                 research = {"status": "unavailable", "error": type(exc).__name__}
 
+        hypothesis_statement = (
+            f"Oracle runtime {instance_id} has stale heartbeat telemetry; the cause is unknown "
+            "(process, bridge/network, or local outbox). Verify it before assessing strategy performance."
+        )
+        hypothesis_id = case_id
+        prior_hypothesis = self._forge.hypothesis_queue.get(case_id)
+        if prior_hypothesis is not None and prior_hypothesis.statement != hypothesis_statement:
+            # Older queued cases used wording that implied a stopped process.
+            # Preserve that historical record and create one corrected, linked
+            # operational hypothesis with a stable identity.
+            hypothesis_id = case_id + "-cause-undetermined-v1"
         hypothesis = self._forge.hypothesis_queue.add(
-            f"Oracle runtime {instance_id} stopped delivering heartbeats; identify and verify "
-            "the operational cause before assessing strategy performance.",
-            "forge_oracle_heartbeat_diagnosis", case_id)
+            hypothesis_statement, "forge_oracle_heartbeat_diagnosis", hypothesis_id)
         incident_status = "stale"
         incident_key = str(job.get("incident_key", ""))
         if incident_key:
@@ -1795,6 +1805,7 @@ class OracleImprovementService:
                                   and isinstance(incident_value, dict) else None),
             "atlas_research": research, "hypothesis": hypothesis.to_dict(),
             "lifecycle_status": ("research_recorded" if research.get("status") == "complete"
+                                 else "research_partial" if research.get("status") == "partial"
                                  else "research_unavailable"),
             "strategy_experiment_performed": False,
             "promotion_performed": False, "risk_policy_changed": False,

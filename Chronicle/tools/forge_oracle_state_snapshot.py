@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -25,6 +26,22 @@ try:
     from Chronicle.core.state_store import StateStore
 except ImportError:  # direct package execution from inside Chronicle
     from core.state_store import StateStore  # type: ignore
+
+
+def _public_snapshot_value(value):
+    """Keep account identifiers and credentials out of the public research branch."""
+    if isinstance(value, dict):
+        return {
+            key: _public_snapshot_value(item)
+            for key, item in value.items()
+            if not re.search(
+                r"secret|token|password|credential|account[_ -]?id|account[_ -]?number|login[_ -]?id",
+                str(key), re.I,
+            )
+        }
+    if isinstance(value, list):
+        return [_public_snapshot_value(item) for item in value]
+    return value
 
 
 def _write_json_atomic(path: Path, value: dict) -> None:
@@ -74,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
               f"kept {result['skipped_newer']} newer local records.")
         return 0
 
-    snapshot = store.export_snapshot(NAMESPACE)
+    snapshot = _public_snapshot_value(store.export_snapshot(NAMESPACE))
     _write_json_atomic(args.snapshot, snapshot)
     print(f"Exported {snapshot['record_count']} Forge Oracle Chronicle state records.")
     return 0

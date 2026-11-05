@@ -12,14 +12,11 @@ near-duplicate records on every update, or building fragile "find the
 latest matching record" search logic. Neither is right.
 
 This gives Chronicle a second, small, honest mechanism: upsert-by-key,
-WITH full history retained alongside it. get()/data() stay fast (O(1),
-just the current value) for every hot-path caller that only cares "what
-is this right now" -- unchanged from before. But every set() now appends
-the previous value to a history trail instead of destroying it, so Forge
-and Atlas can ask "has this been declining for two weeks" during nightly
-research, not just "what is it right now" (a real gap found by testing
-this against the actual nightly-research goal -- pure overwrite meant
-history was gone by the time anyone went looking for it).
+with a bounded diagnostic revision trail. Immutable event records preserve
+audit history; mutable projections do not copy prior events on each update.
+get()/data() stay fast (O(1), just the current value) for every hot-path
+caller. set() retains at most 20 prior snapshots by default, with stricter
+per-namespace limits for high-churn operational projections.
 
 Chronicle remains the single source of truth for BOTH kinds of data --
 episodic (VectorStore) and state (this) -- without distorting either
@@ -30,7 +27,7 @@ individual agents' trackers (ChampionConfidenceTracker, TermReliabilityTracker,
 HypothesisQueue, etc.) get Chronicle as their real source of truth while
 keeping a fast local cache. ChronicleBackedStore only ever reads/writes
 the CURRENT value (via get()/set()) -- it doesn't need to know history
-exists at all; the history trail is purely additive.
+exists at all; immutable event records preserve the audit trail where needed.
 
 Each key has a monotonic storage revision. Remote clients can pass that
 revision to state.set as expected_revision so stale writers receive a conflict
@@ -65,7 +62,7 @@ _OWNER_BOUND_KEYS = {
 }
 
 
-class StateStore:
+class LegacyJsonStateStore:
     def __init__(self, storage_dir: str):
         self.path = Path(storage_dir) / "state_store.json"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -520,3 +517,8 @@ class StateStore:
                 key for key, record in self._data.items()
                 if key.startswith(prefix) and not record.get("deleted", False)
             ]
+
+
+# The SQLite implementation is the active backend. Keep the JSON implementation
+# above temporarily for migration/reference; StateStore remains the public API.
+from .sqlite_state_store import StateStore as StateStore  # noqa: E402
