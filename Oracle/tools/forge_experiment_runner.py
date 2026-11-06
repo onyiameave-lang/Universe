@@ -34,6 +34,7 @@ REQUIRED_RESEARCH_TIMEFRAMES = ("W1", "D1", "H4", "H1", "M45", "M30", "M15")
 CHRONICLE_RESEARCH_DIR = ROOT / "Chronicle" / "memory" / "research"
 LEGACY_CHRONICLE_RESEARCH_DIR = ROOT / "Chronicle" / "research"
 REPORT_DIR = CHRONICLE_RESEARCH_DIR / "oracle_forge_experiments"
+CANDIDATE_DIR = CHRONICLE_RESEARCH_DIR / "oracle_strategy_candidates"
 LEGACY_REPORT_DIR = ROOT / "Forge" / "reports" / "oracle_experiments"
 CATALOG_DIR = CHRONICLE_RESEARCH_DIR / "oracle_strategy_catalogs"
 COST_PROFILE_FILE = ROOT / "Oracle" / "config" / "forge_cost_profiles.json"
@@ -47,7 +48,7 @@ def _migrate_chronicle_research_artifacts() -> None:
     CHRONICLE_RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
     for name in (
             "oracle_cost_profiles", "oracle_forge_experiments",
-            "oracle_market_data", "oracle_strategy_catalogs",
+            "oracle_market_data", "oracle_strategy_catalogs", "oracle_strategy_candidates",
             "oracle_ablation_learning", "oracle_state", "oracle_shadow"):
         source_dir = LEGACY_CHRONICLE_RESEARCH_DIR / name
         target_dir = CHRONICLE_RESEARCH_DIR / name
@@ -428,6 +429,79 @@ def _persist_catalog_artifact(sync_result):
         return {"status": "blocked", "message": f"could not persist catalog artifact: {type(exc).__name__}"}
     return {"status": "complete", "catalog_fingerprint": fingerprint,
             "record_count": len(catalog.get("records", [])), "already_saved": False}
+
+
+def _persist_strategy_candidate(result_item: dict, recorded_at: str, source_report: str | None = None):
+    """Persist a completed Oracle candidate separately from its batch report."""
+    response = result_item.get("result") if isinstance(result_item, dict) else None
+    data = response.get("data") if isinstance(response, dict) else None
+    genome = data.get("candidate_genome") if isinstance(data, dict) else None
+    if (result_item.get("status") != "complete" or not isinstance(data, dict)
+            or not isinstance(genome, dict) or not isinstance(genome.get("modules"), dict)
+            or not isinstance(genome.get("genome_id"), str) or not genome.get("genome_id")):
+        return None
+    experiment_id = data.get("experiment_id")
+    symbol = result_item.get("symbol")
+    if (not isinstance(experiment_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", experiment_id)
+            or not isinstance(symbol, str) or not re.fullmatch(r"[A-Z0-9._-]{1,24}", symbol)):
+        return {"status": "error", "message": "candidate identity is invalid"}
+    evaluation = data.get("evaluation") if isinstance(data.get("evaluation"), dict) else {}
+    design = evaluation.get("evaluation_design") if isinstance(evaluation.get("evaluation_design"), dict) else {}
+    artifact = _redact({
+        "schema": "forge.oracle.strategy_candidate.v1",
+        "candidate_id": genome.get("genome_id"),
+        "experiment_id": experiment_id,
+        "symbol": symbol,
+        "candidate_status": "research_only",
+        "recommendation": data.get("recommendation"),
+        "evidence_role": design.get("evidence_role") or data.get("recommendation"),
+        "promotion_performed": False,
+        "promotion_eligible": False,
+        "candidate_genome": genome,
+        "parent_strategy_ids": genome.get("parents", []),
+        "regime": data.get("regime"),
+        "dataset_fingerprint": data.get("dataset_fingerprint") or result_item.get("data_fingerprint"),
+        "holdout_fingerprint": data.get("holdout_fingerprint"),
+        "timeframe_fingerprints": data.get("timeframe_fingerprints") or result_item.get("timeframe_fingerprints"),
+        "timeframe_coverage": data.get("timeframe_coverage") or result_item.get("timeframe_coverage"),
+        "evaluation_engine_version": result_item.get("evaluation_engine_version"),
+        "cost_profile_version": result_item.get("cost_profile_version"),
+        "guardrails": data.get("guardrails"),
+        "trade_sample": data.get("trade_sample"),
+        "evaluation": evaluation,
+        "result_metrics": data.get("result_metrics"),
+        "interpretation": data.get("interpretation"),
+        "source_report": source_report,
+        "recorded_at": recorded_at,
+    })
+    directory = CANDIDATE_DIR / symbol
+    path = directory / f"{experiment_id}.json"
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            same_identity = (isinstance(previous, dict) and
+                previous.get("schema") == artifact["schema"]
+                and previous.get("experiment_id") == experiment_id
+                and previous.get("candidate_id") == artifact["candidate_id"]
+                and previous.get("dataset_fingerprint") == artifact["dataset_fingerprint"]
+            )
+            if not same_identity:
+                return {"status": "error", "message": "existing candidate artifact conflicts with this result"}
+            return {"status": "complete", "path": str(path.relative_to(ROOT)).replace("\\", "/"),
+                    "already_saved": True, "candidate_id": artifact["candidate_id"]}
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        try:
+            temporary.write_text(json.dumps(artifact, indent=2, sort_keys=True,
+                                            allow_nan=False) + "\n", encoding="utf-8")
+            os.replace(temporary, path)
+        except (OSError, TypeError, ValueError):
+            temporary.unlink(missing_ok=True)
+            raise
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {"status": "error", "message": f"candidate artifact persistence failed: {type(exc).__name__}"}
+    return {"status": "complete", "path": str(path.relative_to(ROOT)).replace("\\", "/"),
+            "already_saved": False, "candidate_id": artifact["candidate_id"]}
 
 
 def _post(url: str, symbol: str, mode: str, ablation: str | None, symbols=None,
@@ -927,6 +1001,23 @@ def main() -> int:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = now.strftime("%Y%m%dT%H%M%S%fZ")
     report_path = REPORT_DIR / f"{stamp}-cycle-{cycle}-{mode_spec.replace(':', '-')}.json"
+    candidate_artifacts = []
+    report_reference = str(report_path.relative_to(ROOT)).replace("\\", "/")
+    for item in results:
+        saved_candidate = _persist_strategy_candidate(item, now.isoformat(), report_reference)
+        if saved_candidate is None:
+            continue
+        item["candidate_artifact_status"] = saved_candidate.get("status")
+        item["candidate_artifact"] = saved_candidate.get("path")
+        if saved_candidate.get("status") == "complete":
+            candidate_artifacts.append({
+                "symbol": item.get("symbol"),
+                "candidate_id": saved_candidate.get("candidate_id"),
+                "experiment_id": _nested_value(item, "result", "data", "experiment_id"),
+                "recommendation": _nested_value(item, "result", "data", "recommendation"),
+                "path": saved_candidate.get("path"),
+                "already_saved": saved_candidate.get("already_saved", False),
+            })
     report = {
         "schema": "forge.oracle.action_batch_report.v1",
         "run_status": _run_outcome(results),
@@ -937,6 +1028,8 @@ def main() -> int:
         "symbol_count": len(symbols), "symbols": symbols,
         "research_only": True, "promotion_performed": False,
         "results": results,
+        "strategy_candidate_count": len(candidate_artifacts),
+        "strategy_candidates": candidate_artifacts,
         "strategy_catalog_sync": catalog_sync_summary,
         "broker_cost_observations": _redact(cost_observation_result),
         "generated_cost_profile_count": len(generated_cost_profiles),
@@ -963,6 +1056,34 @@ def main() -> int:
         temporary_report.unlink(missing_ok=True)
         raise
     print(json.dumps({"report": str(report_path), "mode": mode_spec, "summary": report["summary"]}))
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        summary_lines = [
+            "## Forge Oracle research run",
+            "",
+            f"- Run status: **{report['run_status']}**",
+            f"- Mode: `{mode_spec}`",
+            f"- Strategy candidates saved: **{len(candidate_artifacts)}**",
+            "- Promotion performed: **no**",
+            "",
+        ]
+        if candidate_artifacts:
+            summary_lines.extend([
+                "| Symbol | Candidate | Recommendation | Artifact |",
+                "|---|---|---|---|",
+            ])
+            for candidate in candidate_artifacts:
+                summary_lines.append(
+                    f"| {candidate['symbol']} | `{candidate['candidate_id']}` | "
+                    f"{candidate['recommendation'] or 'none'} | `{candidate['path']}` |"
+                )
+            summary_lines.append("")
+        summary_lines.append(f"Detailed report: `{report_reference}`")
+        try:
+            with Path(summary_path).open("a", encoding="utf-8") as summary_file:
+                summary_file.write("\n".join(summary_lines) + "\n")
+        except OSError as exc:
+            print(f"Could not append GitHub step summary: {type(exc).__name__}", flush=True)
     return 0
 
 

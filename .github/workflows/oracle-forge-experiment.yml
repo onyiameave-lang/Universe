@@ -154,8 +154,11 @@ jobs:
           if [[ -f Chronicle/memory/research/oracle_state/forge_oracle_state.json ]]; then
             git add Chronicle/memory/research/oracle_state/forge_oracle_state.json
           fi
-          mkdir -p Chronicle/memory/research/oracle_forge_experiments Chronicle/memory/research/oracle_strategy_catalogs Chronicle/memory/research/oracle_market_data Chronicle/memory/research/oracle_cost_profiles Chronicle/memory/research/oracle_ablation_learning Chronicle/memory/research/oracle_state
-          git add Chronicle/memory/research/oracle_forge_experiments/ Chronicle/memory/research/oracle_strategy_catalogs/ Chronicle/memory/research/oracle_market_data/ Chronicle/memory/research/oracle_ablation_learning/ Chronicle/memory/research/oracle_state/
+          if [[ -f Chronicle/memory/research/README.md ]]; then
+            git add Chronicle/memory/research/README.md
+          fi
+          mkdir -p Chronicle/memory/research/oracle_forge_experiments Chronicle/memory/research/oracle_strategy_candidates Chronicle/memory/research/oracle_strategy_catalogs Chronicle/memory/research/oracle_market_data Chronicle/memory/research/oracle_cost_profiles Chronicle/memory/research/oracle_ablation_learning Chronicle/memory/research/oracle_state
+          git add Chronicle/memory/research/oracle_forge_experiments/ Chronicle/memory/research/oracle_strategy_candidates/ Chronicle/memory/research/oracle_strategy_catalogs/ Chronicle/memory/research/oracle_market_data/ Chronicle/memory/research/oracle_ablation_learning/ Chronicle/memory/research/oracle_state/
           if [[ -d Chronicle/memory/research/oracle_cost_profiles ]]; then
             find Chronicle/memory/research/oracle_cost_profiles -mindepth 2 -maxdepth 2 -type f -name latest.json -print0 | xargs -0 -r git add --
           fi
