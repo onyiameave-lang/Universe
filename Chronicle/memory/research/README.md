@@ -14,6 +14,10 @@ restores and commits these artifacts on the `oracle-v2` branch.
 - `oracle_market_data/` stores content-addressed OHLCV datasets and manifests.
 - `oracle_strategy_catalogs/` stores versioned snapshots of the Oracle strategy
   catalog.
+- `oracle_strategy_baselines/<SYMBOL>/latest.json` stores the last verified V1
+  incumbent, metrics, and risk policy. Forge can use it while the V1 API is
+  offline; candidates remain tied to that exact snapshot fingerprint and must
+  be checked against the current V1 incumbent before any adoption decision.
 - `oracle_state/forge_oracle_state.json` stores the Forge-owned Oracle Chronicle
   state needed to continue research on ephemeral Actions runners.
 

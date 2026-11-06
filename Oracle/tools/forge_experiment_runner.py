@@ -37,6 +37,8 @@ REPORT_DIR = CHRONICLE_RESEARCH_DIR / "oracle_forge_experiments"
 CANDIDATE_DIR = CHRONICLE_RESEARCH_DIR / "oracle_strategy_candidates"
 LEGACY_REPORT_DIR = ROOT / "Forge" / "reports" / "oracle_experiments"
 CATALOG_DIR = CHRONICLE_RESEARCH_DIR / "oracle_strategy_catalogs"
+BASELINE_DIR = CHRONICLE_RESEARCH_DIR / "oracle_strategy_baselines"
+V1_CATALOG_LATEST = CATALOG_DIR / "oracle_v1_latest.json"
 COST_PROFILE_FILE = ROOT / "Oracle" / "config" / "forge_cost_profiles.json"
 SYMBOL_ALIASES_FILE = ROOT / "Oracle" / "config" / "ctrader_research_symbol_aliases.json"
 
@@ -49,6 +51,7 @@ def _migrate_chronicle_research_artifacts() -> None:
     for name in (
             "oracle_cost_profiles", "oracle_forge_experiments",
             "oracle_market_data", "oracle_strategy_catalogs", "oracle_strategy_candidates",
+            "oracle_strategy_baselines",
             "oracle_ablation_learning", "oracle_state", "oracle_shadow"):
         source_dir = LEGACY_CHRONICLE_RESEARCH_DIR / name
         target_dir = CHRONICLE_RESEARCH_DIR / name
@@ -431,6 +434,142 @@ def _persist_catalog_artifact(sync_result):
             "record_count": len(catalog.get("records", [])), "already_saved": False}
 
 
+def _canonical_fingerprint(value: dict) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _persist_v1_catalog_snapshot(catalog: dict, captured_at: str):
+    """Mark the last catalog explicitly exported by V1 for offline V2 research."""
+    if catalog.get("schema") != "oracle.strategy_catalog.snapshot.v1":
+        return {"status": "blocked", "message": "V1 catalog schema is invalid"}
+    persisted = _persist_catalog_artifact({"data": {"catalog_snapshot": catalog}})
+    if persisted.get("status") != "complete":
+        return persisted
+    pointer = {
+        "schema": "forge.oracle.v1_catalog_snapshot.v1",
+        "source": "oracle_v1_api",
+        "captured_at": captured_at,
+        "catalog_fingerprint": persisted["catalog_fingerprint"],
+        "catalog": catalog,
+    }
+    temporary = V1_CATALOG_LATEST.with_suffix(".json.tmp")
+    try:
+        CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(json.dumps(_redact(pointer), indent=2, sort_keys=True,
+                                        allow_nan=False) + "\n", encoding="utf-8")
+        os.replace(temporary, V1_CATALOG_LATEST)
+    except (OSError, TypeError, ValueError) as exc:
+        temporary.unlink(missing_ok=True)
+        return {"status": "blocked", "message": f"could not save V1 catalog pointer: {type(exc).__name__}"}
+    return {**persisted, "source": "oracle_v1_api", "captured_at": captured_at}
+
+
+def _persist_v1_incumbent_snapshot(symbol: str, incumbent: dict, catalog_fingerprint: str,
+                                   captured_at: str):
+    """Persist the V1 baseline fields needed to research while the V1 API is offline."""
+    if (not isinstance(incumbent, dict) or incumbent.get("status") != "complete"
+            or str(incumbent.get("symbol", "")).upper() != symbol
+            or not isinstance(incumbent.get("baseline_genome"), dict)
+            or not isinstance(incumbent.get("performance_metrics"), dict)
+            or not isinstance(incumbent.get("risk_policy"), dict)):
+        return {"status": "blocked", "message": "V1 incumbent snapshot is missing required baseline, metrics, or risk policy"}
+    baseline = {key: incumbent.get(key) for key in (
+        "symbol", "regime", "strategy_id", "baseline_genome", "performance_metrics",
+        "risk_policy", "minimum_executed_trades",
+    )}
+    baseline["symbol"] = symbol
+    clean_baseline = _redact(baseline)
+    record = {
+        "schema": "forge.oracle.v1_incumbent_snapshot.v1",
+        "source": "oracle_v1_api",
+        "symbol": symbol,
+        "captured_at": captured_at,
+        "catalog_fingerprint": catalog_fingerprint,
+        "baseline": clean_baseline,
+    }
+    try:
+        fingerprint = _canonical_fingerprint(record)
+    except (TypeError, ValueError):
+        return {"status": "blocked", "message": "V1 incumbent snapshot contains non-canonical values"}
+    record["snapshot_fingerprint"] = fingerprint
+    directory = BASELINE_DIR / symbol
+    versioned = directory / f"{fingerprint}.json"
+    latest = directory / "latest.json"
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n"
+        if not versioned.exists():
+            temporary = versioned.with_suffix(".json.tmp")
+            temporary.write_text(encoded, encoding="utf-8")
+            os.replace(temporary, versioned)
+        temporary = latest.with_suffix(".json.tmp")
+        temporary.write_text(encoded, encoding="utf-8")
+        os.replace(temporary, latest)
+    except (OSError, TypeError, ValueError) as exc:
+        return {"status": "blocked", "message": f"could not save V1 incumbent snapshot: {type(exc).__name__}"}
+    return {"status": "complete", "snapshot_fingerprint": fingerprint,
+            "path": str(latest.relative_to(ROOT)).replace("\\", "/")}
+
+
+def _load_v1_incumbent_snapshot(symbol: str):
+    path = BASELINE_DIR / symbol / "latest.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (not isinstance(record, dict)
+            or record.get("schema") != "forge.oracle.v1_incumbent_snapshot.v1"
+            or record.get("source") != "oracle_v1_api"
+            or record.get("symbol") != symbol
+            or not isinstance(record.get("baseline"), dict)):
+        return None
+    fingerprint = record.get("snapshot_fingerprint")
+    canonical = {key: value for key, value in record.items() if key != "snapshot_fingerprint"}
+    try:
+        if not isinstance(fingerprint, str) or _canonical_fingerprint(canonical) != fingerprint:
+            return None
+    except (TypeError, ValueError):
+        return None
+    baseline = record["baseline"]
+    if (not isinstance(baseline.get("baseline_genome"), dict)
+            or not isinstance(baseline.get("performance_metrics"), dict)
+            or not isinstance(baseline.get("risk_policy"), dict)):
+        return None
+    return {"status": "complete", **baseline, "snapshot_fingerprint": fingerprint,
+            "snapshot_captured_at": record.get("captured_at"),
+            "catalog_fingerprint": record.get("catalog_fingerprint")}
+
+
+def _load_v1_catalog_snapshot():
+    try:
+        pointer = json.loads(V1_CATALOG_LATEST.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    catalog = pointer.get("catalog") if isinstance(pointer, dict) else None
+    if (not isinstance(pointer, dict)
+            or pointer.get("schema") != "forge.oracle.v1_catalog_snapshot.v1"
+            or pointer.get("source") != "oracle_v1_api"
+            or not isinstance(catalog, dict)
+            or catalog.get("schema") != "oracle.strategy_catalog.snapshot.v1"):
+        return None
+    fingerprint = catalog.get("catalog_fingerprint")
+    canonical = {key: value for key, value in catalog.items()
+                 if key not in {"catalog_fingerprint", "record_count",
+                                "family_template_count", "source_error_count"}}
+    try:
+        valid = (isinstance(fingerprint, str) and re.fullmatch(r"[0-9a-f]{64}", fingerprint)
+                 and fingerprint == pointer.get("catalog_fingerprint")
+                 and _canonical_fingerprint(canonical) == fingerprint)
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        return None
+    return {"status": "complete", "catalog": catalog,
+            "captured_at": pointer.get("captured_at")}
+
+
 def _persist_strategy_candidate(result_item: dict, recorded_at: str, source_report: str | None = None):
     """Persist a completed Oracle candidate separately from its batch report."""
     response = result_item.get("result") if isinstance(result_item, dict) else None
@@ -453,6 +592,8 @@ def _persist_strategy_candidate(result_item: dict, recorded_at: str, source_repo
         "experiment_id": experiment_id,
         "symbol": symbol,
         "candidate_status": "research_only",
+        "incumbent_fingerprint": result_item.get("incumbent_fingerprint"),
+        "incumbent_snapshot_fingerprint": result_item.get("incumbent_snapshot_fingerprint"),
         "recommendation": data.get("recommendation"),
         "evidence_role": design.get("evidence_role") or data.get("recommendation"),
         "promotion_performed": False,
@@ -586,18 +727,23 @@ def _json_request(url: str, payload=None, token: str | None = None, timeout=30):
         return {"status": "error", "message": f"request failed: {type(exc).__name__}"}
 
 
-def _select_oracle_source() -> str:
-    """Use V2 Oracle in CI/full mode; otherwise connect to the local V1 API."""
+def _select_oracle_source(symbols: list[str]) -> str:
+    """Prefer live V1, then its durable snapshots; never silently change incumbents."""
     requested = os.getenv("ORACLE_FORGE_ORACLE_SOURCE", "auto").strip().lower()
-    if requested in {"v1", "v2"}:
+    if requested in {"v1", "v1_snapshot", "v2"}:
         return requested
-    api_base = os.getenv("ORACLE_FORGE_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-    health = _json_request(f"{api_base}/health", timeout=3)
-    if "oracle" in health.get("active_agents", []):
-        return "v2"
     v1_base = os.getenv("ORACLE_V1_API_URL", "http://127.0.0.1:8001").rstrip("/")
     v1_health = _json_request(f"{v1_base}/health", timeout=3)
-    return "v1" if "oracle" in v1_health.get("active_agents", []) else "unavailable"
+    if "oracle" in v1_health.get("active_agents", []):
+        return "v1"
+    saved_catalog = _load_v1_catalog_snapshot()
+    if symbols and saved_catalog is not None:
+        expected_catalog = saved_catalog["catalog"].get("catalog_fingerprint")
+        snapshots = [_load_v1_incumbent_snapshot(symbol) for symbol in symbols]
+        if all(isinstance(item, dict) and item.get("catalog_fingerprint") == expected_catalog
+               for item in snapshots):
+            return "v1_snapshot"
+    return "unavailable"
 
 
 def _v1_catalog_and_incumbent(symbol: str | None = None):
@@ -624,15 +770,53 @@ def _v2_bridge_act(task: str, context: dict):
     return response
 
 
-def _catalog_sync_v1():
+def _catalog_sync_v1(symbols: list[str]):
     source = _v1_catalog_and_incumbent()
     catalog = source.get("catalog") if isinstance(source, dict) else None
     if source.get("status") != "complete" or not isinstance(catalog, dict):
         return {"status": source.get("status", "error"), "data": source}
+    captured_at = datetime.now(timezone.utc).isoformat()
+    catalog_snapshot = _persist_v1_catalog_snapshot(catalog, captured_at)
     result = _v2_bridge_act("oracle.strategy.catalog.sync", {"catalog": catalog})
     data = result.get("data", {}) if isinstance(result, dict) else {}
+    incumbents = {}
+    for symbol in symbols:
+        current = _v1_catalog_and_incumbent(symbol)
+        if current.get("status") == "complete":
+            snapshot = _persist_v1_incumbent_snapshot(
+                symbol, current, catalog.get("catalog_fingerprint", ""), captured_at,
+            )
+            incumbents[symbol] = ({**current, "snapshot_fingerprint": snapshot.get("snapshot_fingerprint")}
+                                  if snapshot.get("status") == "complete" else snapshot)
+        else:
+            incumbents[symbol] = current
     return {"status": result.get("status", "error"),
-            "data": {**(data if isinstance(data, dict) else {}), "catalog_snapshot": catalog}}
+            "data": {**(data if isinstance(data, dict) else {}), "catalog_snapshot": catalog,
+                     "v1_catalog_snapshot": catalog_snapshot, "v1_incumbents": incumbents}}
+
+
+def _catalog_sync_v1_snapshot(symbols: list[str]):
+    saved = _load_v1_catalog_snapshot()
+    if not isinstance(saved, dict):
+        return {"status": "blocked", "data": {
+            "status": "blocked", "message": "No verified V1 catalog snapshot is available in Chronicle",
+        }}
+    catalog = saved["catalog"]
+    result = _v2_bridge_act("oracle.strategy.catalog.sync", {"catalog": catalog})
+    data = result.get("data", {}) if isinstance(result, dict) else {}
+    incumbents = {symbol: _load_v1_incumbent_snapshot(symbol) for symbol in symbols}
+    missing = [symbol for symbol, value in incumbents.items() if value is None]
+    if missing:
+        return {"status": "blocked", "data": {
+            **(data if isinstance(data, dict) else {}),
+            "status": "blocked", "message": f"V1 incumbent snapshots missing for: {', '.join(missing)}",
+            "catalog_snapshot": catalog, "v1_incumbents": incumbents,
+        }}
+    return {"status": result.get("status", "error"),
+            "data": {**(data if isinstance(data, dict) else {}), "catalog_snapshot": catalog,
+                     "v1_catalog_snapshot": {"status": "complete", "source": "chronicle_v1_snapshot",
+                                             "captured_at": saved.get("captured_at")},
+                     "v1_incumbents": incumbents}}
 
 
 def _select_v1_ablation_target(symbol: str, cycle: int, data_fingerprint: str,
@@ -733,7 +917,7 @@ def main() -> int:
             "status": "skipped", "message": "empirical cost collection disabled for this cycle",
             "observations": [], "cost_profiles": {},
         }}
-    oracle_source = "not_required" if mode == "cost-observations" else _select_oracle_source()
+    oracle_source = "not_required" if mode == "cost-observations" else _select_oracle_source(symbols)
     if mode != "cost-observations":
         print(f"Oracle incumbent source: {oracle_source}", flush=True)
     if mode == "cost-observations":
@@ -743,24 +927,36 @@ def main() -> int:
         }}
         catalog_store_result = {"status": "skipped"}
     else:
-        print("Syncing Oracle strategy catalog to Chronicle through Forge", flush=True)
+        print("Syncing the selected Oracle incumbent snapshot to Chronicle through Forge", flush=True)
         if oracle_source == "v1":
-            catalog_sync_result = _catalog_sync_v1()
+            catalog_sync_result = _catalog_sync_v1(symbols)
+        elif oracle_source == "v1_snapshot":
+            catalog_sync_result = _catalog_sync_v1_snapshot(symbols)
         elif oracle_source == "v2":
             catalog_sync_result = _post("", "", "catalog-sync", None)
         else:
             catalog_sync_result = {"status": "blocked", "data": {
                 "status": "blocked",
-                "message": "No active Oracle V2 agent or authenticated Oracle V1 API was found",
+                "message": "No active V1 API or complete Chronicle V1 snapshot was found; V2 incumbent fallback is disabled",
             }}
         catalog_store_result = _persist_catalog_artifact(catalog_sync_result)
     catalog_sync_data = catalog_sync_result.get("data", {}) if isinstance(catalog_sync_result, dict) else {}
+    v1_snapshot_meta = catalog_sync_data.get("v1_catalog_snapshot") if isinstance(catalog_sync_data, dict) else None
+    v1_incumbents = catalog_sync_data.get("v1_incumbents") if isinstance(catalog_sync_data, dict) else None
+    v1_snapshot_ok = (
+        oracle_source not in {"v1", "v1_snapshot"}
+        or (isinstance(v1_snapshot_meta, dict) and v1_snapshot_meta.get("status") == "complete"
+            and isinstance(v1_incumbents, dict)
+            and all(isinstance(v1_incumbents.get(symbol), dict)
+                    and v1_incumbents[symbol].get("status") == "complete" for symbol in symbols))
+    )
     catalog_sync_ok = (
         isinstance(catalog_sync_result, dict)
         and catalog_sync_result.get("status") == "complete"
         and isinstance(catalog_sync_data, dict)
         and catalog_sync_data.get("status") == "complete"
         and catalog_store_result.get("status") == "complete"
+        and v1_snapshot_ok
     )
     catalog_sync_summary = {
         "status": "skipped" if mode == "cost-observations" else "complete" if catalog_sync_ok else "blocked",
@@ -769,6 +965,8 @@ def main() -> int:
         "already_saved": catalog_store_result.get("already_saved"),
         "artifact_status": catalog_store_result.get("status"),
         "artifact_message": catalog_store_result.get("message"),
+        "v1_snapshot_status": v1_snapshot_meta.get("status") if isinstance(v1_snapshot_meta, dict) else None,
+        "v1_snapshot_captured_at": v1_snapshot_meta.get("captured_at") if isinstance(v1_snapshot_meta, dict) else None,
         "chronicle_state_status": catalog_sync_data.get("status") if isinstance(catalog_sync_data, dict) else None,
         "chronicle_state_message": catalog_sync_data.get("message") if isinstance(catalog_sync_data, dict) else None,
     }
@@ -825,12 +1023,13 @@ def main() -> int:
         selected_incumbent = None
         incumbent_fingerprint = None
         reused_from = None
-        if (mode not in {"drift", "cost-observations"} and oracle_source == "v1"
+        if (mode not in {"drift", "cost-observations"} and oracle_source in {"v1", "v1_snapshot"}
                 and catalog_sync_ok and isinstance(execution_costs, dict)):
-            selected_incumbent = _v1_catalog_and_incumbent(symbol)
-            if selected_incumbent.get("status") != "complete":
-                response = {"status": selected_incumbent.get("status", "error"),
-                            "data": selected_incumbent}
+            synced_incumbents = catalog_sync_data.get("v1_incumbents", {})
+            selected_incumbent = synced_incumbents.get(symbol) if isinstance(synced_incumbents, dict) else None
+            if not isinstance(selected_incumbent, dict) or selected_incumbent.get("status") != "complete":
+                response = {"status": selected_incumbent.get("status", "blocked") if isinstance(selected_incumbent, dict) else "blocked",
+                            "data": selected_incumbent or {"message": "V1 incumbent snapshot is missing"}}
                 status = _result_status(response)
             else:
                 incumbent_fingerprint = _incumbent_fingerprint(selected_incumbent)
@@ -927,7 +1126,7 @@ def main() -> int:
                     "cost_observation": observation,
                 }}
                 status = "blocked"
-            elif learn_ablation_targets and oracle_source != "v1":
+            elif learn_ablation_targets and oracle_source not in {"v1", "v1_snapshot"}:
                 response = {"status": "blocked", "data": {
                     "status": "blocked",
                     "message": "evidence-guided ablation selection requires the active V1 incumbent identity; no fixed-target fallback was used",
@@ -962,7 +1161,7 @@ def main() -> int:
                 }}
                 status = "reused"
             else:
-                if oracle_source == "v1":
+                if oracle_source in {"v1", "v1_snapshot"}:
                     response = _request_v1_improvement(
                         symbol, mode, selected_ablation, execution_costs,
                         incumbent=selected_incumbent,
@@ -984,6 +1183,10 @@ def main() -> int:
             "evaluation_engine_version": EVALUATION_ENGINE_VERSION,
             "ablation_target": selected_ablation, "status": status,
             "incumbent_fingerprint": incumbent_fingerprint,
+            "incumbent_snapshot_fingerprint": (
+                selected_incumbent.get("snapshot_fingerprint")
+                if isinstance(selected_incumbent, dict) else None
+            ),
             "diagnostic_code": _diagnostic_code(status, response, "experiment"),
             "experiment_executed": status == "complete" and not reused_from,
             "reused_from": _reuse_reference(reused_from),
