@@ -18,6 +18,9 @@ restores and commits these artifacts on the `oracle-v2` branch.
   incumbent, metrics, and risk policy. Forge can use it while the V1 API is
   offline; candidates remain tied to that exact snapshot fingerprint and must
   be checked against the current V1 incumbent before any adoption decision.
+- Run `ORACLE_FORGE_EXPERIMENT_TYPE=v1-snapshot-sync` once while V1 is online to
+  seed or refresh its catalog and per-symbol incumbent snapshots. Later runs
+  use only matching V1 snapshots; they do not silently substitute V2's Oracle.
 - `oracle_state/forge_oracle_state.json` stores the Forge-owned Oracle Chronicle
   state needed to continue research on ephemeral Actions runners.
 

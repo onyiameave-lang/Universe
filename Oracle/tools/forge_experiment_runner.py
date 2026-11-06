@@ -883,7 +883,7 @@ def main() -> int:
         mode_spec = "ablation:learned" if learn_ablation_targets else scheduled_mode
     elif requested_mode in ROTATION:
         mode_spec = requested_mode
-    elif requested_mode == "cost-observations":
+    elif requested_mode in {"cost-observations", "v1-snapshot-sync"}:
         mode_spec = requested_mode
     elif requested_mode == "ablation":
         target = os.getenv("ORACLE_FORGE_ABLATION_TARGET", "").strip().lower()
@@ -891,7 +891,7 @@ def main() -> int:
             raise SystemExit("An ablation run requires a registered ORACLE_FORGE_ABLATION_TARGET")
         mode_spec = f"ablation:{target}"
     else:
-        raise SystemExit("Experiment type must be auto, challenger, drift, ablation, or cost-observations")
+        raise SystemExit("Experiment type must be auto, challenger, drift, ablation, cost-observations, or v1-snapshot-sync")
     mode = "ablation" if mode_spec.startswith("ablation:") else mode_spec
     ablation = mode_spec.split(":", 1)[1] if mode == "ablation" else None
     if learn_ablation_targets:
@@ -908,7 +908,13 @@ def main() -> int:
     collect_empirical = os.getenv("ORACLE_FORGE_COLLECT_EMPIRICAL_COSTS", "false").strip().lower() in {
         "1", "true", "yes", "on",
     }
-    if collect_empirical or mode == "cost-observations":
+    if mode == "v1-snapshot-sync":
+        print("Skipping market and broker collection; exporting the current V1 baseline to Chronicle", flush=True)
+        cost_observation_result = {"status": "skipped", "data": {
+            "status": "skipped", "message": "snapshot-only sync does not require broker collection",
+            "observations": [], "cost_profiles": {},
+        }}
+    elif collect_empirical or mode == "cost-observations":
         print(f"Collecting cTrader cost observations for {len(symbols)} symbols", flush=True)
         cost_observation_result = _post("", "", "cost-observations", None, symbols=symbols)
     else:
@@ -1024,7 +1030,8 @@ def main() -> int:
         incumbent_fingerprint = None
         reused_from = None
         if (mode not in {"drift", "cost-observations"} and oracle_source in {"v1", "v1_snapshot"}
-                and catalog_sync_ok and isinstance(execution_costs, dict)):
+                and catalog_sync_ok
+                and (mode == "v1-snapshot-sync" or isinstance(execution_costs, dict))):
             synced_incumbents = catalog_sync_data.get("v1_incumbents", {})
             selected_incumbent = synced_incumbents.get(symbol) if isinstance(synced_incumbents, dict) else None
             if not isinstance(selected_incumbent, dict) or selected_incumbent.get("status") != "complete":
@@ -1039,7 +1046,14 @@ def main() -> int:
                         "message": "V1 incumbent genome is missing or cannot be fingerprinted; refusing stale-result reuse",
                     }}
                     status = "blocked"
-        if mode == "cost-observations":
+        if mode == "v1-snapshot-sync":
+            status = "complete" if catalog_sync_ok and isinstance(selected_incumbent, dict) else "blocked"
+            response = {"status": status, "data": {
+                "status": status,
+                "message": "V1 catalog and incumbent snapshot saved to Chronicle" if status == "complete"
+                else "V1 catalog or incumbent snapshot could not be saved",
+            }}
+        elif mode == "cost-observations":
             observation = next((item for item in cost_data.get("observations", [])
                                 if isinstance(item, dict) and item.get("symbol") == symbol), {})
             collection_failed = cost_observation_result.get("status") == "error"
