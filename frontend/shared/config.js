@@ -8,9 +8,15 @@
 const BASE_URL = (() => {
   if (typeof window.UNIVERSE_API_BASE !== 'undefined') return window.UNIVERSE_API_BASE.replace(/\/$/, '');
   const stored = localStorage.getItem('universe-api-base');
-  if (stored) return stored.replace(/\/$/, '');
-  return 'http://localhost:8000';
+  if (stored && !stored.includes('localhost:8000')) return stored.replace(/\/$/, '');
+  return window.location.origin;
 })();
+
+const CONFIG = {
+  API_BASE: BASE_URL,
+};
+window.CONFIG = CONFIG;
+window.API_BASE = BASE_URL;
 
 // ── ENDPOINTS ─────────────────────────────────────────────────────────────────
 const API = {
