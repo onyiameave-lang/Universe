@@ -1059,6 +1059,156 @@ async def ecosystem_chat(request: Request):
             "data": {"status": "error", "message": str(exc)},
         }
 
+# ── Forge V2 7-Timeframe Discovery & Background Shadow Runner Python Routes ──
+@app.get("/api/forge/pilot/status")
+async def forge_v2_pilot_status(symbol: str = "GBPUSD", regime: str = "trending_up"):
+    import json
+    from Forge.core.shadow_runner import ForgeShadowRunner
+    from Forge.core.mtf_institutional_engine import MultiTimeframeInstitutionalEngine
+
+    upper_sym = (symbol or "GBPUSD").strip().upper()
+    kv_path = ROOT / "Chronicle" / "memory" / "store" / "kv_state.json"
+    mem_path = ROOT / "Chronicle" / "memory" / "store" / "memories.json"
+    ep_path = ROOT / "Chronicle" / "memory" / "store" / "episodes.json"
+    cat_path = ROOT / "Chronicle" / "memory" / "research" / "oracle_strategy_catalog" / "latest.json"
+
+    kv_store = json.loads(kv_path.read_text(encoding="utf-8")) if kv_path.exists() else {}
+    memories = json.loads(mem_path.read_text(encoding="utf-8")) if mem_path.exists() else []
+    episodes = json.loads(ep_path.read_text(encoding="utf-8")) if ep_path.exists() else []
+    catalog = json.loads(cat_path.read_text(encoding="utf-8")) if cat_path.exists() else {}
+
+    candidates = [
+        v["value"]
+        for k, v in kv_store.items()
+        if k.startswith("forge.core.candidate.")
+        and isinstance(v, dict)
+        and isinstance(v.get("value"), dict)
+        and (not symbol or v["value"].get("symbol") == upper_sym)
+    ]
+    hypotheses = [
+        v["value"]
+        for k, v in kv_store.items()
+        if k.startswith("forge.core.hypothesis.")
+        and isinstance(v, dict)
+        and isinstance(v.get("value"), dict)
+    ]
+    atlas_briefs = [
+        v["value"]
+        for k, v in kv_store.items()
+        if k.startswith(f"atlas.forge.research_brief.{upper_sym}.")
+        and isinstance(v, dict)
+        and isinstance(v.get("value"), dict)
+    ]
+
+    mtf_engine = MultiTimeframeInstitutionalEngine(ROOT)
+    mtf_ds = mtf_engine.load_cached_dataset(upper_sym)
+
+    shadow_runner = ForgeShadowRunner(ROOT)
+    shadow_ledger = shadow_runner._read_json(shadow_runner.shadow_ledger_path, {"symbols": {}})
+    shadow_report = (shadow_ledger.get("symbols") or {}).get(upper_sym)
+    if not shadow_report:
+        shadow_report = await run_in_threadpool(
+            shadow_runner.run_shadow_session, upper_sym, "ALL", 260
+        )
+
+    symbols_map = catalog.get("symbols") or {"GBPUSD": ["trending_up"], "EURUSD": ["trending_up"]}
+    symbols_readiness = []
+    for sym_key in sorted(symbols_map.keys()):
+        cp_path = ROOT / "Chronicle" / "memory" / "research" / "oracle_cost_profiles" / sym_key / "latest.json"
+        cp = json.loads(cp_path.read_text(encoding="utf-8")) if cp_path.exists() else None
+        ds_sym = mtf_engine.load_cached_dataset(sym_key)
+        tf_counts = ds_sym.get("timeframe_counts") if ds_sym else None
+        bars_cnt = sum(tf_counts.values()) if isinstance(tf_counts, dict) else 500
+        symbols_readiness.append({
+            "symbol": sym_key,
+            "status": "READY" if cp else "BLOCKED",
+            "blocker_code": None if cp else "MISSING_VERIFIED_COST_PROFILE",
+            "blocker_reason": None if cp else f"No verified cost profile found for {sym_key}.",
+            "bars_count": bars_cnt,
+            "mtf_ingested": bool(ds_sym),
+            "mtf_counts": tf_counts,
+            "cost_profile": cp,
+            "incumbent_regimes": symbols_map.get(sym_key, []),
+        })
+
+    recurrences = sum(max(0, int(m.get("occurrence_count", 1)) - 1) for m in memories if isinstance(m, dict))
+
+    return {
+        "status": "ok",
+        "deployment_target": "oracle_v2",
+        "active_symbol": upper_sym,
+        "active_regime": regime,
+        "mtf_summary": {
+            "symbol": mtf_ds.get("symbol"),
+            "yahoo_ticker": mtf_ds.get("yahoo_ticker"),
+            "timeframe_counts": mtf_ds.get("timeframe_counts"),
+            "session_distribution": mtf_ds.get("session_distribution"),
+            "regime_distribution": mtf_ds.get("regime_distribution"),
+            "fetched_at_unix": mtf_ds.get("fetched_at_unix"),
+        } if mtf_ds else None,
+        "atlas_research_briefs": atlas_briefs,
+        "shadow_runner_report": shadow_report,
+        "oracle_v2_deployed_strategies": catalog.get("oracle_v2_strategies") or {},
+        "symbols_readiness": symbols_readiness,
+        "candidates": candidates,
+        "hypotheses": hypotheses,
+        "learned_rankings": None,
+        "prior_lessons": [
+            {
+                "lesson": m.get("content"),
+                "adjustment": m.get("domain"),
+                "confidence": m.get("confidence", 0.9),
+                "repeat_count": m.get("occurrence_count", 1),
+                "occurrences": m.get("occurrences", []),
+            }
+            for m in memories[:10]
+            if isinstance(m, dict)
+        ],
+        "storage_topology": {
+            "chronicle_hard_drive": {
+                "state_keys_count": len(kv_store),
+                "total_revisions": len(kv_store) + len(memories) + len(episodes),
+                "memories_count": len(memories),
+                "episodes_count": len(episodes),
+                "lessons_count": len(memories),
+                "recurrences_consolidated": recurrences,
+            },
+            "agent_ram_and_outboxes": [
+                {"agent": "oracle", "ram_files": ["champion_library.json", "evolved_strategies.json"], "outbox_pending_events": 0}
+            ],
+        },
+    }
+
+
+@app.get("/api/forge/v2/shadow/status")
+async def forge_v2_shadow_status(symbol: str = "GBPUSD"):
+    from Forge.core.shadow_runner import ForgeShadowRunner
+    runner = ForgeShadowRunner(ROOT)
+    upper_sym = (symbol or "GBPUSD").strip().upper()
+    ledger = runner._read_json(runner.shadow_ledger_path, {"symbols": {}})
+    report = (ledger.get("symbols") or {}).get(upper_sym)
+    if not report:
+        report = await run_in_threadpool(runner.run_shadow_session, upper_sym, "ALL", 260)
+    return {"status": "ok", "symbol": upper_sym, "shadow_runner_report": report}
+
+
+@app.post("/api/forge/v2/shadow/run")
+async def forge_v2_shadow_run(request: Request):
+    from Forge.core.shadow_runner import ForgeShadowRunner
+    body = await request.json()
+    symbol = str(body.get("symbol", "GBPUSD")).strip().upper()
+    style = str(body.get("trader_style", "ALL")).strip().upper()
+    lookback = int(body.get("lookback_bars", 260))
+    runner = ForgeShadowRunner(ROOT)
+    report = await run_in_threadpool(runner.run_shadow_session, symbol, style, lookback)
+    return {
+        "status": "complete",
+        "symbol": symbol,
+        "trader_style": style,
+        "shadow_runner_report": report,
+    }
+
+
 if FRONTEND_ROOT.exists():
     app.mount("/frontend", StaticFiles(directory=str(FRONTEND_ROOT), html=True), name="static-frontend")
 else:
@@ -1068,3 +1218,4 @@ if __name__ == "__main__":
     import uvicorn
     bridge_only = os.getenv("ORACLE_FORGE_BRIDGE_ONLY", "false").strip().lower() in {"1", "true", "yes"}
     uvicorn.run(app, host="127.0.0.1" if bridge_only else "0.0.0.0", port=8000, ws="wsproto")
+
