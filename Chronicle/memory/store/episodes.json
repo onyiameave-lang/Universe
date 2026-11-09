@@ -1,0 +1,492 @@
+[
+  {
+    "episode_id": "ep-3209018e88bb",
+    "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.swing_trading::oracle.pilot.oracle_v2.mtf_discovery.swing_trading::pass",
+    "agent": "forge",
+    "task": "oracle.pilot.oracle_v2.mtf_discovery.swing_trading",
+    "success": true,
+    "outcome": "[EURUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.388x ATR, Dynamic BE=+1.71R, TP1=+2.37R (50%), TP2=+5.82R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION]: Lockbox Trades=13, WinRate=53.8%, Net=3.6218% (vs Baseline -2.7326%).",
+    "error": null,
+    "context": {},
+    "occurrence_count": 2,
+    "first_timestamp": 1794222383.257,
+    "timestamp": 1794222384.263,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-09T11:06:23.257Z",
+        "timestamp_unix": 1794222383.257,
+        "note": "First recorded on 2026-11-09 11:06:23 UTC: [GBPUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.582x ATR, Dynamic BE=+0.91R, TP1=+1.27R (50%), TP2=+3.35R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, LONDON_TREND_EXPANSION, LONDON_OPEN_JUDAS_SWEEP]: Lockbox Trades=12, WinRate=83.3%, Net=3.7744% (vs Baseline 4.0551%)."
+      },
+      {
+        "date_iso": "2026-11-09T11:06:24.263Z",
+        "timestamp_unix": 1794222384.263,
+        "note": "Happened again on 2026-11-09 11:06:24 UTC: [EURUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.388x ATR, Dynamic BE=+1.71R, TP1=+2.37R (50%), TP2=+5.82R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION]: Lockbox Trades=13, WinRate=53.8%, Net=3.6218% (vs Baseline -2.7326%)."
+      }
+    ],
+    "lesson": {
+      "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.swing_trading::oracle.pilot.oracle_v2.mtf_discovery.swing_trading::pass",
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.oracle_v2.mtf_discovery.swing_trading",
+      "root_cause": "Controlled variation 'oracle_v2.mtf_discovery.swing_trading' improved out-of-sample expectancy and risk-adjusted return in scope oracle_v2::GBPUSD::swing_trading.",
+      "lesson": "[EURUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.388x ATR, Dynamic BE=+1.71R, TP1=+2.37R (50%), TP2=+5.82R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION]: Lockbox Trades=13, WinRate=53.8%, Net=3.6218% (vs Baseline -2.7326%).",
+      "adjustment": "Prioritize 'oracle_v2.mtf_discovery.swing_trading' in oracle_v2::EURUSD::swing_trading candidate synthesis (Accumulated reward: 10.7968).",
+      "confidence": 0.91,
+      "repeated": true,
+      "repeat_count": 2,
+      "occurrences": [
+        {
+          "date_iso": "2026-11-09T11:06:23.257Z",
+          "timestamp_unix": 1794222383.257,
+          "note": "First recorded on 2026-11-09 11:06:23 UTC: [GBPUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.582x ATR, Dynamic BE=+0.91R, TP1=+1.27R (50%), TP2=+3.35R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, LONDON_TREND_EXPANSION, LONDON_OPEN_JUDAS_SWEEP]: Lockbox Trades=12, WinRate=83.3%, Net=3.7744% (vs Baseline 4.0551%)."
+        },
+        {
+          "date_iso": "2026-11-09T11:06:24.263Z",
+          "timestamp_unix": 1794222384.263,
+          "note": "Happened again on 2026-11-09 11:06:24 UTC: [EURUSD SWING_TRADING on H1 — Institutional Multi-Session Structural Swing Trader] Learned SL=1.388x ATR, Dynamic BE=+1.71R, TP1=+2.37R (50%), TP2=+5.82R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION]: Lockbox Trades=13, WinRate=53.8%, Net=3.6218% (vs Baseline -2.7326%)."
+        }
+      ]
+    }
+  },
+  {
+    "episode_id": "ep-ee77d4d3f32b",
+    "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.day_trading::oracle.pilot.oracle_v2.mtf_discovery.day_trading::pass",
+    "agent": "forge",
+    "task": "oracle.pilot.oracle_v2.mtf_discovery.day_trading",
+    "success": true,
+    "outcome": "[EURUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.493x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+3.72R in Adaptive Sessions [NY_OVERLAP_INSTITUTIONAL_DRIVE, ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_AFTERNOON_REBALANCING]: Lockbox Trades=24, WinRate=62.5%, Net=2.1712% (vs Baseline 1.7681%).",
+    "error": null,
+    "context": {},
+    "occurrence_count": 2,
+    "first_timestamp": 1794222383.038,
+    "timestamp": 1794222384.083,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-09T11:06:23.038Z",
+        "timestamp_unix": 1794222383.038,
+        "note": "First recorded on 2026-11-09 11:06:23 UTC: [GBPUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.253x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+2.58R in Adaptive Sessions [LONDON_OPEN_JUDAS_SWEEP, ASIAN_RANGE_ACCUMULATION, LONDON_TREND_EXPANSION]: Lockbox Trades=14, WinRate=71.4%, Net=2.6071% (vs Baseline -0.2639%)."
+      },
+      {
+        "date_iso": "2026-11-09T11:06:24.083Z",
+        "timestamp_unix": 1794222384.083,
+        "note": "Happened again on 2026-11-09 11:06:24 UTC: [EURUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.493x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+3.72R in Adaptive Sessions [NY_OVERLAP_INSTITUTIONAL_DRIVE, ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_AFTERNOON_REBALANCING]: Lockbox Trades=24, WinRate=62.5%, Net=2.1712% (vs Baseline 1.7681%)."
+      }
+    ],
+    "lesson": {
+      "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.day_trading::oracle.pilot.oracle_v2.mtf_discovery.day_trading::pass",
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.oracle_v2.mtf_discovery.day_trading",
+      "root_cause": "Controlled variation 'oracle_v2.mtf_discovery.day_trading' improved out-of-sample expectancy and risk-adjusted return in scope oracle_v2::GBPUSD::day_trading.",
+      "lesson": "[EURUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.493x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+3.72R in Adaptive Sessions [NY_OVERLAP_INSTITUTIONAL_DRIVE, ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_AFTERNOON_REBALANCING]: Lockbox Trades=24, WinRate=62.5%, Net=2.1712% (vs Baseline 1.7681%).",
+      "adjustment": "Prioritize 'oracle_v2.mtf_discovery.day_trading' in oracle_v2::EURUSD::day_trading candidate synthesis (Accumulated reward: 3.6556).",
+      "confidence": 0.91,
+      "repeated": true,
+      "repeat_count": 2,
+      "occurrences": [
+        {
+          "date_iso": "2026-11-09T11:06:23.038Z",
+          "timestamp_unix": 1794222383.038,
+          "note": "First recorded on 2026-11-09 11:06:23 UTC: [GBPUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.253x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+2.58R in Adaptive Sessions [LONDON_OPEN_JUDAS_SWEEP, ASIAN_RANGE_ACCUMULATION, LONDON_TREND_EXPANSION]: Lockbox Trades=14, WinRate=71.4%, Net=2.6071% (vs Baseline -0.2639%)."
+        },
+        {
+          "date_iso": "2026-11-09T11:06:24.083Z",
+          "timestamp_unix": 1794222384.083,
+          "note": "Happened again on 2026-11-09 11:06:24 UTC: [EURUSD DAY_TRADING on M15 — Institutional Order-Flow & Discount/Premium Day Trader] Learned SL=1.493x ATR, Dynamic BE=+0.89R, TP1=+1.23R (50%), TP2=+3.72R in Adaptive Sessions [NY_OVERLAP_INSTITUTIONAL_DRIVE, ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_AFTERNOON_REBALANCING]: Lockbox Trades=24, WinRate=62.5%, Net=2.1712% (vs Baseline 1.7681%)."
+        }
+      ]
+    }
+  },
+  {
+    "episode_id": "ep-efee02126d35",
+    "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.scalping::oracle.pilot.oracle_v2.mtf_discovery.scalping::pass",
+    "agent": "forge",
+    "task": "oracle.pilot.oracle_v2.mtf_discovery.scalping",
+    "success": true,
+    "outcome": "[EURUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.163x ATR, Dynamic BE=+0.9R, TP1=+1.25R (50%), TP2=+2.88R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING]: Lockbox Trades=97, WinRate=52.6%, Net=8.5252% (vs Baseline 7.9749%).",
+    "error": null,
+    "context": {},
+    "occurrence_count": 2,
+    "first_timestamp": 1794222382.804,
+    "timestamp": 1794222383.872,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-09T11:06:22.804Z",
+        "timestamp_unix": 1794222382.804,
+        "note": "First recorded on 2026-11-09 11:06:22 UTC: [GBPUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.117x ATR, Dynamic BE=+1.07R, TP1=+1.48R (50%), TP2=+3.35R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_OVERLAP_INSTITUTIONAL_DRIVE]: Lockbox Trades=71, WinRate=50.7%, Net=6.4868% (vs Baseline -3.8226%)."
+      },
+      {
+        "date_iso": "2026-11-09T11:06:23.872Z",
+        "timestamp_unix": 1794222383.872,
+        "note": "Happened again on 2026-11-09 11:06:23 UTC: [EURUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.163x ATR, Dynamic BE=+0.9R, TP1=+1.25R (50%), TP2=+2.88R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING]: Lockbox Trades=97, WinRate=52.6%, Net=8.5252% (vs Baseline 7.9749%)."
+      }
+    ],
+    "lesson": {
+      "concept_key": "forge::oracle.pilot.oracle_v2.mtf_discovery.scalping::oracle.pilot.oracle_v2.mtf_discovery.scalping::pass",
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.oracle_v2.mtf_discovery.scalping",
+      "root_cause": "Controlled variation 'oracle_v2.mtf_discovery.scalping' improved out-of-sample expectancy and risk-adjusted return in scope oracle_v2::GBPUSD::scalping.",
+      "lesson": "[EURUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.163x ATR, Dynamic BE=+0.9R, TP1=+1.25R (50%), TP2=+2.88R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING]: Lockbox Trades=97, WinRate=52.6%, Net=8.5252% (vs Baseline 7.9749%).",
+      "adjustment": "Prioritize 'oracle_v2.mtf_discovery.scalping' in oracle_v2::EURUSD::scalping candidate synthesis (Accumulated reward: 5.2031).",
+      "confidence": 0.91,
+      "repeated": true,
+      "repeat_count": 2,
+      "occurrences": [
+        {
+          "date_iso": "2026-11-09T11:06:22.804Z",
+          "timestamp_unix": 1794222382.804,
+          "note": "First recorded on 2026-11-09 11:06:22 UTC: [GBPUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.117x ATR, Dynamic BE=+1.07R, TP1=+1.48R (50%), TP2=+3.35R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, NY_OVERLAP_INSTITUTIONAL_DRIVE]: Lockbox Trades=71, WinRate=50.7%, Net=6.4868% (vs Baseline -3.8226%)."
+        },
+        {
+          "date_iso": "2026-11-09T11:06:23.872Z",
+          "timestamp_unix": 1794222383.872,
+          "note": "Happened again on 2026-11-09 11:06:23 UTC: [EURUSD SCALPING on M5 — Institutional Session Liquidity & Displacement Scalper] Learned SL=1.163x ATR, Dynamic BE=+0.9R, TP1=+1.25R (50%), TP2=+2.88R in Adaptive Sessions [ASIAN_RANGE_ACCUMULATION, LONDON_OPEN_JUDAS_SWEEP, LONDON_TREND_EXPANSION, NY_OVERLAP_INSTITUTIONAL_DRIVE, NY_AFTERNOON_REBALANCING]: Lockbox Trades=97, WinRate=52.6%, Net=8.5252% (vs Baseline 7.9749%)."
+        }
+      ]
+    }
+  },
+  {
+    "episode_id": "ep-59d468a8ed46",
+    "agent": "forge",
+    "task": "oracle.pilot.sizing.constant_monetary_risk_stop_scaled",
+    "success": false,
+    "outcome": "[EURUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.sizing.constant_monetary_risk_stop_scaled",
+      "root_cause": "Controlled variation 'sizing.constant_monetary_risk_stop_scaled' failed to beat frozen incumbent or breached statistical/cost guardrails in scope oracle::EURUSD::ranging.",
+      "lesson": "[EURUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%.",
+      "adjustment": "Down-weight 'sizing.constant_monetary_risk_stop_scaled' in oracle::EURUSD::ranging (1 inconclusive/rejected screens).",
+      "confidence": 0.72,
+      "repeated": true,
+      "repeat_count": 3,
+      "concept_key": "forge::oracle.pilot.sizing.constant_monetary_risk_stop_scaled::oracle.pilot.sizing.constant_monetary_risk_stop_scaled::fail",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.798Z",
+          "timestamp_unix": 1794035829.798,
+          "note": "[EURUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%."
+        },
+        {
+          "date_iso": "2026-11-07T07:17:09.528Z",
+          "timestamp_unix": 1794035829.528,
+          "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=0.554% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5512%."
+        },
+        {
+          "date_iso": "2026-11-07T07:15:54.944Z",
+          "timestamp_unix": 1794035754.944,
+          "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=0.554% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5512%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.798,
+    "concept_key": "forge::oracle.pilot.sizing.constant_monetary_risk_stop_scaled::oracle.pilot.sizing.constant_monetary_risk_stop_scaled::fail",
+    "occurrence_count": 3,
+    "first_timestamp": 1794035829.798,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.798Z",
+        "timestamp_unix": 1794035829.798,
+        "note": "[EURUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%."
+      },
+      {
+        "date_iso": "2026-11-07T07:17:09.528Z",
+        "timestamp_unix": 1794035829.528,
+        "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=0.554% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5512%."
+      },
+      {
+        "date_iso": "2026-11-07T07:15:54.944Z",
+        "timestamp_unix": 1794035754.944,
+        "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate E — Stop-Distance & Volatility-Adjusted Constant-Risk Sizing: Lockbox Return=0.554% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5512%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-a94143e1579a",
+    "agent": "forge",
+    "task": "oracle.pilot.exit.hybrid_structure_atr_and_mtf_context",
+    "success": false,
+    "outcome": "[EURUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.exit.hybrid_structure_atr_and_mtf_context",
+      "root_cause": "Controlled variation 'exit.hybrid_structure_atr_and_mtf_context' failed to beat frozen incumbent or breached statistical/cost guardrails in scope oracle::EURUSD::ranging.",
+      "lesson": "[EURUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%.",
+      "adjustment": "Down-weight 'exit.hybrid_structure_atr_and_mtf_context' in oracle::EURUSD::ranging (1 inconclusive/rejected screens).",
+      "confidence": 0.72,
+      "repeated": true,
+      "repeat_count": 3,
+      "concept_key": "forge::oracle.pilot.exit.hybrid_structure_atr_and_mtf_context::oracle.pilot.exit.hybrid_structure_atr_and_mtf_context::fail",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.750Z",
+          "timestamp_unix": 1794035829.75,
+          "note": "[EURUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%."
+        },
+        {
+          "date_iso": "2026-11-07T07:17:09.491Z",
+          "timestamp_unix": 1794035829.491,
+          "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=0.53% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5271%."
+        },
+        {
+          "date_iso": "2026-11-07T07:15:54.919Z",
+          "timestamp_unix": 1794035754.919,
+          "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=0.53% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5271%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.75,
+    "concept_key": "forge::oracle.pilot.exit.hybrid_structure_atr_and_mtf_context::oracle.pilot.exit.hybrid_structure_atr_and_mtf_context::fail",
+    "occurrence_count": 3,
+    "first_timestamp": 1794035829.75,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.750Z",
+        "timestamp_unix": 1794035829.75,
+        "note": "[EURUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=1.1676% (vs Incumbent 1.6279%), Sharpe=1.4284, Expectancy=0.7784R, Stress Return=1.1646%."
+      },
+      {
+        "date_iso": "2026-11-07T07:17:09.491Z",
+        "timestamp_unix": 1794035829.491,
+        "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=0.53% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5271%."
+      },
+      {
+        "date_iso": "2026-11-07T07:15:54.919Z",
+        "timestamp_unix": 1794035754.919,
+        "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate D — Structure + ATR Buffer & Contextual Multi-Timeframe Weighting: Lockbox Return=0.53% (vs Incumbent 0.8254%), Sharpe=0.6469, Expectancy=0.265R, Stress Return=0.5271%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-797c29aa2ca7",
+    "agent": "forge",
+    "task": "oracle.pilot.exit.volatility_adaptive_atr",
+    "success": true,
+    "outcome": "[EURUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=2.1487% (vs Incumbent 1.6279%), Sharpe=1.6828, Expectancy=1.0743R, Stress Return=2.141%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.exit.volatility_adaptive_atr",
+      "root_cause": "Controlled variation 'exit.volatility_adaptive_atr' improved out-of-sample expectancy and risk-adjusted return in scope oracle::EURUSD::ranging.",
+      "lesson": "[EURUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=2.1487% (vs Incumbent 1.6279%), Sharpe=1.6828, Expectancy=1.0743R, Stress Return=2.141%.",
+      "adjustment": "Prioritize 'exit.volatility_adaptive_atr' in oracle::EURUSD::ranging candidate synthesis (Accumulated reward: 1.0559).",
+      "confidence": 0.88,
+      "repeated": true,
+      "repeat_count": 2,
+      "concept_key": "forge::oracle.pilot.exit.volatility_adaptive_atr::oracle.pilot.exit.volatility_adaptive_atr::pass",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.706Z",
+          "timestamp_unix": 1794035829.706,
+          "note": "[EURUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=2.1487% (vs Incumbent 1.6279%), Sharpe=1.6828, Expectancy=1.0743R, Stress Return=2.141%."
+        },
+        {
+          "date_iso": "2026-11-07T07:17:09.462Z",
+          "timestamp_unix": 1794035829.462,
+          "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.706,
+    "concept_key": "forge::oracle.pilot.exit.volatility_adaptive_atr::oracle.pilot.exit.volatility_adaptive_atr::pass",
+    "occurrence_count": 2,
+    "first_timestamp": 1794035829.706,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.706Z",
+        "timestamp_unix": 1794035829.706,
+        "note": "[EURUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=2.1487% (vs Incumbent 1.6279%), Sharpe=1.6828, Expectancy=1.0743R, Stress Return=2.141%."
+      },
+      {
+        "date_iso": "2026-11-07T07:17:09.462Z",
+        "timestamp_unix": 1794035829.462,
+        "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-6d44c7e221b1",
+    "agent": "forge",
+    "task": "oracle.pilot.exit.market_structure_invalidation",
+    "success": false,
+    "outcome": "[EURUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=1.1953% (vs Incumbent 1.6279%), Sharpe=1.4443, Expectancy=0.7969R, Stress Return=1.1921%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.exit.market_structure_invalidation",
+      "root_cause": "Controlled variation 'exit.market_structure_invalidation' failed to beat frozen incumbent or breached statistical/cost guardrails in scope oracle::EURUSD::ranging.",
+      "lesson": "[EURUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=1.1953% (vs Incumbent 1.6279%), Sharpe=1.4443, Expectancy=0.7969R, Stress Return=1.1921%.",
+      "adjustment": "Down-weight 'exit.market_structure_invalidation' in oracle::EURUSD::ranging (1 inconclusive/rejected screens).",
+      "confidence": 0.72,
+      "repeated": true,
+      "repeat_count": 2,
+      "concept_key": "forge::oracle.pilot.exit.market_structure_invalidation::oracle.pilot.exit.market_structure_invalidation::fail",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.667Z",
+          "timestamp_unix": 1794035829.667,
+          "note": "[EURUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=1.1953% (vs Incumbent 1.6279%), Sharpe=1.4443, Expectancy=0.7969R, Stress Return=1.1921%."
+        },
+        {
+          "date_iso": "2026-11-07T07:15:54.871Z",
+          "timestamp_unix": 1794035754.871,
+          "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.667,
+    "concept_key": "forge::oracle.pilot.exit.market_structure_invalidation::oracle.pilot.exit.market_structure_invalidation::fail",
+    "occurrence_count": 2,
+    "first_timestamp": 1794035829.667,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.667Z",
+        "timestamp_unix": 1794035829.667,
+        "note": "[EURUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=1.1953% (vs Incumbent 1.6279%), Sharpe=1.4443, Expectancy=0.7969R, Stress Return=1.1921%."
+      },
+      {
+        "date_iso": "2026-11-07T07:15:54.871Z",
+        "timestamp_unix": 1794035754.871,
+        "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-1a8ba8c9a77c",
+    "agent": "forge",
+    "task": "oracle.pilot.incumbent_baseline_reproduction",
+    "success": false,
+    "outcome": "[EURUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=1.6279% (vs Incumbent 1.6279%), Sharpe=1.4648, Expectancy=0.814R, Stress Return=1.622%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.incumbent_baseline_reproduction",
+      "root_cause": "Controlled variation 'incumbent_baseline_reproduction' failed to beat frozen incumbent or breached statistical/cost guardrails in scope oracle::EURUSD::ranging.",
+      "lesson": "[EURUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=1.6279% (vs Incumbent 1.6279%), Sharpe=1.4648, Expectancy=0.814R, Stress Return=1.622%.",
+      "adjustment": "Down-weight 'incumbent_baseline_reproduction' in oracle::EURUSD::ranging (1 inconclusive/rejected screens).",
+      "confidence": 0.72,
+      "repeated": true,
+      "repeat_count": 3,
+      "concept_key": "forge::oracle.pilot.incumbent_baseline_reproduction::oracle.pilot.incumbent_baseline_reproduction::fail",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.623Z",
+          "timestamp_unix": 1794035829.623,
+          "note": "[EURUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=1.6279% (vs Incumbent 1.6279%), Sharpe=1.4648, Expectancy=0.814R, Stress Return=1.622%."
+        },
+        {
+          "date_iso": "2026-11-07T07:17:09.402Z",
+          "timestamp_unix": 1794035829.402,
+          "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=0.8254% (vs Incumbent 0.8254%), Sharpe=0.9632, Expectancy=0.4127R, Stress Return=0.8212%."
+        },
+        {
+          "date_iso": "2026-11-07T07:15:54.848Z",
+          "timestamp_unix": 1794035754.848,
+          "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=0.8254% (vs Incumbent 0.8254%), Sharpe=0.9632, Expectancy=0.4127R, Stress Return=0.8212%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.623,
+    "concept_key": "forge::oracle.pilot.incumbent_baseline_reproduction::oracle.pilot.incumbent_baseline_reproduction::fail",
+    "occurrence_count": 3,
+    "first_timestamp": 1794035829.623,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.623Z",
+        "timestamp_unix": 1794035829.623,
+        "note": "[EURUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=1.6279% (vs Incumbent 1.6279%), Sharpe=1.4648, Expectancy=0.814R, Stress Return=1.622%."
+      },
+      {
+        "date_iso": "2026-11-07T07:17:09.402Z",
+        "timestamp_unix": 1794035829.402,
+        "note": "Happened again on 2026-11-07 07:17 UTC: [GBPUSD::ranging] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=0.8254% (vs Incumbent 0.8254%), Sharpe=0.9632, Expectancy=0.4127R, Stress Return=0.8212%."
+      },
+      {
+        "date_iso": "2026-11-07T07:15:54.848Z",
+        "timestamp_unix": 1794035754.848,
+        "note": "Happened again on 2026-11-07 07:15 UTC: [GBPUSD::trending_up] Candidate A — Frozen V1 Incumbent Baseline: Lockbox Return=0.8254% (vs Incumbent 0.8254%), Sharpe=0.9632, Expectancy=0.4127R, Stress Return=0.8212%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-622704fb293a",
+    "agent": "forge",
+    "task": "oracle.pilot.exit.market_structure_invalidation",
+    "success": true,
+    "outcome": "[GBPUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.exit.market_structure_invalidation",
+      "root_cause": "Controlled variation 'exit.market_structure_invalidation' improved out-of-sample expectancy and risk-adjusted return in scope oracle::GBPUSD::ranging.",
+      "lesson": "[GBPUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%.",
+      "adjustment": "Prioritize 'exit.market_structure_invalidation' in oracle::GBPUSD::ranging candidate synthesis (Accumulated reward: 0.4281).",
+      "confidence": 0.88,
+      "repeated": false,
+      "repeat_count": 1,
+      "concept_key": "forge::oracle.pilot.exit.market_structure_invalidation::oracle.pilot.exit.market_structure_invalidation::pass",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:17:09.429Z",
+          "timestamp_unix": 1794035829.429,
+          "note": "[GBPUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%."
+        }
+      ]
+    },
+    "timestamp": 1794035829.429,
+    "concept_key": "forge::oracle.pilot.exit.market_structure_invalidation::oracle.pilot.exit.market_structure_invalidation::pass",
+    "occurrence_count": 1,
+    "first_timestamp": 1794035829.429,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:17:09.429Z",
+        "timestamp_unix": 1794035829.429,
+        "note": "[GBPUSD::ranging] Candidate B — Market-Structure Stop-Loss & Structure Target: Lockbox Return=0.7772% (vs Incumbent 0.8254%), Sharpe=1.2936, Expectancy=0.3886R, Stress Return=0.7739%."
+      }
+    ]
+  },
+  {
+    "episode_id": "ep-f54621bcf53f",
+    "agent": "forge",
+    "task": "oracle.pilot.exit.volatility_adaptive_atr",
+    "success": false,
+    "outcome": "[GBPUSD::trending_up] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%.",
+    "error": null,
+    "context": {},
+    "lesson": {
+      "source": "empirical_experiment",
+      "task": "oracle.pilot.exit.volatility_adaptive_atr",
+      "root_cause": "Controlled variation 'exit.volatility_adaptive_atr' failed to beat frozen incumbent or breached statistical/cost guardrails in scope oracle::GBPUSD::trending_up.",
+      "lesson": "[GBPUSD::trending_up] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%.",
+      "adjustment": "Down-weight 'exit.volatility_adaptive_atr' in oracle::GBPUSD::trending_up (1 inconclusive/rejected screens).",
+      "confidence": 0.72,
+      "repeated": false,
+      "repeat_count": 1,
+      "concept_key": "forge::oracle.pilot.exit.volatility_adaptive_atr::oracle.pilot.exit.volatility_adaptive_atr::fail",
+      "occurrences": [
+        {
+          "date_iso": "2026-11-07T07:15:54.892Z",
+          "timestamp_unix": 1794035754.892,
+          "note": "[GBPUSD::trending_up] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%."
+        }
+      ]
+    },
+    "timestamp": 1794035754.892,
+    "concept_key": "forge::oracle.pilot.exit.volatility_adaptive_atr::oracle.pilot.exit.volatility_adaptive_atr::fail",
+    "occurrence_count": 1,
+    "first_timestamp": 1794035754.892,
+    "occurrences": [
+      {
+        "date_iso": "2026-11-07T07:15:54.892Z",
+        "timestamp_unix": 1794035754.892,
+        "note": "[GBPUSD::trending_up] Candidate C — Volatility-Adjusted ATR Stop & Target: Lockbox Return=1.1559% (vs Incumbent 0.8254%), Sharpe=1.2051, Expectancy=0.5779R, Stress Return=1.1509%."
+      }
+    ]
+  }
+]
