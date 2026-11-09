@@ -612,7 +612,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Forge V2 Background Shadow Runner (Tests V2 Strategies When Oracle V1 Is Idle)"
     )
-    parser.add_argument("--symbol", default="GBPUSD", help="Symbol (e.g. GBPUSD, EURUSD)")
+    parser.add_argument(
+        "--symbol", default="GBPUSD", help="Single symbol (e.g. GBPUSD, EURUSD)"
+    )
+    parser.add_argument(
+        "--symbols",
+        default="",
+        help="Comma-separated symbols for multi-pair shadow monitoring (e.g. GBPUSD,EURUSD)",
+    )
     parser.add_argument(
         "--style",
         default="ALL",
@@ -624,35 +631,65 @@ def main() -> None:
         default=260,
         help="Number of recent trigger-timeframe bars to shadow-monitor",
     )
+    parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Run continuously in a background loop alongside Oracle V1",
+    )
+    parser.add_argument(
+        "--interval-sec",
+        type=int,
+        default=300,
+        help="Seconds between shadow evaluation cycles when --daemon is active (default: 300s / 5m)",
+    )
     args = parser.parse_args()
 
+    symbols_list = (
+        [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+        if args.symbols
+        else [args.symbol.upper()]
+    )
+
     runner = ForgeShadowRunner()
-    report = runner.run_shadow_session(
-        symbol=args.symbol,
-        trader_style=args.style,
-        lookback_bars=args.lookback_bars,
-    )
-    print(
-        json.dumps(
-            {
-                "status": "complete",
-                "mode": report.get("mode"),
-                "symbol": report.get("symbol"),
-                "v1_missed_opportunities_captured_by_v2": report.get(
-                    "v1_missed_opportunities_captured_by_v2"
+
+    while True:
+        for sym in symbols_list:
+            report = runner.run_shadow_session(
+                symbol=sym,
+                trader_style=args.style,
+                lookback_bars=args.lookback_bars,
+            )
+            print(
+                json.dumps(
+                    {
+                        "status": "complete",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                        "mode": report.get("mode"),
+                        "symbol": report.get("symbol"),
+                        "v1_missed_opportunities_captured_by_v2": report.get(
+                            "v1_missed_opportunities_captured_by_v2"
+                        ),
+                        "overall_shadow_win_rate_pct": report.get(
+                            "overall_shadow_win_rate_pct"
+                        ),
+                        "overall_shadow_total_r": report.get("overall_shadow_total_r"),
+                        "overall_shadow_net_return_pct": report.get(
+                            "overall_shadow_net_return_pct"
+                        ),
+                        "style_summaries": report.get("style_summaries"),
+                        "sample_shadow_trade": (
+                            report.get("recent_shadow_trades") or [None]
+                        )[0],
+                    },
+                    indent=2,
                 ),
-                "overall_shadow_win_rate_pct": report.get("overall_shadow_win_rate_pct"),
-                "overall_shadow_total_r": report.get("overall_shadow_total_r"),
-                "overall_shadow_net_return_pct": report.get(
-                    "overall_shadow_net_return_pct"
-                ),
-                "style_summaries": report.get("style_summaries"),
-                "sample_shadow_trade": (report.get("recent_shadow_trades") or [None])[0],
-            },
-            indent=2,
-        )
-    )
+                flush=True,
+            )
+        if not args.daemon:
+            break
+        time.sleep(max(15, args.interval_sec))
 
 
 if __name__ == "__main__":
     main()
+
