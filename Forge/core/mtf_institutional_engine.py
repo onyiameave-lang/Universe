@@ -282,6 +282,196 @@ class MultiTimeframeInstitutionalEngine:
             return None
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def _fetch_yahoo_interval(
+        self, ticker: str, interval: str, range_str: str
+    ) -> List[Dict[str, Any]]:
+        encoded = urllib.parse.quote(ticker, safe="")
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded}?interval={interval}&range={range_str}"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; UniverseForgeV2/2.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        result = ((payload.get("chart") or {}).get("result") or [None])[0] or {}
+        timestamps = result.get("timestamp") or []
+        quote = ((result.get("indicators") or {}).get("quote") or [{}])[0] or {}
+        opens = quote.get("open") or []
+        highs = quote.get("high") or []
+        lows = quote.get("low") or []
+        closes = quote.get("close") or []
+        volumes = quote.get("volume") or []
+
+        bars: List[Dict[str, Any]] = []
+        for idx, u in enumerate(timestamps):
+            o = opens[idx] if idx < len(opens) else None
+            h = highs[idx] if idx < len(highs) else None
+            l = lows[idx] if idx < len(lows) else None
+            c = closes[idx] if idx < len(closes) else None
+            v = volumes[idx] if idx < len(volumes) else 0.0
+            if (
+                isinstance(u, (int, float))
+                and isinstance(o, (int, float))
+                and isinstance(h, (int, float))
+                and isinstance(l, (int, float))
+                and isinstance(c, (int, float))
+                and c > 0
+            ):
+                u_int = int(u)
+                bars.append(
+                    {
+                        "ts": datetime.fromtimestamp(u_int, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "unix_sec": u_int,
+                        "open": float(o),
+                        "high": float(h),
+                        "low": float(l),
+                        "close": float(c),
+                        "volume": float(v) if isinstance(v, (int, float)) else 0.0,
+                    }
+                )
+        return bars
+
+    def _aggregate_h1_to_h4(self, h1_bars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not h1_bars:
+            return []
+        buckets: Dict[int, Dict[str, Any]] = {}
+        for b in h1_bars:
+            block_sec = (int(b["unix_sec"]) // (4 * 3600)) * (4 * 3600)
+            existing = buckets.get(block_sec)
+            if not existing:
+                buckets[block_sec] = {
+                    "ts": datetime.fromtimestamp(block_sec, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "unix_sec": block_sec,
+                    "open": float(b["open"]),
+                    "high": float(b["high"]),
+                    "low": float(b["low"]),
+                    "close": float(b["close"]),
+                    "volume": float(b.get("volume", 0.0)),
+                }
+            else:
+                existing["high"] = max(existing["high"], float(b["high"]))
+                existing["low"] = min(existing["low"], float(b["low"]))
+                existing["close"] = float(b["close"])
+                existing["volume"] += float(b.get("volume", 0.0))
+        raw_h4 = [buckets[k] for k in sorted(buckets.keys())]
+        return self.annotate_bar_series(raw_h4)
+
+    def fetch_live_7tf_dataset(
+        self, symbol: str, max_age_sec: int = 90, force_refresh: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Pulls fresh live 7-timeframe candles (W1, D1, H4, H1, M30, M15, M5) for `symbol`
+        if the cached dataset is older than `max_age_sec`, annotates institutional
+        microstructure and adaptive sessions with zero look-ahead, and persists to Chronicle.
+        Falls back to the cached dataset only if the live feed is temporarily unreachable.
+        """
+        upper_sym = symbol.upper()
+        cached = self.load_cached_dataset(upper_sym)
+        now_unix = time.time()
+        if (
+            not force_refresh
+            and cached
+            and isinstance(cached.get("fetched_at_unix"), (int, float))
+            and (now_unix - float(cached["fetched_at_unix"])) <= max_age_sec
+        ):
+            return cached
+
+        ticker = self.resolve_yahoo_ticker(upper_sym)
+        try:
+            w1_raw = self._fetch_yahoo_interval(ticker, "1wk", "2y")
+            d1_raw = self._fetch_yahoo_interval(ticker, "1d", "1y")
+            h1_raw = self._fetch_yahoo_interval(ticker, "1h", "60d")
+            m30_raw = self._fetch_yahoo_interval(ticker, "30m", "30d")
+            m15_raw = self._fetch_yahoo_interval(ticker, "15m", "30d")
+            m5_raw = self._fetch_yahoo_interval(ticker, "5m", "15d")
+
+            if len(m15_raw) < 40 or len(h1_raw) < 20:
+                return cached
+
+            w1 = self.annotate_bar_series(w1_raw)
+            d1 = self.annotate_bar_series(d1_raw)
+            h1 = self.annotate_bar_series(h1_raw)
+            h4 = self._aggregate_h1_to_h4(h1)
+            m30 = self.annotate_bar_series(m30_raw)
+            m15 = self.annotate_bar_series(m15_raw)
+            m5 = self.annotate_bar_series(m5_raw)
+
+            session_dist: Dict[str, int] = {
+                "ASIAN_SESSION": 0,
+                "LONDON_SESSION": 0,
+                "LONDON_NY_OVERLAP": 0,
+                "NEW_YORK_SESSION": 0,
+                "OFF_HOURS_ROLLOVER": 0,
+            }
+            adaptive_dist: Dict[str, int] = {
+                "ASIAN_RANGE_ACCUMULATION": 0,
+                "LONDON_OPEN_JUDAS_SWEEP": 0,
+                "LONDON_TREND_EXPANSION": 0,
+                "NY_OVERLAP_INSTITUTIONAL_DRIVE": 0,
+                "NY_AFTERNOON_REBALANCING": 0,
+                "ROLLOVER_SPREAD_GUARD": 0,
+            }
+            regime_dist: Dict[str, int] = {
+                "TRENDING_BULLISH": 0,
+                "TRENDING_BEARISH": 0,
+                "CONSOLIDATION_RANGING": 0,
+                "VOLATILITY_EXPANSION": 0,
+            }
+            for b in m15:
+                s_code = b["session"]
+                a_code = b["adaptive_session"]
+                r_code = b["regime"]
+                session_dist[s_code] = session_dist.get(s_code, 0) + 1
+                adaptive_dist[a_code] = adaptive_dist.get(a_code, 0) + 1
+                regime_dist[r_code] = regime_dist.get(r_code, 0) + 1
+
+            counts = {
+                "W1": len(w1),
+                "D1": len(d1),
+                "H4": len(h4),
+                "H1": len(h1),
+                "M30": len(m30),
+                "M15": len(m15),
+                "M5": len(m5),
+            }
+            fp = sha256_hex(
+                {
+                    "symbol": upper_sym,
+                    "counts": counts,
+                    "last_m5_ts": m5[-1]["ts"] if m5 else None,
+                    "last_h1_ts": h1[-1]["ts"] if h1 else None,
+                }
+            )
+            dataset: Dict[str, Any] = {
+                "schema": "forge.mtf_market_dataset.v2",
+                "symbol": upper_sym,
+                "yahoo_ticker": ticker,
+                "source": "yahoo_finance_live_7tf_institutional",
+                "fetched_at_unix": now_unix,
+                "dataset_fingerprint": fp,
+                "timeframe_counts": counts,
+                "session_distribution": session_dist,
+                "adaptive_session_distribution": adaptive_dist,
+                "regime_distribution": regime_dist,
+                "series": {
+                    "W1": w1,
+                    "D1": d1,
+                    "H4": h4,
+                    "H1": h1,
+                    "M30": m30,
+                    "M15": m15,
+                    "M5": m5,
+                },
+            }
+            target_dir = self.mtf_chronicle_dir / upper_sym
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / "latest.json").write_text(
+                json.dumps(dataset), encoding="utf-8"
+            )
+            return dataset
+        except Exception:
+            return cached
+
     @staticmethod
     def evaluate_trader_archetype_signal(
         bar: Dict[str, Any],

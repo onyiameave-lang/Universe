@@ -117,6 +117,66 @@ class ForgeShadowRunner:
             return "V1_DAILY_SHORT_ACTIVE"
         return "V1_IDLE_WAITING_FOR_DAILY_CLOSE"
 
+    def load_v1_api_bridge_state(self, symbol: str) -> Dict[str, Any]:
+        """
+        Reads the live V1 -> V2 API bridge telemetry stored in Chronicle via
+        `POST /internal/forge/act` (`oracle.decision.observation` & `oracle.trader.heartbeat`).
+        Whenever V1 fails to place a trade (e.g. `no_setup`, `risk_rejected`, `signal_timeout`),
+        V1 posts that observation to the API, which persists `forge.oracle.decision_summary.*`.
+        """
+        upper = symbol.upper()
+        kv_path = (
+            self.workspace_root / "Chronicle" / "memory" / "store" / "kv_state.json"
+        )
+        kv_store = self._read_json(kv_path, {})
+        summaries: List[Dict[str, Any]] = []
+        latest_heartbeat: Optional[Dict[str, Any]] = None
+
+        if isinstance(kv_store, dict):
+            for k, entry in kv_store.items():
+                val = entry.get("value") if isinstance(entry, dict) else None
+                if not isinstance(val, dict):
+                    continue
+                if k.startswith("forge.oracle.decision_summary.") and str(val.get("symbol", "")).upper() == upper:
+                    summaries.append(val)
+                elif k.startswith("forge.oracle.trader_heartbeat.latest."):
+                    if (
+                        latest_heartbeat is None
+                        or float(val.get("last_seen_at_unix", 0) or 0)
+                        > float(latest_heartbeat.get("last_seen_at_unix", 0) or 0)
+                    ):
+                        latest_heartbeat = val
+
+        summaries.sort(
+            key=lambda s: float(s.get("last_event_at_unix", 0) or 0), reverse=True
+        )
+        top_summary = summaries[0] if summaries else {}
+        recent_events = top_summary.get("recent_events") or []
+        latest_event = recent_events[-1] if recent_events else {}
+
+        return {
+            "bridge_endpoint": "POST /internal/forge/act (oracle.decision.observation & oracle.trader.heartbeat)",
+            "active": True,
+            "symbol": upper,
+            "evaluations_total": int(top_summary.get("evaluations", 0) or 0),
+            "evaluations_since_last_trade": int(
+                top_summary.get("evaluations_since_last_trade", 0) or 0
+            ),
+            "outcome_counts_since_last_trade": top_summary.get(
+                "outcome_counts_since_last_trade", {}
+            ),
+            "latest_v1_api_outcome_code": latest_event.get("outcome_code")
+            or "AWAITING_V1_API_CYCLE",
+            "latest_v1_api_reason_codes": latest_event.get("reason_codes") or [],
+            "last_v1_decision_at_unix": top_summary.get("last_event_at_unix"),
+            "last_v1_heartbeat_at_unix": (
+                latest_heartbeat.get("last_seen_at_unix") if latest_heartbeat else None
+            ),
+            "v1_heartbeat_instance": (
+                latest_heartbeat.get("instance_id") if latest_heartbeat else None
+            ),
+        }
+
     def load_v2_candidate_blueprint(
         self, symbol: str, trader_style: str
     ) -> Optional[Dict[str, Any]]:
@@ -174,14 +234,20 @@ class ForgeShadowRunner:
         symbol: str = "GBPUSD",
         trader_style: str = "ALL",
         lookback_bars: int = 260,
+        refresh_live: bool = True,
     ) -> Dict[str, Any]:
         """
-        Runs the Shadow Runner across the latest intraday market window for `symbol`,
-        placing background shadow trades whenever Oracle V1 is idle/blocked and
+        Runs the Shadow Runner across the live 7-timeframe market feed for `symbol`,
+        placing background shadow trades whenever Oracle V1 is idle/blocked (monitored via
+        `POST /internal/forge/act` decision observations + D1 signal state) and
         monitoring each shadow trade to completion (or active open status).
         """
         upper_sym = symbol.upper()
-        dataset = self.mtf_engine.load_cached_dataset(upper_sym)
+        dataset = (
+            self.mtf_engine.fetch_live_7tf_dataset(upper_sym, max_age_sec=90)
+            if refresh_live
+            else self.mtf_engine.load_cached_dataset(upper_sym)
+        )
         if not dataset:
             return {
                 "status": "error",
@@ -195,6 +261,7 @@ class ForgeShadowRunner:
         )
 
         v1_timestamps = self.load_v1_demo_trade_timestamps(upper_sym)
+        v1_api_bridge = self.load_v1_api_bridge_state(upper_sym)
         total_cost_bps = self.load_verified_cost_bps(upper_sym)
 
         shadow_trades: List[Dict[str, Any]] = []
@@ -577,11 +644,22 @@ class ForgeShadowRunner:
         total_wins = sum(1 for t in shadow_trades if t["realized_r"] > 0)
         total_net_r = round(sum(t["realized_r"] for t in shadow_trades), 3)
 
+        m5_series = dataset.get("series", {}).get("M5", [])
+        m15_series = dataset.get("series", {}).get("M15", [])
+
         report = {
             "schema": "forge.shadow_runner.report.v1",
             "mode": "BACKGROUND_SHADOW_ONLY_NO_DEMO_ORDERS",
             "symbol": upper_sym,
             "evaluated_at_unix": time.time(),
+            "live_data_feed": {
+                "source": dataset.get("source", "yahoo_finance_live_7tf_institutional"),
+                "fetched_at_unix": dataset.get("fetched_at_unix"),
+                "latest_m5_bar_ts": m5_series[-1]["ts"] if m5_series else None,
+                "latest_m15_bar_ts": m15_series[-1]["ts"] if m15_series else None,
+                "latest_live_price": m5_series[-1]["close"] if m5_series else (m15_series[-1]["close"] if m15_series else None),
+            },
+            "oracle_v1_api_bridge_monitor": v1_api_bridge,
             "oracle_v1_demo_trades_in_history": len(v1_timestamps),
             "v1_missed_opportunities_captured_by_v2": len(shadow_trades),
             "overall_shadow_win_rate_pct": round(

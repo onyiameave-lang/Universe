@@ -724,6 +724,32 @@ async def forge_bridge_act(request: Request):
             "Forge bridge task=%s returned result_status=%s in %.1fs",
             task, result_status, elapsed,
         )
+
+    # When V1 reports via the API bridge that it did NOT place a trade
+    # (e.g. no_setup, risk_rejected, signal_timeout), trigger the Forge V2
+    # Shadow Runner on live 7-TF data for that symbol in the background.
+    if task == "oracle.decision.observation":
+        obs = context.get("observation") or {}
+        obs_symbol = str(obs.get("symbol", "")).strip().upper()
+        obs_outcome = str(obs.get("outcome_code", "")).strip()
+        if obs_symbol and obs_outcome and obs_outcome != "trade_opened":
+            try:
+                from Forge.core.shadow_runner import ForgeShadowRunner
+                runner = ForgeShadowRunner(ROOT)
+                shadow_res = await run_in_threadpool(
+                    runner.run_shadow_session, obs_symbol, "ALL", 260, True
+                )
+                if isinstance(result, dict):
+                    result["shadow_runner_triggered"] = True
+                    result["shadow_trades_captured"] = shadow_res.get(
+                        "v1_missed_opportunities_captured_by_v2", 0
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Shadow runner hook on V1 no-trade observation failed for %s: %s",
+                    obs_symbol, type(exc).__name__,
+                )
+
     return {"agent": "forge", "task": task,
             "status": result_status if result_status in {"complete", "blocked", "error"} else "complete",
             "result": result}
