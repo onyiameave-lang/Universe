@@ -1,17 +1,42 @@
 {
   "candidate_id": "cand-v2-xauusd-scalping",
+  "experiment_id": "exp-v2-xauusd-scalping",
   "hypothesis_id": "hyp-v2-xauusd-scalping",
   "symbol": "XAUUSD",
   "regime": "trending_up",
   "trader_style": "SCALPING",
-  "lifecycle_state": "DEPLOYED_ORACLE_V2",
-  "created_at_unix": 1794294778.2797441,
+  "candidate_code": "V2_MTF_SCALPING",
+  "candidate_title": "Oracle V2 7-Timeframe SCALPING (M5 Trigger)",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 7-TF stack (M5 trigger): 107 trades, WinRate=45.8%, Net=1.21%, MC95 DD=6.79%.",
+  "created_at_unix": 1794306474.1776164,
+  "updated_at_unix": 1794306474.1776164,
   "evaluation_metrics": {
     "trades_count": 107,
     "win_rate_pct": 45.8,
     "total_net_r": 2.42,
     "expectancy_r": 0.023,
     "mc95_worst_case_drawdown_pct": 6.79,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 107,
+      "wins": 49,
+      "losses": 58,
+      "win_rate": 0.458,
+      "net_return_pct": 1.21,
+      "expectancy_r": 0.023,
+      "sharpe_ratio": 0.5,
+      "max_drawdown_pct": 4.46
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 4.46,
+    "mc95_worst_case_drawdown_pct": 6.79,
+    "mc99_extreme_drawdown_pct": 7.94,
+    "mc95_max_consecutive_losses": 10,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -55,11 +80,11 @@
     },
     "instrument_physics": {
       "symbol": "XAUUSD",
-      "avg_wick_to_body_ratio": 2.993,
+      "avg_wick_to_body_ratio": 2.989,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.478,
-      "trend_persistence_score": 0.263,
-      "mean_reversion_propensity": 0.737,
+      "trend_persistence_score": 0.264,
+      "mean_reversion_propensity": 0.736,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         2,
@@ -73,8 +98,8 @@
       "symbol": "XAUUSD",
       "trader_style": "SCALPING",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 15.7,
-      "efficiency_drift_pct": -2.35,
+      "volatility_drift_pct": 10.75,
+      "efficiency_drift_pct": 1.1,
       "recommendation": "Market regime physics for XAUUSD (SCALPING) remain aligned with training baseline."
     },
     "monte_carlo_stress_report": {

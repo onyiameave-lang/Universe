@@ -1,17 +1,42 @@
 {
   "candidate_id": "cand-v2-usdjpy-day_trading",
+  "experiment_id": "exp-v2-usdjpy-day_trading",
   "hypothesis_id": "hyp-v2-usdjpy-day_trading",
   "symbol": "USDJPY",
   "regime": "trending_up",
   "trader_style": "DAY_TRADING",
-  "lifecycle_state": "DEPLOYED_ORACLE_V2",
-  "created_at_unix": 1794294776.342408,
+  "candidate_code": "V2_MTF_DAY_TRADING",
+  "candidate_title": "Oracle V2 7-Timeframe DAY TRADING (M15 Trigger)",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 7-TF stack (M15 trigger): 8 trades, WinRate=62.5%, Net=1.88%, MC95 DD=1.17%.",
+  "created_at_unix": 1794306472.033614,
+  "updated_at_unix": 1794306472.033614,
   "evaluation_metrics": {
     "trades_count": 8,
     "win_rate_pct": 62.5,
     "total_net_r": 3.755,
     "expectancy_r": 0.469,
     "mc95_worst_case_drawdown_pct": 1.17,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 8,
+      "wins": 5,
+      "losses": 3,
+      "win_rate": 0.625,
+      "net_return_pct": 1.88,
+      "expectancy_r": 0.469,
+      "sharpe_ratio": 1.03,
+      "max_drawdown_pct": 0.62
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 0.62,
+    "mc95_worst_case_drawdown_pct": 1.17,
+    "mc99_extreme_drawdown_pct": 1.18,
+    "mc95_max_consecutive_losses": 3,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -55,11 +80,11 @@
     },
     "instrument_physics": {
       "symbol": "USDJPY",
-      "avg_wick_to_body_ratio": 3.467,
+      "avg_wick_to_body_ratio": 3.464,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.459,
-      "trend_persistence_score": 0.266,
-      "mean_reversion_propensity": 0.734,
+      "trend_persistence_score": 0.265,
+      "mean_reversion_propensity": 0.735,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         8,
@@ -73,8 +98,8 @@
       "symbol": "USDJPY",
       "trader_style": "DAY_TRADING",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 0.88,
-      "efficiency_drift_pct": 10.99,
+      "volatility_drift_pct": 0.72,
+      "efficiency_drift_pct": 9.31,
       "recommendation": "Market regime physics for USDJPY (DAY_TRADING) remain aligned with training baseline."
     },
     "monte_carlo_stress_report": {

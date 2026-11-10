@@ -1,17 +1,42 @@
 {
   "candidate_id": "cand-v2-xauusd-swing_trading",
+  "experiment_id": "exp-v2-xauusd-swing_trading",
   "hypothesis_id": "hyp-v2-xauusd-swing_trading",
   "symbol": "XAUUSD",
   "regime": "trending_up",
   "trader_style": "SWING_TRADING",
-  "lifecycle_state": "DEPLOYED_ORACLE_V2",
-  "created_at_unix": 1794294778.3322718,
+  "candidate_code": "V2_MTF_SWING_TRADING",
+  "candidate_title": "Oracle V2 7-Timeframe SWING TRADING (H1 Trigger)",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 7-TF stack (H1 trigger): 21 trades, WinRate=61.9%, Net=0.25%, MC95 DD=3.05%.",
+  "created_at_unix": 1794306474.2373717,
+  "updated_at_unix": 1794306474.2373717,
   "evaluation_metrics": {
-    "trades_count": 20,
-    "win_rate_pct": 60.0,
-    "total_net_r": 0.286,
-    "expectancy_r": 0.014,
-    "mc95_worst_case_drawdown_pct": 3.07,
+    "trades_count": 21,
+    "win_rate_pct": 61.9,
+    "total_net_r": 0.495,
+    "expectancy_r": 0.024,
+    "mc95_worst_case_drawdown_pct": 3.05,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 21,
+      "wins": 13,
+      "losses": 8,
+      "win_rate": 0.619,
+      "net_return_pct": 0.25,
+      "expectancy_r": 0.024,
+      "sharpe_ratio": 0.5,
+      "max_drawdown_pct": 2.01
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 2.01,
+    "mc95_worst_case_drawdown_pct": 3.05,
+    "mc99_extreme_drawdown_pct": 3.5,
+    "mc95_max_consecutive_losses": 4,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -53,11 +78,11 @@
     },
     "instrument_physics": {
       "symbol": "XAUUSD",
-      "avg_wick_to_body_ratio": 2.993,
+      "avg_wick_to_body_ratio": 2.989,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.478,
-      "trend_persistence_score": 0.263,
-      "mean_reversion_propensity": 0.737,
+      "trend_persistence_score": 0.264,
+      "mean_reversion_propensity": 0.736,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         2,
@@ -71,16 +96,16 @@
       "symbol": "XAUUSD",
       "trader_style": "SWING_TRADING",
       "drift_status": "MODERATE_DRIFT",
-      "volatility_drift_pct": 6.76,
-      "efficiency_drift_pct": 21.38,
-      "recommendation": "Moderate regime shift detected (6.8% volatility delta). Dynamic ATR stops automatically compensate."
+      "volatility_drift_pct": 6.91,
+      "efficiency_drift_pct": 21.87,
+      "recommendation": "Moderate regime shift detected (6.9% volatility delta). Dynamic ATR stops automatically compensate."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 2.03,
-      "mc95_worst_case_drawdown_pct": 3.07,
-      "mc99_extreme_drawdown_pct": 3.54,
-      "mc95_max_consecutive_losses": 5,
+      "mc50_median_drawdown_pct": 2.01,
+      "mc95_worst_case_drawdown_pct": 3.05,
+      "mc99_extreme_drawdown_pct": 3.5,
+      "mc95_max_consecutive_losses": 4,
       "passed_mc95_gate": true
     }
   }

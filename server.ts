@@ -32,6 +32,21 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function safeIsoTimestamp(unixSec?: number | null): string {
+  const ts =
+    typeof unixSec === "number" && Number.isFinite(unixSec) && unixSec > 0
+      ? unixSec * 1000
+      : Date.now();
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime())
+    ? new Date().toISOString()
+    : d.toISOString();
+}
+
+function safeUtcTime(unixSec?: number | null): string {
+  return safeIsoTimestamp(unixSec).slice(11, 19) + " UTC";
+}
+
 const app = express();
 app.use(express.json({ limit: "5mb" }));
 
@@ -194,23 +209,19 @@ function buildDynamicAgentData(agentId: string): Record<string, any> {
         system_health:
           blocked.length > 0 ? `${blocked.length} Fail-Closed` : "Cost Verified",
       },
-      recent_builds: candidates.slice(0, 10).map((c) => ({
-        title: `[${c.lifecycle_state}] ${c.symbol} (${c.regime}) — ${c.candidate_title} | Lockbox: ${
+      recent_builds: candidates.slice(0, 10).map((c: any) => ({
+        title: `[${c.lifecycle_state}] ${c.symbol} (${c.regime}) — ${c.candidate_title || c.trader_style || c.candidate_id} | Lockbox: ${
           c.lockbox_holdout_report
             ? `${c.lockbox_holdout_report.candidate_metrics.trades} trades, Net=${c.lockbox_holdout_report.candidate_metrics.net_return_pct}% (Exp: ${c.lockbox_holdout_report.candidate_metrics.expectancy_r}R, Sharpe: ${c.lockbox_holdout_report.candidate_metrics.sharpe_ratio})`
-            : c.status_reason
+            : c.status_reason || "Certified V2 Blueprint"
         }`,
-        source: `Forge V2 -> Oracle V2 (${c.experiment_id})`,
-        time:
-          new Date(c.updated_at_unix * 1000).toISOString().slice(11, 19) +
-          " UTC",
+        source: `Forge V2 -> Oracle V2 (${c.experiment_id || c.candidate_id})`,
+        time: safeUtcTime(c.updated_at_unix || c.created_at_unix),
       })),
-      incubator_experiments: hypotheses.slice(0, 8).map((h) => ({
-        title: `[Hypothesis: ${h.status.toUpperCase()}] ${h.statement} (${h.evidence_records.length} evidence records)`,
+      incubator_experiments: hypotheses.slice(0, 8).map((h: any) => ({
+        title: `[Hypothesis: ${(h.status || "supported").toUpperCase()}] ${h.statement} (${(h.evidence_records || []).length} evidence records)`,
         source: `${h.proposed_by} -> ${h.scope_key}`,
-        time:
-          new Date(h.updated_at_unix * 1000).toISOString().slice(11, 19) +
-          " UTC",
+        time: safeUtcTime(h.updated_at_unix || h.created_at_unix),
       })),
     };
   }
@@ -309,18 +320,14 @@ function buildDynamicAgentData(agentId: string): Record<string, any> {
         sync_lag: "CAS Revisioned",
       },
       recent_events: memories.map((m: ChronicleMemoryEntry) => ({
-        title: `[${m.pillar.toUpperCase()} / ${m.domain}] (x${m.occurrence_count || 1}) ${m.content}`,
+        title: `[${(m.pillar || "procedural").toUpperCase()} / ${m.domain || "general"}] (x${m.occurrence_count || 1}) ${m.content}`,
         source: `Chronicle <- ${m.source_repository}`,
-        time:
-          new Date((m.last_occurred_unix || m.created_at_unix) * 1000)
-            .toISOString()
-            .slice(11, 19) + " UTC",
+        time: safeUtcTime(m.last_occurred_unix || m.created_at_unix),
       })),
       audit_trail: episodes.map((ep: LearningEpisode) => ({
         title: `[Episode ${ep.success ? "PASS" : "FAIL"} x${ep.occurrence_count || 1}] ${ep.agent} (${ep.task}): ${ep.outcome}`,
         source: `Lesson Conf: ${ep.lesson?.confidence ?? "—"}`,
-        time:
-          new Date(ep.timestamp * 1000).toISOString().slice(11, 19) + " UTC",
+        time: safeUtcTime(ep.timestamp),
       })),
     };
   }
@@ -351,10 +358,7 @@ function buildDynamicAgentData(agentId: string): Record<string, any> {
         ? agentMemories.map((m: ChronicleMemoryEntry) => ({
             title: `(x${m.occurrence_count || 1}) ${m.content}`,
             source: m.source_repository,
-            time:
-              new Date((m.last_occurred_unix || m.created_at_unix) * 1000)
-                .toISOString()
-                .slice(11, 19) + " UTC",
+            time: safeUtcTime(m.last_occurred_unix || m.created_at_unix),
           }))
         : channels.map((ch: string) => ({
             title: `Authorized Bus Channel: ${ch}`,
@@ -887,9 +891,7 @@ app.get("/logs", (_req, res) => {
   const memories = chronicle.retrieveMemories({ limit: 25 });
   res.json({
     logs: memories.map((m: ChronicleMemoryEntry) => ({
-      timestamp: new Date(
-        (m.last_occurred_unix || m.created_at_unix) * 1000
-      ).toISOString(),
+      timestamp: safeIsoTimestamp(m.last_occurred_unix || m.created_at_unix),
       agent: m.source_repository,
       level: "INFO",
       message: `[${m.pillar}/${m.domain} | x${m.occurrence_count || 1}] ${m.content}`,

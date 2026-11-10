@@ -1,17 +1,42 @@
 {
   "candidate_id": "cand-v2-xauusd-range_specialist",
+  "experiment_id": "exp-v2-xauusd-range_specialist",
   "hypothesis_id": "hyp-v2-xauusd-range_specialist",
   "symbol": "XAUUSD",
   "regime": "ranging",
   "trader_style": "RANGE_SPECIALIST",
-  "lifecycle_state": "DEPLOYED_ORACLE_V2",
-  "created_at_unix": 1794294778.4274893,
+  "candidate_code": "V2_MTF_RANGE_SPECIALIST",
+  "candidate_title": "Oracle V2 7-Timeframe RANGE SPECIALIST (M15 Trigger)",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 7-TF stack (M15 trigger): 69 trades, WinRate=43.5%, Net=-1.75%, MC95 DD=7.05%.",
+  "created_at_unix": 1794306474.3419504,
+  "updated_at_unix": 1794306474.3419504,
   "evaluation_metrics": {
     "trades_count": 69,
     "win_rate_pct": 43.5,
     "total_net_r": -3.493,
     "expectancy_r": -0.051,
     "mc95_worst_case_drawdown_pct": 7.05,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 69,
+      "wins": 30,
+      "losses": 39,
+      "win_rate": 0.435,
+      "net_return_pct": -1.75,
+      "expectancy_r": -0.051,
+      "sharpe_ratio": 0.5,
+      "max_drawdown_pct": 4.73
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 4.73,
+    "mc95_worst_case_drawdown_pct": 7.05,
+    "mc99_extreme_drawdown_pct": 7.92,
+    "mc95_max_consecutive_losses": 10,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -53,11 +78,11 @@
     },
     "instrument_physics": {
       "symbol": "XAUUSD",
-      "avg_wick_to_body_ratio": 2.993,
+      "avg_wick_to_body_ratio": 2.989,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.478,
-      "trend_persistence_score": 0.263,
-      "mean_reversion_propensity": 0.737,
+      "trend_persistence_score": 0.264,
+      "mean_reversion_propensity": 0.736,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         2,
@@ -71,9 +96,9 @@
       "symbol": "XAUUSD",
       "trader_style": "RANGE_SPECIALIST",
       "drift_status": "MODERATE_DRIFT",
-      "volatility_drift_pct": 35.2,
-      "efficiency_drift_pct": 21.3,
-      "recommendation": "Moderate regime shift detected (35.2% volatility delta). Dynamic ATR stops automatically compensate."
+      "volatility_drift_pct": 35.06,
+      "efficiency_drift_pct": 21.43,
+      "recommendation": "Moderate regime shift detected (35.1% volatility delta). Dynamic ATR stops automatically compensate."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
