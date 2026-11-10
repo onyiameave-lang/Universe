@@ -7,87 +7,534 @@
   "trader_style": "SCALPING",
   "candidate_code": "V2_MTF_SCALPING",
   "candidate_title": "Atlas+Forge Self-Discovered (H4+H1 -> M30+M15 -> M5) SCALPING",
-  "lifecycle_state": "WATCHLIST",
-  "status_reason": "Discovered by Atlas+Forge on 60% Dev Split & Tested on 40% Lockbox: Trades=10, WinRate=40.0%, Net=-1.22%, MC95 DD=3.57%.",
-  "created_at_unix": 1794312516.3119946,
-  "updated_at_unix": 1794312516.3119946,
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Discovered by Atlas+Forge (with Pulse/Sentinel & Leave-One-Out Ablation) on 60% Dev & Tested on 40% Lockbox: Trades=9, WinRate=44.4%, Net=0.98%, MaxTPStage=TP3, MC95 DD=1.84%.",
+  "created_at_unix": 1794314374.293097,
+  "updated_at_unix": 1794314374.293097,
   "atlas_research_hypothesis": {
     "hypothesis_id": "hyp-v2-gbpusd-scalping",
     "atlas_report_id": "atlas-hyp-gbpusd-scalping",
     "proposed_by": "atlas_and_forge_autonomous_discovery",
-    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.653, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: M5 (w=+0.275), H1 (w=+0.250), H4 (w=+0.165). Forge learned feature predictive weights: dealing_range_reversion (w=+0.266), liquidity_sweep (w=+0.254), fvg_impulse (w=+0.135).",
-    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.653, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.275), H1 (w=+0.250), H4 (w=+0.165), while empirical feature ablation ranks dealing_range_reversion (w=+0.266), liquidity_sweep (w=+0.254), fvg_impulse (w=+0.135) as the primary edge drivers.",
-    "confidence": 0.78,
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.658, trend_persistence=0.265, mean_reversion=0.735. Learned timeframe weights: M5 (w=+0.273), H1 (w=+0.248), M30 (w=+0.175). Ablation-retained features: liquidity_sweep (w=+0.158), dealing_range_reversion (w=+0.150), fvg_impulse (w=+0.141), ema_trend (w=+0.126) (pruned/left out by ablation: none).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.658, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.273), H1 (w=+0.248), M30 (w=+0.175). Controlled leave-one-out ablation retained [liquidity_sweep (w=+0.158), dealing_range_reversion (w=+0.150), fvg_impulse (w=+0.141), ema_trend (w=+0.126)] and pruned [none].",
+    "confidence": 0.82,
     "dominant_timeframes_discovered": [
       "M5",
       "H1",
-      "H4"
+      "M30"
     ],
     "dominant_features_discovered": [
-      "dealing_range_reversion",
       "liquidity_sweep",
-      "fvg_impulse"
-    ]
+      "dealing_range_reversion",
+      "fvg_impulse",
+      "ema_trend"
+    ],
+    "pruned_features_left_out_by_ablation": []
   },
   "learned_strategy_genome": {
-    "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+    "discovery_method": "forge_autonomous_60pct_dev_ridge_and_leave_one_out_ablation",
     "timeframe_weights": {
-      "H4": 0.165,
-      "H1": 0.25,
-      "M30": 0.162,
-      "M15": 0.148,
-      "M5": 0.275
+      "H4": 0.16,
+      "H1": 0.248,
+      "M30": 0.175,
+      "M15": 0.143,
+      "M5": 0.273
     },
     "feature_weights": {
-      "ema_trend": 0.124,
-      "bos_breakout": 0.111,
-      "liquidity_sweep": 0.254,
-      "fvg_impulse": 0.135,
-      "dealing_range_reversion": 0.266,
-      "rsi_momentum": 0.111
+      "ema_trend": 0.126,
+      "bos_breakout": 0.126,
+      "liquidity_sweep": 0.158,
+      "fvg_impulse": 0.141,
+      "dealing_range_reversion": 0.15,
+      "rsi_momentum": 0.055,
+      "sentinel_news_sentiment": 0.119,
+      "pulse_social_sentiment": 0.125
+    },
+    "pre_ablation_feature_weights": {
+      "ema_trend": 0.102,
+      "bos_breakout": 0.101,
+      "liquidity_sweep": 0.239,
+      "fvg_impulse": 0.102,
+      "dealing_range_reversion": 0.219,
+      "rsi_momentum": 0.102,
+      "sentinel_news_sentiment": 0.068,
+      "pulse_social_sentiment": 0.068
+    },
+    "ablation_study_report": {
+      "study_id": "abl-v2-gbpusd-scalping",
+      "ablation_engine_version": "1.0.0",
+      "baseline_validation_expectancy_atr": 2.9984,
+      "post_pruning_validation_expectancy_atr": 2.9984,
+      "retained_components": [
+        "ema_trend",
+        "bos_breakout",
+        "liquidity_sweep",
+        "fvg_impulse",
+        "dealing_range_reversion",
+        "rsi_momentum",
+        "sentinel_news_sentiment",
+        "pulse_social_sentiment"
+      ],
+      "pruned_components_left_out": [],
+      "component_breakdown": {
+        "ema_trend": {
+          "component_id": "ema_trend",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.377,
+          "marginal_value_added_atr": 2.6214,
+          "without_component_win_rate": 1.0,
+          "train_ic_edge": -0.2618,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "bos_breakout": {
+          "component_id": "bos_breakout",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.3776,
+          "marginal_value_added_atr": 2.6208,
+          "without_component_win_rate": 0.4545,
+          "train_ic_edge": -0.64,
+          "shadow_net_r_delta": -0.066,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "liquidity_sweep": {
+          "component_id": "liquidity_sweep",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": -0.2337,
+          "marginal_value_added_atr": 3.2321,
+          "without_component_win_rate": 0.36,
+          "train_ic_edge": 0.2311,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "fvg_impulse": {
+          "component_id": "fvg_impulse",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.0675,
+          "marginal_value_added_atr": 2.9309,
+          "without_component_win_rate": 0.3636,
+          "train_ic_edge": -0.0823,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "dealing_range_reversion": {
+          "component_id": "dealing_range_reversion",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": -0.0597,
+          "marginal_value_added_atr": 3.0582,
+          "without_component_win_rate": 0.4706,
+          "train_ic_edge": 0.1972,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "rsi_momentum": {
+          "component_id": "rsi_momentum",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 1.8874,
+          "marginal_value_added_atr": 1.1111,
+          "without_component_win_rate": 0.6842,
+          "train_ic_edge": -0.1806,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "sentinel_news_sentiment": {
+          "component_id": "sentinel_news_sentiment",
+          "component_type": "data_source",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.5029,
+          "marginal_value_added_atr": 2.4955,
+          "without_component_win_rate": 0.5,
+          "train_ic_edge": -0.065,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "pulse_social_sentiment": {
+          "component_id": "pulse_social_sentiment",
+          "component_type": "data_source",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.3776,
+          "marginal_value_added_atr": 2.6208,
+          "without_component_win_rate": 0.4545,
+          "train_ic_edge": -0.0902,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        }
+      },
+      "formal_ablation_report": {
+        "study_id": "abl-v2-gbpusd-scalping",
+        "parent_experiment_id": "exp-v2-gbpusd-scalping",
+        "ablation_engine_version": "1.0.0",
+        "manifest_id": "manifest-v2-gbpusd-scalping",
+        "manifest_version": "2.0.0",
+        "component_impacts": [
+          {
+            "component_id": "ema_trend",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.377,
+            "marginal_impact": -2.6214,
+            "relative_impact": -0.8743,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "bos_breakout",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.3776,
+            "marginal_impact": -2.6208,
+            "relative_impact": -0.8741,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "liquidity_sweep",
+            "full_system_metric": 2.9984,
+            "ablated_metric": -0.2337,
+            "marginal_impact": -3.2321,
+            "relative_impact": -1.0779,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "fvg_impulse",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.0675,
+            "marginal_impact": -2.9309,
+            "relative_impact": -0.9775,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "dealing_range_reversion",
+            "full_system_metric": 2.9984,
+            "ablated_metric": -0.0597,
+            "marginal_impact": -3.0582,
+            "relative_impact": -1.0199,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "rsi_momentum",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 1.8874,
+            "marginal_impact": -1.1111,
+            "relative_impact": -0.3705,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "sentinel_news_sentiment",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.5029,
+            "marginal_impact": -2.4955,
+            "relative_impact": -0.8323,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "pulse_social_sentiment",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.3776,
+            "marginal_impact": -2.6208,
+            "relative_impact": -0.8741,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          }
+        ],
+        "interaction_candidates": [
+          "ema_trend",
+          "bos_breakout",
+          "liquidity_sweep",
+          "fvg_impulse",
+          "dealing_range_reversion",
+          "rsi_momentum",
+          "sentinel_news_sentiment",
+          "pulse_social_sentiment"
+        ],
+        "total_runs_executed": 9,
+        "individual_runs_executed": 8
+      },
+      "tp_continuation_7stage_ablation": {
+        "with_7tp_continuation_total_r": 1.955,
+        "without_continuation_capped_at_primary_tp_r": 2.243,
+        "marginal_r_gained_by_7tp_continuation": -0.288,
+        "trades_continued_past_primary_tp": 0,
+        "highest_tp_stage_reached_in_lockbox": 3
+      }
     },
     "structural_gates": {
       "macro_dealing_range_long_max": 0.75,
       "macro_dealing_range_short_min": 0.25,
       "htf_room_to_run_atr_min": 1.35,
       "rsi_long_band": [
-        32.71,
-        59.5
+        33.05,
+        59.41
       ],
       "rsi_short_band": [
         36.27,
         61.6
       ],
-      "entry_score_threshold": 0.44,
-      "validation_screen_score_atr": 4.852
+      "entry_score_threshold": 0.36,
+      "validation_screen_score_atr": 2.998
+    }
+  },
+  "ablation_study_report": {
+    "study_id": "abl-v2-gbpusd-scalping",
+    "ablation_engine_version": "1.0.0",
+    "baseline_validation_expectancy_atr": 2.9984,
+    "post_pruning_validation_expectancy_atr": 2.9984,
+    "retained_components": [
+      "ema_trend",
+      "bos_breakout",
+      "liquidity_sweep",
+      "fvg_impulse",
+      "dealing_range_reversion",
+      "rsi_momentum",
+      "sentinel_news_sentiment",
+      "pulse_social_sentiment"
+    ],
+    "pruned_components_left_out": [],
+    "component_breakdown": {
+      "ema_trend": {
+        "component_id": "ema_trend",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 0.377,
+        "marginal_value_added_atr": 2.6214,
+        "without_component_win_rate": 1.0,
+        "train_ic_edge": -0.2618,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "bos_breakout": {
+        "component_id": "bos_breakout",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 0.3776,
+        "marginal_value_added_atr": 2.6208,
+        "without_component_win_rate": 0.4545,
+        "train_ic_edge": -0.64,
+        "shadow_net_r_delta": -0.066,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "liquidity_sweep": {
+        "component_id": "liquidity_sweep",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": -0.2337,
+        "marginal_value_added_atr": 3.2321,
+        "without_component_win_rate": 0.36,
+        "train_ic_edge": 0.2311,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "fvg_impulse": {
+        "component_id": "fvg_impulse",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 0.0675,
+        "marginal_value_added_atr": 2.9309,
+        "without_component_win_rate": 0.3636,
+        "train_ic_edge": -0.0823,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "dealing_range_reversion": {
+        "component_id": "dealing_range_reversion",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": -0.0597,
+        "marginal_value_added_atr": 3.0582,
+        "without_component_win_rate": 0.4706,
+        "train_ic_edge": 0.1972,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "rsi_momentum": {
+        "component_id": "rsi_momentum",
+        "component_type": "signal",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 1.8874,
+        "marginal_value_added_atr": 1.1111,
+        "without_component_win_rate": 0.6842,
+        "train_ic_edge": -0.1806,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "sentinel_news_sentiment": {
+        "component_id": "sentinel_news_sentiment",
+        "component_type": "data_source",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 0.5029,
+        "marginal_value_added_atr": 2.4955,
+        "without_component_win_rate": 0.5,
+        "train_ic_edge": -0.065,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      },
+      "pulse_social_sentiment": {
+        "component_id": "pulse_social_sentiment",
+        "component_type": "data_source",
+        "full_system_expectancy_atr": 2.9984,
+        "without_component_expectancy_atr": 0.3776,
+        "marginal_value_added_atr": 2.6208,
+        "without_component_win_rate": 0.4545,
+        "train_ic_edge": -0.0902,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "RETAINED_ADDS_VALUE"
+      }
+    },
+    "formal_ablation_report": {
+      "study_id": "abl-v2-gbpusd-scalping",
+      "parent_experiment_id": "exp-v2-gbpusd-scalping",
+      "ablation_engine_version": "1.0.0",
+      "manifest_id": "manifest-v2-gbpusd-scalping",
+      "manifest_version": "2.0.0",
+      "component_impacts": [
+        {
+          "component_id": "ema_trend",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 0.377,
+          "marginal_impact": -2.6214,
+          "relative_impact": -0.8743,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "bos_breakout",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 0.3776,
+          "marginal_impact": -2.6208,
+          "relative_impact": -0.8741,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "liquidity_sweep",
+          "full_system_metric": 2.9984,
+          "ablated_metric": -0.2337,
+          "marginal_impact": -3.2321,
+          "relative_impact": -1.0779,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "fvg_impulse",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 0.0675,
+          "marginal_impact": -2.9309,
+          "relative_impact": -0.9775,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "dealing_range_reversion",
+          "full_system_metric": 2.9984,
+          "ablated_metric": -0.0597,
+          "marginal_impact": -3.0582,
+          "relative_impact": -1.0199,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "rsi_momentum",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 1.8874,
+          "marginal_impact": -1.1111,
+          "relative_impact": -0.3705,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "sentinel_news_sentiment",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 0.5029,
+          "marginal_impact": -2.4955,
+          "relative_impact": -0.8323,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        },
+        {
+          "component_id": "pulse_social_sentiment",
+          "full_system_metric": 2.9984,
+          "ablated_metric": 0.3776,
+          "marginal_impact": -2.6208,
+          "relative_impact": -0.8741,
+          "direction": "higher_is_better",
+          "interaction_suspected": true,
+          "evidence_quality": "validation_partition_leave_one_out"
+        }
+      ],
+      "interaction_candidates": [
+        "ema_trend",
+        "bos_breakout",
+        "liquidity_sweep",
+        "fvg_impulse",
+        "dealing_range_reversion",
+        "rsi_momentum",
+        "sentinel_news_sentiment",
+        "pulse_social_sentiment"
+      ],
+      "total_runs_executed": 9,
+      "individual_runs_executed": 8
+    },
+    "tp_continuation_7stage_ablation": {
+      "with_7tp_continuation_total_r": 1.955,
+      "without_continuation_capped_at_primary_tp_r": 2.243,
+      "marginal_r_gained_by_7tp_continuation": -0.288,
+      "trades_continued_past_primary_tp": 0,
+      "highest_tp_stage_reached_in_lockbox": 3
     }
   },
   "evaluation_metrics": {
-    "trades_count": 10,
-    "win_rate_pct": 40.0,
-    "total_net_r": -2.432,
-    "expectancy_r": -0.243,
-    "mc95_worst_case_drawdown_pct": 3.57,
+    "trades_count": 9,
+    "win_rate_pct": 44.4,
+    "total_net_r": 1.955,
+    "expectancy_r": 0.217,
+    "highest_tp_stage_reached": 3,
+    "continued_past_primary_tp_count": 0,
+    "marginal_r_from_7tp_continuation": -0.288,
+    "mc95_worst_case_drawdown_pct": 1.84,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 10,
+      "trades": 9,
       "wins": 4,
-      "losses": 6,
-      "win_rate": 0.4,
-      "net_return_pct": -1.22,
-      "expectancy_r": -0.243,
+      "losses": 5,
+      "win_rate": 0.444,
+      "net_return_pct": 0.98,
+      "expectancy_r": 0.217,
       "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 2.4
+      "max_drawdown_pct": 1.22
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 2.4,
-    "mc95_worst_case_drawdown_pct": 3.57,
-    "mc99_extreme_drawdown_pct": 3.8,
-    "mc95_max_consecutive_losses": 5,
+    "mc50_median_drawdown_pct": 1.22,
+    "mc95_worst_case_drawdown_pct": 1.84,
+    "mc99_extreme_drawdown_pct": 1.89,
+    "mc95_max_consecutive_losses": 4,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -109,100 +556,592 @@
       "hypothesis_id": "hyp-v2-gbpusd-scalping",
       "atlas_report_id": "atlas-hyp-gbpusd-scalping",
       "proposed_by": "atlas_and_forge_autonomous_discovery",
-      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.653, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: M5 (w=+0.275), H1 (w=+0.250), H4 (w=+0.165). Forge learned feature predictive weights: dealing_range_reversion (w=+0.266), liquidity_sweep (w=+0.254), fvg_impulse (w=+0.135).",
-      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.653, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.275), H1 (w=+0.250), H4 (w=+0.165), while empirical feature ablation ranks dealing_range_reversion (w=+0.266), liquidity_sweep (w=+0.254), fvg_impulse (w=+0.135) as the primary edge drivers.",
-      "confidence": 0.78,
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.658, trend_persistence=0.265, mean_reversion=0.735. Learned timeframe weights: M5 (w=+0.273), H1 (w=+0.248), M30 (w=+0.175). Ablation-retained features: liquidity_sweep (w=+0.158), dealing_range_reversion (w=+0.150), fvg_impulse (w=+0.141), ema_trend (w=+0.126) (pruned/left out by ablation: none).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.658, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.273), H1 (w=+0.248), M30 (w=+0.175). Controlled leave-one-out ablation retained [liquidity_sweep (w=+0.158), dealing_range_reversion (w=+0.150), fvg_impulse (w=+0.141), ema_trend (w=+0.126)] and pruned [none].",
+      "confidence": 0.82,
       "dominant_timeframes_discovered": [
         "M5",
         "H1",
-        "H4"
+        "M30"
       ],
       "dominant_features_discovered": [
-        "dealing_range_reversion",
         "liquidity_sweep",
-        "fvg_impulse"
-      ]
+        "dealing_range_reversion",
+        "fvg_impulse",
+        "ema_trend"
+      ],
+      "pruned_features_left_out_by_ablation": []
+    },
+    "pulse_and_sentinel_intelligence": {
+      "sentinel_agent": {
+        "agent": "sentinel",
+        "sentiment": 0.0,
+        "confidence": 0.0,
+        "article_count": 0,
+        "evidence_state": "degraded",
+        "top_headline": null,
+        "term_reliability_mean": 0.4822,
+        "recent_bar_signal": 0.0
+      },
+      "pulse_agent": {
+        "agent": "pulse",
+        "sentiment": 0.0,
+        "confidence": 0.0,
+        "post_count": 0,
+        "avg_authenticity": 0.5,
+        "manipulation_warning": false,
+        "evidence_state": "degraded",
+        "recent_bar_signal": 0.0593
+      },
+      "sentinel_retained_by_ablation": true,
+      "pulse_retained_by_ablation": true
     },
     "learned_strategy_genome": {
-      "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+      "discovery_method": "forge_autonomous_60pct_dev_ridge_and_leave_one_out_ablation",
       "timeframe_weights": {
-        "H4": 0.165,
-        "H1": 0.25,
-        "M30": 0.162,
-        "M15": 0.148,
-        "M5": 0.275
+        "H4": 0.16,
+        "H1": 0.248,
+        "M30": 0.175,
+        "M15": 0.143,
+        "M5": 0.273
       },
       "feature_weights": {
-        "ema_trend": 0.124,
-        "bos_breakout": 0.111,
-        "liquidity_sweep": 0.254,
-        "fvg_impulse": 0.135,
-        "dealing_range_reversion": 0.266,
-        "rsi_momentum": 0.111
+        "ema_trend": 0.126,
+        "bos_breakout": 0.126,
+        "liquidity_sweep": 0.158,
+        "fvg_impulse": 0.141,
+        "dealing_range_reversion": 0.15,
+        "rsi_momentum": 0.055,
+        "sentinel_news_sentiment": 0.119,
+        "pulse_social_sentiment": 0.125
+      },
+      "pre_ablation_feature_weights": {
+        "ema_trend": 0.102,
+        "bos_breakout": 0.101,
+        "liquidity_sweep": 0.239,
+        "fvg_impulse": 0.102,
+        "dealing_range_reversion": 0.219,
+        "rsi_momentum": 0.102,
+        "sentinel_news_sentiment": 0.068,
+        "pulse_social_sentiment": 0.068
+      },
+      "ablation_study_report": {
+        "study_id": "abl-v2-gbpusd-scalping",
+        "ablation_engine_version": "1.0.0",
+        "baseline_validation_expectancy_atr": 2.9984,
+        "post_pruning_validation_expectancy_atr": 2.9984,
+        "retained_components": [
+          "ema_trend",
+          "bos_breakout",
+          "liquidity_sweep",
+          "fvg_impulse",
+          "dealing_range_reversion",
+          "rsi_momentum",
+          "sentinel_news_sentiment",
+          "pulse_social_sentiment"
+        ],
+        "pruned_components_left_out": [],
+        "component_breakdown": {
+          "ema_trend": {
+            "component_id": "ema_trend",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 0.377,
+            "marginal_value_added_atr": 2.6214,
+            "without_component_win_rate": 1.0,
+            "train_ic_edge": -0.2618,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "bos_breakout": {
+            "component_id": "bos_breakout",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 0.3776,
+            "marginal_value_added_atr": 2.6208,
+            "without_component_win_rate": 0.4545,
+            "train_ic_edge": -0.64,
+            "shadow_net_r_delta": -0.066,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "liquidity_sweep": {
+            "component_id": "liquidity_sweep",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": -0.2337,
+            "marginal_value_added_atr": 3.2321,
+            "without_component_win_rate": 0.36,
+            "train_ic_edge": 0.2311,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "fvg_impulse": {
+            "component_id": "fvg_impulse",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 0.0675,
+            "marginal_value_added_atr": 2.9309,
+            "without_component_win_rate": 0.3636,
+            "train_ic_edge": -0.0823,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "dealing_range_reversion": {
+            "component_id": "dealing_range_reversion",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": -0.0597,
+            "marginal_value_added_atr": 3.0582,
+            "without_component_win_rate": 0.4706,
+            "train_ic_edge": 0.1972,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "rsi_momentum": {
+            "component_id": "rsi_momentum",
+            "component_type": "signal",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 1.8874,
+            "marginal_value_added_atr": 1.1111,
+            "without_component_win_rate": 0.6842,
+            "train_ic_edge": -0.1806,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "sentinel_news_sentiment": {
+            "component_id": "sentinel_news_sentiment",
+            "component_type": "data_source",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 0.5029,
+            "marginal_value_added_atr": 2.4955,
+            "without_component_win_rate": 0.5,
+            "train_ic_edge": -0.065,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          },
+          "pulse_social_sentiment": {
+            "component_id": "pulse_social_sentiment",
+            "component_type": "data_source",
+            "full_system_expectancy_atr": 2.9984,
+            "without_component_expectancy_atr": 0.3776,
+            "marginal_value_added_atr": 2.6208,
+            "without_component_win_rate": 0.4545,
+            "train_ic_edge": -0.0902,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "RETAINED_ADDS_VALUE"
+          }
+        },
+        "formal_ablation_report": {
+          "study_id": "abl-v2-gbpusd-scalping",
+          "parent_experiment_id": "exp-v2-gbpusd-scalping",
+          "ablation_engine_version": "1.0.0",
+          "manifest_id": "manifest-v2-gbpusd-scalping",
+          "manifest_version": "2.0.0",
+          "component_impacts": [
+            {
+              "component_id": "ema_trend",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 0.377,
+              "marginal_impact": -2.6214,
+              "relative_impact": -0.8743,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "bos_breakout",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 0.3776,
+              "marginal_impact": -2.6208,
+              "relative_impact": -0.8741,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "liquidity_sweep",
+              "full_system_metric": 2.9984,
+              "ablated_metric": -0.2337,
+              "marginal_impact": -3.2321,
+              "relative_impact": -1.0779,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "fvg_impulse",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 0.0675,
+              "marginal_impact": -2.9309,
+              "relative_impact": -0.9775,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "dealing_range_reversion",
+              "full_system_metric": 2.9984,
+              "ablated_metric": -0.0597,
+              "marginal_impact": -3.0582,
+              "relative_impact": -1.0199,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "rsi_momentum",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 1.8874,
+              "marginal_impact": -1.1111,
+              "relative_impact": -0.3705,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "sentinel_news_sentiment",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 0.5029,
+              "marginal_impact": -2.4955,
+              "relative_impact": -0.8323,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            },
+            {
+              "component_id": "pulse_social_sentiment",
+              "full_system_metric": 2.9984,
+              "ablated_metric": 0.3776,
+              "marginal_impact": -2.6208,
+              "relative_impact": -0.8741,
+              "direction": "higher_is_better",
+              "interaction_suspected": true,
+              "evidence_quality": "validation_partition_leave_one_out"
+            }
+          ],
+          "interaction_candidates": [
+            "ema_trend",
+            "bos_breakout",
+            "liquidity_sweep",
+            "fvg_impulse",
+            "dealing_range_reversion",
+            "rsi_momentum",
+            "sentinel_news_sentiment",
+            "pulse_social_sentiment"
+          ],
+          "total_runs_executed": 9,
+          "individual_runs_executed": 8
+        },
+        "tp_continuation_7stage_ablation": {
+          "with_7tp_continuation_total_r": 1.955,
+          "without_continuation_capped_at_primary_tp_r": 2.243,
+          "marginal_r_gained_by_7tp_continuation": -0.288,
+          "trades_continued_past_primary_tp": 0,
+          "highest_tp_stage_reached_in_lockbox": 3
+        }
       },
       "structural_gates": {
         "macro_dealing_range_long_max": 0.75,
         "macro_dealing_range_short_min": 0.25,
         "htf_room_to_run_atr_min": 1.35,
         "rsi_long_band": [
-          32.71,
-          59.5
+          33.05,
+          59.41
         ],
         "rsi_short_band": [
           36.27,
           61.6
         ],
-        "entry_score_threshold": 0.44,
-        "validation_screen_score_atr": 4.852
+        "entry_score_threshold": 0.36,
+        "validation_screen_score_atr": 2.998
+      }
+    },
+    "ablation_study_report": {
+      "study_id": "abl-v2-gbpusd-scalping",
+      "ablation_engine_version": "1.0.0",
+      "baseline_validation_expectancy_atr": 2.9984,
+      "post_pruning_validation_expectancy_atr": 2.9984,
+      "retained_components": [
+        "ema_trend",
+        "bos_breakout",
+        "liquidity_sweep",
+        "fvg_impulse",
+        "dealing_range_reversion",
+        "rsi_momentum",
+        "sentinel_news_sentiment",
+        "pulse_social_sentiment"
+      ],
+      "pruned_components_left_out": [],
+      "component_breakdown": {
+        "ema_trend": {
+          "component_id": "ema_trend",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.377,
+          "marginal_value_added_atr": 2.6214,
+          "without_component_win_rate": 1.0,
+          "train_ic_edge": -0.2618,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "bos_breakout": {
+          "component_id": "bos_breakout",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.3776,
+          "marginal_value_added_atr": 2.6208,
+          "without_component_win_rate": 0.4545,
+          "train_ic_edge": -0.64,
+          "shadow_net_r_delta": -0.066,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "liquidity_sweep": {
+          "component_id": "liquidity_sweep",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": -0.2337,
+          "marginal_value_added_atr": 3.2321,
+          "without_component_win_rate": 0.36,
+          "train_ic_edge": 0.2311,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "fvg_impulse": {
+          "component_id": "fvg_impulse",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.0675,
+          "marginal_value_added_atr": 2.9309,
+          "without_component_win_rate": 0.3636,
+          "train_ic_edge": -0.0823,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "dealing_range_reversion": {
+          "component_id": "dealing_range_reversion",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": -0.0597,
+          "marginal_value_added_atr": 3.0582,
+          "without_component_win_rate": 0.4706,
+          "train_ic_edge": 0.1972,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "rsi_momentum": {
+          "component_id": "rsi_momentum",
+          "component_type": "signal",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 1.8874,
+          "marginal_value_added_atr": 1.1111,
+          "without_component_win_rate": 0.6842,
+          "train_ic_edge": -0.1806,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "sentinel_news_sentiment": {
+          "component_id": "sentinel_news_sentiment",
+          "component_type": "data_source",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.5029,
+          "marginal_value_added_atr": 2.4955,
+          "without_component_win_rate": 0.5,
+          "train_ic_edge": -0.065,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        },
+        "pulse_social_sentiment": {
+          "component_id": "pulse_social_sentiment",
+          "component_type": "data_source",
+          "full_system_expectancy_atr": 2.9984,
+          "without_component_expectancy_atr": 0.3776,
+          "marginal_value_added_atr": 2.6208,
+          "without_component_win_rate": 0.4545,
+          "train_ic_edge": -0.0902,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "RETAINED_ADDS_VALUE"
+        }
+      },
+      "formal_ablation_report": {
+        "study_id": "abl-v2-gbpusd-scalping",
+        "parent_experiment_id": "exp-v2-gbpusd-scalping",
+        "ablation_engine_version": "1.0.0",
+        "manifest_id": "manifest-v2-gbpusd-scalping",
+        "manifest_version": "2.0.0",
+        "component_impacts": [
+          {
+            "component_id": "ema_trend",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.377,
+            "marginal_impact": -2.6214,
+            "relative_impact": -0.8743,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "bos_breakout",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.3776,
+            "marginal_impact": -2.6208,
+            "relative_impact": -0.8741,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "liquidity_sweep",
+            "full_system_metric": 2.9984,
+            "ablated_metric": -0.2337,
+            "marginal_impact": -3.2321,
+            "relative_impact": -1.0779,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "fvg_impulse",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.0675,
+            "marginal_impact": -2.9309,
+            "relative_impact": -0.9775,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "dealing_range_reversion",
+            "full_system_metric": 2.9984,
+            "ablated_metric": -0.0597,
+            "marginal_impact": -3.0582,
+            "relative_impact": -1.0199,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "rsi_momentum",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 1.8874,
+            "marginal_impact": -1.1111,
+            "relative_impact": -0.3705,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "sentinel_news_sentiment",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.5029,
+            "marginal_impact": -2.4955,
+            "relative_impact": -0.8323,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          },
+          {
+            "component_id": "pulse_social_sentiment",
+            "full_system_metric": 2.9984,
+            "ablated_metric": 0.3776,
+            "marginal_impact": -2.6208,
+            "relative_impact": -0.8741,
+            "direction": "higher_is_better",
+            "interaction_suspected": true,
+            "evidence_quality": "validation_partition_leave_one_out"
+          }
+        ],
+        "interaction_candidates": [
+          "ema_trend",
+          "bos_breakout",
+          "liquidity_sweep",
+          "fvg_impulse",
+          "dealing_range_reversion",
+          "rsi_momentum",
+          "sentinel_news_sentiment",
+          "pulse_social_sentiment"
+        ],
+        "total_runs_executed": 9,
+        "individual_runs_executed": 8
+      },
+      "tp_continuation_7stage_ablation": {
+        "with_7tp_continuation_total_r": 1.955,
+        "without_continuation_capped_at_primary_tp_r": 2.243,
+        "marginal_r_gained_by_7tp_continuation": -0.288,
+        "trades_continued_past_primary_tp": 0,
+        "highest_tp_stage_reached_in_lockbox": 3
       }
     },
     "shadow_reinforcement_feedback": {
-      "shadow_trades_analyzed": 8,
-      "shadow_wins": 6,
-      "shadow_losses": 2,
-      "premature_reversals_after_085r": 2,
+      "shadow_trades_analyzed": 1,
+      "shadow_wins": 0,
+      "shadow_losses": 1,
+      "premature_reversals_after_085r": 1,
+      "continued_past_primary_tp_count": 0,
+      "highest_tp_stage_reached_in_shadow": 0,
       "feature_r_deltas": {
-        "ema_trend": 0.847,
-        "bos_breakout": 0.0,
+        "ema_trend": 0.0,
+        "bos_breakout": -0.066,
         "liquidity_sweep": 0.0,
-        "fvg_impulse": 1.555,
-        "dealing_range_reversion": 2.954,
-        "rsi_momentum": 0.0
+        "fvg_impulse": 0.0,
+        "dealing_range_reversion": 0.0,
+        "rsi_momentum": 0.0,
+        "sentinel_news_sentiment": 0.0,
+        "pulse_social_sentiment": 0.0
       }
     },
     "recommended_sessions": [
       "LONDON_SESSION",
-      "LONDON_NY_OVERLAP",
-      "ASIAN_SESSION"
+      "ASIAN_SESSION",
+      "LONDON_NY_OVERLAP"
     ],
     "recommended_adaptive_sessions": [
-      "LONDON_TREND_EXPANSION",
       "LONDON_OPEN_JUDAS_SWEEP",
-      "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+      "ASIAN_RANGE_ACCUMULATION",
+      "LONDON_TREND_EXPANSION"
     ],
     "recommended_regimes": [
-      "CONSOLIDATION_RANGING",
-      "VOLATILITY_EXPANSION",
-      "TRENDING_BULLISH"
+      "TRENDING_BULLISH",
+      "TRENDING_BEARISH",
+      "VOLATILITY_EXPANSION"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 44,
-      "p70_winning_mae_atr": 0.637,
-      "p65_mfe_atr": 3.489,
-      "p80_mfe_atr": 4.801,
-      "learned_optimal_stop_atr_mult": 1.05,
-      "learned_optimal_tp_atr_mult": 3.664,
-      "learned_risk_reward_ratio": 3.49,
+      "sample_setups_60pct_dev": 76,
+      "p70_winning_mae_atr": 0.999,
+      "p65_mfe_atr": 4.348,
+      "p80_mfe_atr": 6.096,
+      "learned_optimal_stop_atr_mult": 1.119,
+      "learned_optimal_tp_atr_mult": 3.917,
+      "learned_risk_reward_ratio": 3.5,
       "learned_be_trigger_r": 1.15,
-      "learned_tp1_r": 1.47,
-      "learned_tp2_r": 3.8,
-      "learned_trail_atr_mult": 0.95
+      "learned_tp1_r": 1.65,
+      "learned_tp2_r": 2.45,
+      "learned_primary_tp_r": 3.5,
+      "learned_tp_ladder_r": {
+        "TP1": 1.65,
+        "TP2": 2.45,
+        "TP3": 3.5,
+        "TP4": 4.8,
+        "TP5": 6.2,
+        "TP6": 7.8,
+        "TP7": 9.8
+      },
+      "tp_stage_scale_out_fractions": {
+        "TP1": 0.2,
+        "TP2": 0.2,
+        "TP3": 0.15,
+        "TP4": 0.15,
+        "TP5": 0.1,
+        "TP6": 0.1,
+        "TP7": 0.1
+      },
+      "continuation_past_tp_enabled": true,
+      "learned_trail_atr_mult": 0.98
     },
     "instrument_physics": {
       "symbol": "GBPUSD",
-      "avg_wick_to_body_ratio": 2.653,
+      "avg_wick_to_body_ratio": 2.658,
       "learned_sweep_wick_ratio_threshold": 0.45,
-      "learned_fvg_body_atr_threshold": 0.549,
+      "learned_fvg_body_atr_threshold": 0.55,
       "trend_persistence_score": 0.265,
       "mean_reversion_propensity": 0.735,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -218,16 +1157,106 @@
       "symbol": "GBPUSD",
       "trader_style": "SCALPING",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 6.14,
-      "efficiency_drift_pct": 6.16,
-      "recommendation": "Market regime physics for GBPUSD (SCALPING) remain aligned with training baseline."
+      "overall_severity": "none",
+      "drifted_features": [],
+      "volatility_drift_pct": 5.48,
+      "efficiency_drift_pct": 5.89,
+      "recommendation": "Market regime physics for GBPUSD (SCALPING) remain aligned (severity=none).",
+      "formal_drift_report": {
+        "model_id": "oracle_v2_gbpusd_scalping",
+        "champion_id": "cand-v2-gbpusd-scalping",
+        "model_version": "2.0.0",
+        "model_domain": "mtf_institutional_strategy",
+        "observation_count": 820,
+        "policy_id": "policy-v2-gbpusd-scalping",
+        "policy_version": "1.0.0",
+        "feature_details": [
+          {
+            "feature_index": 0,
+            "feature_name": "atr_volatility_bps",
+            "baseline_mean": 2.019,
+            "baseline_std": 0.7776,
+            "live_mean": 2.1296,
+            "live_std": 0.8325,
+            "shift_value": 0.142,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          },
+          {
+            "feature_index": 1,
+            "feature_name": "efficiency_ratio",
+            "baseline_mean": 0.2632,
+            "baseline_std": 0.1945,
+            "live_mean": 0.2787,
+            "live_std": 0.199,
+            "shift_value": 0.079,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          },
+          {
+            "feature_index": 2,
+            "feature_name": "wick_to_body_ratio",
+            "baseline_mean": 2.1666,
+            "baseline_std": 4.6299,
+            "live_mean": 2.3506,
+            "live_std": 4.8736,
+            "shift_value": 0.04,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          },
+          {
+            "feature_index": 3,
+            "feature_name": "rsi14_distribution",
+            "baseline_mean": 49.8388,
+            "baseline_std": 11.3721,
+            "live_mean": 50.2428,
+            "live_std": 13.4183,
+            "shift_value": 0.036,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          },
+          {
+            "feature_index": 4,
+            "feature_name": "bos_breakout_frequency",
+            "baseline_mean": 0.1504,
+            "baseline_std": 0.3575,
+            "live_mean": 0.1524,
+            "live_std": 0.3594,
+            "shift_value": 0.006,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          },
+          {
+            "feature_index": 5,
+            "feature_name": "sweep_and_fvg_density",
+            "baseline_mean": 0.2679,
+            "baseline_std": 0.4429,
+            "live_mean": 0.2488,
+            "live_std": 0.4323,
+            "shift_value": 0.043,
+            "calculation_method": "standardized_mean_shift",
+            "severity": "none"
+          }
+        ],
+        "drifted_feature_indices": [],
+        "drifted_feature_names": [],
+        "overall_severity": "none",
+        "drift_detected": false
+      },
+      "drift_orchestrator_suggestion": {
+        "model_id": "oracle_v2_gbpusd_scalping",
+        "champion_id": "cand-v2-gbpusd-scalping",
+        "suggested_investigation": "monitor_only",
+        "drifted_features": [],
+        "severity": "none"
+      }
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 2.4,
-      "mc95_worst_case_drawdown_pct": 3.57,
-      "mc99_extreme_drawdown_pct": 3.8,
-      "mc95_max_consecutive_losses": 5,
+      "mc50_median_drawdown_pct": 1.22,
+      "mc95_worst_case_drawdown_pct": 1.84,
+      "mc99_extreme_drawdown_pct": 1.89,
+      "mc95_max_consecutive_losses": 4,
       "passed_mc95_gate": true
     }
   }

@@ -295,12 +295,27 @@ class ForgeShadowRunner:
 
             exc = bp.get("learned_excursion_parameters", {})
             sl_atr_mult = float(exc.get("learned_optimal_stop_atr_mult", 1.5))
-            tp_atr_mult = float(exc.get("learned_optimal_tp_atr_mult", 3.0))
-            rr_target = float(exc.get("learned_risk_reward_ratio", 2.0))
             be_trigger_r = float(exc.get("learned_be_trigger_r", 0.75))
             tp1_r = float(exc.get("learned_tp1_r", 1.25))
-            tp2_r = float(exc.get("learned_tp2_r", 2.4))
+            tp2_r = float(exc.get("learned_tp2_r", 2.0))
+            primary_tp_r = float(exc.get("learned_primary_tp_r", 2.45))
             trail_atr_mult = float(exc.get("learned_trail_atr_mult", 1.35))
+            tp_ladder_r = exc.get("learned_tp_ladder_r") or {
+                "TP1": tp1_r,
+                "TP2": tp2_r,
+                "TP3": primary_tp_r,
+                "TP4": round(primary_tp_r * 1.30, 2),
+                "TP5": round(primary_tp_r * 1.65, 2),
+                "TP6": round(primary_tp_r * 2.05, 2),
+                "TP7": round(primary_tp_r * 2.50, 2),
+            }
+
+            # Fetch bar-aligned Sentinel (News) & Pulse (Social) signals for this trigger series
+            news_social_ctx = self.mtf_engine.fetch_pulse_and_sentinel_context(
+                upper_sym, trigger_series
+            )
+            sentinel_scores = news_social_ctx["sentinel_bar_scores"]
+            pulse_scores = news_social_ctx["pulse_bar_scores"]
 
             horizon_bars = (
                 12 if style == "SCALPING" else (16 if style in ("DAY_TRADING", "RANGE_SPECIALIST") else 24)
@@ -331,7 +346,7 @@ class ForgeShadowRunner:
                     i += 1
                     continue
 
-                # 2. Check Top-Down 7-Timeframe Context
+                # 2. Check Top-Down 7-Timeframe Context + Pulse/Sentinel Agents
                 macro_bars = [
                     b
                     for tf in macro_tfs
@@ -342,6 +357,8 @@ class ForgeShadowRunner:
                     for tf in setup_tfs
                     if (b := self._find_latest_completed_bar(dataset["series"].get(tf, []), unix_sec))
                 ]
+                s_val = float(sentinel_scores[i]) if i < len(sentinel_scores) else 0.0
+                p_val = float(pulse_scores[i]) if i < len(pulse_scores) else 0.0
 
                 sig = self.mtf_engine.evaluate_trader_archetype_signal(
                     bar=bar,
@@ -349,6 +366,8 @@ class ForgeShadowRunner:
                     setup_bars=setup_bars,
                     trader_style=style,
                     learned_genome=bp.get("learned_strategy_genome"),
+                    sentinel_signal=s_val,
+                    pulse_signal=p_val,
                 )
                 if sig == 0:
                     i += 1
@@ -359,9 +378,11 @@ class ForgeShadowRunner:
                 v1_status = self.evaluate_v1_legacy_signal(d1_bar)
                 v1_placed_demo = self.did_oracle_v1_trade_near(v1_timestamps, unix_sec)
 
-                # Shadow Runner specifically captures trades when V1 did NOT place a demo trade
-                # or when V1 was blocked by its daily-only filter
-                v1_missed_opportunity = (not v1_placed_demo) or v1_status.startswith("V1_BLOCKED") or v1_status.startswith("V1_IDLE")
+                v1_missed_opportunity = (
+                    (not v1_placed_demo)
+                    or v1_status.startswith("V1_BLOCKED")
+                    or v1_status.startswith("V1_IDLE")
+                )
                 if not v1_missed_opportunity:
                     i += 1
                     continue
@@ -379,7 +400,6 @@ class ForgeShadowRunner:
                     max(struct_dist, atr * (sl_atr_mult * 0.85)),
                     atr * (sl_atr_mult * 1.35),
                 )
-                target_distance = max(atr * tp_atr_mult, stop_distance * rr_target)
 
                 stop_distance_bps = (stop_distance / entry_price) * 10000.0
                 if total_cost_bps > stop_distance_bps * 0.38:
@@ -389,157 +409,40 @@ class ForgeShadowRunner:
                 initial_stop = round(
                     entry_price - stop_distance if is_long else entry_price + stop_distance, 5
                 )
-                tp1_price = round(
-                    entry_price + stop_distance * tp1_r
-                    if is_long
-                    else entry_price - stop_distance * tp1_r,
-                    5,
+
+                # 4. Execute & Monitor the Shadow Trade with the 7-Stage Progressive TP Ladder + Continuation Runner
+                sim = self.mtf_engine.simulate_progressive_7tp_execution(
+                    trig_series=trigger_series,
+                    entry_idx=i,
+                    horizon_bars=horizon_bars,
+                    is_long=is_long,
+                    entry_price=entry_price,
+                    stop_distance=stop_distance,
+                    atr=atr,
+                    be_trigger_r=be_trigger_r,
+                    trail_atr_mult=trail_atr_mult,
+                    tp_ladder_r=tp_ladder_r,
+                    allow_continuation_past_primary=True,
                 )
-                tp2_price = round(
-                    entry_price + stop_distance * tp2_r
-                    if is_long
-                    else entry_price - stop_distance * tp2_r,
-                    5,
-                )
 
-                # 4. Monitor the Shadow Trade bar-by-bar in the background
-                current_stop = initial_stop
-                be_active = False
-                tp1_filled = False
-                banked_r = 0.0
-                remaining_weight = 1.0
-                peak_mfe_r = 0.0
-                worst_mae_r = 0.0
-                exit_idx = min(end_idx - 1, i + horizon_bars)
-                exit_price = float(trigger_series[exit_idx]["close"])
-                shadow_status = "CLOSED_TIME_HORIZON"
-                lifecycle_events: List[str] = []
-
-                for k in range(i + 1, min(end_idx, i + horizon_bars + 1)):
-                    f_bar = trigger_series[k]
-                    f_high = float(f_bar["high"])
-                    f_low = float(f_bar["low"])
-                    f_close = float(f_bar["close"])
-
-                    fav_r = (
-                        (f_high - entry_price) / stop_distance
-                        if is_long
-                        else (entry_price - f_low) / stop_distance
-                    )
-                    adv_r = (
-                        (entry_price - f_low) / stop_distance
-                        if is_long
-                        else (f_high - entry_price) / stop_distance
-                    )
-                    peak_mfe_r = max(peak_mfe_r, fav_r)
-                    worst_mae_r = max(worst_mae_r, adv_r)
-
-                    if is_long:
-                        if f_low <= current_stop:
-                            exit_idx = k
-                            exit_price = current_stop
-                            stop_exit_r = (current_stop - entry_price) / stop_distance
-                            gross_r = banked_r + remaining_weight * stop_exit_r
-                            remaining_weight = 0.0
-                            shadow_status = (
-                                "CLOSED_TP1_AND_TRAILED_STOP"
-                                if tp1_filled
-                                else ("CLOSED_BREAKEVEN_PROTECTED" if be_active else "CLOSED_STOP_LOSS")
-                            )
-                            lifecycle_events.append(
-                                f"Exited at {round(current_stop, 5)} ({shadow_status}) on {f_bar['ts']}"
-                            )
-                            break
-                        if not tp1_filled and fav_r >= tp1_r:
-                            banked_r += 0.5 * tp1_r
-                            remaining_weight = 0.5
-                            tp1_filled = True
-                            be_active = True
-                            current_stop = max(current_stop, entry_price + stop_distance * 0.12)
-                            lifecycle_events.append(
-                                f"Banked 50% TP1 at +{tp1_r}R ({tp1_price}) & locked SL at +{round(0.12, 2)}R"
-                            )
-                        elif not be_active and fav_r >= be_trigger_r:
-                            be_active = True
-                            current_stop = max(current_stop, entry_price + stop_distance * 0.10)
-                            lifecycle_events.append(
-                                f"Activated Dynamic Break-Even at +{be_trigger_r}R (SL moved to {round(current_stop, 5)})"
-                            )
-                        if tp1_filled:
-                            chand_stop = f_close - atr * trail_atr_mult
-                            if chand_stop > current_stop:
-                                current_stop = chand_stop
-                        if fav_r >= tp2_r:
-                            exit_idx = k
-                            exit_price = tp2_price
-                            gross_r = banked_r + remaining_weight * tp2_r
-                            remaining_weight = 0.0
-                            shadow_status = "CLOSED_FULL_TP2_TARGET"
-                            lifecycle_events.append(
-                                f"Reached full Runner TP2 at +{tp2_r}R ({tp2_price}) on {f_bar['ts']}"
-                            )
-                            break
-                    else:
-                        if f_high >= current_stop:
-                            exit_idx = k
-                            exit_price = current_stop
-                            stop_exit_r = (entry_price - current_stop) / stop_distance
-                            gross_r = banked_r + remaining_weight * stop_exit_r
-                            remaining_weight = 0.0
-                            shadow_status = (
-                                "CLOSED_TP1_AND_TRAILED_STOP"
-                                if tp1_filled
-                                else ("CLOSED_BREAKEVEN_PROTECTED" if be_active else "CLOSED_STOP_LOSS")
-                            )
-                            lifecycle_events.append(
-                                f"Exited at {round(current_stop, 5)} ({shadow_status}) on {f_bar['ts']}"
-                            )
-                            break
-                        if not tp1_filled and fav_r >= tp1_r:
-                            banked_r += 0.5 * tp1_r
-                            remaining_weight = 0.5
-                            tp1_filled = True
-                            be_active = True
-                            current_stop = min(current_stop, entry_price - stop_distance * 0.12)
-                            lifecycle_events.append(
-                                f"Banked 50% TP1 at +{tp1_r}R ({tp1_price}) & locked SL at +{round(0.12, 2)}R"
-                            )
-                        elif not be_active and fav_r >= be_trigger_r:
-                            be_active = True
-                            current_stop = min(current_stop, entry_price - stop_distance * 0.10)
-                            lifecycle_events.append(
-                                f"Activated Dynamic Break-Even at +{be_trigger_r}R (SL moved to {round(current_stop, 5)})"
-                            )
-                        if tp1_filled:
-                            chand_stop = f_close + atr * trail_atr_mult
-                            if chand_stop < current_stop:
-                                current_stop = chand_stop
-                        if fav_r >= tp2_r:
-                            exit_idx = k
-                            exit_price = tp2_price
-                            gross_r = banked_r + remaining_weight * tp2_r
-                            remaining_weight = 0.0
-                            shadow_status = "CLOSED_FULL_TP2_TARGET"
-                            lifecycle_events.append(
-                                f"Reached full Runner TP2 at +{tp2_r}R ({tp2_price}) on {f_bar['ts']}"
-                            )
-                            break
-
-                if remaining_weight > 0.0:
-                    # Check if the trade is still actively open at the very end of the series
-                    if i + horizon_bars >= end_idx - 1:
-                        shadow_status = "OPEN_MONITORING"
-                    final_move = (
-                        exit_price - entry_price if is_long else entry_price - exit_price
-                    )
-                    gross_r = banked_r + remaining_weight * (final_move / stop_distance)
-                    lifecycle_events.append(
-                        f"{'Currently Open & Monitoring' if shadow_status == 'OPEN_MONITORING' else 'Closed at time horizon'} at {round(exit_price, 5)}"
-                    )
+                gross_r = float(sim["gross_r"])
+                exit_idx = int(sim["exit_idx"])
+                exit_price = float(sim["exit_price"])
+                current_stop = float(sim["active_stop_loss"])
+                shadow_status = str(sim["shadow_status"])
+                peak_mfe_r = float(sim["peak_mfe_r"])
+                worst_mae_r = float(sim["worst_mae_r"])
+                be_active = bool(sim["be_ratchet_triggered"])
+                tp1_filled = bool(sim["tp1_partial_banked"])
+                tp_stages_hit = list(sim["tp_stages_hit"])
+                highest_stage = int(sim["highest_tp_stage_reached"])
+                continued_past_tp3 = bool(sim["continued_past_primary_tp"])
+                tp_prices = dict(sim["tp_ladder_prices"])
+                lifecycle_events = list(sim["lifecycle_events"])
 
                 cost_drag_r = total_cost_bps / max(stop_distance_bps, 0.1)
                 realized_r = round(gross_r - cost_drag_r, 4)
-                net_return_pct = round(realized_r * 0.5, 4)  # 0.50% constant monetary risk
+                net_return_pct = round(realized_r * 0.5, 4)
 
                 micro_trigger = (
                     "Bullish Liquidity Sweep"
@@ -552,6 +455,10 @@ class ForgeShadowRunner:
                     if bar.get("fvg_bearish")
                     else "Break of Structure (BOS)"
                     if bar.get("bos_direction", 0) != 0
+                    else "Sentinel News Catalyst"
+                    if abs(s_val) >= 0.35
+                    else "Pulse Crowd Flow"
+                    if abs(p_val) >= 0.35
                     else "Institutional Pullback / Edge Reversion"
                 )
 
@@ -562,6 +469,10 @@ class ForgeShadowRunner:
                     if (bar.get("fvg_bullish") or bar.get("fvg_bearish"))
                     else "bos_breakout"
                     if bar.get("bos_direction", 0) != 0
+                    else "sentinel_news_sentiment"
+                    if abs(s_val) >= 0.35
+                    else "pulse_social_sentiment"
+                    if abs(p_val) >= 0.35
                     else "dealing_range_reversion"
                     if bar.get("discount_premium_zone") in ("DISCOUNT", "PREMIUM")
                     else "ema_trend"
@@ -574,6 +485,8 @@ class ForgeShadowRunner:
                     "candidate_id": loaded["candidate_id"],
                     "trigger_timeframe": trigger_tf,
                     "trigger_feature_key": trigger_feature_key,
+                    "sentinel_signal_at_entry": round(s_val, 3),
+                    "pulse_signal_at_entry": round(p_val, 3),
                     "direction": "LONG" if is_long else "SHORT",
                     "opened_at_ts": bar["ts"],
                     "closed_at_ts": trigger_series[exit_idx]["ts"],
@@ -585,8 +498,13 @@ class ForgeShadowRunner:
                     "entry_price": round(entry_price, 5),
                     "initial_stop_loss": initial_stop,
                     "active_stop_loss": round(current_stop, 5),
-                    "tp1_level": tp1_price,
-                    "tp2_level": tp2_price,
+                    "primary_tp_level": tp_prices.get("TP3"),
+                    "tp1_level": tp_prices.get("TP1"),
+                    "tp2_level": tp_prices.get("TP2"),
+                    "tp_ladder_levels": tp_prices,
+                    "tp_stages_hit": tp_stages_hit,
+                    "highest_tp_stage_reached": highest_stage,
+                    "continued_past_primary_tp": continued_past_tp3,
                     "exit_price": round(exit_price, 5),
                     "shadow_status": shadow_status,
                     "profitable": realized_r > 0,
@@ -602,7 +520,6 @@ class ForgeShadowRunner:
                 style_trades.append(trade_record)
                 shadow_trades.append(trade_record)
 
-                # If a shadow trade failed, append to feedback outbox so Forge's Mistake Clinic learns from it
                 if realized_r < 0:
                     feedback_event = {
                         "event_id": f"shd-fb-{unix_sec}-{upper_sym}-{style}",
@@ -630,8 +547,10 @@ class ForgeShadowRunner:
             total_r = round(sum(t["realized_r"] for t in style_trades), 3)
             avg_r = round(total_r / max(1, len(style_trades)), 3)
             be_saves = sum(
-                1 for t in style_trades if t["shadow_status"] in ("CLOSED_BREAKEVEN_PROTECTED", "CLOSED_TP1_AND_TRAILED_STOP")
+                1 for t in style_trades if t["be_ratchet_triggered"] and t["realized_r"] > 0
             )
+            continued_cnt = sum(1 for t in style_trades if t.get("continued_past_primary_tp"))
+            max_stage = max((int(t.get("highest_tp_stage_reached", 0)) for t in style_trades), default=0)
 
             style_summaries[style] = {
                 "trader_style": style,
@@ -645,6 +564,8 @@ class ForgeShadowRunner:
                 "expectancy_r": avg_r,
                 "net_shadow_return_pct": round(total_r * 0.5, 2),
                 "dynamic_be_and_tp1_saves": be_saves,
+                "continued_past_primary_tp_count": continued_cnt,
+                "highest_tp_stage_reached": f"TP{max_stage}" if max_stage > 0 else "NONE",
                 "verdict": (
                     "PROFITABLE_IN_SHADOW"
                     if total_r > 0 and wins / max(1, len(style_trades)) >= 0.45
@@ -652,13 +573,12 @@ class ForgeShadowRunner:
                 ),
             }
 
-            # Store non-duplicating lesson in Chronicle
             self.chronicle_ledger.record_lesson(
                 domain="shadow_runner_evaluation",
                 content=(
-                    f"Shadow Runner evaluated {upper_sym} {style} ({trigger_tf}) on setups missed by Oracle V1: "
+                    f"Shadow Runner evaluated {upper_sym} {style} ({trigger_tf}) with 7-Stage TP Ladder: "
                     f"{len(style_trades)} shadow trades, WinRate={style_summaries[style]['win_rate_pct']}%, "
-                    f"Total={total_r}R (Expectancy={avg_r}R, Dynamic BE/TP1 saves={be_saves})."
+                    f"Total={total_r}R (Expectancy={avg_r}R, MaxTPStage=TP{max_stage}, ContinuedPastTP3={continued_cnt})."
                 ),
                 concept_key=f"shadow_runner::{upper_sym}::{style}",
                 tags=["forge", "shadow_runner", upper_sym, style],
