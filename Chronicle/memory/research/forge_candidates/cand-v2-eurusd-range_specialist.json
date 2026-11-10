@@ -6,37 +6,88 @@
   "regime": "ranging",
   "trader_style": "RANGE_SPECIALIST",
   "candidate_code": "V2_MTF_RANGE_SPECIALIST",
-  "candidate_title": "Oracle V2 Top-Down (D1+H4 -> H1+M30 -> M15) RANGE SPECIALIST",
+  "candidate_title": "Atlas+Forge Self-Discovered (D1+H4 -> H1+M30 -> M15) RANGE SPECIALIST",
   "lifecycle_state": "DEPLOYED",
-  "status_reason": "Certified on 3-Layer Top-Down Stack (D1+H4->M15): 40% Lockbox Trades=12, WinRate=66.7%, Net=4.08%, MC95 DD=1.09%.",
-  "created_at_unix": 1794308954.676642,
-  "updated_at_unix": 1794308954.676642,
+  "status_reason": "Discovered by Atlas+Forge on 60% Dev Split & Tested on 40% Lockbox: Trades=62, WinRate=45.2%, Net=0.12%, MC95 DD=6.52%.",
+  "created_at_unix": 1794309875.5514977,
+  "updated_at_unix": 1794309875.5514977,
+  "atlas_research_hypothesis": {
+    "hypothesis_id": "hyp-v2-eurusd-range_specialist",
+    "atlas_report_id": "atlas-hyp-eurusd-range_specialist",
+    "proposed_by": "atlas_and_forge_autonomous_discovery",
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245). Forge learned feature predictive weights: ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245), while empirical feature ablation ranks ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174) as the primary edge drivers.",
+    "confidence": 0.78,
+    "dominant_timeframes_discovered": [
+      "D1",
+      "H4",
+      "M15"
+    ],
+    "dominant_features_discovered": [
+      "ema_trend",
+      "bos_breakout",
+      "rsi_momentum"
+    ]
+  },
+  "learned_strategy_genome": {
+    "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+    "timeframe_weights": {
+      "D1": 0.245,
+      "H4": 0.245,
+      "H1": 0.112,
+      "M30": 0.153,
+      "M15": 0.245
+    },
+    "feature_weights": {
+      "ema_trend": 0.188,
+      "bos_breakout": 0.188,
+      "liquidity_sweep": 0.146,
+      "fvg_impulse": 0.133,
+      "dealing_range_reversion": 0.171,
+      "rsi_momentum": 0.174
+    },
+    "structural_gates": {
+      "macro_dealing_range_long_max": 0.68,
+      "macro_dealing_range_short_min": 0.32,
+      "htf_room_to_run_atr_min": 1.35,
+      "rsi_long_band": [
+        31.58,
+        62.37
+      ],
+      "rsi_short_band": [
+        28.47,
+        64.44
+      ],
+      "entry_score_threshold": 0.26,
+      "validation_screen_score_atr": 0.092
+    }
+  },
   "evaluation_metrics": {
-    "trades_count": 12,
-    "win_rate_pct": 66.7,
-    "total_net_r": 8.158,
-    "expectancy_r": 0.68,
-    "mc95_worst_case_drawdown_pct": 1.09,
+    "trades_count": 62,
+    "win_rate_pct": 45.2,
+    "total_net_r": 0.24,
+    "expectancy_r": 0.004,
+    "mc95_worst_case_drawdown_pct": 6.52,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 12,
-      "wins": 8,
-      "losses": 4,
-      "win_rate": 0.667,
-      "net_return_pct": 4.08,
-      "expectancy_r": 0.68,
-      "sharpe_ratio": 1.5,
-      "max_drawdown_pct": 0.56
+      "trades": 62,
+      "wins": 28,
+      "losses": 34,
+      "win_rate": 0.452,
+      "net_return_pct": 0.12,
+      "expectancy_r": 0.004,
+      "sharpe_ratio": 0.5,
+      "max_drawdown_pct": 4.31
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 0.56,
-    "mc95_worst_case_drawdown_pct": 1.09,
-    "mc99_extreme_drawdown_pct": 1.12,
-    "mc95_max_consecutive_losses": 3,
+    "mc50_median_drawdown_pct": 4.31,
+    "mc95_worst_case_drawdown_pct": 6.52,
+    "mc99_extreme_drawdown_pct": 7.67,
+    "mc95_max_consecutive_losses": 9,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -54,84 +105,66 @@
       ],
       "trigger_timeframe": "M15"
     },
-    "top_down_execution_rules": {
-      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-      "layer_1_macro_narrative": {
-        "timeframes": [
-          "D1",
-          "H4"
+    "atlas_research_hypothesis": {
+      "hypothesis_id": "hyp-v2-eurusd-range_specialist",
+      "atlas_report_id": "atlas-hyp-eurusd-range_specialist",
+      "proposed_by": "atlas_and_forge_autonomous_discovery",
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245). Forge learned feature predictive weights: ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245), while empirical feature ablation ranks ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174) as the primary edge drivers.",
+      "confidence": 0.78,
+      "dominant_timeframes_discovered": [
+        "D1",
+        "H4",
+        "M15"
+      ],
+      "dominant_features_discovered": [
+        "ema_trend",
+        "bos_breakout",
+        "rsi_momentum"
+      ]
+    },
+    "learned_strategy_genome": {
+      "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+      "timeframe_weights": {
+        "D1": 0.245,
+        "H4": 0.245,
+        "H1": 0.112,
+        "M30": 0.153,
+        "M15": 0.245
+      },
+      "feature_weights": {
+        "ema_trend": 0.188,
+        "bos_breakout": 0.188,
+        "liquidity_sweep": 0.146,
+        "fvg_impulse": 0.133,
+        "dealing_range_reversion": 0.171,
+        "rsi_momentum": 0.174
+      },
+      "structural_gates": {
+        "macro_dealing_range_long_max": 0.68,
+        "macro_dealing_range_short_min": 0.32,
+        "htf_room_to_run_atr_min": 1.35,
+        "rsi_long_band": [
+          31.58,
+          62.37
         ],
-        "rules": [
-          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-          "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-        ]
-      },
-      "layer_2_setup_structure": {
-        "timeframes": [
-          "H1",
-          "M30"
+        "rsi_short_band": [
+          28.47,
+          64.44
         ],
-        "rules": [
-          "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-          "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-        ]
-      },
-      "layer_3_trigger_execution": {
-        "timeframe": "M15",
-        "rules": [
-          "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-          "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-        ]
-      },
-      "empirical_session_matrix_60pct_dev": {
-        "LONDON_SESSION": {
-          "setups": 4,
-          "win_rate_pct": 25.0,
-          "expectancy_r": 0.062
-        },
-        "ASIAN_SESSION": {
-          "setups": 2,
-          "win_rate_pct": 50.0,
-          "expectancy_r": 0.671
-        },
-        "LONDON_NY_OVERLAP": {
-          "setups": 2,
-          "win_rate_pct": 50.0,
-          "expectancy_r": 0.227
-        },
-        "NEW_YORK_SESSION": {
-          "setups": 4,
-          "win_rate_pct": 100.0,
-          "expectancy_r": 2.181
-        }
-      },
-      "empirical_regime_matrix_60pct_dev": {
-        "TRENDING_BULLISH": {
-          "setups": 3,
-          "win_rate_pct": 66.7,
-          "expectancy_r": 1.76
-        },
-        "CONSOLIDATION_RANGING": {
-          "setups": 7,
-          "win_rate_pct": 57.1,
-          "expectancy_r": 0.719
-        },
-        "VOLATILITY_EXPANSION": {
-          "setups": 2,
-          "win_rate_pct": 50.0,
-          "expectancy_r": 0.227
-        }
+        "entry_score_threshold": 0.26,
+        "validation_screen_score_atr": 0.092
       }
     },
     "recommended_sessions": [
-      "NEW_YORK_SESSION",
       "ASIAN_SESSION",
+      "NEW_YORK_SESSION",
       "LONDON_NY_OVERLAP"
     ],
     "recommended_adaptive_sessions": [
-      "NY_AFTERNOON_REBALANCING",
-      "LONDON_OPEN_JUDAS_SWEEP",
-      "ASIAN_RANGE_ACCUMULATION"
+      "ASIAN_RANGE_ACCUMULATION",
+      "LONDON_TREND_EXPANSION",
+      "NY_AFTERNOON_REBALANCING"
     ],
     "recommended_regimes": [
       "TRENDING_BULLISH",
@@ -139,23 +172,23 @@
       "VOLATILITY_EXPANSION"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 12,
-      "p70_winning_mae_atr": 0.38,
-      "p65_mfe_atr": 3.576,
-      "p80_mfe_atr": 4.47,
-      "learned_optimal_stop_atr_mult": 1.05,
-      "learned_optimal_tp_atr_mult": 3.755,
-      "learned_risk_reward_ratio": 3.58,
-      "learned_be_trigger_r": 1.15,
-      "learned_tp1_r": 1.67,
-      "learned_tp2_r": 3.8,
-      "learned_trail_atr_mult": 0.95
+      "sample_setups_60pct_dev": 323,
+      "p70_winning_mae_atr": 1.148,
+      "p65_mfe_atr": 2.503,
+      "p80_mfe_atr": 3.616,
+      "learned_optimal_stop_atr_mult": 1.286,
+      "learned_optimal_tp_atr_mult": 2.628,
+      "learned_risk_reward_ratio": 2.04,
+      "learned_be_trigger_r": 0.88,
+      "learned_tp1_r": 1.28,
+      "learned_tp2_r": 2.81,
+      "learned_trail_atr_mult": 1.13
     },
     "instrument_physics": {
       "symbol": "EURUSD",
-      "avg_wick_to_body_ratio": 4.004,
+      "avg_wick_to_body_ratio": 4.002,
       "learned_sweep_wick_ratio_threshold": 0.45,
-      "learned_fvg_body_atr_threshold": 0.553,
+      "learned_fvg_body_atr_threshold": 0.554,
       "trend_persistence_score": 0.276,
       "mean_reversion_propensity": 0.724,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -171,16 +204,16 @@
       "symbol": "EURUSD",
       "trader_style": "RANGE_SPECIALIST",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 7.13,
-      "efficiency_drift_pct": 6.98,
+      "volatility_drift_pct": 7.1,
+      "efficiency_drift_pct": 7.3,
       "recommendation": "Market regime physics for EURUSD (RANGE_SPECIALIST) remain aligned with training baseline."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 0.56,
-      "mc95_worst_case_drawdown_pct": 1.09,
-      "mc99_extreme_drawdown_pct": 1.12,
-      "mc95_max_consecutive_losses": 3,
+      "mc50_median_drawdown_pct": 4.31,
+      "mc95_worst_case_drawdown_pct": 6.52,
+      "mc99_extreme_drawdown_pct": 7.67,
+      "mc95_max_consecutive_losses": 9,
       "passed_mc95_gate": true
     }
   }

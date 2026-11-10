@@ -348,6 +348,7 @@ class ForgeShadowRunner:
                     macro_bars=macro_bars,
                     setup_bars=setup_bars,
                     trader_style=style,
+                    learned_genome=bp.get("learned_strategy_genome"),
                 )
                 if sig == 0:
                     i += 1

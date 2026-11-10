@@ -1,7 +1,7 @@
 {
   "schema": "oracle.strategy_catalog.snapshot.v1",
   "catalog_id": "cat-c580d9887ac4be70",
-  "created_at_unix": 1794308569.295,
+  "created_at_unix": 1794309376.542,
   "strategy_count": 146,
   "champion_library_count": 22,
   "evolved_strategies_count": 146,
@@ -23,111 +23,88 @@
           ],
           "trigger_timeframe": "M5"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "H4",
-              "H1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-gbpusd-scalping",
+          "atlas_report_id": "atlas-hyp-gbpusd-scalping",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: M5 (w=+0.274), H1 (w=+0.249), M30 (w=+0.170). Forge learned feature predictive weights: liquidity_sweep (w=+0.279), dealing_range_reversion (w=+0.234), ema_trend (w=+0.122).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.274), H1 (w=+0.249), M30 (w=+0.170), while empirical feature ablation ranks liquidity_sweep (w=+0.279), dealing_range_reversion (w=+0.234), ema_trend (w=+0.122) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "M5",
+            "H1",
+            "M30"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "dealing_range_reversion",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "H4": 0.162,
+            "H1": 0.249,
+            "M30": 0.17,
+            "M15": 0.145,
+            "M5": 0.274
+          },
+          "feature_weights": {
+            "ema_trend": 0.122,
+            "bos_breakout": 0.122,
+            "liquidity_sweep": 0.279,
+            "fvg_impulse": 0.122,
+            "dealing_range_reversion": 0.234,
+            "rsi_momentum": 0.122
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.75,
+            "macro_dealing_range_short_min": 0.25,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              32.71,
+              59.5
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across H4, H1.",
-              "Compute Macro Dealing Range position from H4, H1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "M30",
-              "M15"
+            "rsi_short_band": [
+              36.05,
+              61.64
             ],
-            "rules": [
-              "Require M30, M15 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing M30, M15 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M5",
-            "rules": [
-              "Execute on M5 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.55x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M5 16-bar structural swing bounded by 1.129x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.99x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 202,
-              "win_rate_pct": 70.8,
-              "expectancy_r": 1.718
-            },
-            "LONDON_SESSION": {
-              "setups": 196,
-              "win_rate_pct": 56.6,
-              "expectancy_r": 1.087
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 96,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.74
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 137,
-              "win_rate_pct": 35.0,
-              "expectancy_r": -0.025
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "VOLATILITY_EXPANSION": {
-              "setups": 79,
-              "win_rate_pct": 57.0,
-              "expectancy_r": 1.314
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 304,
-              "win_rate_pct": 55.6,
-              "expectancy_r": 0.93
-            },
-            "TRENDING_BULLISH": {
-              "setups": 118,
-              "win_rate_pct": 48.3,
-              "expectancy_r": 0.972
-            },
-            "TRENDING_BEARISH": {
-              "setups": 130,
-              "win_rate_pct": 60.8,
-              "expectancy_r": 0.971
-            }
+            "entry_score_threshold": 0.38,
+            "validation_screen_score_atr": 2.354
           }
         },
         "recommended_sessions": [
-          "ASIAN_SESSION",
           "LONDON_SESSION",
-          "LONDON_NY_OVERLAP"
+          "LONDON_NY_OVERLAP",
+          "ASIAN_SESSION"
         ],
         "recommended_adaptive_sessions": [
           "LONDON_OPEN_JUDAS_SWEEP",
-          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_TREND_EXPANSION",
           "NY_OVERLAP_INSTITUTIONAL_DRIVE"
         ],
         "recommended_regimes": [
           "VOLATILITY_EXPANSION",
-          "TRENDING_BULLISH",
-          "TRENDING_BEARISH"
+          "TRENDING_BEARISH",
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 631,
-          "p70_winning_mae_atr": 1.008,
-          "p65_mfe_atr": 3.559,
-          "p80_mfe_atr": 4.81,
-          "learned_optimal_stop_atr_mult": 1.129,
-          "learned_optimal_tp_atr_mult": 3.736,
-          "learned_risk_reward_ratio": 3.31,
+          "sample_setups_60pct_dev": 50,
+          "p70_winning_mae_atr": 0.847,
+          "p65_mfe_atr": 3.851,
+          "p80_mfe_atr": 4.801,
+          "learned_optimal_stop_atr_mult": 1.05,
+          "learned_optimal_tp_atr_mult": 4.044,
+          "learned_risk_reward_ratio": 3.85,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 0.99
+          "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "GBPUSD",
-          "avg_wick_to_body_ratio": 2.656,
+          "avg_wick_to_body_ratio": 2.654,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.55,
           "trend_persistence_score": 0.265,
@@ -145,16 +122,16 @@
           "symbol": "GBPUSD",
           "trader_style": "SCALPING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 7.43,
-          "efficiency_drift_pct": 6.68,
+          "volatility_drift_pct": 7.12,
+          "efficiency_drift_pct": 6.46,
           "recommendation": "Market regime physics for GBPUSD (SCALPING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 3.98,
-          "mc95_worst_case_drawdown_pct": 6.13,
-          "mc99_extreme_drawdown_pct": 6.97,
-          "mc95_max_consecutive_losses": 11,
+          "mc50_median_drawdown_pct": 2.55,
+          "mc95_worst_case_drawdown_pct": 3.76,
+          "mc99_extreme_drawdown_pct": 4.18,
+          "mc95_max_consecutive_losses": 6,
           "passed_mc95_gate": true
         }
       },
@@ -173,78 +150,55 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-gbpusd-day_trading",
+          "atlas_report_id": "atlas-hyp-gbpusd-day_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (DAY_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.243), H1 (w=+0.242), M15 (w=+0.218). Forge learned feature predictive weights: ema_trend (w=+0.228), rsi_momentum (w=+0.223), bos_breakout (w=+0.212).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (DAY_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.243), H1 (w=+0.242), M15 (w=+0.218), while empirical feature ablation ranks ema_trend (w=+0.228), rsi_momentum (w=+0.223), bos_breakout (w=+0.212) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "H4",
+            "H1",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "ema_trend",
+            "rsi_momentum",
+            "bos_breakout"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.172,
+            "H4": 0.243,
+            "H1": 0.242,
+            "M30": 0.124,
+            "M15": 0.218
+          },
+          "feature_weights": {
+            "ema_trend": 0.228,
+            "bos_breakout": 0.212,
+            "liquidity_sweep": 0.103,
+            "fvg_impulse": 0.174,
+            "dealing_range_reversion": 0.059,
+            "rsi_momentum": 0.223
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              34.15,
+              65.54
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              34.37,
+              65.53
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.55x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.14R, bank 50% TP1 at +1.65R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "LONDON_SESSION": {
-              "setups": 9,
-              "win_rate_pct": 55.6,
-              "expectancy_r": 4.267
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 9,
-              "win_rate_pct": 55.6,
-              "expectancy_r": 2.634
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 17,
-              "win_rate_pct": 17.6,
-              "expectancy_r": -0.424
-            },
-            "ASIAN_SESSION": {
-              "setups": 11,
-              "win_rate_pct": 36.4,
-              "expectancy_r": 0.685
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 39,
-              "win_rate_pct": 35.9,
-              "expectancy_r": 0.987
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 3,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 1.96
-            },
-            "TRENDING_BEARISH": {
-              "setups": 1,
-              "win_rate_pct": 0.0,
-              "expectancy_r": -0.85
-            },
-            "TRENDING_BULLISH": {
-              "setups": 3,
-              "win_rate_pct": 33.3,
-              "expectancy_r": 6.307
-            }
+            "entry_score_threshold": 0.26,
+            "validation_screen_score_atr": 1.087
           }
         },
         "recommended_sessions": [
@@ -259,25 +213,25 @@
         ],
         "recommended_regimes": [
           "TRENDING_BULLISH",
-          "VOLATILITY_EXPANSION",
-          "CONSOLIDATION_RANGING"
+          "CONSOLIDATION_RANGING",
+          "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 46,
-          "p70_winning_mae_atr": 0.742,
-          "p65_mfe_atr": 2.649,
-          "p80_mfe_atr": 4.653,
+          "sample_setups_60pct_dev": 113,
+          "p70_winning_mae_atr": 0.835,
+          "p65_mfe_atr": 3.312,
+          "p80_mfe_atr": 4.841,
           "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 2.781,
-          "learned_risk_reward_ratio": 2.65,
-          "learned_be_trigger_r": 1.14,
-          "learned_tp1_r": 1.65,
+          "learned_optimal_tp_atr_mult": 3.478,
+          "learned_risk_reward_ratio": 3.31,
+          "learned_be_trigger_r": 1.15,
+          "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
           "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "GBPUSD",
-          "avg_wick_to_body_ratio": 2.656,
+          "avg_wick_to_body_ratio": 2.654,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.55,
           "trend_persistence_score": 0.265,
@@ -295,15 +249,15 @@
           "symbol": "GBPUSD",
           "trader_style": "DAY_TRADING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 4.5,
-          "efficiency_drift_pct": 6.74,
+          "volatility_drift_pct": 4.45,
+          "efficiency_drift_pct": 7.02,
           "recommendation": "Market regime physics for GBPUSD (DAY_TRADING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.67,
-          "mc95_worst_case_drawdown_pct": 2.73,
-          "mc99_extreme_drawdown_pct": 2.86,
+          "mc50_median_drawdown_pct": 1.7,
+          "mc95_worst_case_drawdown_pct": 3.0,
+          "mc99_extreme_drawdown_pct": 3.8,
           "mc95_max_consecutive_losses": 6,
           "passed_mc95_gate": true
         }
@@ -322,109 +276,87 @@
           ],
           "trigger_timeframe": "H1"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "W1",
-              "D1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-gbpusd-swing_trading",
+          "atlas_report_id": "atlas-hyp-gbpusd-swing_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: W1 (w=+0.280), H4 (w=+0.280), H1 (w=+0.250). Forge learned feature predictive weights: rsi_momentum (w=+0.352), ema_trend (w=+0.306), bos_breakout (w=+0.086).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.280), H4 (w=+0.280), H1 (w=+0.250), while empirical feature ablation ranks rsi_momentum (w=+0.352), ema_trend (w=+0.306), bos_breakout (w=+0.086) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "W1",
+            "H4",
+            "H1"
+          ],
+          "dominant_features_discovered": [
+            "rsi_momentum",
+            "ema_trend",
+            "bos_breakout"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "W1": 0.28,
+            "D1": 0.191,
+            "H4": 0.28,
+            "H1": 0.25
+          },
+          "feature_weights": {
+            "ema_trend": 0.306,
+            "bos_breakout": 0.086,
+            "liquidity_sweep": 0.086,
+            "fvg_impulse": 0.086,
+            "dealing_range_reversion": 0.086,
+            "rsi_momentum": 0.352
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.86,
+            "macro_dealing_range_short_min": 0.14,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              33.19,
+              58.91
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
-              "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H4"
+            "rsi_short_band": [
+              36.67,
+              56.6
             ],
-            "rules": [
-              "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "H1",
-            "rules": [
-              "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.55x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.461x ATR; activate Break-Even at +1.05R, bank 50% TP1 at +1.52R, and trail remaining 50% runner with 1.29x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 11,
-              "win_rate_pct": 63.6,
-              "expectancy_r": 1.193
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 4,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 1.456
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 13,
-              "win_rate_pct": 38.5,
-              "expectancy_r": 0.923
-            },
-            "LONDON_SESSION": {
-              "setups": 18,
-              "win_rate_pct": 61.1,
-              "expectancy_r": 1.731
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 31,
-              "win_rate_pct": 61.3,
-              "expectancy_r": 1.933
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 5,
-              "win_rate_pct": 20.0,
-              "expectancy_r": -0.261
-            },
-            "TRENDING_BULLISH": {
-              "setups": 3,
-              "win_rate_pct": 33.3,
-              "expectancy_r": -0.331
-            },
-            "TRENDING_BEARISH": {
-              "setups": 7,
-              "win_rate_pct": 57.1,
-              "expectancy_r": 0.639
-            }
+            "entry_score_threshold": 0.26,
+            "validation_screen_score_atr": 4.289
           }
         },
         "recommended_sessions": [
           "LONDON_SESSION",
-          "NEW_YORK_SESSION",
-          "ASIAN_SESSION"
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
         ],
         "recommended_adaptive_sessions": [
-          "LONDON_OPEN_JUDAS_SWEEP",
-          "NY_AFTERNOON_REBALANCING",
-          "ASIAN_RANGE_ACCUMULATION"
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+          "LONDON_OPEN_JUDAS_SWEEP"
         ],
         "recommended_regimes": [
-          "CONSOLIDATION_RANGING",
-          "TRENDING_BEARISH"
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION",
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 46,
+          "sample_setups_60pct_dev": 92,
           "p70_winning_mae_atr": 1.305,
-          "p65_mfe_atr": 3.4,
+          "p65_mfe_atr": 4.053,
           "p80_mfe_atr": 6.189,
           "learned_optimal_stop_atr_mult": 1.461,
-          "learned_optimal_tp_atr_mult": 3.57,
-          "learned_risk_reward_ratio": 2.44,
-          "learned_be_trigger_r": 1.05,
-          "learned_tp1_r": 1.52,
+          "learned_optimal_tp_atr_mult": 4.256,
+          "learned_risk_reward_ratio": 2.91,
+          "learned_be_trigger_r": 1.15,
+          "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
           "learned_trail_atr_mult": 1.29
         },
         "instrument_physics": {
           "symbol": "GBPUSD",
-          "avg_wick_to_body_ratio": 2.656,
+          "avg_wick_to_body_ratio": 2.654,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.55,
           "trend_persistence_score": 0.265,
@@ -442,15 +374,15 @@
           "symbol": "GBPUSD",
           "trader_style": "SWING_TRADING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 12.35,
-          "efficiency_drift_pct": 13.32,
+          "volatility_drift_pct": 12.36,
+          "efficiency_drift_pct": 13.41,
           "recommendation": "Market regime physics for GBPUSD (SWING_TRADING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.03,
-          "mc95_worst_case_drawdown_pct": 1.6,
-          "mc99_extreme_drawdown_pct": 2.07,
+          "mc50_median_drawdown_pct": 1.04,
+          "mc95_worst_case_drawdown_pct": 2.02,
+          "mc99_extreme_drawdown_pct": 2.52,
           "mc95_max_consecutive_losses": 3,
           "passed_mc95_gate": true
         }
@@ -470,102 +402,79 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-gbpusd-range_specialist",
+          "atlas_report_id": "atlas-hyp-gbpusd-range_specialist",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213). Forge learned feature predictive weights: liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213), while empirical feature ablation ranks liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "H4",
+            "M15",
+            "H1"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "bos_breakout",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.178,
+            "H4": 0.267,
+            "H1": 0.213,
+            "M30": 0.122,
+            "M15": 0.22
+          },
+          "feature_weights": {
+            "ema_trend": 0.187,
+            "bos_breakout": 0.201,
+            "liquidity_sweep": 0.202,
+            "fvg_impulse": 0.132,
+            "dealing_range_reversion": 0.103,
+            "rsi_momentum": 0.174
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              34.15,
+              65.11
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              33.02,
+              66.42
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.55x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "LONDON_SESSION": {
-              "setups": 5,
-              "win_rate_pct": 80.0,
-              "expectancy_r": 3.006
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 10,
-              "win_rate_pct": 60.0,
-              "expectancy_r": 2.225
-            },
-            "ASIAN_SESSION": {
-              "setups": 7,
-              "win_rate_pct": 57.1,
-              "expectancy_r": 1.374
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 2,
-              "win_rate_pct": 100.0,
-              "expectancy_r": 2.593
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "TRENDING_BULLISH": {
-              "setups": 5,
-              "win_rate_pct": 80.0,
-              "expectancy_r": 5.771
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 6,
-              "win_rate_pct": 33.3,
-              "expectancy_r": -0.244
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 12,
-              "win_rate_pct": 75.0,
-              "expectancy_r": 1.702
-            },
-            "TRENDING_BEARISH": {
-              "setups": 1,
-              "win_rate_pct": 100.0,
-              "expectancy_r": 4.27
-            }
+            "entry_score_threshold": 0.44,
+            "validation_screen_score_atr": -0.741
           }
         },
         "recommended_sessions": [
+          "ASIAN_SESSION",
           "LONDON_SESSION",
-          "NEW_YORK_SESSION",
-          "LONDON_NY_OVERLAP"
+          "NEW_YORK_SESSION"
         ],
         "recommended_adaptive_sessions": [
-          "LONDON_OPEN_JUDAS_SWEEP",
-          "NY_AFTERNOON_REBALANCING",
-          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+          "LONDON_TREND_EXPANSION",
+          "ASIAN_RANGE_ACCUMULATION",
+          "NY_AFTERNOON_REBALANCING"
         ],
         "recommended_regimes": [
-          "TRENDING_BULLISH",
-          "CONSOLIDATION_RANGING"
+          "CONSOLIDATION_RANGING",
+          "TRENDING_BEARISH"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 24,
-          "p70_winning_mae_atr": 0.804,
-          "p65_mfe_atr": 3.774,
-          "p80_mfe_atr": 6.024,
+          "sample_setups_60pct_dev": 36,
+          "p70_winning_mae_atr": 0.672,
+          "p65_mfe_atr": 2.801,
+          "p80_mfe_atr": 4.284,
           "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 3.963,
-          "learned_risk_reward_ratio": 3.77,
+          "learned_optimal_tp_atr_mult": 2.941,
+          "learned_risk_reward_ratio": 2.8,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
@@ -573,7 +482,7 @@
         },
         "instrument_physics": {
           "symbol": "GBPUSD",
-          "avg_wick_to_body_ratio": 2.656,
+          "avg_wick_to_body_ratio": 2.654,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.55,
           "trend_persistence_score": 0.265,
@@ -591,16 +500,16 @@
           "symbol": "GBPUSD",
           "trader_style": "RANGE_SPECIALIST",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 4.5,
-          "efficiency_drift_pct": 6.74,
+          "volatility_drift_pct": 4.45,
+          "efficiency_drift_pct": 7.02,
           "recommendation": "Market regime physics for GBPUSD (RANGE_SPECIALIST) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.17,
-          "mc95_worst_case_drawdown_pct": 1.75,
-          "mc99_extreme_drawdown_pct": 1.76,
-          "mc95_max_consecutive_losses": 4,
+          "mc50_median_drawdown_pct": 2.37,
+          "mc95_worst_case_drawdown_pct": 3.42,
+          "mc99_extreme_drawdown_pct": 3.96,
+          "mc95_max_consecutive_losses": 6,
           "passed_mc95_gate": true
         }
       }
@@ -621,103 +530,80 @@
           ],
           "trigger_timeframe": "M5"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "H4",
-              "H1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-eurusd-scalping",
+          "atlas_report_id": "atlas-hyp-eurusd-scalping",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: H4 (w=+0.305), M30 (w=+0.189), M5 (w=+0.177). Forge learned feature predictive weights: liquidity_sweep (w=+0.314), dealing_range_reversion (w=+0.256), ema_trend (w=+0.107).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.305), M30 (w=+0.189), M5 (w=+0.177), while empirical feature ablation ranks liquidity_sweep (w=+0.314), dealing_range_reversion (w=+0.256), ema_trend (w=+0.107) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "H4",
+            "M30",
+            "M5"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "dealing_range_reversion",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "H4": 0.305,
+            "H1": 0.17,
+            "M30": 0.189,
+            "M15": 0.16,
+            "M5": 0.177
+          },
+          "feature_weights": {
+            "ema_trend": 0.107,
+            "bos_breakout": 0.107,
+            "liquidity_sweep": 0.314,
+            "fvg_impulse": 0.107,
+            "dealing_range_reversion": 0.256,
+            "rsi_momentum": 0.107
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              32.64,
+              61.31
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across H4, H1.",
-              "Compute Macro Dealing Range position from H4, H1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "M30",
-              "M15"
+            "rsi_short_band": [
+              37.14,
+              60.82
             ],
-            "rules": [
-              "Require M30, M15 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing M30, M15 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M5",
-            "rules": [
-              "Execute on M5 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M5 16-bar structural swing bounded by 1.061x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 174,
-              "win_rate_pct": 54.6,
-              "expectancy_r": 1.158
-            },
-            "LONDON_SESSION": {
-              "setups": 151,
-              "win_rate_pct": 53.0,
-              "expectancy_r": 1.393
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 104,
-              "win_rate_pct": 39.4,
-              "expectancy_r": 0.318
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 175,
-              "win_rate_pct": 40.0,
-              "expectancy_r": 0.24
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 285,
-              "win_rate_pct": 49.8,
-              "expectancy_r": 0.868
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 61,
-              "win_rate_pct": 45.9,
-              "expectancy_r": 0.988
-            },
-            "TRENDING_BEARISH": {
-              "setups": 150,
-              "win_rate_pct": 48.7,
-              "expectancy_r": 0.665
-            },
-            "TRENDING_BULLISH": {
-              "setups": 108,
-              "win_rate_pct": 39.8,
-              "expectancy_r": 0.739
-            }
+            "entry_score_threshold": 0.32,
+            "validation_screen_score_atr": 1.694
           }
         },
         "recommended_sessions": [
           "LONDON_SESSION",
-          "ASIAN_SESSION",
-          "LONDON_NY_OVERLAP"
+          "LONDON_NY_OVERLAP",
+          "ASIAN_SESSION"
         ],
         "recommended_adaptive_sessions": [
           "LONDON_TREND_EXPANSION",
           "LONDON_OPEN_JUDAS_SWEEP",
-          "ASIAN_RANGE_ACCUMULATION"
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
         ],
         "recommended_regimes": [
-          "VOLATILITY_EXPANSION",
-          "CONSOLIDATION_RANGING",
-          "TRENDING_BULLISH"
+          "TRENDING_BEARISH",
+          "TRENDING_BULLISH",
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 604,
-          "p70_winning_mae_atr": 0.947,
-          "p65_mfe_atr": 3.0,
-          "p80_mfe_atr": 4.475,
-          "learned_optimal_stop_atr_mult": 1.061,
-          "learned_optimal_tp_atr_mult": 3.15,
-          "learned_risk_reward_ratio": 2.97,
+          "sample_setups_60pct_dev": 64,
+          "p70_winning_mae_atr": 0.926,
+          "p65_mfe_atr": 3.744,
+          "p80_mfe_atr": 5.277,
+          "learned_optimal_stop_atr_mult": 1.05,
+          "learned_optimal_tp_atr_mult": 3.931,
+          "learned_risk_reward_ratio": 3.74,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
@@ -725,9 +611,9 @@
         },
         "instrument_physics": {
           "symbol": "EURUSD",
-          "avg_wick_to_body_ratio": 4.004,
+          "avg_wick_to_body_ratio": 4.002,
           "learned_sweep_wick_ratio_threshold": 0.45,
-          "learned_fvg_body_atr_threshold": 0.553,
+          "learned_fvg_body_atr_threshold": 0.554,
           "trend_persistence_score": 0.276,
           "mean_reversion_propensity": 0.724,
           "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -743,16 +629,16 @@
           "symbol": "EURUSD",
           "trader_style": "SCALPING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 0.21,
-          "efficiency_drift_pct": -0.2,
+          "volatility_drift_pct": 0.09,
+          "efficiency_drift_pct": -0.56,
           "recommendation": "Market regime physics for EURUSD (SCALPING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 2.17,
-          "mc95_worst_case_drawdown_pct": 3.47,
-          "mc99_extreme_drawdown_pct": 4.3,
-          "mc95_max_consecutive_losses": 7,
+          "mc50_median_drawdown_pct": 1.23,
+          "mc95_worst_case_drawdown_pct": 2.29,
+          "mc99_extreme_drawdown_pct": 2.43,
+          "mc95_max_consecutive_losses": 5,
           "passed_mc95_gate": true
         }
       },
@@ -771,108 +657,90 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-eurusd-day_trading",
+          "atlas_report_id": "atlas-hyp-eurusd-day_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (DAY_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: D1 (w=+0.244), H4 (w=+0.244), M15 (w=+0.244). Forge learned feature predictive weights: ema_trend (w=+0.253), bos_breakout (w=+0.253), rsi_momentum (w=+0.240).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (DAY_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.244), H4 (w=+0.244), M15 (w=+0.244), while empirical feature ablation ranks ema_trend (w=+0.253), bos_breakout (w=+0.253), rsi_momentum (w=+0.240) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "D1",
+            "H4",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "ema_trend",
+            "bos_breakout",
+            "rsi_momentum"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.244,
+            "H4": 0.244,
+            "H1": 0.143,
+            "M30": 0.123,
+            "M15": 0.244
+          },
+          "feature_weights": {
+            "ema_trend": 0.253,
+            "bos_breakout": 0.253,
+            "liquidity_sweep": 0.04,
+            "fvg_impulse": 0.175,
+            "dealing_range_reversion": 0.04,
+            "rsi_momentum": 0.24
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              30.6,
+              62.37
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              29.09,
+              64.69
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.426x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 1.25x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 12,
-              "win_rate_pct": 33.3,
-              "expectancy_r": 0.504
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 14,
-              "win_rate_pct": 57.1,
-              "expectancy_r": 1.861
-            },
-            "LONDON_SESSION": {
-              "setups": 9,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 2.159
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 9,
-              "win_rate_pct": 22.2,
-              "expectancy_r": -0.054
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 38,
-              "win_rate_pct": 44.7,
-              "expectancy_r": 1.077
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 4,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 1.385
-            },
-            "TRENDING_BEARISH": {
-              "setups": 2,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 2.292
-            }
+            "entry_score_threshold": 0.5,
+            "validation_screen_score_atr": -0.245
           }
         },
         "recommended_sessions": [
           "LONDON_SESSION",
-          "LONDON_NY_OVERLAP",
-          "ASIAN_SESSION"
+          "ASIAN_SESSION",
+          "LONDON_NY_OVERLAP"
         ],
         "recommended_adaptive_sessions": [
           "LONDON_OPEN_JUDAS_SWEEP",
-          "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-          "ASIAN_RANGE_ACCUMULATION"
+          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_TREND_EXPANSION"
         ],
         "recommended_regimes": [
           "TRENDING_BEARISH",
-          "VOLATILITY_EXPANSION",
-          "CONSOLIDATION_RANGING"
+          "CONSOLIDATION_RANGING",
+          "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 44,
-          "p70_winning_mae_atr": 1.273,
-          "p65_mfe_atr": 4.009,
-          "p80_mfe_atr": 7.096,
-          "learned_optimal_stop_atr_mult": 1.426,
-          "learned_optimal_tp_atr_mult": 4.21,
-          "learned_risk_reward_ratio": 2.95,
+          "sample_setups_60pct_dev": 97,
+          "p70_winning_mae_atr": 1.212,
+          "p65_mfe_atr": 5.271,
+          "p80_mfe_atr": 6.523,
+          "learned_optimal_stop_atr_mult": 1.358,
+          "learned_optimal_tp_atr_mult": 4.8,
+          "learned_risk_reward_ratio": 3.53,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 1.25
+          "learned_trail_atr_mult": 1.2
         },
         "instrument_physics": {
           "symbol": "EURUSD",
-          "avg_wick_to_body_ratio": 4.004,
+          "avg_wick_to_body_ratio": 4.002,
           "learned_sweep_wick_ratio_threshold": 0.45,
-          "learned_fvg_body_atr_threshold": 0.553,
+          "learned_fvg_body_atr_threshold": 0.554,
           "trend_persistence_score": 0.276,
           "mean_reversion_propensity": 0.724,
           "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -888,16 +756,16 @@
           "symbol": "EURUSD",
           "trader_style": "DAY_TRADING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 7.13,
-          "efficiency_drift_pct": 6.98,
+          "volatility_drift_pct": 7.1,
+          "efficiency_drift_pct": 7.3,
           "recommendation": "Market regime physics for EURUSD (DAY_TRADING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.51,
-          "mc95_worst_case_drawdown_pct": 2.44,
-          "mc99_extreme_drawdown_pct": 2.67,
-          "mc95_max_consecutive_losses": 4,
+          "mc50_median_drawdown_pct": 1.0,
+          "mc95_worst_case_drawdown_pct": 1.56,
+          "mc99_extreme_drawdown_pct": 1.99,
+          "mc95_max_consecutive_losses": 3,
           "passed_mc95_gate": true
         }
       },
@@ -915,112 +783,88 @@
           ],
           "trigger_timeframe": "H1"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "W1",
-              "D1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-eurusd-swing_trading",
+          "atlas_report_id": "atlas-hyp-eurusd-swing_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Forge learned feature predictive weights: rsi_momentum (w=+0.337), ema_trend (w=+0.256), dealing_range_reversion (w=+0.133).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250), while empirical feature ablation ranks rsi_momentum (w=+0.337), ema_trend (w=+0.256), dealing_range_reversion (w=+0.133) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "W1",
+            "D1",
+            "H4"
+          ],
+          "dominant_features_discovered": [
+            "rsi_momentum",
+            "ema_trend",
+            "dealing_range_reversion"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "W1": 0.25,
+            "D1": 0.25,
+            "H4": 0.25,
+            "H1": 0.25
+          },
+          "feature_weights": {
+            "ema_trend": 0.256,
+            "bos_breakout": 0.118,
+            "liquidity_sweep": 0.078,
+            "fvg_impulse": 0.078,
+            "dealing_range_reversion": 0.133,
+            "rsi_momentum": 0.337
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.75,
+            "macro_dealing_range_short_min": 0.25,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              27.22,
+              60.72
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
-              "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H4"
+            "rsi_short_band": [
+              39.13,
+              59.78
             ],
-            "rules": [
-              "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "H1",
-            "rules": [
-              "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.243x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 1.09x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "NEW_YORK_SESSION": {
-              "setups": 14,
-              "win_rate_pct": 57.1,
-              "expectancy_r": 1.756
-            },
-            "ASIAN_SESSION": {
-              "setups": 15,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 2.346
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 7,
-              "win_rate_pct": 42.9,
-              "expectancy_r": 0.887
-            },
-            "LONDON_SESSION": {
-              "setups": 11,
-              "win_rate_pct": 45.5,
-              "expectancy_r": 1.254
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 37,
-              "win_rate_pct": 56.8,
-              "expectancy_r": 1.663
-            },
-            "TRENDING_BULLISH": {
-              "setups": 5,
-              "win_rate_pct": 40.0,
-              "expectancy_r": 0.872
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 1,
-              "win_rate_pct": 0.0,
-              "expectancy_r": -0.85
-            },
-            "TRENDING_BEARISH": {
-              "setups": 4,
-              "win_rate_pct": 75.0,
-              "expectancy_r": 3.681
-            }
+            "entry_score_threshold": 0.5,
+            "validation_screen_score_atr": 7.317
           }
         },
         "recommended_sessions": [
-          "ASIAN_SESSION",
-          "NEW_YORK_SESSION",
-          "LONDON_SESSION"
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
         ],
         "recommended_adaptive_sessions": [
-          "ASIAN_RANGE_ACCUMULATION",
-          "LONDON_OPEN_JUDAS_SWEEP",
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE",
           "NY_AFTERNOON_REBALANCING"
         ],
         "recommended_regimes": [
           "TRENDING_BEARISH",
-          "CONSOLIDATION_RANGING",
-          "TRENDING_BULLISH"
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 47,
-          "p70_winning_mae_atr": 1.11,
-          "p65_mfe_atr": 5.125,
-          "p80_mfe_atr": 7.4,
-          "learned_optimal_stop_atr_mult": 1.243,
-          "learned_optimal_tp_atr_mult": 4.8,
-          "learned_risk_reward_ratio": 3.86,
+          "sample_setups_60pct_dev": 48,
+          "p70_winning_mae_atr": 1.146,
+          "p65_mfe_atr": 3.417,
+          "p80_mfe_atr": 6.898,
+          "learned_optimal_stop_atr_mult": 1.284,
+          "learned_optimal_tp_atr_mult": 3.587,
+          "learned_risk_reward_ratio": 2.79,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 1.09
+          "learned_trail_atr_mult": 1.13
         },
         "instrument_physics": {
           "symbol": "EURUSD",
-          "avg_wick_to_body_ratio": 4.004,
+          "avg_wick_to_body_ratio": 4.002,
           "learned_sweep_wick_ratio_threshold": 0.45,
-          "learned_fvg_body_atr_threshold": 0.553,
+          "learned_fvg_body_atr_threshold": 0.554,
           "trend_persistence_score": 0.276,
           "mean_reversion_propensity": 0.724,
           "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -1036,16 +880,16 @@
           "symbol": "EURUSD",
           "trader_style": "SWING_TRADING",
           "drift_status": "MODERATE_DRIFT",
-          "volatility_drift_pct": 27.85,
-          "efficiency_drift_pct": 19.54,
+          "volatility_drift_pct": 27.87,
+          "efficiency_drift_pct": 19.53,
           "recommendation": "Moderate regime shift detected (27.9% volatility delta). Dynamic ATR stops automatically compensate."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 0.96,
-          "mc95_worst_case_drawdown_pct": 1.44,
-          "mc99_extreme_drawdown_pct": 1.54,
-          "mc95_max_consecutive_losses": 2,
+          "mc50_median_drawdown_pct": 1.02,
+          "mc95_worst_case_drawdown_pct": 1.54,
+          "mc99_extreme_drawdown_pct": 1.56,
+          "mc95_max_consecutive_losses": 3,
           "passed_mc95_gate": true
         }
       },
@@ -1064,84 +908,66 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-eurusd-range_specialist",
+          "atlas_report_id": "atlas-hyp-eurusd-range_specialist",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.002, trend_persistence=0.276, mean_reversion=0.724. Forge 60%-development learned timeframe weights: D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245). Forge learned feature predictive weights: ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.002, mean-reversion=0.724). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.245), H4 (w=+0.245), M15 (w=+0.245), while empirical feature ablation ranks ema_trend (w=+0.188), bos_breakout (w=+0.188), rsi_momentum (w=+0.174) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "D1",
+            "H4",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "ema_trend",
+            "bos_breakout",
+            "rsi_momentum"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.245,
+            "H4": 0.245,
+            "H1": 0.112,
+            "M30": 0.153,
+            "M15": 0.245
+          },
+          "feature_weights": {
+            "ema_trend": 0.188,
+            "bos_breakout": 0.188,
+            "liquidity_sweep": 0.146,
+            "fvg_impulse": 0.133,
+            "dealing_range_reversion": 0.171,
+            "rsi_momentum": 0.174
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              31.58,
+              62.37
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              28.47,
+              64.44
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "LONDON_SESSION": {
-              "setups": 4,
-              "win_rate_pct": 25.0,
-              "expectancy_r": 0.062
-            },
-            "ASIAN_SESSION": {
-              "setups": 2,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.671
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 2,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.227
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 4,
-              "win_rate_pct": 100.0,
-              "expectancy_r": 2.181
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "TRENDING_BULLISH": {
-              "setups": 3,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 1.76
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 7,
-              "win_rate_pct": 57.1,
-              "expectancy_r": 0.719
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 2,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.227
-            }
+            "entry_score_threshold": 0.26,
+            "validation_screen_score_atr": 0.092
           }
         },
         "recommended_sessions": [
-          "NEW_YORK_SESSION",
           "ASIAN_SESSION",
+          "NEW_YORK_SESSION",
           "LONDON_NY_OVERLAP"
         ],
         "recommended_adaptive_sessions": [
-          "NY_AFTERNOON_REBALANCING",
-          "LONDON_OPEN_JUDAS_SWEEP",
-          "ASIAN_RANGE_ACCUMULATION"
+          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_TREND_EXPANSION",
+          "NY_AFTERNOON_REBALANCING"
         ],
         "recommended_regimes": [
           "TRENDING_BULLISH",
@@ -1149,23 +975,23 @@
           "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 12,
-          "p70_winning_mae_atr": 0.38,
-          "p65_mfe_atr": 3.576,
-          "p80_mfe_atr": 4.47,
-          "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 3.755,
-          "learned_risk_reward_ratio": 3.58,
-          "learned_be_trigger_r": 1.15,
-          "learned_tp1_r": 1.67,
-          "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 0.95
+          "sample_setups_60pct_dev": 323,
+          "p70_winning_mae_atr": 1.148,
+          "p65_mfe_atr": 2.503,
+          "p80_mfe_atr": 3.616,
+          "learned_optimal_stop_atr_mult": 1.286,
+          "learned_optimal_tp_atr_mult": 2.628,
+          "learned_risk_reward_ratio": 2.04,
+          "learned_be_trigger_r": 0.88,
+          "learned_tp1_r": 1.28,
+          "learned_tp2_r": 2.81,
+          "learned_trail_atr_mult": 1.13
         },
         "instrument_physics": {
           "symbol": "EURUSD",
-          "avg_wick_to_body_ratio": 4.004,
+          "avg_wick_to_body_ratio": 4.002,
           "learned_sweep_wick_ratio_threshold": 0.45,
-          "learned_fvg_body_atr_threshold": 0.553,
+          "learned_fvg_body_atr_threshold": 0.554,
           "trend_persistence_score": 0.276,
           "mean_reversion_propensity": 0.724,
           "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -1181,16 +1007,16 @@
           "symbol": "EURUSD",
           "trader_style": "RANGE_SPECIALIST",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 7.13,
-          "efficiency_drift_pct": 6.98,
+          "volatility_drift_pct": 7.1,
+          "efficiency_drift_pct": 7.3,
           "recommendation": "Market regime physics for EURUSD (RANGE_SPECIALIST) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 0.56,
-          "mc95_worst_case_drawdown_pct": 1.09,
-          "mc99_extreme_drawdown_pct": 1.12,
-          "mc95_max_consecutive_losses": 3,
+          "mc50_median_drawdown_pct": 4.31,
+          "mc95_worst_case_drawdown_pct": 6.52,
+          "mc99_extreme_drawdown_pct": 7.67,
+          "mc95_max_consecutive_losses": 9,
           "passed_mc95_gate": true
         }
       }
@@ -1211,89 +1037,66 @@
           ],
           "trigger_timeframe": "M5"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "H4",
-              "H1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-usdjpy-scalping",
+          "atlas_report_id": "atlas-hyp-usdjpy-scalping",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.223), M5 (w=+0.213), H1 (w=+0.206). Forge learned feature predictive weights: dealing_range_reversion (w=+0.273), liquidity_sweep (w=+0.200), ema_trend (w=+0.132).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.223), M5 (w=+0.213), H1 (w=+0.206), while empirical feature ablation ranks dealing_range_reversion (w=+0.273), liquidity_sweep (w=+0.200), ema_trend (w=+0.132) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "H4",
+            "M5",
+            "H1"
+          ],
+          "dominant_features_discovered": [
+            "dealing_range_reversion",
+            "liquidity_sweep",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "H4": 0.223,
+            "H1": 0.206,
+            "M30": 0.173,
+            "M15": 0.184,
+            "M5": 0.213
+          },
+          "feature_weights": {
+            "ema_trend": 0.132,
+            "bos_breakout": 0.132,
+            "liquidity_sweep": 0.2,
+            "fvg_impulse": 0.132,
+            "dealing_range_reversion": 0.273,
+            "rsi_momentum": 0.132
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.87,
+            "macro_dealing_range_short_min": 0.13,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              34.46,
+              60.2
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across H4, H1.",
-              "Compute Macro Dealing Range position from H4, H1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "M30",
-              "M15"
+            "rsi_short_band": [
+              39.11,
+              65.52
             ],
-            "rules": [
-              "Require M30, M15 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing M30, M15 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M5",
-            "rules": [
-              "Execute on M5 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M5 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +0.92R, bank 50% TP1 at +1.33R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +2.83R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 212,
-              "win_rate_pct": 48.6,
-              "expectancy_r": 0.58
-            },
-            "LONDON_SESSION": {
-              "setups": 160,
-              "win_rate_pct": 70.0,
-              "expectancy_r": 0.804
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 63,
-              "win_rate_pct": 44.4,
-              "expectancy_r": 0.448
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 105,
-              "win_rate_pct": 42.9,
-              "expectancy_r": 0.024
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "VOLATILITY_EXPANSION": {
-              "setups": 38,
-              "win_rate_pct": 63.2,
-              "expectancy_r": 1.115
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 285,
-              "win_rate_pct": 50.9,
-              "expectancy_r": 0.426
-            },
-            "TRENDING_BEARISH": {
-              "setups": 114,
-              "win_rate_pct": 64.9,
-              "expectancy_r": 1.004
-            },
-            "TRENDING_BULLISH": {
-              "setups": 103,
-              "win_rate_pct": 43.7,
-              "expectancy_r": 0.04
-            }
+            "entry_score_threshold": 0.44,
+            "validation_screen_score_atr": 0.257
           }
         },
         "recommended_sessions": [
-          "LONDON_SESSION",
           "ASIAN_SESSION",
-          "LONDON_NY_OVERLAP"
+          "NEW_YORK_SESSION",
+          "LONDON_SESSION"
         ],
         "recommended_adaptive_sessions": [
+          "ASIAN_RANGE_ACCUMULATION",
           "LONDON_OPEN_JUDAS_SWEEP",
-          "LONDON_TREND_EXPANSION",
-          "ASIAN_RANGE_ACCUMULATION"
+          "NY_AFTERNOON_REBALANCING"
         ],
         "recommended_regimes": [
           "VOLATILITY_EXPANSION",
@@ -1301,21 +1104,21 @@
           "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 540,
-          "p70_winning_mae_atr": 0.868,
-          "p65_mfe_atr": 2.153,
-          "p80_mfe_atr": 2.971,
-          "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 2.261,
-          "learned_risk_reward_ratio": 2.15,
-          "learned_be_trigger_r": 0.92,
-          "learned_tp1_r": 1.33,
-          "learned_tp2_r": 2.83,
-          "learned_trail_atr_mult": 0.95
+          "sample_setups_60pct_dev": 86,
+          "p70_winning_mae_atr": 1.106,
+          "p65_mfe_atr": 2.764,
+          "p80_mfe_atr": 3.808,
+          "learned_optimal_stop_atr_mult": 1.239,
+          "learned_optimal_tp_atr_mult": 2.902,
+          "learned_risk_reward_ratio": 2.34,
+          "learned_be_trigger_r": 1.0,
+          "learned_tp1_r": 1.45,
+          "learned_tp2_r": 3.07,
+          "learned_trail_atr_mult": 1.09
         },
         "instrument_physics": {
           "symbol": "USDJPY",
-          "avg_wick_to_body_ratio": 3.468,
+          "avg_wick_to_body_ratio": 3.472,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.459,
           "trend_persistence_score": 0.265,
@@ -1333,16 +1136,16 @@
           "symbol": "USDJPY",
           "trader_style": "SCALPING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": -0.97,
-          "efficiency_drift_pct": -0.48,
+          "volatility_drift_pct": -0.98,
+          "efficiency_drift_pct": -0.31,
           "recommendation": "Market regime physics for USDJPY (SCALPING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 3.41,
-          "mc95_worst_case_drawdown_pct": 5.01,
-          "mc99_extreme_drawdown_pct": 5.97,
-          "mc95_max_consecutive_losses": 8,
+          "mc50_median_drawdown_pct": 0.94,
+          "mc95_worst_case_drawdown_pct": 1.39,
+          "mc99_extreme_drawdown_pct": 1.4,
+          "mc95_max_consecutive_losses": 4,
           "passed_mc95_gate": true
         }
       },
@@ -1361,81 +1164,66 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-usdjpy-day_trading",
+          "atlas_report_id": "atlas-hyp-usdjpy-day_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (DAY_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H1 (w=+0.258), M30 (w=+0.257), M15 (w=+0.179). Forge learned feature predictive weights: liquidity_sweep (w=+0.217), ema_trend (w=+0.157), bos_breakout (w=+0.157).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (DAY_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H1 (w=+0.258), M30 (w=+0.257), M15 (w=+0.179), while empirical feature ablation ranks liquidity_sweep (w=+0.217), ema_trend (w=+0.157), bos_breakout (w=+0.157) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "H1",
+            "M30",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "ema_trend",
+            "bos_breakout"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.143,
+            "H4": 0.163,
+            "H1": 0.258,
+            "M30": 0.257,
+            "M15": 0.179
+          },
+          "feature_weights": {
+            "ema_trend": 0.157,
+            "bos_breakout": 0.157,
+            "liquidity_sweep": 0.217,
+            "fvg_impulse": 0.157,
+            "dealing_range_reversion": 0.157,
+            "rsi_momentum": 0.157
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.82,
+            "macro_dealing_range_short_min": 0.18,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              36.85,
+              64.76
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              40.05,
+              64.96
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +0.84R, bank 50% TP1 at +1.22R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.32R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "NEW_YORK_SESSION": {
-              "setups": 14,
-              "win_rate_pct": 14.3,
-              "expectancy_r": -0.21
-            },
-            "LONDON_SESSION": {
-              "setups": 10,
-              "win_rate_pct": 90.0,
-              "expectancy_r": 1.282
-            },
-            "ASIAN_SESSION": {
-              "setups": 8,
-              "win_rate_pct": 25.0,
-              "expectancy_r": -0.3
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 4,
-              "win_rate_pct": 0.0,
-              "expectancy_r": -0.85
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "TRENDING_BULLISH": {
-              "setups": 6,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.637
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 27,
-              "win_rate_pct": 29.6,
-              "expectancy_r": -0.122
-            },
-            "TRENDING_BEARISH": {
-              "setups": 3,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 1.179
-            }
+            "entry_score_threshold": 0.32,
+            "validation_screen_score_atr": 0.792
           }
         },
         "recommended_sessions": [
-          "LONDON_SESSION"
+          "LONDON_SESSION",
+          "ASIAN_SESSION",
+          "LONDON_NY_OVERLAP"
         ],
         "recommended_adaptive_sessions": [
           "LONDON_OPEN_JUDAS_SWEEP",
-          "LONDON_TREND_EXPANSION"
+          "LONDON_TREND_EXPANSION",
+          "ASIAN_RANGE_ACCUMULATION"
         ],
         "recommended_regimes": [
           "TRENDING_BEARISH",
@@ -1443,21 +1231,21 @@
           "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 36,
-          "p70_winning_mae_atr": 0.841,
-          "p65_mfe_atr": 1.955,
-          "p80_mfe_atr": 3.489,
+          "sample_setups_60pct_dev": 68,
+          "p70_winning_mae_atr": 0.728,
+          "p65_mfe_atr": 2.534,
+          "p80_mfe_atr": 3.349,
           "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 2.052,
-          "learned_risk_reward_ratio": 1.95,
-          "learned_be_trigger_r": 0.84,
-          "learned_tp1_r": 1.22,
-          "learned_tp2_r": 3.32,
+          "learned_optimal_tp_atr_mult": 2.661,
+          "learned_risk_reward_ratio": 2.53,
+          "learned_be_trigger_r": 1.09,
+          "learned_tp1_r": 1.58,
+          "learned_tp2_r": 3.19,
           "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "USDJPY",
-          "avg_wick_to_body_ratio": 3.468,
+          "avg_wick_to_body_ratio": 3.472,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.459,
           "trend_persistence_score": 0.265,
@@ -1475,16 +1263,16 @@
           "symbol": "USDJPY",
           "trader_style": "DAY_TRADING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 0.68,
-          "efficiency_drift_pct": 9.51,
+          "volatility_drift_pct": 0.64,
+          "efficiency_drift_pct": 9.66,
           "recommendation": "Market regime physics for USDJPY (DAY_TRADING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 0.91,
-          "mc95_worst_case_drawdown_pct": 1.24,
-          "mc99_extreme_drawdown_pct": 1.24,
-          "mc95_max_consecutive_losses": 2,
+          "mc50_median_drawdown_pct": 2.05,
+          "mc95_worst_case_drawdown_pct": 3.31,
+          "mc99_extreme_drawdown_pct": 4.09,
+          "mc95_max_consecutive_losses": 6,
           "passed_mc95_gate": true
         }
       },
@@ -1502,110 +1290,87 @@
           ],
           "trigger_timeframe": "H1"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "W1",
-              "D1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-usdjpy-swing_trading",
+          "atlas_report_id": "atlas-hyp-usdjpy-swing_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248). Forge learned feature predictive weights: liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248), while empirical feature ablation ranks liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "W1",
+            "H1",
+            "H4"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "fvg_impulse",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "W1": 0.28,
+            "D1": 0.192,
+            "H4": 0.248,
+            "H1": 0.28
+          },
+          "feature_weights": {
+            "ema_trend": 0.218,
+            "bos_breakout": 0.042,
+            "liquidity_sweep": 0.271,
+            "fvg_impulse": 0.246,
+            "dealing_range_reversion": 0.048,
+            "rsi_momentum": 0.175
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              40.11,
+              62.63
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
-              "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H4"
+            "rsi_short_band": [
+              29.09,
+              67.73
             ],
-            "rules": [
-              "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "H1",
-            "rules": [
-              "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.67x ATR; activate Break-Even at +0.78R, bank 50% TP1 at +1.13R, and trail remaining 50% runner with 1.47x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 17,
-              "win_rate_pct": 52.9,
-              "expectancy_r": 2.124
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 5,
-              "win_rate_pct": 20.0,
-              "expectancy_r": -0.311
-            },
-            "LONDON_SESSION": {
-              "setups": 12,
-              "win_rate_pct": 41.7,
-              "expectancy_r": 1.309
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 7,
-              "win_rate_pct": 71.4,
-              "expectancy_r": 3.096
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 25,
-              "win_rate_pct": 52.0,
-              "expectancy_r": 1.172
-            },
-            "TRENDING_BULLISH": {
-              "setups": 6,
-              "win_rate_pct": 33.3,
-              "expectancy_r": 0.953
-            },
-            "TRENDING_BEARISH": {
-              "setups": 6,
-              "win_rate_pct": 33.3,
-              "expectancy_r": 0.999
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 4,
-              "win_rate_pct": 75.0,
-              "expectancy_r": 7.732
-            }
+            "entry_score_threshold": 0.32,
+            "validation_screen_score_atr": 0.962
           }
         },
         "recommended_sessions": [
-          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION",
           "ASIAN_SESSION",
           "LONDON_SESSION"
         ],
         "recommended_adaptive_sessions": [
-          "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-          "LONDON_TREND_EXPANSION",
-          "ASIAN_RANGE_ACCUMULATION"
+          "NY_AFTERNOON_REBALANCING",
+          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_OPEN_JUDAS_SWEEP"
         ],
         "recommended_regimes": [
+          "TRENDING_BEARISH",
           "VOLATILITY_EXPANSION",
-          "CONSOLIDATION_RANGING",
-          "TRENDING_BEARISH"
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 41,
-          "p70_winning_mae_atr": 1.491,
-          "p65_mfe_atr": 2.903,
-          "p80_mfe_atr": 6.806,
-          "learned_optimal_stop_atr_mult": 1.67,
-          "learned_optimal_tp_atr_mult": 3.048,
-          "learned_risk_reward_ratio": 1.83,
-          "learned_be_trigger_r": 0.78,
-          "learned_tp1_r": 1.13,
+          "sample_setups_60pct_dev": 46,
+          "p70_winning_mae_atr": 0.672,
+          "p65_mfe_atr": 7.322,
+          "p80_mfe_atr": 13.979,
+          "learned_optimal_stop_atr_mult": 1.05,
+          "learned_optimal_tp_atr_mult": 4.8,
+          "learned_risk_reward_ratio": 4.57,
+          "learned_be_trigger_r": 1.15,
+          "learned_tp1_r": 1.67,
           "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 1.47
+          "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "USDJPY",
-          "avg_wick_to_body_ratio": 3.468,
+          "avg_wick_to_body_ratio": 3.472,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.459,
           "trend_persistence_score": 0.265,
@@ -1623,16 +1388,16 @@
           "symbol": "USDJPY",
           "trader_style": "SWING_TRADING",
           "drift_status": "MODERATE_DRIFT",
-          "volatility_drift_pct": -13.15,
-          "efficiency_drift_pct": -22.37,
-          "recommendation": "Moderate regime shift detected (-13.2% volatility delta). Dynamic ATR stops automatically compensate."
+          "volatility_drift_pct": -13.14,
+          "efficiency_drift_pct": -22.22,
+          "recommendation": "Moderate regime shift detected (-13.1% volatility delta). Dynamic ATR stops automatically compensate."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 3.09,
-          "mc95_worst_case_drawdown_pct": 3.97,
-          "mc99_extreme_drawdown_pct": 4.3,
-          "mc95_max_consecutive_losses": 7,
+          "mc50_median_drawdown_pct": 3.74,
+          "mc95_worst_case_drawdown_pct": 5.12,
+          "mc99_extreme_drawdown_pct": 5.84,
+          "mc95_max_consecutive_losses": 9,
           "passed_mc95_gate": true
         }
       },
@@ -1651,78 +1416,55 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-usdjpy-range_specialist",
+          "atlas_report_id": "atlas-hyp-usdjpy-range_specialist",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: M30 (w=+0.260), H1 (w=+0.255), M15 (w=+0.184). Forge learned feature predictive weights: liquidity_sweep (w=+0.370), dealing_range_reversion (w=+0.180), ema_trend (w=+0.112).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M30 (w=+0.260), H1 (w=+0.255), M15 (w=+0.184), while empirical feature ablation ranks liquidity_sweep (w=+0.370), dealing_range_reversion (w=+0.180), ema_trend (w=+0.112) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "M30",
+            "H1",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "dealing_range_reversion",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.147,
+            "H4": 0.154,
+            "H1": 0.255,
+            "M30": 0.26,
+            "M15": 0.184
+          },
+          "feature_weights": {
+            "ema_trend": 0.112,
+            "bos_breakout": 0.112,
+            "liquidity_sweep": 0.37,
+            "fvg_impulse": 0.112,
+            "dealing_range_reversion": 0.18,
+            "rsi_momentum": 0.112
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.81,
+            "macro_dealing_range_short_min": 0.19,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              36.85,
+              64.53
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              40.0,
+              64.77
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.63R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "LONDON_SESSION": {
-              "setups": 16,
-              "win_rate_pct": 68.8,
-              "expectancy_r": 0.9
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 3,
-              "win_rate_pct": 0.0,
-              "expectancy_r": -0.85
-            },
-            "ASIAN_SESSION": {
-              "setups": 13,
-              "win_rate_pct": 61.5,
-              "expectancy_r": 0.797
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 6,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.648
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "TRENDING_BULLISH": {
-              "setups": 8,
-              "win_rate_pct": 87.5,
-              "expectancy_r": 1.431
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 12,
-              "win_rate_pct": 33.3,
-              "expectancy_r": -0.01
-            },
-            "TRENDING_BEARISH": {
-              "setups": 10,
-              "win_rate_pct": 80.0,
-              "expectancy_r": 1.311
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 8,
-              "win_rate_pct": 37.5,
-              "expectancy_r": 0.208
-            }
+            "entry_score_threshold": 0.26,
+            "validation_screen_score_atr": 0.204
           }
         },
         "recommended_sessions": [
@@ -1732,30 +1474,30 @@
         ],
         "recommended_adaptive_sessions": [
           "LONDON_TREND_EXPANSION",
-          "ASIAN_RANGE_ACCUMULATION",
-          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "ASIAN_RANGE_ACCUMULATION"
         ],
         "recommended_regimes": [
-          "TRENDING_BULLISH",
           "TRENDING_BEARISH",
+          "TRENDING_BULLISH",
           "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 38,
-          "p70_winning_mae_atr": 0.717,
-          "p65_mfe_atr": 2.785,
-          "p80_mfe_atr": 3.813,
-          "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 2.924,
-          "learned_risk_reward_ratio": 2.78,
-          "learned_be_trigger_r": 1.15,
-          "learned_tp1_r": 1.67,
-          "learned_tp2_r": 3.63,
-          "learned_trail_atr_mult": 0.95
+          "sample_setups_60pct_dev": 323,
+          "p70_winning_mae_atr": 0.976,
+          "p65_mfe_atr": 2.44,
+          "p80_mfe_atr": 3.406,
+          "learned_optimal_stop_atr_mult": 1.094,
+          "learned_optimal_tp_atr_mult": 2.562,
+          "learned_risk_reward_ratio": 2.34,
+          "learned_be_trigger_r": 1.0,
+          "learned_tp1_r": 1.45,
+          "learned_tp2_r": 3.11,
+          "learned_trail_atr_mult": 0.96
         },
         "instrument_physics": {
           "symbol": "USDJPY",
-          "avg_wick_to_body_ratio": 3.468,
+          "avg_wick_to_body_ratio": 3.472,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.459,
           "trend_persistence_score": 0.265,
@@ -1773,16 +1515,16 @@
           "symbol": "USDJPY",
           "trader_style": "RANGE_SPECIALIST",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 0.68,
-          "efficiency_drift_pct": 9.51,
+          "volatility_drift_pct": 0.64,
+          "efficiency_drift_pct": 9.66,
           "recommendation": "Market regime physics for USDJPY (RANGE_SPECIALIST) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.46,
-          "mc95_worst_case_drawdown_pct": 2.45,
-          "mc99_extreme_drawdown_pct": 2.99,
-          "mc95_max_consecutive_losses": 4,
+          "mc50_median_drawdown_pct": 6.34,
+          "mc95_worst_case_drawdown_pct": 7.99,
+          "mc99_extreme_drawdown_pct": 8.8,
+          "mc95_max_consecutive_losses": 10,
           "passed_mc95_gate": true
         }
       }
@@ -1803,111 +1545,88 @@
           ],
           "trigger_timeframe": "M5"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "H4",
-              "H1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-xauusd-scalping",
+          "atlas_report_id": "atlas-hyp-xauusd-scalping",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for XAUUSD (SCALPING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.994, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: M5 (w=+0.334), M30 (w=+0.211), M15 (w=+0.192). Forge learned feature predictive weights: dealing_range_reversion (w=+0.293), liquidity_sweep (w=+0.258), ema_trend (w=+0.112).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for XAUUSD (SCALPING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.994, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to M5 (w=+0.334), M30 (w=+0.211), M15 (w=+0.192), while empirical feature ablation ranks dealing_range_reversion (w=+0.293), liquidity_sweep (w=+0.258), ema_trend (w=+0.112) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "M5",
+            "M30",
+            "M15"
+          ],
+          "dominant_features_discovered": [
+            "dealing_range_reversion",
+            "liquidity_sweep",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "H4": 0.137,
+            "H1": 0.126,
+            "M30": 0.211,
+            "M15": 0.192,
+            "M5": 0.334
+          },
+          "feature_weights": {
+            "ema_trend": 0.112,
+            "bos_breakout": 0.112,
+            "liquidity_sweep": 0.258,
+            "fvg_impulse": 0.112,
+            "dealing_range_reversion": 0.293,
+            "rsi_momentum": 0.112
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.76,
+            "macro_dealing_range_short_min": 0.24,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              33.19,
+              62.82
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across H4, H1.",
-              "Compute Macro Dealing Range position from H4, H1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "M30",
-              "M15"
+            "rsi_short_band": [
+              38.59,
+              62.79
             ],
-            "rules": [
-              "Require M30, M15 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing M30, M15 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M5",
-            "rules": [
-              "Execute on M5 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.478x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M5 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.11R, bank 50% TP1 at +1.61R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.3R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 145,
-              "win_rate_pct": 52.4,
-              "expectancy_r": 0.448
-            },
-            "LONDON_SESSION": {
-              "setups": 132,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.619
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 84,
-              "win_rate_pct": 60.7,
-              "expectancy_r": 1.119
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 82,
-              "win_rate_pct": 42.7,
-              "expectancy_r": 0.104
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "VOLATILITY_EXPANSION": {
-              "setups": 38,
-              "win_rate_pct": 55.3,
-              "expectancy_r": 0.676
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 214,
-              "win_rate_pct": 50.9,
-              "expectancy_r": 0.523
-            },
-            "TRENDING_BEARISH": {
-              "setups": 135,
-              "win_rate_pct": 54.8,
-              "expectancy_r": 0.589
-            },
-            "TRENDING_BULLISH": {
-              "setups": 56,
-              "win_rate_pct": 42.9,
-              "expectancy_r": 0.571
-            }
+            "entry_score_threshold": 0.38,
+            "validation_screen_score_atr": 0.945
           }
         },
         "recommended_sessions": [
+          "ASIAN_SESSION",
           "LONDON_NY_OVERLAP",
-          "LONDON_SESSION",
-          "ASIAN_SESSION"
+          "LONDON_SESSION"
         ],
         "recommended_adaptive_sessions": [
+          "ASIAN_RANGE_ACCUMULATION",
           "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-          "LONDON_TREND_EXPANSION",
           "LONDON_OPEN_JUDAS_SWEEP"
         ],
         "recommended_regimes": [
-          "VOLATILITY_EXPANSION",
-          "TRENDING_BEARISH",
-          "TRENDING_BULLISH"
+          "CONSOLIDATION_RANGING",
+          "TRENDING_BULLISH",
+          "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 443,
-          "p70_winning_mae_atr": 0.924,
-          "p65_mfe_atr": 2.594,
-          "p80_mfe_atr": 3.467,
+          "sample_setups_60pct_dev": 98,
+          "p70_winning_mae_atr": 0.704,
+          "p65_mfe_atr": 3.165,
+          "p80_mfe_atr": 4.104,
           "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 2.724,
-          "learned_risk_reward_ratio": 2.59,
-          "learned_be_trigger_r": 1.11,
-          "learned_tp1_r": 1.61,
-          "learned_tp2_r": 3.3,
+          "learned_optimal_tp_atr_mult": 3.323,
+          "learned_risk_reward_ratio": 3.16,
+          "learned_be_trigger_r": 1.15,
+          "learned_tp1_r": 1.67,
+          "learned_tp2_r": 3.8,
           "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "XAUUSD",
-          "avg_wick_to_body_ratio": 2.993,
+          "avg_wick_to_body_ratio": 2.994,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.478,
           "trend_persistence_score": 0.265,
@@ -1925,16 +1644,16 @@
           "symbol": "XAUUSD",
           "trader_style": "SCALPING",
           "drift_status": "STABLE",
-          "volatility_drift_pct": 10.28,
-          "efficiency_drift_pct": 0.84,
+          "volatility_drift_pct": 10.14,
+          "efficiency_drift_pct": 0.87,
           "recommendation": "Market regime physics for XAUUSD (SCALPING) remain aligned with training baseline."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.43,
-          "mc95_worst_case_drawdown_pct": 2.34,
-          "mc99_extreme_drawdown_pct": 2.89,
-          "mc95_max_consecutive_losses": 6,
+          "mc50_median_drawdown_pct": 1.28,
+          "mc95_worst_case_drawdown_pct": 1.99,
+          "mc99_extreme_drawdown_pct": 2.53,
+          "mc95_max_consecutive_losses": 5,
           "passed_mc95_gate": true
         }
       },
@@ -1953,106 +1672,88 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-xauusd-day_trading",
+          "atlas_report_id": "atlas-hyp-xauusd-day_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for XAUUSD (DAY_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.994, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: D1 (w=+0.239), H4 (w=+0.207), M30 (w=+0.199). Forge learned feature predictive weights: ema_trend (w=+0.206), dealing_range_reversion (w=+0.172), bos_breakout (w=+0.155).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for XAUUSD (DAY_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.994, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.239), H4 (w=+0.207), M30 (w=+0.199), while empirical feature ablation ranks ema_trend (w=+0.206), dealing_range_reversion (w=+0.172), bos_breakout (w=+0.155) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "D1",
+            "H4",
+            "M30"
+          ],
+          "dominant_features_discovered": [
+            "ema_trend",
+            "dealing_range_reversion",
+            "bos_breakout"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.239,
+            "H4": 0.207,
+            "H1": 0.189,
+            "M30": 0.199,
+            "M15": 0.166
+          },
+          "feature_weights": {
+            "ema_trend": 0.206,
+            "bos_breakout": 0.155,
+            "liquidity_sweep": 0.155,
+            "fvg_impulse": 0.155,
+            "dealing_range_reversion": 0.172,
+            "rsi_momentum": 0.155
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.7,
+            "macro_dealing_range_short_min": 0.3,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              37.64,
+              60.9
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              37.79,
+              65.34
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.478x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.51R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "LONDON_NY_OVERLAP": {
-              "setups": 11,
-              "win_rate_pct": 45.5,
-              "expectancy_r": 0.38
-            },
-            "LONDON_SESSION": {
-              "setups": 14,
-              "win_rate_pct": 78.6,
-              "expectancy_r": 1.39
-            },
-            "ASIAN_SESSION": {
-              "setups": 18,
-              "win_rate_pct": 44.4,
-              "expectancy_r": 0.206
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 17,
-              "win_rate_pct": 58.8,
-              "expectancy_r": 0.59
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 55,
-              "win_rate_pct": 56.4,
-              "expectancy_r": 0.636
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 3,
-              "win_rate_pct": 33.3,
-              "expectancy_r": -0.055
-            },
-            "TRENDING_BEARISH": {
-              "setups": 2,
-              "win_rate_pct": 100.0,
-              "expectancy_r": 1.27
-            }
+            "entry_score_threshold": 0.26,
+            "validation_screen_score_atr": 3.014
           }
         },
         "recommended_sessions": [
+          "ASIAN_SESSION",
           "LONDON_SESSION",
-          "NEW_YORK_SESSION",
           "LONDON_NY_OVERLAP"
         ],
         "recommended_adaptive_sessions": [
           "LONDON_OPEN_JUDAS_SWEEP",
-          "NY_AFTERNOON_REBALANCING",
+          "ASIAN_RANGE_ACCUMULATION",
           "NY_OVERLAP_INSTITUTIONAL_DRIVE"
         ],
         "recommended_regimes": [
-          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION",
           "CONSOLIDATION_RANGING",
-          "VOLATILITY_EXPANSION"
+          "TRENDING_BEARISH"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 60,
-          "p70_winning_mae_atr": 0.912,
-          "p65_mfe_atr": 2.873,
-          "p80_mfe_atr": 3.688,
+          "sample_setups_60pct_dev": 70,
+          "p70_winning_mae_atr": 0.745,
+          "p65_mfe_atr": 3.027,
+          "p80_mfe_atr": 4.013,
           "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 3.017,
-          "learned_risk_reward_ratio": 2.87,
+          "learned_optimal_tp_atr_mult": 3.178,
+          "learned_risk_reward_ratio": 3.03,
           "learned_be_trigger_r": 1.15,
           "learned_tp1_r": 1.67,
-          "learned_tp2_r": 3.51,
+          "learned_tp2_r": 3.8,
           "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "XAUUSD",
-          "avg_wick_to_body_ratio": 2.993,
+          "avg_wick_to_body_ratio": 2.994,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.478,
           "trend_persistence_score": 0.265,
@@ -2070,16 +1771,16 @@
           "symbol": "XAUUSD",
           "trader_style": "DAY_TRADING",
           "drift_status": "MODERATE_DRIFT",
-          "volatility_drift_pct": 34.93,
-          "efficiency_drift_pct": 20.94,
+          "volatility_drift_pct": 34.88,
+          "efficiency_drift_pct": 21.2,
           "recommendation": "Moderate regime shift detected (34.9% volatility delta). Dynamic ATR stops automatically compensate."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 3.23,
-          "mc95_worst_case_drawdown_pct": 4.44,
-          "mc99_extreme_drawdown_pct": 4.99,
-          "mc95_max_consecutive_losses": 8,
+          "mc50_median_drawdown_pct": 1.59,
+          "mc95_worst_case_drawdown_pct": 2.41,
+          "mc99_extreme_drawdown_pct": 2.83,
+          "mc95_max_consecutive_losses": 5,
           "passed_mc95_gate": true
         }
       },
@@ -2097,110 +1798,87 @@
           ],
           "trigger_timeframe": "H1"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "W1",
-              "D1"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-xauusd-swing_trading",
+          "atlas_report_id": "atlas-hyp-xauusd-swing_trading",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for XAUUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.994, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: W1 (w=+0.311), H1 (w=+0.311), D1 (w=+0.222). Forge learned feature predictive weights: dealing_range_reversion (w=+0.409), liquidity_sweep (w=+0.160), ema_trend (w=+0.108).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for XAUUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.994, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.311), H1 (w=+0.311), D1 (w=+0.222), while empirical feature ablation ranks dealing_range_reversion (w=+0.409), liquidity_sweep (w=+0.160), ema_trend (w=+0.108) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "W1",
+            "H1",
+            "D1"
+          ],
+          "dominant_features_discovered": [
+            "dealing_range_reversion",
+            "liquidity_sweep",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "W1": 0.311,
+            "D1": 0.222,
+            "H4": 0.156,
+            "H1": 0.311
+          },
+          "feature_weights": {
+            "ema_trend": 0.108,
+            "bos_breakout": 0.108,
+            "liquidity_sweep": 0.16,
+            "fvg_impulse": 0.108,
+            "dealing_range_reversion": 0.409,
+            "rsi_momentum": 0.108
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.68,
+            "macro_dealing_range_short_min": 0.32,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              30.21,
+              63.12
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
-              "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H4"
+            "rsi_short_band": [
+              38.75,
+              61.49
             ],
-            "rules": [
-              "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "H1",
-            "rules": [
-              "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.478x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.555x ATR; activate Break-Even at +1.1R, bank 50% TP1 at +1.59R, and trail remaining 50% runner with 1.37x ATR Chandelier stop to +3.13R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 16,
-              "win_rate_pct": 75.0,
-              "expectancy_r": 1.79
-            },
-            "LONDON_SESSION": {
-              "setups": 18,
-              "win_rate_pct": 55.6,
-              "expectancy_r": 1.01
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 12,
-              "win_rate_pct": 33.3,
-              "expectancy_r": -0.018
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 6,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.565
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "TRENDING_BULLISH": {
-              "setups": 5,
-              "win_rate_pct": 40.0,
-              "expectancy_r": 0.828
-            },
-            "CONSOLIDATION_RANGING": {
-              "setups": 27,
-              "win_rate_pct": 59.3,
-              "expectancy_r": 1.111
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 5,
-              "win_rate_pct": 20.0,
-              "expectancy_r": -0.367
-            },
-            "TRENDING_BEARISH": {
-              "setups": 15,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 1.18
-            }
+            "entry_score_threshold": 0.34,
+            "validation_screen_score_atr": 0.0
           }
         },
         "recommended_sessions": [
-          "ASIAN_SESSION",
-          "LONDON_SESSION",
-          "NEW_YORK_SESSION"
+          "NEW_YORK_SESSION",
+          "LONDON_NY_OVERLAP",
+          "ASIAN_SESSION"
         ],
         "recommended_adaptive_sessions": [
-          "ASIAN_RANGE_ACCUMULATION",
-          "LONDON_TREND_EXPANSION",
-          "NY_AFTERNOON_REBALANCING"
+          "NY_AFTERNOON_REBALANCING",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+          "ASIAN_RANGE_ACCUMULATION"
         ],
         "recommended_regimes": [
-          "TRENDING_BEARISH",
+          "TRENDING_BULLISH",
           "CONSOLIDATION_RANGING",
-          "TRENDING_BULLISH"
+          "VOLATILITY_EXPANSION"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 52,
-          "p70_winning_mae_atr": 1.388,
-          "p65_mfe_atr": 3.798,
-          "p80_mfe_atr": 4.871,
-          "learned_optimal_stop_atr_mult": 1.555,
-          "learned_optimal_tp_atr_mult": 3.988,
-          "learned_risk_reward_ratio": 2.56,
-          "learned_be_trigger_r": 1.1,
-          "learned_tp1_r": 1.59,
-          "learned_tp2_r": 3.13,
-          "learned_trail_atr_mult": 1.37
+          "sample_setups_60pct_dev": 26,
+          "p70_winning_mae_atr": 0.832,
+          "p65_mfe_atr": 4.571,
+          "p80_mfe_atr": 5.233,
+          "learned_optimal_stop_atr_mult": 1.05,
+          "learned_optimal_tp_atr_mult": 4.8,
+          "learned_risk_reward_ratio": 4.57,
+          "learned_be_trigger_r": 1.15,
+          "learned_tp1_r": 1.67,
+          "learned_tp2_r": 3.8,
+          "learned_trail_atr_mult": 0.95
         },
         "instrument_physics": {
           "symbol": "XAUUSD",
-          "avg_wick_to_body_ratio": 2.993,
+          "avg_wick_to_body_ratio": 2.994,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.478,
           "trend_persistence_score": 0.265,
@@ -2218,16 +1896,16 @@
           "symbol": "XAUUSD",
           "trader_style": "SWING_TRADING",
           "drift_status": "MODERATE_DRIFT",
-          "volatility_drift_pct": 6.94,
-          "efficiency_drift_pct": 21.94,
-          "recommendation": "Moderate regime shift detected (6.9% volatility delta). Dynamic ATR stops automatically compensate."
+          "volatility_drift_pct": 7.02,
+          "efficiency_drift_pct": 21.95,
+          "recommendation": "Moderate regime shift detected (7.0% volatility delta). Dynamic ATR stops automatically compensate."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 0.51,
-          "mc95_worst_case_drawdown_pct": 1.02,
-          "mc99_extreme_drawdown_pct": 1.03,
-          "mc95_max_consecutive_losses": 2,
+          "mc50_median_drawdown_pct": 0.53,
+          "mc95_worst_case_drawdown_pct": 0.54,
+          "mc99_extreme_drawdown_pct": 0.54,
+          "mc95_max_consecutive_losses": 1,
           "passed_mc95_gate": true
         }
       },
@@ -2246,111 +1924,88 @@
           ],
           "trigger_timeframe": "M15"
         },
-        "top_down_execution_rules": {
-          "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-          "layer_1_macro_narrative": {
-            "timeframes": [
-              "D1",
-              "H4"
+        "atlas_research_hypothesis": {
+          "hypothesis_id": "hyp-v2-xauusd-range_specialist",
+          "atlas_report_id": "atlas-hyp-xauusd-range_specialist",
+          "proposed_by": "atlas_and_forge_autonomous_discovery",
+          "query": "Formulate an empirical multi-timeframe trading hypothesis for XAUUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.994, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: D1 (w=+0.233), M30 (w=+0.203), H1 (w=+0.202). Forge learned feature predictive weights: liquidity_sweep (w=+0.279), dealing_range_reversion (w=+0.225), ema_trend (w=+0.146).",
+          "hypothesis_statement": "Atlas & Forge empirical synthesis for XAUUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.994, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to D1 (w=+0.233), M30 (w=+0.203), H1 (w=+0.202), while empirical feature ablation ranks liquidity_sweep (w=+0.279), dealing_range_reversion (w=+0.225), ema_trend (w=+0.146) as the primary edge drivers.",
+          "confidence": 0.78,
+          "dominant_timeframes_discovered": [
+            "D1",
+            "M30",
+            "H1"
+          ],
+          "dominant_features_discovered": [
+            "liquidity_sweep",
+            "dealing_range_reversion",
+            "ema_trend"
+          ]
+        },
+        "learned_strategy_genome": {
+          "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+          "timeframe_weights": {
+            "D1": 0.233,
+            "H4": 0.193,
+            "H1": 0.202,
+            "M30": 0.203,
+            "M15": 0.169
+          },
+          "feature_weights": {
+            "ema_trend": 0.146,
+            "bos_breakout": 0.117,
+            "liquidity_sweep": 0.279,
+            "fvg_impulse": 0.117,
+            "dealing_range_reversion": 0.225,
+            "rsi_momentum": 0.117
+          },
+          "structural_gates": {
+            "macro_dealing_range_long_max": 0.69,
+            "macro_dealing_range_short_min": 0.31,
+            "htf_room_to_run_atr_min": 1.35,
+            "rsi_long_band": [
+              37.29,
+              61.48
             ],
-            "rules": [
-              "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
-              "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-            ]
-          },
-          "layer_2_setup_structure": {
-            "timeframes": [
-              "H1",
-              "M30"
+            "rsi_short_band": [
+              37.69,
+              64.66
             ],
-            "rules": [
-              "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-              "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-            ]
-          },
-          "layer_3_trigger_execution": {
-            "timeframe": "M15",
-            "rules": [
-              "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.478x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-              "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
-            ]
-          },
-          "empirical_session_matrix_60pct_dev": {
-            "ASIAN_SESSION": {
-              "setups": 7,
-              "win_rate_pct": 71.4,
-              "expectancy_r": 1.948
-            },
-            "NEW_YORK_SESSION": {
-              "setups": 4,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.849
-            },
-            "LONDON_SESSION": {
-              "setups": 8,
-              "win_rate_pct": 62.5,
-              "expectancy_r": 0.909
-            },
-            "LONDON_NY_OVERLAP": {
-              "setups": 6,
-              "win_rate_pct": 66.7,
-              "expectancy_r": 0.254
-            }
-          },
-          "empirical_regime_matrix_60pct_dev": {
-            "CONSOLIDATION_RANGING": {
-              "setups": 16,
-              "win_rate_pct": 62.5,
-              "expectancy_r": 0.893
-            },
-            "VOLATILITY_EXPANSION": {
-              "setups": 4,
-              "win_rate_pct": 75.0,
-              "expectancy_r": 0.89
-            },
-            "TRENDING_BULLISH": {
-              "setups": 4,
-              "win_rate_pct": 50.0,
-              "expectancy_r": 0.946
-            },
-            "TRENDING_BEARISH": {
-              "setups": 1,
-              "win_rate_pct": 100.0,
-              "expectancy_r": 4.202
-            }
+            "entry_score_threshold": 0.5,
+            "validation_screen_score_atr": 0.022
           }
         },
         "recommended_sessions": [
-          "ASIAN_SESSION",
+          "NEW_YORK_SESSION",
           "LONDON_SESSION",
-          "NEW_YORK_SESSION"
+          "ASIAN_SESSION"
         ],
         "recommended_adaptive_sessions": [
+          "NY_AFTERNOON_REBALANCING",
           "LONDON_OPEN_JUDAS_SWEEP",
-          "ASIAN_RANGE_ACCUMULATION",
-          "NY_AFTERNOON_REBALANCING"
+          "ASIAN_RANGE_ACCUMULATION"
         ],
         "recommended_regimes": [
           "TRENDING_BULLISH",
-          "CONSOLIDATION_RANGING",
-          "VOLATILITY_EXPANSION"
+          "VOLATILITY_EXPANSION",
+          "CONSOLIDATION_RANGING"
         ],
         "learned_excursion_parameters": {
-          "sample_setups_60pct_dev": 25,
-          "p70_winning_mae_atr": 0.914,
-          "p65_mfe_atr": 2.934,
-          "p80_mfe_atr": 4.177,
-          "learned_optimal_stop_atr_mult": 1.05,
-          "learned_optimal_tp_atr_mult": 3.081,
-          "learned_risk_reward_ratio": 2.93,
-          "learned_be_trigger_r": 1.15,
-          "learned_tp1_r": 1.67,
-          "learned_tp2_r": 3.8,
-          "learned_trail_atr_mult": 0.95
+          "sample_setups_60pct_dev": 112,
+          "p70_winning_mae_atr": 1.16,
+          "p65_mfe_atr": 2.564,
+          "p80_mfe_atr": 3.198,
+          "learned_optimal_stop_atr_mult": 1.3,
+          "learned_optimal_tp_atr_mult": 2.693,
+          "learned_risk_reward_ratio": 2.07,
+          "learned_be_trigger_r": 0.89,
+          "learned_tp1_r": 1.29,
+          "learned_tp2_r": 2.46,
+          "learned_trail_atr_mult": 1.14
         },
         "instrument_physics": {
           "symbol": "XAUUSD",
-          "avg_wick_to_body_ratio": 2.993,
+          "avg_wick_to_body_ratio": 2.994,
           "learned_sweep_wick_ratio_threshold": 0.45,
           "learned_fvg_body_atr_threshold": 0.478,
           "trend_persistence_score": 0.265,
@@ -2368,16 +2023,16 @@
           "symbol": "XAUUSD",
           "trader_style": "RANGE_SPECIALIST",
           "drift_status": "MODERATE_DRIFT",
-          "volatility_drift_pct": 34.93,
-          "efficiency_drift_pct": 20.94,
+          "volatility_drift_pct": 34.88,
+          "efficiency_drift_pct": 21.2,
           "recommendation": "Moderate regime shift detected (34.9% volatility delta). Dynamic ATR stops automatically compensate."
         },
         "monte_carlo_stress_report": {
           "iterations": 1000,
-          "mc50_median_drawdown_pct": 1.16,
-          "mc95_worst_case_drawdown_pct": 2.21,
-          "mc99_extreme_drawdown_pct": 2.26,
-          "mc95_max_consecutive_losses": 6,
+          "mc50_median_drawdown_pct": 2.98,
+          "mc95_worst_case_drawdown_pct": 4.41,
+          "mc99_extreme_drawdown_pct": 4.9,
+          "mc95_max_consecutive_losses": 7,
           "passed_mc95_gate": true
         }
       }

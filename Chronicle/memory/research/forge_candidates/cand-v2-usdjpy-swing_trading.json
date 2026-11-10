@@ -6,37 +6,87 @@
   "regime": "trending_up",
   "trader_style": "SWING_TRADING",
   "candidate_code": "V2_MTF_SWING_TRADING",
-  "candidate_title": "Oracle V2 Top-Down (W1+D1 -> H4 -> H1) SWING TRADING",
-  "lifecycle_state": "DEPLOYED",
-  "status_reason": "Certified on 3-Layer Top-Down Stack (W1+D1->H1): 40% Lockbox Trades=16, WinRate=37.5%, Net=-2.63%, MC95 DD=3.97%.",
-  "created_at_unix": 1794308957.050222,
-  "updated_at_unix": 1794308957.050222,
+  "candidate_title": "Atlas+Forge Self-Discovered (W1+D1 -> H4 -> H1) SWING TRADING",
+  "lifecycle_state": "WATCHLIST",
+  "status_reason": "Discovered by Atlas+Forge on 60% Dev Split & Tested on 40% Lockbox: Trades=23, WinRate=34.8%, Net=-2.36%, MC95 DD=5.12%.",
+  "created_at_unix": 1794309877.9859407,
+  "updated_at_unix": 1794309877.9859407,
+  "atlas_research_hypothesis": {
+    "hypothesis_id": "hyp-v2-usdjpy-swing_trading",
+    "atlas_report_id": "atlas-hyp-usdjpy-swing_trading",
+    "proposed_by": "atlas_and_forge_autonomous_discovery",
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248). Forge learned feature predictive weights: liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248), while empirical feature ablation ranks liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218) as the primary edge drivers.",
+    "confidence": 0.78,
+    "dominant_timeframes_discovered": [
+      "W1",
+      "H1",
+      "H4"
+    ],
+    "dominant_features_discovered": [
+      "liquidity_sweep",
+      "fvg_impulse",
+      "ema_trend"
+    ]
+  },
+  "learned_strategy_genome": {
+    "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+    "timeframe_weights": {
+      "W1": 0.28,
+      "D1": 0.192,
+      "H4": 0.248,
+      "H1": 0.28
+    },
+    "feature_weights": {
+      "ema_trend": 0.218,
+      "bos_breakout": 0.042,
+      "liquidity_sweep": 0.271,
+      "fvg_impulse": 0.246,
+      "dealing_range_reversion": 0.048,
+      "rsi_momentum": 0.175
+    },
+    "structural_gates": {
+      "macro_dealing_range_long_max": 0.68,
+      "macro_dealing_range_short_min": 0.32,
+      "htf_room_to_run_atr_min": 1.35,
+      "rsi_long_band": [
+        40.11,
+        62.63
+      ],
+      "rsi_short_band": [
+        29.09,
+        67.73
+      ],
+      "entry_score_threshold": 0.32,
+      "validation_screen_score_atr": 0.962
+    }
+  },
   "evaluation_metrics": {
-    "trades_count": 16,
-    "win_rate_pct": 37.5,
-    "total_net_r": -5.252,
-    "expectancy_r": -0.328,
-    "mc95_worst_case_drawdown_pct": 3.97,
+    "trades_count": 23,
+    "win_rate_pct": 34.8,
+    "total_net_r": -4.711,
+    "expectancy_r": -0.205,
+    "mc95_worst_case_drawdown_pct": 5.12,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 16,
-      "wins": 6,
-      "losses": 10,
-      "win_rate": 0.375,
-      "net_return_pct": -2.63,
-      "expectancy_r": -0.328,
+      "trades": 23,
+      "wins": 8,
+      "losses": 15,
+      "win_rate": 0.348,
+      "net_return_pct": -2.36,
+      "expectancy_r": -0.205,
       "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 3.09
+      "max_drawdown_pct": 3.74
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 3.09,
-    "mc95_worst_case_drawdown_pct": 3.97,
-    "mc99_extreme_drawdown_pct": 4.3,
-    "mc95_max_consecutive_losses": 7,
+    "mc50_median_drawdown_pct": 3.74,
+    "mc95_worst_case_drawdown_pct": 5.12,
+    "mc99_extreme_drawdown_pct": 5.84,
+    "mc95_max_consecutive_losses": 9,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -53,110 +103,87 @@
       ],
       "trigger_timeframe": "H1"
     },
-    "top_down_execution_rules": {
-      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
-      "layer_1_macro_narrative": {
-        "timeframes": [
-          "W1",
-          "D1"
+    "atlas_research_hypothesis": {
+      "hypothesis_id": "hyp-v2-usdjpy-swing_trading",
+      "atlas_report_id": "atlas-hyp-usdjpy-swing_trading",
+      "proposed_by": "atlas_and_forge_autonomous_discovery",
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for USDJPY (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.472, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248). Forge learned feature predictive weights: liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for USDJPY (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.472, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.280), H1 (w=+0.280), H4 (w=+0.248), while empirical feature ablation ranks liquidity_sweep (w=+0.271), fvg_impulse (w=+0.246), ema_trend (w=+0.218) as the primary edge drivers.",
+      "confidence": 0.78,
+      "dominant_timeframes_discovered": [
+        "W1",
+        "H1",
+        "H4"
+      ],
+      "dominant_features_discovered": [
+        "liquidity_sweep",
+        "fvg_impulse",
+        "ema_trend"
+      ]
+    },
+    "learned_strategy_genome": {
+      "discovery_method": "forge_autonomous_60pct_dev_ridge_and_ablation_search",
+      "timeframe_weights": {
+        "W1": 0.28,
+        "D1": 0.192,
+        "H4": 0.248,
+        "H1": 0.28
+      },
+      "feature_weights": {
+        "ema_trend": 0.218,
+        "bos_breakout": 0.042,
+        "liquidity_sweep": 0.271,
+        "fvg_impulse": 0.246,
+        "dealing_range_reversion": 0.048,
+        "rsi_momentum": 0.175
+      },
+      "structural_gates": {
+        "macro_dealing_range_long_max": 0.68,
+        "macro_dealing_range_short_min": 0.32,
+        "htf_room_to_run_atr_min": 1.35,
+        "rsi_long_band": [
+          40.11,
+          62.63
         ],
-        "rules": [
-          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
-          "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
-        ]
-      },
-      "layer_2_setup_structure": {
-        "timeframes": [
-          "H4"
+        "rsi_short_band": [
+          29.09,
+          67.73
         ],
-        "rules": [
-          "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
-          "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
-        ]
-      },
-      "layer_3_trigger_execution": {
-        "timeframe": "H1",
-        "rules": [
-          "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
-          "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.67x ATR; activate Break-Even at +0.78R, bank 50% TP1 at +1.13R, and trail remaining 50% runner with 1.47x ATR Chandelier stop to +3.8R."
-        ]
-      },
-      "empirical_session_matrix_60pct_dev": {
-        "ASIAN_SESSION": {
-          "setups": 17,
-          "win_rate_pct": 52.9,
-          "expectancy_r": 2.124
-        },
-        "NEW_YORK_SESSION": {
-          "setups": 5,
-          "win_rate_pct": 20.0,
-          "expectancy_r": -0.311
-        },
-        "LONDON_SESSION": {
-          "setups": 12,
-          "win_rate_pct": 41.7,
-          "expectancy_r": 1.309
-        },
-        "LONDON_NY_OVERLAP": {
-          "setups": 7,
-          "win_rate_pct": 71.4,
-          "expectancy_r": 3.096
-        }
-      },
-      "empirical_regime_matrix_60pct_dev": {
-        "CONSOLIDATION_RANGING": {
-          "setups": 25,
-          "win_rate_pct": 52.0,
-          "expectancy_r": 1.172
-        },
-        "TRENDING_BULLISH": {
-          "setups": 6,
-          "win_rate_pct": 33.3,
-          "expectancy_r": 0.953
-        },
-        "TRENDING_BEARISH": {
-          "setups": 6,
-          "win_rate_pct": 33.3,
-          "expectancy_r": 0.999
-        },
-        "VOLATILITY_EXPANSION": {
-          "setups": 4,
-          "win_rate_pct": 75.0,
-          "expectancy_r": 7.732
-        }
+        "entry_score_threshold": 0.32,
+        "validation_screen_score_atr": 0.962
       }
     },
     "recommended_sessions": [
-      "LONDON_NY_OVERLAP",
+      "NEW_YORK_SESSION",
       "ASIAN_SESSION",
       "LONDON_SESSION"
     ],
     "recommended_adaptive_sessions": [
-      "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-      "LONDON_TREND_EXPANSION",
-      "ASIAN_RANGE_ACCUMULATION"
+      "NY_AFTERNOON_REBALANCING",
+      "ASIAN_RANGE_ACCUMULATION",
+      "LONDON_OPEN_JUDAS_SWEEP"
     ],
     "recommended_regimes": [
+      "TRENDING_BEARISH",
       "VOLATILITY_EXPANSION",
-      "CONSOLIDATION_RANGING",
-      "TRENDING_BEARISH"
+      "CONSOLIDATION_RANGING"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 41,
-      "p70_winning_mae_atr": 1.491,
-      "p65_mfe_atr": 2.903,
-      "p80_mfe_atr": 6.806,
-      "learned_optimal_stop_atr_mult": 1.67,
-      "learned_optimal_tp_atr_mult": 3.048,
-      "learned_risk_reward_ratio": 1.83,
-      "learned_be_trigger_r": 0.78,
-      "learned_tp1_r": 1.13,
+      "sample_setups_60pct_dev": 46,
+      "p70_winning_mae_atr": 0.672,
+      "p65_mfe_atr": 7.322,
+      "p80_mfe_atr": 13.979,
+      "learned_optimal_stop_atr_mult": 1.05,
+      "learned_optimal_tp_atr_mult": 4.8,
+      "learned_risk_reward_ratio": 4.57,
+      "learned_be_trigger_r": 1.15,
+      "learned_tp1_r": 1.67,
       "learned_tp2_r": 3.8,
-      "learned_trail_atr_mult": 1.47
+      "learned_trail_atr_mult": 0.95
     },
     "instrument_physics": {
       "symbol": "USDJPY",
-      "avg_wick_to_body_ratio": 3.468,
+      "avg_wick_to_body_ratio": 3.472,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.459,
       "trend_persistence_score": 0.265,
@@ -174,16 +201,16 @@
       "symbol": "USDJPY",
       "trader_style": "SWING_TRADING",
       "drift_status": "MODERATE_DRIFT",
-      "volatility_drift_pct": -13.15,
-      "efficiency_drift_pct": -22.37,
-      "recommendation": "Moderate regime shift detected (-13.2% volatility delta). Dynamic ATR stops automatically compensate."
+      "volatility_drift_pct": -13.14,
+      "efficiency_drift_pct": -22.22,
+      "recommendation": "Moderate regime shift detected (-13.1% volatility delta). Dynamic ATR stops automatically compensate."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 3.09,
-      "mc95_worst_case_drawdown_pct": 3.97,
-      "mc99_extreme_drawdown_pct": 4.3,
-      "mc95_max_consecutive_losses": 7,
+      "mc50_median_drawdown_pct": 3.74,
+      "mc95_worst_case_drawdown_pct": 5.12,
+      "mc99_extreme_drawdown_pct": 5.84,
+      "mc95_max_consecutive_losses": 9,
       "passed_mc95_gate": true
     }
   }
