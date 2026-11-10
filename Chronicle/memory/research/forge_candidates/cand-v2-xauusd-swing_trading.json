@@ -6,37 +6,37 @@
   "regime": "trending_up",
   "trader_style": "SWING_TRADING",
   "candidate_code": "V2_MTF_SWING_TRADING",
-  "candidate_title": "Oracle V2 7-Timeframe SWING TRADING (H1 Trigger)",
+  "candidate_title": "Oracle V2 Top-Down (W1+D1 -> H4 -> H1) SWING TRADING",
   "lifecycle_state": "DEPLOYED",
-  "status_reason": "Certified on 7-TF stack (H1 trigger): 21 trades, WinRate=61.9%, Net=0.25%, MC95 DD=3.05%.",
-  "created_at_unix": 1794306474.2373717,
-  "updated_at_unix": 1794306474.2373717,
+  "status_reason": "Certified on 3-Layer Top-Down Stack (W1+D1->H1): 40% Lockbox Trades=9, WinRate=77.8%, Net=2.56%, MC95 DD=1.02%.",
+  "created_at_unix": 1794308958.9255695,
+  "updated_at_unix": 1794308958.9255695,
   "evaluation_metrics": {
-    "trades_count": 21,
-    "win_rate_pct": 61.9,
-    "total_net_r": 0.495,
-    "expectancy_r": 0.024,
-    "mc95_worst_case_drawdown_pct": 3.05,
+    "trades_count": 9,
+    "win_rate_pct": 77.8,
+    "total_net_r": 5.125,
+    "expectancy_r": 0.569,
+    "mc95_worst_case_drawdown_pct": 1.02,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 21,
-      "wins": 13,
-      "losses": 8,
-      "win_rate": 0.619,
-      "net_return_pct": 0.25,
-      "expectancy_r": 0.024,
-      "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 2.01
+      "trades": 9,
+      "wins": 7,
+      "losses": 2,
+      "win_rate": 0.778,
+      "net_return_pct": 2.56,
+      "expectancy_r": 0.569,
+      "sharpe_ratio": 1.25,
+      "max_drawdown_pct": 0.51
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 2.01,
-    "mc95_worst_case_drawdown_pct": 3.05,
-    "mc99_extreme_drawdown_pct": 3.5,
-    "mc95_max_consecutive_losses": 4,
+    "mc50_median_drawdown_pct": 0.51,
+    "mc95_worst_case_drawdown_pct": 1.02,
+    "mc99_extreme_drawdown_pct": 1.03,
+    "mc95_max_consecutive_losses": 2,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -53,36 +53,114 @@
       ],
       "trigger_timeframe": "H1"
     },
+    "top_down_execution_rules": {
+      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
+      "layer_1_macro_narrative": {
+        "timeframes": [
+          "W1",
+          "D1"
+        ],
+        "rules": [
+          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across W1, D1.",
+          "Compute Macro Dealing Range position from W1, D1 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
+        ]
+      },
+      "layer_2_setup_structure": {
+        "timeframes": [
+          "H4"
+        ],
+        "rules": [
+          "Require H4 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
+          "HTF Room-to-Run Gate: Verify distance to opposing H4 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
+        ]
+      },
+      "layer_3_trigger_execution": {
+        "timeframe": "H1",
+        "rules": [
+          "Execute on H1 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.478x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
+          "Anchor initial Stop-Loss to H1 16-bar structural swing bounded by 1.555x ATR; activate Break-Even at +1.1R, bank 50% TP1 at +1.59R, and trail remaining 50% runner with 1.37x ATR Chandelier stop to +3.13R."
+        ]
+      },
+      "empirical_session_matrix_60pct_dev": {
+        "ASIAN_SESSION": {
+          "setups": 16,
+          "win_rate_pct": 75.0,
+          "expectancy_r": 1.79
+        },
+        "LONDON_SESSION": {
+          "setups": 18,
+          "win_rate_pct": 55.6,
+          "expectancy_r": 1.01
+        },
+        "LONDON_NY_OVERLAP": {
+          "setups": 12,
+          "win_rate_pct": 33.3,
+          "expectancy_r": -0.018
+        },
+        "NEW_YORK_SESSION": {
+          "setups": 6,
+          "win_rate_pct": 50.0,
+          "expectancy_r": 0.565
+        }
+      },
+      "empirical_regime_matrix_60pct_dev": {
+        "TRENDING_BULLISH": {
+          "setups": 5,
+          "win_rate_pct": 40.0,
+          "expectancy_r": 0.828
+        },
+        "CONSOLIDATION_RANGING": {
+          "setups": 27,
+          "win_rate_pct": 59.3,
+          "expectancy_r": 1.111
+        },
+        "VOLATILITY_EXPANSION": {
+          "setups": 5,
+          "win_rate_pct": 20.0,
+          "expectancy_r": -0.367
+        },
+        "TRENDING_BEARISH": {
+          "setups": 15,
+          "win_rate_pct": 66.7,
+          "expectancy_r": 1.18
+        }
+      }
+    },
     "recommended_sessions": [
+      "ASIAN_SESSION",
       "LONDON_SESSION",
-      "LONDON_NY_OVERLAP",
       "NEW_YORK_SESSION"
     ],
     "recommended_adaptive_sessions": [
+      "ASIAN_RANGE_ACCUMULATION",
       "LONDON_TREND_EXPANSION",
-      "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+      "NY_AFTERNOON_REBALANCING"
     ],
     "recommended_regimes": [
-      "TRENDING_BULLISH",
       "TRENDING_BEARISH",
-      "VOLATILITY_EXPANSION"
+      "CONSOLIDATION_RANGING",
+      "TRENDING_BULLISH"
     ],
     "learned_excursion_parameters": {
-      "learned_optimal_stop_atr_mult": 1.65,
-      "learned_optimal_tp_atr_mult": 3.8,
-      "learned_risk_reward_ratio": 2.3,
-      "learned_be_trigger_r": 0.85,
-      "learned_tp1_r": 1.4,
-      "learned_tp2_r": 2.8,
-      "learned_trail_atr_mult": 1.45
+      "sample_setups_60pct_dev": 52,
+      "p70_winning_mae_atr": 1.388,
+      "p65_mfe_atr": 3.798,
+      "p80_mfe_atr": 4.871,
+      "learned_optimal_stop_atr_mult": 1.555,
+      "learned_optimal_tp_atr_mult": 3.988,
+      "learned_risk_reward_ratio": 2.56,
+      "learned_be_trigger_r": 1.1,
+      "learned_tp1_r": 1.59,
+      "learned_tp2_r": 3.13,
+      "learned_trail_atr_mult": 1.37
     },
     "instrument_physics": {
       "symbol": "XAUUSD",
-      "avg_wick_to_body_ratio": 2.989,
+      "avg_wick_to_body_ratio": 2.993,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.478,
-      "trend_persistence_score": 0.264,
-      "mean_reversion_propensity": 0.736,
+      "trend_persistence_score": 0.265,
+      "mean_reversion_propensity": 0.735,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         2,
@@ -96,16 +174,16 @@
       "symbol": "XAUUSD",
       "trader_style": "SWING_TRADING",
       "drift_status": "MODERATE_DRIFT",
-      "volatility_drift_pct": 6.91,
-      "efficiency_drift_pct": 21.87,
+      "volatility_drift_pct": 6.94,
+      "efficiency_drift_pct": 21.94,
       "recommendation": "Moderate regime shift detected (6.9% volatility delta). Dynamic ATR stops automatically compensate."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 2.01,
-      "mc95_worst_case_drawdown_pct": 3.05,
-      "mc99_extreme_drawdown_pct": 3.5,
-      "mc95_max_consecutive_losses": 4,
+      "mc50_median_drawdown_pct": 0.51,
+      "mc95_worst_case_drawdown_pct": 1.02,
+      "mc99_extreme_drawdown_pct": 1.03,
+      "mc95_max_consecutive_losses": 2,
       "passed_mc95_gate": true
     }
   }

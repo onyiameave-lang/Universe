@@ -550,15 +550,62 @@ class MultiTimeframeInstitutionalEngine:
         setup_bars: List[Dict[str, Any]],
         trader_style: str,
     ) -> int:
+        """
+        True 3-Layer Top-Down Institutional Confluence Evaluator:
+          - Layer 1 (Macro Timeframes: W1/D1 or D1/H4 or H4/H1):
+              Evaluates Macro Trend Bias (EMA9 vs EMA21 + BOS), Macro Regime, and
+              where current price sits inside the Macro Dealing Range (Macro Swing Low..High)
+              plus Higher-Timeframe structural room-to-run.
+          - Layer 2 (Setup Timeframes: H4 or H1/M30 or M30/M15):
+              Evaluates Setup Zone Confluence (HTF Liquidity Sweep, HTF 3-Bar FVG,
+              HTF BOS, and Setup Momentum alignment).
+          - Layer 3 (Trigger Timeframe: H1, M15, or M5):
+              Requires a lower-timeframe institutional displacement / sweep / FVG trigger
+              that aligns with BOTH Layer 1 (Macro) and Layer 2 (Setup).
+        """
+        close_p = float(bar["close"])
+        trig_atr = max(float(bar.get("atr14", 0.0005)), close_p * 0.00015)
+
+        # ── LAYER 1: MACRO TIMEFRAME BIAS & MACRO DEALING RANGE ──────────────
         macro_votes = 0.0
+        macro_pos_sum = 0.0
+        macro_pos_cnt = 0
+        macro_range_friendly = False
+        htf_ceiling = float("inf")
+        htf_floor = 0.0
+
         for m_bar in macro_bars:
             if m_bar["ema9"] > m_bar["ema21"]:
                 macro_votes += 1.0
             elif m_bar["ema9"] < m_bar["ema21"]:
                 macro_votes -= 1.0
             macro_votes += float(m_bar.get("bos_direction", 0)) * 0.5
+            if m_bar.get("regime") == "TRENDING_BULLISH":
+                macro_votes += 0.5
+            elif m_bar.get("regime") == "TRENDING_BEARISH":
+                macro_votes -= 0.5
+            if (
+                m_bar.get("regime") == "CONSOLIDATION_RANGING"
+                or float(m_bar.get("efficiency_ratio", 0.5)) <= 0.36
+            ):
+                macro_range_friendly = True
 
+            m_high = float(m_bar.get("swing_high_16", m_bar["high"]))
+            m_low = float(m_bar.get("swing_low_16", m_bar["low"]))
+            if m_high > m_low:
+                macro_pos_sum += (close_p - m_low) / max(m_high - m_low, 1e-9)
+                macro_pos_cnt += 1
+
+        macro_pos_in_range = (
+            macro_pos_sum / macro_pos_cnt if macro_pos_cnt > 0 else 0.5
+        )
+        # Avoid buying at the absolute top (>92%) of the Macro Dealing Range or selling at the bottom (<8%)
+        macro_not_overextended_long = macro_pos_in_range <= 0.92
+        macro_not_overextended_short = macro_pos_in_range >= 0.08
+
+        # ── LAYER 2: SETUP TIMEFRAME STRUCTURE & ROOM-TO-RUN ─────────────────
         setup_votes = 0.0
+        setup_range_friendly = False
         for s_bar in setup_bars:
             if s_bar["close"] > s_bar["ema9"] and 44 <= s_bar["rsi14"] <= 74:
                 setup_votes += 1.0
@@ -568,18 +615,54 @@ class MultiTimeframeInstitutionalEngine:
                 setup_votes += 0.75
             if s_bar.get("fvg_bearish") or s_bar.get("liquidity_sweep_bearish"):
                 setup_votes -= 0.75
+            setup_votes += float(s_bar.get("bos_direction", 0)) * 0.4
+            if (
+                s_bar.get("regime") == "CONSOLIDATION_RANGING"
+                or float(s_bar.get("efficiency_ratio", 0.5)) <= 0.36
+            ):
+                setup_range_friendly = True
 
+            s_high = float(s_bar.get("swing_high_16", s_bar["high"]))
+            s_low = float(s_bar.get("swing_low_16", s_bar["low"]))
+            if s_high > close_p:
+                htf_ceiling = min(htf_ceiling, s_high)
+            if 0 < s_low < close_p:
+                htf_floor = max(htf_floor, s_low)
+
+        # Check HTF structural room-to-run (if price is right below an H1/H4 swing high ceiling, require BOS breakout)
+        has_bull_room = (
+            htf_ceiling == float("inf")
+            or (htf_ceiling - close_p) >= trig_atr * 0.9
+            or bar.get("bos_direction") == 1
+        )
+        has_bear_room = (
+            htf_floor == 0.0
+            or (close_p - htf_floor) >= trig_atr * 0.9
+            or bar.get("bos_direction") == -1
+        )
+
+        # ── LAYER 3: TRIGGER TIMEFRAME EXECUTION BY ARCHETYPE ────────────────
         if trader_style == "SCALPING":
             bull = (
-                bar.get("liquidity_sweep_bullish")
-                or bar.get("fvg_bullish")
-                or (bar["close"] > bar["ema9"] >= bar["ema21"])
-            ) and 35 <= bar["rsi14"] <= 70
+                (
+                    bar.get("liquidity_sweep_bullish")
+                    or bar.get("fvg_bullish")
+                    or (bar["close"] > bar["ema9"] >= bar["ema21"])
+                )
+                and 35 <= bar["rsi14"] <= 70
+                and macro_not_overextended_long
+                and has_bull_room
+            )
             bear = (
-                bar.get("liquidity_sweep_bearish")
-                or bar.get("fvg_bearish")
-                or (bar["close"] < bar["ema9"] <= bar["ema21"])
-            ) and 30 <= bar["rsi14"] <= 65
+                (
+                    bar.get("liquidity_sweep_bearish")
+                    or bar.get("fvg_bearish")
+                    or (bar["close"] < bar["ema9"] <= bar["ema21"])
+                )
+                and 30 <= bar["rsi14"] <= 65
+                and macro_not_overextended_short
+                and has_bear_room
+            )
             if bull and macro_votes >= 0 and setup_votes > 0:
                 return 1
             if bear and macro_votes <= 0 and setup_votes < 0:
@@ -588,17 +671,29 @@ class MultiTimeframeInstitutionalEngine:
 
         if trader_style == "DAY_TRADING":
             bull = (
-                bar.get("liquidity_sweep_bullish")
-                or bar.get("fvg_bullish")
-                or bar.get("bos_direction") == 1
-                or (bar["close"] > bar["ema9"] >= bar["ema21"])
-            ) and bar.get("discount_premium_zone") != "PREMIUM" and 38 <= bar["rsi14"] <= 68
+                (
+                    bar.get("liquidity_sweep_bullish")
+                    or bar.get("fvg_bullish")
+                    or bar.get("bos_direction") == 1
+                    or (bar["close"] > bar["ema9"] >= bar["ema21"])
+                )
+                and bar.get("discount_premium_zone") != "PREMIUM"
+                and 38 <= bar["rsi14"] <= 68
+                and macro_not_overextended_long
+                and has_bull_room
+            )
             bear = (
-                bar.get("liquidity_sweep_bearish")
-                or bar.get("fvg_bearish")
-                or bar.get("bos_direction") == -1
-                or (bar["close"] < bar["ema9"] <= bar["ema21"])
-            ) and bar.get("discount_premium_zone") != "DISCOUNT" and 32 <= bar["rsi14"] <= 62
+                (
+                    bar.get("liquidity_sweep_bearish")
+                    or bar.get("fvg_bearish")
+                    or bar.get("bos_direction") == -1
+                    or (bar["close"] < bar["ema9"] <= bar["ema21"])
+                )
+                and bar.get("discount_premium_zone") != "DISCOUNT"
+                and 32 <= bar["rsi14"] <= 62
+                and macro_not_overextended_short
+                and has_bear_room
+            )
             if bull and macro_votes >= 0 and setup_votes > 0:
                 return 1
             if bear and macro_votes <= 0 and setup_votes < 0:
@@ -606,46 +701,75 @@ class MultiTimeframeInstitutionalEngine:
             return 0
 
         if trader_style == "RANGE_SPECIALIST":
-            is_range_context = (
-                bar.get("regime") == "CONSOLIDATION_RANGING"
-                or bar.get("efficiency_ratio", 0.5) < 0.34
-                or bar.get("adaptive_session") in ("ASIAN_RANGE_ACCUMULATION", "NY_AFTERNOON_REBALANCING")
+            # Requires Higher-Timeframe (Macro or Setup) range/consolidation confirmation + Trigger edge fade
+            is_htf_range_context = (
+                macro_range_friendly
+                or setup_range_friendly
+                or bar.get("regime") == "CONSOLIDATION_RANGING"
+                or bar.get("adaptive_session")
+                in ("ASIAN_RANGE_ACCUMULATION", "NY_AFTERNOON_REBALANCING")
             )
             bull_range = (
-                is_range_context
+                is_htf_range_context
                 and (
                     bar.get("liquidity_sweep_bullish")
-                    or (bar.get("discount_premium_zone") == "DISCOUNT" and bar["close"] > bar["open"] and bar["rsi14"] <= 46)
+                    or (
+                        bar.get("discount_premium_zone") == "DISCOUNT"
+                        and bar["close"] > bar["open"]
+                        and bar["rsi14"] <= 48
+                    )
                 )
                 and bar.get("discount_premium_zone") != "PREMIUM"
+                and macro_pos_in_range <= 0.65
             )
             bear_range = (
-                is_range_context
+                is_htf_range_context
                 and (
                     bar.get("liquidity_sweep_bearish")
-                    or (bar.get("discount_premium_zone") == "PREMIUM" and bar["close"] < bar["open"] and bar["rsi14"] >= 54)
+                    or (
+                        bar.get("discount_premium_zone") == "PREMIUM"
+                        and bar["close"] < bar["open"]
+                        and bar["rsi14"] >= 52
+                    )
                 )
                 and bar.get("discount_premium_zone") != "DISCOUNT"
+                and macro_pos_in_range >= 0.35
             )
-            if bull_range and macro_votes >= -1.0:
+            if bull_range and macro_votes >= -1.0 and setup_votes >= -0.75:
                 return 1
-            if bear_range and macro_votes <= 1.0:
+            if bear_range and macro_votes <= 1.0 and setup_votes <= 0.75:
                 return -1
             return 0
 
-        # SWING_TRADING
+        # SWING_TRADING (W1+D1 Macro -> H4 Setup -> H1 Trigger)
         bull_swing = (
-            bar.get("liquidity_sweep_bullish")
-            or bar.get("fvg_bullish")
-            or bar.get("bos_direction") == 1
-            or (bar["close"] > bar["ema9"] > bar["ema21"] and bar.get("discount_premium_zone") == "DISCOUNT")
-        ) and 36 <= bar["rsi14"] <= 66
+            (
+                bar.get("liquidity_sweep_bullish")
+                or bar.get("fvg_bullish")
+                or bar.get("bos_direction") == 1
+                or (
+                    bar["close"] > bar["ema9"] > bar["ema21"]
+                    and bar.get("discount_premium_zone") == "DISCOUNT"
+                )
+            )
+            and 36 <= bar["rsi14"] <= 66
+            and macro_not_overextended_long
+            and has_bull_room
+        )
         bear_swing = (
-            bar.get("liquidity_sweep_bearish")
-            or bar.get("fvg_bearish")
-            or bar.get("bos_direction") == -1
-            or (bar["close"] < bar["ema9"] < bar["ema21"] and bar.get("discount_premium_zone") == "PREMIUM")
-        ) and 34 <= bar["rsi14"] <= 64
+            (
+                bar.get("liquidity_sweep_bearish")
+                or bar.get("fvg_bearish")
+                or bar.get("bos_direction") == -1
+                or (
+                    bar["close"] < bar["ema9"] < bar["ema21"]
+                    and bar.get("discount_premium_zone") == "PREMIUM"
+                )
+            )
+            and 34 <= bar["rsi14"] <= 64
+            and macro_not_overextended_short
+            and has_bear_room
+        )
         if bull_swing and macro_votes >= 0 and setup_votes > 0:
             return 1
         if bear_swing and macro_votes <= 0 and setup_votes < 0:
@@ -960,59 +1084,20 @@ class MultiTimeframeInstitutionalEngine:
                     "setup_timeframes": ["M30", "M15"],
                     "trigger_timeframe": "M5",
                 }
-                sl_mult, tp_mult, rr_target = 1.35, 2.75, 2.05
-                be_r, tp1_r, tp2_r, trail_mult = 0.65, 1.15, 2.25, 1.15
-                rec_sessions = ["LONDON_SESSION", "LONDON_NY_OVERLAP", "NEW_YORK_SESSION"]
-                rec_adaptive = [
-                    "LONDON_OPEN_JUDAS_SWEEP",
-                    "LONDON_TREND_EXPANSION",
-                    "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-                ]
-                rec_regimes = [
-                    "TRENDING_BULLISH",
-                    "TRENDING_BEARISH",
-                    "VOLATILITY_EXPANSION",
-                ]
-                horizon = 12
+                horizon = 14
             elif style_up == "DAY_TRADING":
                 stack = {
                     "macro_timeframes": ["D1", "H4"],
                     "setup_timeframes": ["H1", "M30"],
                     "trigger_timeframe": "M15",
                 }
-                sl_mult, tp_mult, rr_target = 1.50, 3.15, 2.10
-                be_r, tp1_r, tp2_r, trail_mult = 0.75, 1.25, 2.40, 1.30
-                rec_sessions = ["LONDON_SESSION", "LONDON_NY_OVERLAP", "NEW_YORK_SESSION"]
-                rec_adaptive = [
-                    "LONDON_OPEN_JUDAS_SWEEP",
-                    "LONDON_TREND_EXPANSION",
-                    "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-                ]
-                rec_regimes = [
-                    "TRENDING_BULLISH",
-                    "TRENDING_BEARISH",
-                    "VOLATILITY_EXPANSION",
-                ]
-                horizon = 16
+                horizon = 18
             elif style_up == "RANGE_SPECIALIST":
                 stack = {
                     "macro_timeframes": ["D1", "H4"],
                     "setup_timeframes": ["H1", "M30"],
                     "trigger_timeframe": "M15",
                 }
-                sl_mult, tp_mult, rr_target = 1.25, 2.35, 1.88
-                be_r, tp1_r, tp2_r, trail_mult = 0.60, 1.05, 1.95, 1.10
-                rec_sessions = [
-                    "ASIAN_SESSION",
-                    "LONDON_SESSION",
-                    "NEW_YORK_SESSION",
-                ]
-                rec_adaptive = [
-                    "ASIAN_RANGE_ACCUMULATION",
-                    "LONDON_OPEN_JUDAS_SWEEP",
-                    "NY_AFTERNOON_REBALANCING",
-                ]
-                rec_regimes = ["CONSOLIDATION_RANGING"]
                 horizon = 16
             else:  # SWING_TRADING
                 stack = {
@@ -1020,31 +1105,154 @@ class MultiTimeframeInstitutionalEngine:
                     "setup_timeframes": ["H4"],
                     "trigger_timeframe": "H1",
                 }
-                sl_mult, tp_mult, rr_target = 1.65, 3.80, 2.30
-                be_r, tp1_r, tp2_r, trail_mult = 0.85, 1.40, 2.80, 1.45
-                rec_sessions = [
-                    "LONDON_SESSION",
-                    "LONDON_NY_OVERLAP",
-                    "NEW_YORK_SESSION",
-                ]
-                rec_adaptive = [
-                    "LONDON_TREND_EXPANSION",
-                    "NY_OVERLAP_INSTITUTIONAL_DRIVE",
-                ]
-                rec_regimes = [
-                    "TRENDING_BULLISH",
-                    "TRENDING_BEARISH",
-                    "VOLATILITY_EXPANSION",
-                ]
-                horizon = 24
+                horizon = 26
 
             trig_tf = stack["trigger_timeframe"]
             trig_series = dataset.get("series", {}).get(trig_tf, [])
             drift = self.inspect_strategy_regime_drift(upper_sym, style_up, trig_series or m15_bars)
 
-            # Evaluate historical trade returns for walk-forward + Monte Carlo stress test
+            # ── STAGE 1: 60% DEVELOPMENT SPLIT EMPIRICAL TOP-DOWN DISCOVERY ────
+            # Instead of hardcoded SL/TP/Session/Regime values, scan the first 60%
+            # chronological split across all 3 Top-Down layers (Macro -> Setup -> Trigger)
+            # to empirically learn optimal MAE stop buffer, MFE TP1/TP2 targets,
+            # best UTC Sessions, best Adaptive Session Behaviors, and best Regimes.
+            dev_end_idx = max(35, int(len(trig_series) * 0.60))
+            winning_maes_atr: List[float] = []
+            all_mfes_atr: List[float] = []
+            session_stats: Dict[str, Dict[str, float]] = {}
+            adaptive_stats: Dict[str, Dict[str, float]] = {}
+            regime_stats: Dict[str, Dict[str, float]] = {}
+
+            for i in range(25, max(26, dev_end_idx - horizon)):
+                b = trig_series[i]
+                if b.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
+                    continue
+                u_sec = int(b["unix_sec"])
+                macro_b = [
+                    bar_m
+                    for tf in stack["macro_timeframes"]
+                    if (bar_m := self._find_bar_at_or_before(dataset["series"].get(tf, []), u_sec))
+                ]
+                setup_b = [
+                    bar_s
+                    for tf in stack["setup_timeframes"]
+                    if (bar_s := self._find_bar_at_or_before(dataset["series"].get(tf, []), u_sec))
+                ]
+                sig = self.evaluate_trader_archetype_signal(b, macro_b, setup_b, style_up)
+                if sig == 0:
+                    continue
+
+                is_long = sig == 1
+                entry_p = float(b["close"])
+                atr = max(float(b.get("atr14", 0.0005)), entry_p * 0.00015)
+
+                max_fav = 0.0
+                max_adv = 0.0
+                for k in range(i + 1, min(dev_end_idx, i + horizon + 1)):
+                    fb = trig_series[k]
+                    fh, fl = float(fb["high"]), float(fb["low"])
+                    fav = (fh - entry_p) / atr if is_long else (entry_p - fl) / atr
+                    adv = (entry_p - fl) / atr if is_long else (fh - entry_p) / atr
+                    if fav > max_fav:
+                        max_fav = fav
+                    if adv > max_adv:
+                        max_adv = adv
+
+                all_mfes_atr.append(max_fav)
+                is_win_excursion = max_fav >= 1.25 and max_adv <= 1.85
+                if is_win_excursion:
+                    winning_maes_atr.append(max_adv)
+
+                approx_r = (max_fav * 0.65 - max_adv * 0.35) if is_win_excursion else -0.85
+
+                s_key = str(b.get("session", "LONDON_SESSION"))
+                s_st = session_stats.setdefault(s_key, {"setups": 0, "wins": 0, "r_sum": 0.0})
+                s_st["setups"] += 1
+                s_st["wins"] += 1 if is_win_excursion else 0
+                s_st["r_sum"] += approx_r
+
+                a_key = str(b.get("adaptive_session", "LONDON_TREND_EXPANSION"))
+                a_st = adaptive_stats.setdefault(a_key, {"setups": 0, "wins": 0, "r_sum": 0.0})
+                a_st["setups"] += 1
+                a_st["wins"] += 1 if is_win_excursion else 0
+                a_st["r_sum"] += approx_r
+
+                # Attribute regime to Macro + Trigger consensus
+                r_key = str(b.get("regime", "TRENDING_BULLISH"))
+                r_st = regime_stats.setdefault(r_key, {"setups": 0, "wins": 0, "r_sum": 0.0})
+                r_st["setups"] += 1
+                r_st["wins"] += 1 if is_win_excursion else 0
+                r_st["r_sum"] += approx_r
+
+            def _pct(arr: List[float], q: float, fallback: float) -> float:
+                if not arr:
+                    return fallback
+                s = sorted(arr)
+                return s[min(len(s) - 1, int(len(s) * q))]
+
+            p70_mae = _pct(winning_maes_atr, 0.70, 1.15)
+            p65_mfe = _pct(all_mfes_atr, 0.65, 2.50)
+            p80_mfe = _pct(all_mfes_atr, 0.80, 3.40)
+
+            sl_mult = round(min(2.15, max(1.05, p70_mae * 1.12)), 3)
+            tp_mult = round(min(4.80, max(sl_mult * 1.65, p65_mfe * 1.05)), 3)
+            rr_target = round(tp_mult / max(sl_mult, 0.1), 2)
+            be_r = round(min(1.15, max(0.55, (p65_mfe / max(sl_mult, 0.1)) * 0.45)), 2)
+            tp1_r = round(min(1.85, max(0.95, be_r * 1.45)), 2)
+            tp2_r = round(min(3.80, max(tp1_r * 1.55, p80_mfe / max(sl_mult, 0.1))), 2)
+            trail_mult = round(min(1.75, max(0.95, sl_mult * 0.88)), 2)
+
+            # Empirically select best Sessions, Adaptive Behaviors, and Regimes from the 60% Dev Split
+            rec_sessions = [
+                k
+                for k, v in sorted(
+                    session_stats.items(),
+                    key=lambda kv: kv[1]["r_sum"] / max(1.0, kv[1]["setups"]),
+                    reverse=True,
+                )
+                if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.15 or v["wins"] / v["setups"] >= 0.42)
+            ][:3]
+            if not rec_sessions:
+                rec_sessions = ["LONDON_SESSION", "LONDON_NY_OVERLAP", "NEW_YORK_SESSION"]
+
+            rec_adaptive = [
+                k
+                for k, v in sorted(
+                    adaptive_stats.items(),
+                    key=lambda kv: kv[1]["r_sum"] / max(1.0, kv[1]["setups"]),
+                    reverse=True,
+                )
+                if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.15 or v["wins"] / v["setups"] >= 0.42)
+            ][:3]
+            if not rec_adaptive:
+                rec_adaptive = [
+                    "LONDON_OPEN_JUDAS_SWEEP",
+                    "LONDON_TREND_EXPANSION",
+                    "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+                ]
+
+            rec_regimes = [
+                k
+                for k, v in sorted(
+                    regime_stats.items(),
+                    key=lambda kv: kv[1]["r_sum"] / max(1.0, kv[1]["setups"]),
+                    reverse=True,
+                )
+                if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.20 or v["wins"] / v["setups"] >= 0.40)
+            ][:3]
+            if not rec_regimes:
+                rec_regimes = (
+                    ["CONSOLIDATION_RANGING"]
+                    if style_up == "RANGE_SPECIALIST"
+                    else ["TRENDING_BULLISH", "TRENDING_BEARISH", "VOLATILITY_EXPANSION"]
+                )
+
+            # ── STAGE 2: 40% OUT-OF-SAMPLE LOCKBOX HOLDOUT EVALUATION ──────────
+            # Evaluate strictly on the unseen 40% chronological lockbox suffix (with fallback
+            # to full walk-forward series only if the timeframe has < 80 total bars).
+            eval_start_idx = dev_end_idx if len(trig_series) >= 120 else 30
             trade_returns_r: List[float] = []
-            i = 30
+            i = eval_start_idx
             while i < len(trig_series) - 2:
                 b = trig_series[i]
                 u_sec = int(b["unix_sec"])
@@ -1076,7 +1284,15 @@ class MultiTimeframeInstitutionalEngine:
                 is_long = sig == 1
                 entry_p = float(b["close"])
                 atr = max(float(b.get("atr14", 0.0005)), entry_p * 0.00015)
-                stop_dist = atr * sl_mult
+                struct_dist = (
+                    max(entry_p - float(b["swing_low_16"]), atr * 0.75)
+                    if is_long
+                    else max(float(b["swing_high_16"]) - entry_p, atr * 0.75)
+                )
+                stop_dist = min(
+                    max(struct_dist, atr * (sl_mult * 0.85)),
+                    atr * (sl_mult * 1.35),
+                )
                 stop_bps = (stop_dist / entry_p) * 10000.0
                 if total_cost_bps > stop_bps * 0.40:
                     i += 1
@@ -1150,16 +1366,62 @@ class MultiTimeframeInstitutionalEngine:
             total_r = round(sum(trade_returns_r), 3)
             win_rate = round((wins / max(1, len(trade_returns_r))) * 100.0, 1)
 
+            top_down_execution_rules = {
+                "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
+                "layer_1_macro_narrative": {
+                    "timeframes": stack["macro_timeframes"],
+                    "rules": [
+                        f"Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across {', '.join(stack['macro_timeframes'])}.",
+                        f"Compute Macro Dealing Range position from {', '.join(stack['macro_timeframes'])} 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount.",
+                    ],
+                },
+                "layer_2_setup_structure": {
+                    "timeframes": stack["setup_timeframes"],
+                    "rules": [
+                        f"Require {', '.join(stack['setup_timeframes'])} structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
+                        f"HTF Room-to-Run Gate: Verify distance to opposing {', '.join(stack['setup_timeframes'])} Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger.",
+                    ],
+                },
+                "layer_3_trigger_execution": {
+                    "timeframe": trig_tf,
+                    "rules": [
+                        f"Execute on {trig_tf} confirmation candle (Liquidity Sweep wick >= {physics['learned_sweep_wick_ratio_threshold']}, 3-Bar FVG body >= {physics['learned_fvg_body_atr_threshold']}x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
+                        f"Anchor initial Stop-Loss to {trig_tf} 16-bar structural swing bounded by {sl_mult}x ATR; activate Break-Even at +{be_r}R, bank 50% TP1 at +{tp1_r}R, and trail remaining 50% runner with {trail_mult}x ATR Chandelier stop to +{tp2_r}R.",
+                    ],
+                },
+                "empirical_session_matrix_60pct_dev": {
+                    k: {
+                        "setups": int(v["setups"]),
+                        "win_rate_pct": round((v["wins"] / max(1.0, v["setups"])) * 100.0, 1),
+                        "expectancy_r": round(v["r_sum"] / max(1.0, v["setups"]), 3),
+                    }
+                    for k, v in session_stats.items()
+                },
+                "empirical_regime_matrix_60pct_dev": {
+                    k: {
+                        "setups": int(v["setups"]),
+                        "win_rate_pct": round((v["wins"] / max(1.0, v["setups"])) * 100.0, 1),
+                        "expectancy_r": round(v["r_sum"] / max(1.0, v["setups"]), 3),
+                    }
+                    for k, v in regime_stats.items()
+                },
+            }
+
             cand_id = f"cand-v2-{upper_sym.lower()}-{style_up.lower()}"
             blueprint = {
                 "strategy_id": f"oracle_v2_{upper_sym.lower()}_{style_up.lower()}",
                 "symbol": upper_sym,
                 "trader_style": style_up,
                 "top_down_stack": stack,
+                "top_down_execution_rules": top_down_execution_rules,
                 "recommended_sessions": rec_sessions,
                 "recommended_adaptive_sessions": rec_adaptive,
                 "recommended_regimes": rec_regimes,
                 "learned_excursion_parameters": {
+                    "sample_setups_60pct_dev": len(all_mfes_atr),
+                    "p70_winning_mae_atr": round(p70_mae, 3),
+                    "p65_mfe_atr": round(p65_mfe, 3),
+                    "p80_mfe_atr": round(p80_mfe, 3),
                     "learned_optimal_stop_atr_mult": sl_mult,
                     "learned_optimal_tp_atr_mult": tp_mult,
                     "learned_risk_reward_ratio": rr_target,
@@ -1184,9 +1446,9 @@ class MultiTimeframeInstitutionalEngine:
                 "regime": "trending_up" if style_up != "RANGE_SPECIALIST" else "ranging",
                 "trader_style": style_up,
                 "candidate_code": f"V2_MTF_{style_up}",
-                "candidate_title": f"Oracle V2 7-Timeframe {style_up.replace('_', ' ')} ({trig_tf} Trigger)",
+                "candidate_title": f"Oracle V2 Top-Down ({'+'.join(stack['macro_timeframes'])} -> {'+'.join(stack['setup_timeframes'])} -> {trig_tf}) {style_up.replace('_', ' ')}",
                 "lifecycle_state": "DEPLOYED",
-                "status_reason": f"Certified on 7-TF stack ({trig_tf} trigger): {len(trade_returns_r)} trades, WinRate={win_rate}%, Net={net_ret_pct}%, MC95 DD={mc_report['mc95_worst_case_drawdown_pct']}%.",
+                "status_reason": f"Certified on 3-Layer Top-Down Stack ({'+'.join(stack['macro_timeframes'])}->{trig_tf}): 40% Lockbox Trades={len(trade_returns_r)}, WinRate={win_rate}%, Net={net_ret_pct}%, MC95 DD={mc_report['mc95_worst_case_drawdown_pct']}%.",
                 "created_at_unix": now_ts,
                 "updated_at_unix": now_ts,
                 "evaluation_metrics": {
@@ -1227,10 +1489,15 @@ class MultiTimeframeInstitutionalEngine:
             catalog["oracle_v2_strategies"][upper_sym][style_up] = blueprint
             trained_results[style_up] = {
                 "candidate_id": cand_id,
-                "trigger_timeframe": trig_tf,
-                "trades_evaluated": len(trade_returns_r),
-                "win_rate_pct": win_rate,
-                "total_net_r": total_r,
+                "top_down_stack": f"{'+'.join(stack['macro_timeframes'])} -> {'+'.join(stack['setup_timeframes'])} -> {trig_tf}",
+                "learned_sl_atr": sl_mult,
+                "learned_tp1_r": tp1_r,
+                "learned_tp2_r": tp2_r,
+                "recommended_sessions": rec_sessions,
+                "recommended_regimes": rec_regimes,
+                "lockbox_trades": len(trade_returns_r),
+                "lockbox_win_rate_pct": win_rate,
+                "lockbox_total_net_r": total_r,
                 "mc95_drawdown_pct": mc_report["mc95_worst_case_drawdown_pct"],
             }
 

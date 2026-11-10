@@ -1,0 +1,187 @@
+{
+  "candidate_id": "cand-v2-eurusd-day_trading",
+  "experiment_id": "exp-v2-eurusd-day_trading",
+  "hypothesis_id": "hyp-v2-eurusd-day_trading",
+  "symbol": "EURUSD",
+  "regime": "trending_up",
+  "trader_style": "DAY_TRADING",
+  "candidate_code": "V2_MTF_DAY_TRADING",
+  "candidate_title": "Oracle V2 Top-Down (D1+H4 -> H1+M30 -> M15) DAY TRADING",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 3-Layer Top-Down Stack (D1+H4->M15): 40% Lockbox Trades=19, WinRate=68.4%, Net=2.57%, MC95 DD=2.44%.",
+  "created_at_unix": 1794308954.5594113,
+  "updated_at_unix": 1794308954.5594113,
+  "evaluation_metrics": {
+    "trades_count": 19,
+    "win_rate_pct": 68.4,
+    "total_net_r": 5.149,
+    "expectancy_r": 0.271,
+    "mc95_worst_case_drawdown_pct": 2.44,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 19,
+      "wins": 13,
+      "losses": 6,
+      "win_rate": 0.684,
+      "net_return_pct": 2.57,
+      "expectancy_r": 0.271,
+      "sharpe_ratio": 0.6,
+      "max_drawdown_pct": 1.51
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 1.51,
+    "mc95_worst_case_drawdown_pct": 2.44,
+    "mc99_extreme_drawdown_pct": 2.67,
+    "mc95_max_consecutive_losses": 4,
+    "passed_mc95_gate": true
+  },
+  "v1_compatibility_export": {
+    "strategy_id": "oracle_v2_eurusd_day_trading",
+    "symbol": "EURUSD",
+    "trader_style": "DAY_TRADING",
+    "top_down_stack": {
+      "macro_timeframes": [
+        "D1",
+        "H4"
+      ],
+      "setup_timeframes": [
+        "H1",
+        "M30"
+      ],
+      "trigger_timeframe": "M15"
+    },
+    "top_down_execution_rules": {
+      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
+      "layer_1_macro_narrative": {
+        "timeframes": [
+          "D1",
+          "H4"
+        ],
+        "rules": [
+          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
+          "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
+        ]
+      },
+      "layer_2_setup_structure": {
+        "timeframes": [
+          "H1",
+          "M30"
+        ],
+        "rules": [
+          "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
+          "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
+        ]
+      },
+      "layer_3_trigger_execution": {
+        "timeframe": "M15",
+        "rules": [
+          "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.553x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
+          "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.426x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 1.25x ATR Chandelier stop to +3.8R."
+        ]
+      },
+      "empirical_session_matrix_60pct_dev": {
+        "ASIAN_SESSION": {
+          "setups": 12,
+          "win_rate_pct": 33.3,
+          "expectancy_r": 0.504
+        },
+        "LONDON_NY_OVERLAP": {
+          "setups": 14,
+          "win_rate_pct": 57.1,
+          "expectancy_r": 1.861
+        },
+        "LONDON_SESSION": {
+          "setups": 9,
+          "win_rate_pct": 66.7,
+          "expectancy_r": 2.159
+        },
+        "NEW_YORK_SESSION": {
+          "setups": 9,
+          "win_rate_pct": 22.2,
+          "expectancy_r": -0.054
+        }
+      },
+      "empirical_regime_matrix_60pct_dev": {
+        "CONSOLIDATION_RANGING": {
+          "setups": 38,
+          "win_rate_pct": 44.7,
+          "expectancy_r": 1.077
+        },
+        "VOLATILITY_EXPANSION": {
+          "setups": 4,
+          "win_rate_pct": 50.0,
+          "expectancy_r": 1.385
+        },
+        "TRENDING_BEARISH": {
+          "setups": 2,
+          "win_rate_pct": 50.0,
+          "expectancy_r": 2.292
+        }
+      }
+    },
+    "recommended_sessions": [
+      "LONDON_SESSION",
+      "LONDON_NY_OVERLAP",
+      "ASIAN_SESSION"
+    ],
+    "recommended_adaptive_sessions": [
+      "LONDON_OPEN_JUDAS_SWEEP",
+      "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+      "ASIAN_RANGE_ACCUMULATION"
+    ],
+    "recommended_regimes": [
+      "TRENDING_BEARISH",
+      "VOLATILITY_EXPANSION",
+      "CONSOLIDATION_RANGING"
+    ],
+    "learned_excursion_parameters": {
+      "sample_setups_60pct_dev": 44,
+      "p70_winning_mae_atr": 1.273,
+      "p65_mfe_atr": 4.009,
+      "p80_mfe_atr": 7.096,
+      "learned_optimal_stop_atr_mult": 1.426,
+      "learned_optimal_tp_atr_mult": 4.21,
+      "learned_risk_reward_ratio": 2.95,
+      "learned_be_trigger_r": 1.15,
+      "learned_tp1_r": 1.67,
+      "learned_tp2_r": 3.8,
+      "learned_trail_atr_mult": 1.25
+    },
+    "instrument_physics": {
+      "symbol": "EURUSD",
+      "avg_wick_to_body_ratio": 4.004,
+      "learned_sweep_wick_ratio_threshold": 0.45,
+      "learned_fvg_body_atr_threshold": 0.553,
+      "trend_persistence_score": 0.276,
+      "mean_reversion_propensity": 0.724,
+      "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+      "peak_volatility_utc_hours": [
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    "regime_drift_report": {
+      "symbol": "EURUSD",
+      "trader_style": "DAY_TRADING",
+      "drift_status": "STABLE",
+      "volatility_drift_pct": 7.13,
+      "efficiency_drift_pct": 6.98,
+      "recommendation": "Market regime physics for EURUSD (DAY_TRADING) remain aligned with training baseline."
+    },
+    "monte_carlo_stress_report": {
+      "iterations": 1000,
+      "mc50_median_drawdown_pct": 1.51,
+      "mc95_worst_case_drawdown_pct": 2.44,
+      "mc99_extreme_drawdown_pct": 2.67,
+      "mc95_max_consecutive_losses": 4,
+      "passed_mc95_gate": true
+    }
+  }
+}

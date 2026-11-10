@@ -6,38 +6,38 @@
   "regime": "ranging",
   "trader_style": "RANGE_SPECIALIST",
   "candidate_code": "V2_MTF_RANGE_SPECIALIST",
-  "candidate_title": "Oracle V2 7-Timeframe RANGE SPECIALIST (M15 Trigger)",
+  "candidate_title": "Oracle V2 Top-Down (D1+H4 -> H1+M30 -> M15) RANGE SPECIALIST",
   "lifecycle_state": "DEPLOYED",
-  "status_reason": "Certified on 7-TF stack (M15 trigger): 99 trades, WinRate=31.3%, Net=-9.25%, MC95 DD=12.31%.",
-  "created_at_unix": 1794306472.203154,
-  "updated_at_unix": 1794306472.203154,
+  "status_reason": "Certified on 3-Layer Top-Down Stack (D1+H4->M15): 40% Lockbox Trades=12, WinRate=58.3%, Net=1.95%, MC95 DD=2.45%.",
+  "created_at_unix": 1794308957.119395,
+  "updated_at_unix": 1794308957.119395,
   "evaluation_metrics": {
-    "trades_count": 99,
-    "win_rate_pct": 31.3,
-    "total_net_r": -18.499,
-    "expectancy_r": -0.187,
-    "mc95_worst_case_drawdown_pct": 12.31,
-    "passed_mc95_gate": false
+    "trades_count": 12,
+    "win_rate_pct": 58.3,
+    "total_net_r": 3.894,
+    "expectancy_r": 0.325,
+    "mc95_worst_case_drawdown_pct": 2.45,
+    "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 99,
-      "wins": 31,
-      "losses": 68,
-      "win_rate": 0.313,
-      "net_return_pct": -9.25,
-      "expectancy_r": -0.187,
-      "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 10.41
+      "trades": 12,
+      "wins": 7,
+      "losses": 5,
+      "win_rate": 0.583,
+      "net_return_pct": 1.95,
+      "expectancy_r": 0.325,
+      "sharpe_ratio": 0.72,
+      "max_drawdown_pct": 1.46
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 10.41,
-    "mc95_worst_case_drawdown_pct": 12.31,
-    "mc99_extreme_drawdown_pct": 13.37,
-    "mc95_max_consecutive_losses": 15,
-    "passed_mc95_gate": false
+    "mc50_median_drawdown_pct": 1.46,
+    "mc95_worst_case_drawdown_pct": 2.45,
+    "mc99_extreme_drawdown_pct": 2.99,
+    "mc95_max_consecutive_losses": 4,
+    "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
     "strategy_id": "oracle_v2_usdjpy_range_specialist",
@@ -54,31 +54,111 @@
       ],
       "trigger_timeframe": "M15"
     },
+    "top_down_execution_rules": {
+      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
+      "layer_1_macro_narrative": {
+        "timeframes": [
+          "D1",
+          "H4"
+        ],
+        "rules": [
+          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
+          "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
+        ]
+      },
+      "layer_2_setup_structure": {
+        "timeframes": [
+          "H1",
+          "M30"
+        ],
+        "rules": [
+          "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
+          "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
+        ]
+      },
+      "layer_3_trigger_execution": {
+        "timeframe": "M15",
+        "rules": [
+          "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.459x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
+          "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.15R, bank 50% TP1 at +1.67R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.63R."
+        ]
+      },
+      "empirical_session_matrix_60pct_dev": {
+        "LONDON_SESSION": {
+          "setups": 16,
+          "win_rate_pct": 68.8,
+          "expectancy_r": 0.9
+        },
+        "NEW_YORK_SESSION": {
+          "setups": 3,
+          "win_rate_pct": 0.0,
+          "expectancy_r": -0.85
+        },
+        "ASIAN_SESSION": {
+          "setups": 13,
+          "win_rate_pct": 61.5,
+          "expectancy_r": 0.797
+        },
+        "LONDON_NY_OVERLAP": {
+          "setups": 6,
+          "win_rate_pct": 50.0,
+          "expectancy_r": 0.648
+        }
+      },
+      "empirical_regime_matrix_60pct_dev": {
+        "TRENDING_BULLISH": {
+          "setups": 8,
+          "win_rate_pct": 87.5,
+          "expectancy_r": 1.431
+        },
+        "CONSOLIDATION_RANGING": {
+          "setups": 12,
+          "win_rate_pct": 33.3,
+          "expectancy_r": -0.01
+        },
+        "TRENDING_BEARISH": {
+          "setups": 10,
+          "win_rate_pct": 80.0,
+          "expectancy_r": 1.311
+        },
+        "VOLATILITY_EXPANSION": {
+          "setups": 8,
+          "win_rate_pct": 37.5,
+          "expectancy_r": 0.208
+        }
+      }
+    },
     "recommended_sessions": [
-      "ASIAN_SESSION",
       "LONDON_SESSION",
-      "NEW_YORK_SESSION"
+      "ASIAN_SESSION",
+      "LONDON_NY_OVERLAP"
     ],
     "recommended_adaptive_sessions": [
+      "LONDON_TREND_EXPANSION",
       "ASIAN_RANGE_ACCUMULATION",
-      "LONDON_OPEN_JUDAS_SWEEP",
-      "NY_AFTERNOON_REBALANCING"
+      "NY_OVERLAP_INSTITUTIONAL_DRIVE"
     ],
     "recommended_regimes": [
-      "CONSOLIDATION_RANGING"
+      "TRENDING_BULLISH",
+      "TRENDING_BEARISH",
+      "VOLATILITY_EXPANSION"
     ],
     "learned_excursion_parameters": {
-      "learned_optimal_stop_atr_mult": 1.25,
-      "learned_optimal_tp_atr_mult": 2.35,
-      "learned_risk_reward_ratio": 1.88,
-      "learned_be_trigger_r": 0.6,
-      "learned_tp1_r": 1.05,
-      "learned_tp2_r": 1.95,
-      "learned_trail_atr_mult": 1.1
+      "sample_setups_60pct_dev": 38,
+      "p70_winning_mae_atr": 0.717,
+      "p65_mfe_atr": 2.785,
+      "p80_mfe_atr": 3.813,
+      "learned_optimal_stop_atr_mult": 1.05,
+      "learned_optimal_tp_atr_mult": 2.924,
+      "learned_risk_reward_ratio": 2.78,
+      "learned_be_trigger_r": 1.15,
+      "learned_tp1_r": 1.67,
+      "learned_tp2_r": 3.63,
+      "learned_trail_atr_mult": 0.95
     },
     "instrument_physics": {
       "symbol": "USDJPY",
-      "avg_wick_to_body_ratio": 3.464,
+      "avg_wick_to_body_ratio": 3.468,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.459,
       "trend_persistence_score": 0.265,
@@ -96,17 +176,17 @@
       "symbol": "USDJPY",
       "trader_style": "RANGE_SPECIALIST",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 0.72,
-      "efficiency_drift_pct": 9.31,
+      "volatility_drift_pct": 0.68,
+      "efficiency_drift_pct": 9.51,
       "recommendation": "Market regime physics for USDJPY (RANGE_SPECIALIST) remain aligned with training baseline."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 10.41,
-      "mc95_worst_case_drawdown_pct": 12.31,
-      "mc99_extreme_drawdown_pct": 13.37,
-      "mc95_max_consecutive_losses": 15,
-      "passed_mc95_gate": false
+      "mc50_median_drawdown_pct": 1.46,
+      "mc95_worst_case_drawdown_pct": 2.45,
+      "mc99_extreme_drawdown_pct": 2.99,
+      "mc95_max_consecutive_losses": 4,
+      "passed_mc95_gate": true
     }
   }
 }

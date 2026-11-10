@@ -1,0 +1,192 @@
+{
+  "candidate_id": "cand-v2-gbpusd-day_trading",
+  "experiment_id": "exp-v2-gbpusd-day_trading",
+  "hypothesis_id": "hyp-v2-gbpusd-day_trading",
+  "symbol": "GBPUSD",
+  "regime": "trending_up",
+  "trader_style": "DAY_TRADING",
+  "candidate_code": "V2_MTF_DAY_TRADING",
+  "candidate_title": "Oracle V2 Top-Down (D1+H4 -> H1+M30 -> M15) DAY TRADING",
+  "lifecycle_state": "DEPLOYED",
+  "status_reason": "Certified on 3-Layer Top-Down Stack (D1+H4->M15): 40% Lockbox Trades=19, WinRate=47.4%, Net=2.17%, MC95 DD=2.73%.",
+  "created_at_unix": 1794308952.2669163,
+  "updated_at_unix": 1794308952.2669163,
+  "evaluation_metrics": {
+    "trades_count": 19,
+    "win_rate_pct": 47.4,
+    "total_net_r": 4.344,
+    "expectancy_r": 0.229,
+    "mc95_worst_case_drawdown_pct": 2.73,
+    "passed_mc95_gate": true
+  },
+  "lockbox_holdout_report": {
+    "candidate_metrics": {
+      "trades": 19,
+      "wins": 9,
+      "losses": 10,
+      "win_rate": 0.474,
+      "net_return_pct": 2.17,
+      "expectancy_r": 0.229,
+      "sharpe_ratio": 0.5,
+      "max_drawdown_pct": 1.67
+    }
+  },
+  "monte_carlo_stress_report": {
+    "iterations": 1000,
+    "mc50_median_drawdown_pct": 1.67,
+    "mc95_worst_case_drawdown_pct": 2.73,
+    "mc99_extreme_drawdown_pct": 2.86,
+    "mc95_max_consecutive_losses": 6,
+    "passed_mc95_gate": true
+  },
+  "v1_compatibility_export": {
+    "strategy_id": "oracle_v2_gbpusd_day_trading",
+    "symbol": "GBPUSD",
+    "trader_style": "DAY_TRADING",
+    "top_down_stack": {
+      "macro_timeframes": [
+        "D1",
+        "H4"
+      ],
+      "setup_timeframes": [
+        "H1",
+        "M30"
+      ],
+      "trigger_timeframe": "M15"
+    },
+    "top_down_execution_rules": {
+      "analysis_architecture": "3_LAYER_TOP_DOWN_MULTI_TIMEFRAME_CONFLUENCE",
+      "layer_1_macro_narrative": {
+        "timeframes": [
+          "D1",
+          "H4"
+        ],
+        "rules": [
+          "Evaluate EMA9 vs EMA21 trend alignment and Break of Structure (BOS) across D1, H4.",
+          "Compute Macro Dealing Range position from D1, H4 16-bar Swing Low to Swing High; block longs above 92% Macro Premium and shorts below 8% Macro Discount."
+        ]
+      },
+      "layer_2_setup_structure": {
+        "timeframes": [
+          "H1",
+          "M30"
+        ],
+        "rules": [
+          "Require H1, M30 structural confirmation: Close vs EMA9 + RSI14 momentum band + Setup-Timeframe 3-Bar Fair Value Gap (FVG) or Liquidity Sweep.",
+          "HTF Room-to-Run Gate: Verify distance to opposing H1, M30 Swing High/Low ceiling/floor is >= 0.9x ATR (or active BOS breakout) before allowing lower-timeframe trigger."
+        ]
+      },
+      "layer_3_trigger_execution": {
+        "timeframe": "M15",
+        "rules": [
+          "Execute on M15 confirmation candle (Liquidity Sweep wick >= 0.45, 3-Bar FVG body >= 0.55x ATR, or BOS) only when Layer 1 and Layer 2 votes agree.",
+          "Anchor initial Stop-Loss to M15 16-bar structural swing bounded by 1.05x ATR; activate Break-Even at +1.14R, bank 50% TP1 at +1.65R, and trail remaining 50% runner with 0.95x ATR Chandelier stop to +3.8R."
+        ]
+      },
+      "empirical_session_matrix_60pct_dev": {
+        "LONDON_SESSION": {
+          "setups": 9,
+          "win_rate_pct": 55.6,
+          "expectancy_r": 4.267
+        },
+        "LONDON_NY_OVERLAP": {
+          "setups": 9,
+          "win_rate_pct": 55.6,
+          "expectancy_r": 2.634
+        },
+        "NEW_YORK_SESSION": {
+          "setups": 17,
+          "win_rate_pct": 17.6,
+          "expectancy_r": -0.424
+        },
+        "ASIAN_SESSION": {
+          "setups": 11,
+          "win_rate_pct": 36.4,
+          "expectancy_r": 0.685
+        }
+      },
+      "empirical_regime_matrix_60pct_dev": {
+        "CONSOLIDATION_RANGING": {
+          "setups": 39,
+          "win_rate_pct": 35.9,
+          "expectancy_r": 0.987
+        },
+        "VOLATILITY_EXPANSION": {
+          "setups": 3,
+          "win_rate_pct": 66.7,
+          "expectancy_r": 1.96
+        },
+        "TRENDING_BEARISH": {
+          "setups": 1,
+          "win_rate_pct": 0.0,
+          "expectancy_r": -0.85
+        },
+        "TRENDING_BULLISH": {
+          "setups": 3,
+          "win_rate_pct": 33.3,
+          "expectancy_r": 6.307
+        }
+      }
+    },
+    "recommended_sessions": [
+      "LONDON_SESSION",
+      "LONDON_NY_OVERLAP",
+      "ASIAN_SESSION"
+    ],
+    "recommended_adaptive_sessions": [
+      "LONDON_TREND_EXPANSION",
+      "LONDON_OPEN_JUDAS_SWEEP",
+      "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+    ],
+    "recommended_regimes": [
+      "TRENDING_BULLISH",
+      "VOLATILITY_EXPANSION",
+      "CONSOLIDATION_RANGING"
+    ],
+    "learned_excursion_parameters": {
+      "sample_setups_60pct_dev": 46,
+      "p70_winning_mae_atr": 0.742,
+      "p65_mfe_atr": 2.649,
+      "p80_mfe_atr": 4.653,
+      "learned_optimal_stop_atr_mult": 1.05,
+      "learned_optimal_tp_atr_mult": 2.781,
+      "learned_risk_reward_ratio": 2.65,
+      "learned_be_trigger_r": 1.14,
+      "learned_tp1_r": 1.65,
+      "learned_tp2_r": 3.8,
+      "learned_trail_atr_mult": 0.95
+    },
+    "instrument_physics": {
+      "symbol": "GBPUSD",
+      "avg_wick_to_body_ratio": 2.656,
+      "learned_sweep_wick_ratio_threshold": 0.45,
+      "learned_fvg_body_atr_threshold": 0.55,
+      "trend_persistence_score": 0.265,
+      "mean_reversion_propensity": 0.735,
+      "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+      "peak_volatility_utc_hours": [
+        13,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    "regime_drift_report": {
+      "symbol": "GBPUSD",
+      "trader_style": "DAY_TRADING",
+      "drift_status": "STABLE",
+      "volatility_drift_pct": 4.5,
+      "efficiency_drift_pct": 6.74,
+      "recommendation": "Market regime physics for GBPUSD (DAY_TRADING) remain aligned with training baseline."
+    },
+    "monte_carlo_stress_report": {
+      "iterations": 1000,
+      "mc50_median_drawdown_pct": 1.67,
+      "mc95_worst_case_drawdown_pct": 2.73,
+      "mc99_extreme_drawdown_pct": 2.86,
+      "mc95_max_consecutive_losses": 6,
+      "passed_mc95_gate": true
+    }
+  }
+}
