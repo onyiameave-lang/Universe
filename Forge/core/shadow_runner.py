@@ -296,18 +296,26 @@ class ForgeShadowRunner:
             exc = bp.get("learned_excursion_parameters", {})
             sl_atr_mult = float(exc.get("learned_optimal_stop_atr_mult", 1.5))
             be_trigger_r = float(exc.get("learned_be_trigger_r", 0.75))
-            tp1_r = float(exc.get("learned_tp1_r", 1.25))
-            tp2_r = float(exc.get("learned_tp2_r", 2.0))
-            primary_tp_r = float(exc.get("learned_primary_tp_r", 2.45))
+            partial_tp_r = float(exc.get("learned_partial_tp_r", exc.get("learned_tp1_r", 1.15)))
+            primary_tp_r = float(exc.get("learned_primary_tp_r", exc.get("learned_tp2_r", 2.25)))
             trail_atr_mult = float(exc.get("learned_trail_atr_mult", 1.35))
-            tp_ladder_r = exc.get("learned_tp_ladder_r") or {
-                "TP1": tp1_r,
-                "TP2": tp2_r,
-                "TP3": primary_tp_r,
-                "TP4": round(primary_tp_r * 1.30, 2),
-                "TP5": round(primary_tp_r * 1.65, 2),
-                "TP6": round(primary_tp_r * 2.05, 2),
-                "TP7": round(primary_tp_r * 2.50, 2),
+
+            management_policy = bp.get("dynamic_trade_management_policy") or {
+                "learned_optimal_stop_atr_mult": sl_atr_mult,
+                "learned_initial_major_tp_r": primary_tp_r,
+                "learned_partial_tp_r": partial_tp_r,
+                "learned_partial_bank_fraction": float(exc.get("learned_partial_bank_fraction", 0.35)),
+                "learned_sl_reduction_start_r": float(exc.get("learned_sl_reduction_start_r", 0.40)),
+                "learned_be_trigger_r": be_trigger_r,
+                "learned_sl_angle_fit_ratio": float(exc.get("learned_sl_angle_fit_ratio", 0.54)),
+                "learned_trail_atr_mult": trail_atr_mult,
+                "learned_early_cut_drawdown_r": float(exc.get("learned_early_cut_drawdown_r", 0.45)),
+                "learned_early_invalidation_thesis_cutoff": -0.20,
+                "learned_near_tp_zone_pct": float(exc.get("learned_near_tp_zone_pct", 0.82)),
+                "learned_near_tp_reversal_exit_cutoff": 0.02,
+                "learned_tp_expansion_thesis_cutoff": 0.22,
+                "learned_tp_expansion_step_r": float(exc.get("learned_tp_expansion_step_r", 0.90)),
+                "learned_expanded_sl_lock_ratio": float(exc.get("learned_expanded_sl_lock_ratio", 0.78)),
             }
 
             # Fetch bar-aligned Sentinel (News) & Pulse (Social) signals for this trigger series
@@ -410,19 +418,21 @@ class ForgeShadowRunner:
                     entry_price - stop_distance if is_long else entry_price + stop_distance, 5
                 )
 
-                # 4. Execute & Monitor the Shadow Trade with the 7-Stage Progressive TP Ladder + Continuation Runner
-                sim = self.mtf_engine.simulate_progressive_7tp_execution(
+                # 4. Execute & Monitor the Shadow Trade with Real-Trader Dynamic Re-Analysis
+                sim = self.mtf_engine.simulate_real_trader_dynamic_execution(
                     trig_series=trigger_series,
+                    dataset=dataset,
+                    stack=stack,
                     entry_idx=i,
                     horizon_bars=horizon_bars,
                     is_long=is_long,
                     entry_price=entry_price,
                     stop_distance=stop_distance,
                     atr=atr,
-                    be_trigger_r=be_trigger_r,
-                    trail_atr_mult=trail_atr_mult,
-                    tp_ladder_r=tp_ladder_r,
-                    allow_continuation_past_primary=True,
+                    learned_genome=bp.get("learned_strategy_genome") or {},
+                    management_policy=management_policy,
+                    sentinel_scores=sentinel_scores,
+                    pulse_scores=pulse_scores,
                 )
 
                 gross_r = float(sim["gross_r"])
@@ -434,10 +444,13 @@ class ForgeShadowRunner:
                 worst_mae_r = float(sim["worst_mae_r"])
                 be_active = bool(sim["be_ratchet_triggered"])
                 tp1_filled = bool(sim["tp1_partial_banked"])
-                tp_stages_hit = list(sim["tp_stages_hit"])
+                early_cut = bool(sim["early_loss_cut_triggered"])
+                near_tp_save = bool(sim["near_tp_reversal_exit_triggered"])
+                tp_expansions = int(sim["tp_expansions_count"])
+                sl_fits = int(sim["progressive_sl_fits_count"])
+                tp_history_r = list(sim["tp_expansion_history_r"])
                 highest_stage = int(sim["highest_tp_stage_reached"])
-                continued_past_tp3 = bool(sim["continued_past_primary_tp"])
-                tp_prices = dict(sim["tp_ladder_prices"])
+                continued_past_tp = bool(sim["continued_past_primary_tp"])
                 lifecycle_events = list(sim["lifecycle_events"])
 
                 cost_drag_r = total_cost_bps / max(stop_distance_bps, 0.1)
@@ -498,13 +511,18 @@ class ForgeShadowRunner:
                     "entry_price": round(entry_price, 5),
                     "initial_stop_loss": initial_stop,
                     "active_stop_loss": round(current_stop, 5),
-                    "primary_tp_level": tp_prices.get("TP3"),
-                    "tp1_level": tp_prices.get("TP1"),
-                    "tp2_level": tp_prices.get("TP2"),
-                    "tp_ladder_levels": tp_prices,
-                    "tp_stages_hit": tp_stages_hit,
+                    "tp1_level": sim["partial_tp_price"],
+                    "tp2_level": sim["active_major_tp_price"],
+                    "primary_tp_level": sim["active_major_tp_price"],
+                    "initial_major_tp_r": sim["initial_major_tp_r"],
+                    "final_major_tp_r": sim["final_major_tp_r"],
+                    "tp_expansion_history_r": tp_history_r,
+                    "tp_expansions_count": tp_expansions,
+                    "early_loss_cut_triggered": early_cut,
+                    "near_tp_reversal_exit_triggered": near_tp_save,
+                    "progressive_sl_fits_count": sl_fits,
                     "highest_tp_stage_reached": highest_stage,
-                    "continued_past_primary_tp": continued_past_tp3,
+                    "continued_past_primary_tp": continued_past_tp,
                     "exit_price": round(exit_price, 5),
                     "shadow_status": shadow_status,
                     "profitable": realized_r > 0,
@@ -533,8 +551,13 @@ class ForgeShadowRunner:
                         "realized_r": realized_r,
                         "peak_mfe_r": round(peak_mfe_r, 3),
                         "worst_mae_r": round(worst_mae_r, 3),
-                        "exit_reason": "STOP_INVALIDATION" if shadow_status == "CLOSED_STOP_LOSS" else "TIME_HORIZON_EXIT",
-                        "failure_reason": f"Shadow {style} trade stopped out ({realized_r}R) in {bar.get('adaptive_session')} ({bar.get('regime')}); MFE reached +{round(peak_mfe_r, 2)}R before reversal.",
+                        "early_loss_cut_triggered": early_cut,
+                        "exit_reason": (
+                            "EARLY_THESIS_INVALIDATION_CUT"
+                            if early_cut
+                            else ("STOP_INVALIDATION" if "STOP" in shadow_status else "TIME_HORIZON_EXIT")
+                        ),
+                        "failure_reason": f"Shadow {style} trade closed ({realized_r}R, {shadow_status}) in {bar.get('adaptive_session')} ({bar.get('regime')}); MFE reached +{round(peak_mfe_r, 2)}R.",
                         "timestamp_unix": time.time(),
                     }
                     with self.feedback_outbox_path.open("a", encoding="utf-8") as f:
@@ -549,8 +572,9 @@ class ForgeShadowRunner:
             be_saves = sum(
                 1 for t in style_trades if t["be_ratchet_triggered"] and t["realized_r"] > 0
             )
-            continued_cnt = sum(1 for t in style_trades if t.get("continued_past_primary_tp"))
-            max_stage = max((int(t.get("highest_tp_stage_reached", 0)) for t in style_trades), default=0)
+            early_cuts_cnt = sum(1 for t in style_trades if t.get("early_loss_cut_triggered"))
+            near_tp_saves_cnt = sum(1 for t in style_trades if t.get("near_tp_reversal_exit_triggered"))
+            tp_expansions_cnt = sum(int(t.get("tp_expansions_count", 0)) for t in style_trades)
 
             style_summaries[style] = {
                 "trader_style": style,
@@ -564,8 +588,9 @@ class ForgeShadowRunner:
                 "expectancy_r": avg_r,
                 "net_shadow_return_pct": round(total_r * 0.5, 2),
                 "dynamic_be_and_tp1_saves": be_saves,
-                "continued_past_primary_tp_count": continued_cnt,
-                "highest_tp_stage_reached": f"TP{max_stage}" if max_stage > 0 else "NONE",
+                "early_loss_cuts_before_sl": early_cuts_cnt,
+                "near_tp_reversal_saves": near_tp_saves_cnt,
+                "major_tp_expansions_count": tp_expansions_cnt,
                 "verdict": (
                     "PROFITABLE_IN_SHADOW"
                     if total_r > 0 and wins / max(1, len(style_trades)) >= 0.45
@@ -576,9 +601,9 @@ class ForgeShadowRunner:
             self.chronicle_ledger.record_lesson(
                 domain="shadow_runner_evaluation",
                 content=(
-                    f"Shadow Runner evaluated {upper_sym} {style} ({trigger_tf}) with 7-Stage TP Ladder: "
+                    f"Shadow Runner evaluated {upper_sym} {style} ({trigger_tf}) with Real-Trader Dynamic Re-Analysis: "
                     f"{len(style_trades)} shadow trades, WinRate={style_summaries[style]['win_rate_pct']}%, "
-                    f"Total={total_r}R (Expectancy={avg_r}R, MaxTPStage=TP{max_stage}, ContinuedPastTP3={continued_cnt})."
+                    f"Total={total_r}R (Expectancy={avg_r}R, EarlyLossCuts={early_cuts_cnt}, NearTPSaves={near_tp_saves_cnt}, TPExpansions={tp_expansions_cnt})."
                 ),
                 concept_key=f"shadow_runner::{upper_sym}::{style}",
                 tags=["forge", "shadow_runner", upper_sym, style],

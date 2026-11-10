@@ -8,15 +8,15 @@
   "candidate_code": "V2_MTF_SWING_TRADING",
   "candidate_title": "Atlas+Forge Self-Discovered (W1+D1 -> H4 -> H1) SWING TRADING",
   "lifecycle_state": "DEPLOYED",
-  "status_reason": "Discovered by Atlas+Forge (with Pulse/Sentinel & Leave-One-Out Ablation) on 60% Dev & Tested on 40% Lockbox: Trades=10, WinRate=60.0%, Net=0.73%, MaxTPStage=TP2, MC95 DD=1.99%.",
-  "created_at_unix": 1794314364.6168418,
-  "updated_at_unix": 1794314364.6168418,
+  "status_reason": "Discovered by Atlas+Forge (Real-Trader Dynamic Re-Analysis + Ablation) on 60% Dev & Tested on 40% Lockbox: Trades=9, WinRate=55.6%, Net=1.27%, EarlyCuts=0, NearTPSaves=1, TPExpansions=1, MC95 DD=1.65%.",
+  "created_at_unix": 1794328638.9819977,
+  "updated_at_unix": 1794328638.9819977,
   "atlas_research_hypothesis": {
     "hypothesis_id": "hyp-v2-eurusd-swing_trading",
     "atlas_report_id": "atlas-hyp-eurusd-swing_trading",
     "proposed_by": "atlas_and_forge_autonomous_discovery",
-    "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.003, trend_persistence=0.277, mean_reversion=0.723. Learned timeframe weights: W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Ablation-retained features: ema_trend (w=+0.962), rsi_momentum (w=+0.022), bos_breakout (w=+0.008), fvg_impulse (w=+0.008) (pruned/left out by ablation: liquidity_sweep, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment).",
-    "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.003, mean-reversion=0.723). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Controlled leave-one-out ablation retained [ema_trend (w=+0.962), rsi_momentum (w=+0.022), bos_breakout (w=+0.008), fvg_impulse (w=+0.008)] and pruned [liquidity_sweep, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment].",
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.987, trend_persistence=0.279, mean_reversion=0.721. Learned timeframe weights: W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Ablation-retained features: ema_trend (w=+0.969), rsi_momentum (w=+0.023), bos_breakout (w=+0.008) (pruned/left out by ablation: liquidity_sweep, fvg_impulse, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.987, mean-reversion=0.721). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Controlled leave-one-out ablation retained [ema_trend (w=+0.969), rsi_momentum (w=+0.023), bos_breakout (w=+0.008)] and pruned [liquidity_sweep, fvg_impulse, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment].",
     "confidence": 0.82,
     "dominant_timeframes_discovered": [
       "W1",
@@ -26,11 +26,11 @@
     "dominant_features_discovered": [
       "ema_trend",
       "rsi_momentum",
-      "bos_breakout",
-      "fvg_impulse"
+      "bos_breakout"
     ],
     "pruned_features_left_out_by_ablation": [
       "liquidity_sweep",
+      "fvg_impulse",
       "dealing_range_reversion",
       "sentinel_news_sentiment",
       "pulse_social_sentiment"
@@ -45,24 +45,24 @@
       "H1": 0.25
     },
     "feature_weights": {
-      "ema_trend": 0.962,
+      "ema_trend": 0.969,
       "bos_breakout": 0.008,
       "liquidity_sweep": 0.0,
-      "fvg_impulse": 0.008,
+      "fvg_impulse": 0.0,
       "dealing_range_reversion": 0.0,
-      "rsi_momentum": 0.022,
+      "rsi_momentum": 0.023,
       "sentinel_news_sentiment": 0.0,
       "pulse_social_sentiment": 0.0
     },
     "pre_ablation_feature_weights": {
-      "ema_trend": 0.228,
-      "bos_breakout": 0.104,
-      "liquidity_sweep": 0.047,
-      "fvg_impulse": 0.112,
-      "dealing_range_reversion": 0.119,
-      "rsi_momentum": 0.299,
-      "sentinel_news_sentiment": 0.045,
-      "pulse_social_sentiment": 0.045
+      "ema_trend": 0.234,
+      "bos_breakout": 0.107,
+      "liquidity_sweep": 0.07,
+      "fvg_impulse": 0.07,
+      "dealing_range_reversion": 0.123,
+      "rsi_momentum": 0.304,
+      "sentinel_news_sentiment": 0.046,
+      "pulse_social_sentiment": 0.046
     },
     "ablation_study_report": {
       "study_id": "abl-v2-eurusd-swing_trading",
@@ -72,11 +72,11 @@
       "retained_components": [
         "ema_trend",
         "bos_breakout",
-        "fvg_impulse",
         "rsi_momentum"
       ],
       "pruned_components_left_out": [
         "liquidity_sweep",
+        "fvg_impulse",
         "dealing_range_reversion",
         "sentinel_news_sentiment",
         "pulse_social_sentiment"
@@ -112,7 +112,7 @@
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
           "train_ic_edge": -0.3771,
-          "shadow_net_r_delta": -2.11,
+          "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "fvg_impulse": {
@@ -122,9 +122,9 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": -0.2911,
-          "shadow_net_r_delta": 4.479,
-          "verdict": "RETAINED_ADDS_VALUE"
+          "train_ic_edge": -0.3118,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "LEFT_OUT_PRUNED"
         },
         "dealing_range_reversion": {
           "component_id": "dealing_range_reversion",
@@ -133,7 +133,7 @@
           "without_component_expectancy_atr": 7.2062,
           "marginal_value_added_atr": -0.1859,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": 0.1275,
+          "train_ic_edge": 0.1318,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
@@ -144,7 +144,7 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": 0.5824,
+          "train_ic_edge": 0.5754,
           "shadow_net_r_delta": 0.0,
           "verdict": "RETAINED_ADDS_VALUE"
         },
@@ -166,7 +166,7 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": -0.1514,
+          "train_ic_edge": -0.1512,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         }
@@ -266,12 +266,18 @@
         "total_runs_executed": 9,
         "individual_runs_executed": 8
       },
-      "tp_continuation_7stage_ablation": {
-        "with_7tp_continuation_total_r": 1.456,
-        "without_continuation_capped_at_primary_tp_r": 1.456,
-        "marginal_r_gained_by_7tp_continuation": 0.0,
-        "trades_continued_past_primary_tp": 0,
-        "highest_tp_stage_reached_in_lockbox": 2
+      "real_trader_management_ablation": {
+        "full_dynamic_trader_total_r": 2.549,
+        "static_set_and_forget_total_r": 1.705,
+        "total_r_gained_by_dynamic_reanalysis": 0.844,
+        "early_loss_cut_marginal_r_saved": 0.0,
+        "early_loss_cuts_before_sl_count": 0,
+        "near_tp_reversal_save_marginal_r": 0.617,
+        "near_tp_reversal_saves_count": 1,
+        "dynamic_tp_expansion_marginal_r": 0.736,
+        "trades_with_major_tp_expanded": 1,
+        "max_tp_expansions_in_single_trade": 1,
+        "progressive_sl_angle_fits_count": 25
       }
     },
     "structural_gates": {
@@ -290,6 +296,31 @@
       "validation_screen_score_atr": 7.206
     }
   },
+  "dynamic_trade_management_policy": {
+    "policy_type": "real_trader_dynamic_reanalysis_and_capital_protection",
+    "learned_optimal_stop_atr_mult": 1.253,
+    "learned_initial_major_tp_r": 3.4,
+    "learned_partial_tp_r": 1.59,
+    "learned_partial_bank_fraction": 0.35,
+    "learned_sl_reduction_start_r": 0.68,
+    "learned_be_trigger_r": 1.15,
+    "learned_sl_angle_fit_ratio": 0.46,
+    "learned_trail_atr_mult": 1.08,
+    "learned_early_cut_drawdown_r": 0.62,
+    "learned_early_invalidation_thesis_cutoff": -0.16,
+    "learned_near_tp_zone_pct": 0.84,
+    "learned_near_tp_reversal_exit_cutoff": -0.04,
+    "learned_tp_expansion_thesis_cutoff": 0.298,
+    "learned_tp_expansion_step_r": 1.6,
+    "learned_expanded_sl_lock_ratio": 0.78,
+    "dynamic_expansion_preview_r": {
+      "PARTIAL_TP": 1.59,
+      "INITIAL_MAJOR_TP": 3.4,
+      "DYNAMIC_EXPANSION_1": 5.0,
+      "DYNAMIC_EXPANSION_2": 6.6,
+      "DYNAMIC_EXPANSION_3": 8.2
+    }
+  },
   "ablation_study_report": {
     "study_id": "abl-v2-eurusd-swing_trading",
     "ablation_engine_version": "1.0.0",
@@ -298,11 +329,11 @@
     "retained_components": [
       "ema_trend",
       "bos_breakout",
-      "fvg_impulse",
       "rsi_momentum"
     ],
     "pruned_components_left_out": [
       "liquidity_sweep",
+      "fvg_impulse",
       "dealing_range_reversion",
       "sentinel_news_sentiment",
       "pulse_social_sentiment"
@@ -338,7 +369,7 @@
         "marginal_value_added_atr": 0.0,
         "without_component_win_rate": 1.0,
         "train_ic_edge": -0.3771,
-        "shadow_net_r_delta": -2.11,
+        "shadow_net_r_delta": 0.0,
         "verdict": "LEFT_OUT_PRUNED"
       },
       "fvg_impulse": {
@@ -348,9 +379,9 @@
         "without_component_expectancy_atr": 7.0203,
         "marginal_value_added_atr": 0.0,
         "without_component_win_rate": 1.0,
-        "train_ic_edge": -0.2911,
-        "shadow_net_r_delta": 4.479,
-        "verdict": "RETAINED_ADDS_VALUE"
+        "train_ic_edge": -0.3118,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "LEFT_OUT_PRUNED"
       },
       "dealing_range_reversion": {
         "component_id": "dealing_range_reversion",
@@ -359,7 +390,7 @@
         "without_component_expectancy_atr": 7.2062,
         "marginal_value_added_atr": -0.1859,
         "without_component_win_rate": 1.0,
-        "train_ic_edge": 0.1275,
+        "train_ic_edge": 0.1318,
         "shadow_net_r_delta": 0.0,
         "verdict": "LEFT_OUT_PRUNED"
       },
@@ -370,7 +401,7 @@
         "without_component_expectancy_atr": 7.0203,
         "marginal_value_added_atr": 0.0,
         "without_component_win_rate": 1.0,
-        "train_ic_edge": 0.5824,
+        "train_ic_edge": 0.5754,
         "shadow_net_r_delta": 0.0,
         "verdict": "RETAINED_ADDS_VALUE"
       },
@@ -392,7 +423,7 @@
         "without_component_expectancy_atr": 7.0203,
         "marginal_value_added_atr": 0.0,
         "without_component_win_rate": 1.0,
-        "train_ic_edge": -0.1514,
+        "train_ic_edge": -0.1512,
         "shadow_net_r_delta": 0.0,
         "verdict": "LEFT_OUT_PRUNED"
       }
@@ -492,42 +523,51 @@
       "total_runs_executed": 9,
       "individual_runs_executed": 8
     },
-    "tp_continuation_7stage_ablation": {
-      "with_7tp_continuation_total_r": 1.456,
-      "without_continuation_capped_at_primary_tp_r": 1.456,
-      "marginal_r_gained_by_7tp_continuation": 0.0,
-      "trades_continued_past_primary_tp": 0,
-      "highest_tp_stage_reached_in_lockbox": 2
+    "real_trader_management_ablation": {
+      "full_dynamic_trader_total_r": 2.549,
+      "static_set_and_forget_total_r": 1.705,
+      "total_r_gained_by_dynamic_reanalysis": 0.844,
+      "early_loss_cut_marginal_r_saved": 0.0,
+      "early_loss_cuts_before_sl_count": 0,
+      "near_tp_reversal_save_marginal_r": 0.617,
+      "near_tp_reversal_saves_count": 1,
+      "dynamic_tp_expansion_marginal_r": 0.736,
+      "trades_with_major_tp_expanded": 1,
+      "max_tp_expansions_in_single_trade": 1,
+      "progressive_sl_angle_fits_count": 25
     }
   },
   "evaluation_metrics": {
-    "trades_count": 10,
-    "win_rate_pct": 60.0,
-    "total_net_r": 1.456,
-    "expectancy_r": 0.146,
-    "highest_tp_stage_reached": 2,
-    "continued_past_primary_tp_count": 0,
-    "marginal_r_from_7tp_continuation": 0.0,
-    "mc95_worst_case_drawdown_pct": 1.99,
+    "trades_count": 9,
+    "win_rate_pct": 55.6,
+    "total_net_r": 2.549,
+    "expectancy_r": 0.283,
+    "early_loss_cuts_before_sl_count": 0,
+    "near_tp_reversal_saves_count": 1,
+    "trades_with_major_tp_expanded": 1,
+    "max_tp_expansions_in_single_trade": 1,
+    "progressive_sl_angle_fits_count": 25,
+    "marginal_r_from_dynamic_management": 0.844,
+    "mc95_worst_case_drawdown_pct": 1.65,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 10,
-      "wins": 6,
+      "trades": 9,
+      "wins": 5,
       "losses": 4,
-      "win_rate": 0.6,
-      "net_return_pct": 0.73,
-      "expectancy_r": 0.146,
-      "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 1.04
+      "win_rate": 0.556,
+      "net_return_pct": 1.27,
+      "expectancy_r": 0.283,
+      "sharpe_ratio": 0.62,
+      "max_drawdown_pct": 1.03
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 1.04,
-    "mc95_worst_case_drawdown_pct": 1.99,
-    "mc99_extreme_drawdown_pct": 2.05,
+    "mc50_median_drawdown_pct": 1.03,
+    "mc95_worst_case_drawdown_pct": 1.65,
+    "mc99_extreme_drawdown_pct": 1.86,
     "mc95_max_consecutive_losses": 3,
     "passed_mc95_gate": true
   },
@@ -549,8 +589,8 @@
       "hypothesis_id": "hyp-v2-eurusd-swing_trading",
       "atlas_report_id": "atlas-hyp-eurusd-swing_trading",
       "proposed_by": "atlas_and_forge_autonomous_discovery",
-      "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=4.003, trend_persistence=0.277, mean_reversion=0.723. Learned timeframe weights: W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Ablation-retained features: ema_trend (w=+0.962), rsi_momentum (w=+0.022), bos_breakout (w=+0.008), fvg_impulse (w=+0.008) (pruned/left out by ablation: liquidity_sweep, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment).",
-      "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=4.003, mean-reversion=0.723). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Controlled leave-one-out ablation retained [ema_trend (w=+0.962), rsi_momentum (w=+0.022), bos_breakout (w=+0.008), fvg_impulse (w=+0.008)] and pruned [liquidity_sweep, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment].",
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for EURUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=3.987, trend_persistence=0.279, mean_reversion=0.721. Learned timeframe weights: W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Ablation-retained features: ema_trend (w=+0.969), rsi_momentum (w=+0.023), bos_breakout (w=+0.008) (pruned/left out by ablation: liquidity_sweep, fvg_impulse, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for EURUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=3.987, mean-reversion=0.721). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.250), D1 (w=+0.250), H4 (w=+0.250). Controlled leave-one-out ablation retained [ema_trend (w=+0.969), rsi_momentum (w=+0.023), bos_breakout (w=+0.008)] and pruned [liquidity_sweep, fvg_impulse, dealing_range_reversion, sentinel_news_sentiment, pulse_social_sentiment].",
       "confidence": 0.82,
       "dominant_timeframes_discovered": [
         "W1",
@@ -560,11 +600,11 @@
       "dominant_features_discovered": [
         "ema_trend",
         "rsi_momentum",
-        "bos_breakout",
-        "fvg_impulse"
+        "bos_breakout"
       ],
       "pruned_features_left_out_by_ablation": [
         "liquidity_sweep",
+        "fvg_impulse",
         "dealing_range_reversion",
         "sentinel_news_sentiment",
         "pulse_social_sentiment"
@@ -589,7 +629,7 @@
         "avg_authenticity": 0.5,
         "manipulation_warning": false,
         "evidence_state": "degraded",
-        "recent_bar_signal": -0.1808
+        "recent_bar_signal": 0.55
       },
       "sentinel_retained_by_ablation": false,
       "pulse_retained_by_ablation": false
@@ -603,24 +643,24 @@
         "H1": 0.25
       },
       "feature_weights": {
-        "ema_trend": 0.962,
+        "ema_trend": 0.969,
         "bos_breakout": 0.008,
         "liquidity_sweep": 0.0,
-        "fvg_impulse": 0.008,
+        "fvg_impulse": 0.0,
         "dealing_range_reversion": 0.0,
-        "rsi_momentum": 0.022,
+        "rsi_momentum": 0.023,
         "sentinel_news_sentiment": 0.0,
         "pulse_social_sentiment": 0.0
       },
       "pre_ablation_feature_weights": {
-        "ema_trend": 0.228,
-        "bos_breakout": 0.104,
-        "liquidity_sweep": 0.047,
-        "fvg_impulse": 0.112,
-        "dealing_range_reversion": 0.119,
-        "rsi_momentum": 0.299,
-        "sentinel_news_sentiment": 0.045,
-        "pulse_social_sentiment": 0.045
+        "ema_trend": 0.234,
+        "bos_breakout": 0.107,
+        "liquidity_sweep": 0.07,
+        "fvg_impulse": 0.07,
+        "dealing_range_reversion": 0.123,
+        "rsi_momentum": 0.304,
+        "sentinel_news_sentiment": 0.046,
+        "pulse_social_sentiment": 0.046
       },
       "ablation_study_report": {
         "study_id": "abl-v2-eurusd-swing_trading",
@@ -630,11 +670,11 @@
         "retained_components": [
           "ema_trend",
           "bos_breakout",
-          "fvg_impulse",
           "rsi_momentum"
         ],
         "pruned_components_left_out": [
           "liquidity_sweep",
+          "fvg_impulse",
           "dealing_range_reversion",
           "sentinel_news_sentiment",
           "pulse_social_sentiment"
@@ -670,7 +710,7 @@
             "marginal_value_added_atr": 0.0,
             "without_component_win_rate": 1.0,
             "train_ic_edge": -0.3771,
-            "shadow_net_r_delta": -2.11,
+            "shadow_net_r_delta": 0.0,
             "verdict": "LEFT_OUT_PRUNED"
           },
           "fvg_impulse": {
@@ -680,9 +720,9 @@
             "without_component_expectancy_atr": 7.0203,
             "marginal_value_added_atr": 0.0,
             "without_component_win_rate": 1.0,
-            "train_ic_edge": -0.2911,
-            "shadow_net_r_delta": 4.479,
-            "verdict": "RETAINED_ADDS_VALUE"
+            "train_ic_edge": -0.3118,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "LEFT_OUT_PRUNED"
           },
           "dealing_range_reversion": {
             "component_id": "dealing_range_reversion",
@@ -691,7 +731,7 @@
             "without_component_expectancy_atr": 7.2062,
             "marginal_value_added_atr": -0.1859,
             "without_component_win_rate": 1.0,
-            "train_ic_edge": 0.1275,
+            "train_ic_edge": 0.1318,
             "shadow_net_r_delta": 0.0,
             "verdict": "LEFT_OUT_PRUNED"
           },
@@ -702,7 +742,7 @@
             "without_component_expectancy_atr": 7.0203,
             "marginal_value_added_atr": 0.0,
             "without_component_win_rate": 1.0,
-            "train_ic_edge": 0.5824,
+            "train_ic_edge": 0.5754,
             "shadow_net_r_delta": 0.0,
             "verdict": "RETAINED_ADDS_VALUE"
           },
@@ -724,7 +764,7 @@
             "without_component_expectancy_atr": 7.0203,
             "marginal_value_added_atr": 0.0,
             "without_component_win_rate": 1.0,
-            "train_ic_edge": -0.1514,
+            "train_ic_edge": -0.1512,
             "shadow_net_r_delta": 0.0,
             "verdict": "LEFT_OUT_PRUNED"
           }
@@ -824,12 +864,18 @@
           "total_runs_executed": 9,
           "individual_runs_executed": 8
         },
-        "tp_continuation_7stage_ablation": {
-          "with_7tp_continuation_total_r": 1.456,
-          "without_continuation_capped_at_primary_tp_r": 1.456,
-          "marginal_r_gained_by_7tp_continuation": 0.0,
-          "trades_continued_past_primary_tp": 0,
-          "highest_tp_stage_reached_in_lockbox": 2
+        "real_trader_management_ablation": {
+          "full_dynamic_trader_total_r": 2.549,
+          "static_set_and_forget_total_r": 1.705,
+          "total_r_gained_by_dynamic_reanalysis": 0.844,
+          "early_loss_cut_marginal_r_saved": 0.0,
+          "early_loss_cuts_before_sl_count": 0,
+          "near_tp_reversal_save_marginal_r": 0.617,
+          "near_tp_reversal_saves_count": 1,
+          "dynamic_tp_expansion_marginal_r": 0.736,
+          "trades_with_major_tp_expanded": 1,
+          "max_tp_expansions_in_single_trade": 1,
+          "progressive_sl_angle_fits_count": 25
         }
       },
       "structural_gates": {
@@ -848,6 +894,31 @@
         "validation_screen_score_atr": 7.206
       }
     },
+    "dynamic_trade_management_policy": {
+      "policy_type": "real_trader_dynamic_reanalysis_and_capital_protection",
+      "learned_optimal_stop_atr_mult": 1.253,
+      "learned_initial_major_tp_r": 3.4,
+      "learned_partial_tp_r": 1.59,
+      "learned_partial_bank_fraction": 0.35,
+      "learned_sl_reduction_start_r": 0.68,
+      "learned_be_trigger_r": 1.15,
+      "learned_sl_angle_fit_ratio": 0.46,
+      "learned_trail_atr_mult": 1.08,
+      "learned_early_cut_drawdown_r": 0.62,
+      "learned_early_invalidation_thesis_cutoff": -0.16,
+      "learned_near_tp_zone_pct": 0.84,
+      "learned_near_tp_reversal_exit_cutoff": -0.04,
+      "learned_tp_expansion_thesis_cutoff": 0.298,
+      "learned_tp_expansion_step_r": 1.6,
+      "learned_expanded_sl_lock_ratio": 0.78,
+      "dynamic_expansion_preview_r": {
+        "PARTIAL_TP": 1.59,
+        "INITIAL_MAJOR_TP": 3.4,
+        "DYNAMIC_EXPANSION_1": 5.0,
+        "DYNAMIC_EXPANSION_2": 6.6,
+        "DYNAMIC_EXPANSION_3": 8.2
+      }
+    },
     "ablation_study_report": {
       "study_id": "abl-v2-eurusd-swing_trading",
       "ablation_engine_version": "1.0.0",
@@ -856,11 +927,11 @@
       "retained_components": [
         "ema_trend",
         "bos_breakout",
-        "fvg_impulse",
         "rsi_momentum"
       ],
       "pruned_components_left_out": [
         "liquidity_sweep",
+        "fvg_impulse",
         "dealing_range_reversion",
         "sentinel_news_sentiment",
         "pulse_social_sentiment"
@@ -896,7 +967,7 @@
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
           "train_ic_edge": -0.3771,
-          "shadow_net_r_delta": -2.11,
+          "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "fvg_impulse": {
@@ -906,9 +977,9 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": -0.2911,
-          "shadow_net_r_delta": 4.479,
-          "verdict": "RETAINED_ADDS_VALUE"
+          "train_ic_edge": -0.3118,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "LEFT_OUT_PRUNED"
         },
         "dealing_range_reversion": {
           "component_id": "dealing_range_reversion",
@@ -917,7 +988,7 @@
           "without_component_expectancy_atr": 7.2062,
           "marginal_value_added_atr": -0.1859,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": 0.1275,
+          "train_ic_edge": 0.1318,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
@@ -928,7 +999,7 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": 0.5824,
+          "train_ic_edge": 0.5754,
           "shadow_net_r_delta": 0.0,
           "verdict": "RETAINED_ADDS_VALUE"
         },
@@ -950,7 +1021,7 @@
           "without_component_expectancy_atr": 7.0203,
           "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 1.0,
-          "train_ic_edge": -0.1514,
+          "train_ic_edge": -0.1512,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         }
@@ -1050,26 +1121,33 @@
         "total_runs_executed": 9,
         "individual_runs_executed": 8
       },
-      "tp_continuation_7stage_ablation": {
-        "with_7tp_continuation_total_r": 1.456,
-        "without_continuation_capped_at_primary_tp_r": 1.456,
-        "marginal_r_gained_by_7tp_continuation": 0.0,
-        "trades_continued_past_primary_tp": 0,
-        "highest_tp_stage_reached_in_lockbox": 2
+      "real_trader_management_ablation": {
+        "full_dynamic_trader_total_r": 2.549,
+        "static_set_and_forget_total_r": 1.705,
+        "total_r_gained_by_dynamic_reanalysis": 0.844,
+        "early_loss_cut_marginal_r_saved": 0.0,
+        "early_loss_cuts_before_sl_count": 0,
+        "near_tp_reversal_save_marginal_r": 0.617,
+        "near_tp_reversal_saves_count": 1,
+        "dynamic_tp_expansion_marginal_r": 0.736,
+        "trades_with_major_tp_expanded": 1,
+        "max_tp_expansions_in_single_trade": 1,
+        "progressive_sl_angle_fits_count": 25
       }
     },
     "shadow_reinforcement_feedback": {
-      "shadow_trades_analyzed": 5,
-      "shadow_wins": 2,
-      "shadow_losses": 3,
-      "premature_reversals_after_085r": 3,
-      "continued_past_primary_tp_count": 0,
-      "highest_tp_stage_reached_in_shadow": 0,
+      "shadow_trades_analyzed": 0,
+      "shadow_wins": 0,
+      "shadow_losses": 0,
+      "premature_reversals_after_085r": 0,
+      "early_loss_cut_saves_count": 0,
+      "near_tp_reversal_saves_count": 0,
+      "tp_expansions_count": 0,
       "feature_r_deltas": {
         "ema_trend": 0.0,
         "bos_breakout": 0.0,
-        "liquidity_sweep": -2.11,
-        "fvg_impulse": 4.479,
+        "liquidity_sweep": 0.0,
+        "fvg_impulse": 0.0,
         "dealing_range_reversion": 0.0,
         "rsi_momentum": 0.0,
         "sentinel_news_sentiment": 0.0,
@@ -1092,45 +1170,35 @@
       "CONSOLIDATION_RANGING"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 148,
-      "p70_winning_mae_atr": 1.109,
-      "p65_mfe_atr": 5.695,
-      "p80_mfe_atr": 10.632,
-      "learned_optimal_stop_atr_mult": 1.242,
-      "learned_optimal_tp_atr_mult": 4.347,
-      "learned_risk_reward_ratio": 3.5,
+      "sample_setups_60pct_dev": 142,
+      "p70_winning_mae_atr": 1.119,
+      "p65_mfe_atr": 5.708,
+      "p80_mfe_atr": 10.744,
+      "learned_optimal_stop_atr_mult": 1.253,
+      "learned_optimal_tp_atr_mult": 4.26,
+      "learned_risk_reward_ratio": 3.4,
       "learned_be_trigger_r": 1.15,
-      "learned_tp1_r": 1.65,
-      "learned_tp2_r": 2.45,
-      "learned_primary_tp_r": 3.5,
-      "learned_tp_ladder_r": {
-        "TP1": 1.65,
-        "TP2": 2.45,
-        "TP3": 3.5,
-        "TP4": 4.8,
-        "TP5": 6.2,
-        "TP6": 7.8,
-        "TP7": 9.8
-      },
-      "tp_stage_scale_out_fractions": {
-        "TP1": 0.2,
-        "TP2": 0.2,
-        "TP3": 0.15,
-        "TP4": 0.15,
-        "TP5": 0.1,
-        "TP6": 0.1,
-        "TP7": 0.1
-      },
-      "continuation_past_tp_enabled": true,
-      "learned_trail_atr_mult": 1.09
+      "learned_tp1_r": 1.59,
+      "learned_tp2_r": 3.4,
+      "learned_primary_tp_r": 3.4,
+      "learned_partial_tp_r": 1.59,
+      "learned_partial_bank_fraction": 0.35,
+      "learned_sl_reduction_start_r": 0.68,
+      "learned_sl_angle_fit_ratio": 0.46,
+      "learned_early_cut_drawdown_r": 0.62,
+      "learned_near_tp_zone_pct": 0.84,
+      "learned_tp_expansion_step_r": 1.6,
+      "learned_expanded_sl_lock_ratio": 0.78,
+      "dynamic_tp_reanalysis_enabled": true,
+      "learned_trail_atr_mult": 1.08
     },
     "instrument_physics": {
       "symbol": "EURUSD",
-      "avg_wick_to_body_ratio": 4.003,
+      "avg_wick_to_body_ratio": 3.987,
       "learned_sweep_wick_ratio_threshold": 0.45,
-      "learned_fvg_body_atr_threshold": 0.553,
-      "trend_persistence_score": 0.277,
-      "mean_reversion_propensity": 0.723,
+      "learned_fvg_body_atr_threshold": 0.554,
+      "trend_persistence_score": 0.279,
+      "mean_reversion_propensity": 0.721,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         13,
@@ -1148,81 +1216,81 @@
       "drifted_features": [
         "atr_volatility_bps"
       ],
-      "volatility_drift_pct": 27.76,
-      "efficiency_drift_pct": 19.47,
-      "recommendation": "Actionable drift in [atr_volatility_bps] (+27.8% vol shift). DriftOrchestrator suggests ablation_study.",
+      "volatility_drift_pct": 27.96,
+      "efficiency_drift_pct": 20.94,
+      "recommendation": "Actionable drift in [atr_volatility_bps] (+28.0% vol shift). DriftOrchestrator suggests ablation_study.",
       "formal_drift_report": {
         "model_id": "oracle_v2_eurusd_swing_trading",
         "champion_id": "cand-v2-eurusd-swing_trading",
         "model_version": "2.0.0",
         "model_domain": "mtf_institutional_strategy",
-        "observation_count": 284,
+        "observation_count": 285,
         "policy_id": "policy-v2-eurusd-swing_trading",
         "policy_version": "1.0.0",
         "feature_details": [
           {
             "feature_index": 0,
             "feature_name": "atr_volatility_bps",
-            "baseline_mean": 7.7582,
-            "baseline_std": 2.3952,
-            "live_mean": 9.9117,
-            "live_std": 2.3026,
-            "shift_value": 0.899,
+            "baseline_mean": 7.7685,
+            "baseline_std": 2.4018,
+            "live_mean": 9.9403,
+            "live_std": 2.2997,
+            "shift_value": 0.904,
             "calculation_method": "standardized_mean_shift",
             "severity": "actionable"
           },
           {
             "feature_index": 1,
             "feature_name": "efficiency_ratio",
-            "baseline_mean": 0.2825,
-            "baseline_std": 0.2034,
-            "live_mean": 0.3375,
-            "live_std": 0.2078,
-            "shift_value": 0.27,
+            "baseline_mean": 0.2827,
+            "baseline_std": 0.2032,
+            "live_mean": 0.3419,
+            "live_std": 0.207,
+            "shift_value": 0.292,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 2,
             "feature_name": "wick_to_body_ratio",
-            "baseline_mean": 3.4001,
-            "baseline_std": 5.8404,
-            "live_mean": 2.9511,
-            "live_std": 5.1292,
-            "shift_value": 0.077,
+            "baseline_mean": 3.393,
+            "baseline_std": 5.8354,
+            "live_mean": 2.9224,
+            "live_std": 5.1282,
+            "shift_value": 0.081,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 3,
             "feature_name": "rsi14_distribution",
-            "baseline_mean": 46.3117,
-            "baseline_std": 12.8732,
-            "live_mean": 49.3612,
-            "live_std": 13.528,
-            "shift_value": 0.237,
+            "baseline_mean": 46.2995,
+            "baseline_std": 12.861,
+            "live_mean": 49.0621,
+            "live_std": 13.7427,
+            "shift_value": 0.215,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 4,
             "feature_name": "bos_breakout_frequency",
-            "baseline_mean": 0.1094,
-            "baseline_std": 0.3122,
-            "live_mean": 0.1268,
-            "live_std": 0.3327,
-            "shift_value": 0.056,
+            "baseline_mean": 0.1092,
+            "baseline_std": 0.3118,
+            "live_mean": 0.1404,
+            "live_std": 0.3474,
+            "shift_value": 0.1,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 5,
             "feature_name": "sweep_and_fvg_density",
-            "baseline_mean": 0.1988,
-            "baseline_std": 0.3991,
-            "live_mean": 0.2606,
-            "live_std": 0.4389,
-            "shift_value": 0.155,
+            "baseline_mean": 0.1984,
+            "baseline_std": 0.3988,
+            "live_mean": 0.2702,
+            "live_std": 0.4441,
+            "shift_value": 0.18,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           }
@@ -1248,9 +1316,9 @@
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 1.04,
-      "mc95_worst_case_drawdown_pct": 1.99,
-      "mc99_extreme_drawdown_pct": 2.05,
+      "mc50_median_drawdown_pct": 1.03,
+      "mc95_worst_case_drawdown_pct": 1.65,
+      "mc99_extreme_drawdown_pct": 1.86,
       "mc95_max_consecutive_losses": 3,
       "passed_mc95_gate": true
     }
