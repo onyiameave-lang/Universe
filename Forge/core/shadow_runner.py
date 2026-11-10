@@ -39,7 +39,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from Chronicle.core.dedup_ledger import ChronicleDeduplicatingLedger
-from Forge.core.mtf_institutional_engine import MultiTimeframeInstitutionalEngine
+from Forge.core.mtf_institutional_engine import (
+    ALL_WATCHLIST_SYMBOLS,
+    LIVE_PRESET_SYMBOLS,
+    MultiTimeframeInstitutionalEngine,
+)
 
 
 class ForgeShadowRunner:
@@ -269,6 +273,10 @@ class ForgeShadowRunner:
 
         for style in styles:
             loaded = self.load_v2_candidate_blueprint(upper_sym, style)
+            if not loaded:
+                # Auto-train and certify V2 strategies for this symbol on the spot
+                self.mtf_engine.train_and_certify_symbol_strategies(upper_sym)
+                loaded = self.load_v2_candidate_blueprint(upper_sym, style)
             if not loaded:
                 continue
             bp = loaded["blueprint"]
@@ -696,7 +704,13 @@ def main() -> None:
     parser.add_argument(
         "--symbols",
         default="",
-        help="Comma-separated symbols for multi-pair shadow monitoring (e.g. GBPUSD,EURUSD)",
+        help="Comma-separated symbols (e.g. GBPUSD,EURUSD,USDJPY,XAUUSD) or ALL",
+    )
+    parser.add_argument(
+        "--preset",
+        choices=["single", "live", "all"],
+        default="single",
+        help="Symbol preset: 'live' (10 core multi-asset symbols) or 'all' (full 38-symbol watchlist)",
     )
     parser.add_argument(
         "--style",
@@ -722,11 +736,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    symbols_list = (
-        [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-        if args.symbols
-        else [args.symbol.upper()]
-    )
+    if args.preset == "all" or args.symbols.strip().upper() == "ALL":
+        symbols_list = list(ALL_WATCHLIST_SYMBOLS)
+    elif args.preset == "live":
+        symbols_list = list(LIVE_PRESET_SYMBOLS)
+    elif args.symbols.strip():
+        symbols_list = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    else:
+        symbols_list = [args.symbol.upper()]
 
     runner = ForgeShadowRunner()
 

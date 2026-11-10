@@ -1,0 +1,87 @@
+{
+  "candidate_id": "cand-v2-usdjpy-swing_trading",
+  "hypothesis_id": "hyp-v2-usdjpy-swing_trading",
+  "symbol": "USDJPY",
+  "regime": "trending_up",
+  "trader_style": "SWING_TRADING",
+  "lifecycle_state": "DEPLOYED_ORACLE_V2",
+  "created_at_unix": 1794294776.3745441,
+  "evaluation_metrics": {
+    "trades_count": 20,
+    "win_rate_pct": 35.0,
+    "total_net_r": -6.346,
+    "expectancy_r": -0.317,
+    "mc95_worst_case_drawdown_pct": 5.43,
+    "passed_mc95_gate": true
+  },
+  "v1_compatibility_export": {
+    "strategy_id": "oracle_v2_usdjpy_swing_trading",
+    "symbol": "USDJPY",
+    "trader_style": "SWING_TRADING",
+    "top_down_stack": {
+      "macro_timeframes": [
+        "W1",
+        "D1"
+      ],
+      "setup_timeframes": [
+        "H4"
+      ],
+      "trigger_timeframe": "H1"
+    },
+    "recommended_sessions": [
+      "LONDON_SESSION",
+      "LONDON_NY_OVERLAP",
+      "NEW_YORK_SESSION"
+    ],
+    "recommended_adaptive_sessions": [
+      "LONDON_TREND_EXPANSION",
+      "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+    ],
+    "recommended_regimes": [
+      "TRENDING_BULLISH",
+      "TRENDING_BEARISH",
+      "VOLATILITY_EXPANSION"
+    ],
+    "learned_excursion_parameters": {
+      "learned_optimal_stop_atr_mult": 1.65,
+      "learned_optimal_tp_atr_mult": 3.8,
+      "learned_risk_reward_ratio": 2.3,
+      "learned_be_trigger_r": 0.85,
+      "learned_tp1_r": 1.4,
+      "learned_tp2_r": 2.8,
+      "learned_trail_atr_mult": 1.45
+    },
+    "instrument_physics": {
+      "symbol": "USDJPY",
+      "avg_wick_to_body_ratio": 3.467,
+      "learned_sweep_wick_ratio_threshold": 0.45,
+      "learned_fvg_body_atr_threshold": 0.459,
+      "trend_persistence_score": 0.266,
+      "mean_reversion_propensity": 0.734,
+      "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+      "peak_volatility_utc_hours": [
+        8,
+        9,
+        14,
+        15,
+        16
+      ]
+    },
+    "regime_drift_report": {
+      "symbol": "USDJPY",
+      "trader_style": "SWING_TRADING",
+      "drift_status": "MODERATE_DRIFT",
+      "volatility_drift_pct": -12.64,
+      "efficiency_drift_pct": -23.68,
+      "recommendation": "Moderate regime shift detected (-12.6% volatility delta). Dynamic ATR stops automatically compensate."
+    },
+    "monte_carlo_stress_report": {
+      "iterations": 1000,
+      "mc50_median_drawdown_pct": 4.1,
+      "mc95_worst_case_drawdown_pct": 5.43,
+      "mc99_extreme_drawdown_pct": 5.94,
+      "mc95_max_consecutive_losses": 8,
+      "passed_mc95_gate": true
+    }
+  }
+}

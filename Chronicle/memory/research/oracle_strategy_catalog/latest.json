@@ -1,12 +1,585 @@
 {
   "schema": "oracle.strategy_catalog.snapshot.v1",
   "catalog_id": "cat-c580d9887ac4be70",
-  "created_at_unix": 1794235692.563,
+  "created_at_unix": 1794294575.785,
   "strategy_count": 146,
   "champion_library_count": 22,
   "evolved_strategies_count": 146,
   "oracle_v2_deployed_count": 0,
-  "oracle_v2_strategies": {},
+  "oracle_v2_strategies": {
+    "USDJPY": {
+      "SCALPING": {
+        "strategy_id": "oracle_v2_usdjpy_scalping",
+        "symbol": "USDJPY",
+        "trader_style": "SCALPING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "H4",
+            "H1"
+          ],
+          "setup_timeframes": [
+            "M30",
+            "M15"
+          ],
+          "trigger_timeframe": "M5"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.35,
+          "learned_optimal_tp_atr_mult": 2.75,
+          "learned_risk_reward_ratio": 2.05,
+          "learned_be_trigger_r": 0.65,
+          "learned_tp1_r": 1.15,
+          "learned_tp2_r": 2.25,
+          "learned_trail_atr_mult": 1.15
+        },
+        "instrument_physics": {
+          "symbol": "USDJPY",
+          "avg_wick_to_body_ratio": 3.467,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.459,
+          "trend_persistence_score": 0.266,
+          "mean_reversion_propensity": 0.734,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            8,
+            9,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "USDJPY",
+          "trader_style": "SCALPING",
+          "drift_status": "STABLE",
+          "volatility_drift_pct": -1.71,
+          "efficiency_drift_pct": 2.04,
+          "recommendation": "Market regime physics for USDJPY (SCALPING) remain aligned with training baseline."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 9.11,
+          "mc95_worst_case_drawdown_pct": 10.98,
+          "mc99_extreme_drawdown_pct": 11.9,
+          "mc95_max_consecutive_losses": 12,
+          "passed_mc95_gate": false
+        }
+      },
+      "DAY_TRADING": {
+        "strategy_id": "oracle_v2_usdjpy_day_trading",
+        "symbol": "USDJPY",
+        "trader_style": "DAY_TRADING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "D1",
+            "H4"
+          ],
+          "setup_timeframes": [
+            "H1",
+            "M30"
+          ],
+          "trigger_timeframe": "M15"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.5,
+          "learned_optimal_tp_atr_mult": 3.15,
+          "learned_risk_reward_ratio": 2.1,
+          "learned_be_trigger_r": 0.75,
+          "learned_tp1_r": 1.25,
+          "learned_tp2_r": 2.4,
+          "learned_trail_atr_mult": 1.3
+        },
+        "instrument_physics": {
+          "symbol": "USDJPY",
+          "avg_wick_to_body_ratio": 3.467,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.459,
+          "trend_persistence_score": 0.266,
+          "mean_reversion_propensity": 0.734,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            8,
+            9,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "USDJPY",
+          "trader_style": "DAY_TRADING",
+          "drift_status": "STABLE",
+          "volatility_drift_pct": 0.88,
+          "efficiency_drift_pct": 10.99,
+          "recommendation": "Market regime physics for USDJPY (DAY_TRADING) remain aligned with training baseline."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 0.62,
+          "mc95_worst_case_drawdown_pct": 1.17,
+          "mc99_extreme_drawdown_pct": 1.18,
+          "mc95_max_consecutive_losses": 3,
+          "passed_mc95_gate": true
+        }
+      },
+      "SWING_TRADING": {
+        "strategy_id": "oracle_v2_usdjpy_swing_trading",
+        "symbol": "USDJPY",
+        "trader_style": "SWING_TRADING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "W1",
+            "D1"
+          ],
+          "setup_timeframes": [
+            "H4"
+          ],
+          "trigger_timeframe": "H1"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.65,
+          "learned_optimal_tp_atr_mult": 3.8,
+          "learned_risk_reward_ratio": 2.3,
+          "learned_be_trigger_r": 0.85,
+          "learned_tp1_r": 1.4,
+          "learned_tp2_r": 2.8,
+          "learned_trail_atr_mult": 1.45
+        },
+        "instrument_physics": {
+          "symbol": "USDJPY",
+          "avg_wick_to_body_ratio": 3.467,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.459,
+          "trend_persistence_score": 0.266,
+          "mean_reversion_propensity": 0.734,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            8,
+            9,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "USDJPY",
+          "trader_style": "SWING_TRADING",
+          "drift_status": "MODERATE_DRIFT",
+          "volatility_drift_pct": -12.64,
+          "efficiency_drift_pct": -23.68,
+          "recommendation": "Moderate regime shift detected (-12.6% volatility delta). Dynamic ATR stops automatically compensate."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 4.1,
+          "mc95_worst_case_drawdown_pct": 5.43,
+          "mc99_extreme_drawdown_pct": 5.94,
+          "mc95_max_consecutive_losses": 8,
+          "passed_mc95_gate": true
+        }
+      },
+      "RANGE_SPECIALIST": {
+        "strategy_id": "oracle_v2_usdjpy_range_specialist",
+        "symbol": "USDJPY",
+        "trader_style": "RANGE_SPECIALIST",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "D1",
+            "H4"
+          ],
+          "setup_timeframes": [
+            "H1",
+            "M30"
+          ],
+          "trigger_timeframe": "M15"
+        },
+        "recommended_sessions": [
+          "ASIAN_SESSION",
+          "LONDON_SESSION",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "NY_AFTERNOON_REBALANCING"
+        ],
+        "recommended_regimes": [
+          "CONSOLIDATION_RANGING"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.25,
+          "learned_optimal_tp_atr_mult": 2.35,
+          "learned_risk_reward_ratio": 1.88,
+          "learned_be_trigger_r": 0.6,
+          "learned_tp1_r": 1.05,
+          "learned_tp2_r": 1.95,
+          "learned_trail_atr_mult": 1.1
+        },
+        "instrument_physics": {
+          "symbol": "USDJPY",
+          "avg_wick_to_body_ratio": 3.467,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.459,
+          "trend_persistence_score": 0.266,
+          "mean_reversion_propensity": 0.734,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            8,
+            9,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "USDJPY",
+          "trader_style": "RANGE_SPECIALIST",
+          "drift_status": "STABLE",
+          "volatility_drift_pct": 0.88,
+          "efficiency_drift_pct": 10.99,
+          "recommendation": "Market regime physics for USDJPY (RANGE_SPECIALIST) remain aligned with training baseline."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 10.91,
+          "mc95_worst_case_drawdown_pct": 12.84,
+          "mc99_extreme_drawdown_pct": 13.87,
+          "mc95_max_consecutive_losses": 15,
+          "passed_mc95_gate": false
+        }
+      }
+    },
+    "XAUUSD": {
+      "SCALPING": {
+        "strategy_id": "oracle_v2_xauusd_scalping",
+        "symbol": "XAUUSD",
+        "trader_style": "SCALPING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "H4",
+            "H1"
+          ],
+          "setup_timeframes": [
+            "M30",
+            "M15"
+          ],
+          "trigger_timeframe": "M5"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.35,
+          "learned_optimal_tp_atr_mult": 2.75,
+          "learned_risk_reward_ratio": 2.05,
+          "learned_be_trigger_r": 0.65,
+          "learned_tp1_r": 1.15,
+          "learned_tp2_r": 2.25,
+          "learned_trail_atr_mult": 1.15
+        },
+        "instrument_physics": {
+          "symbol": "XAUUSD",
+          "avg_wick_to_body_ratio": 2.993,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.478,
+          "trend_persistence_score": 0.263,
+          "mean_reversion_propensity": 0.737,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            2,
+            3,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "XAUUSD",
+          "trader_style": "SCALPING",
+          "drift_status": "STABLE",
+          "volatility_drift_pct": 15.7,
+          "efficiency_drift_pct": -2.35,
+          "recommendation": "Market regime physics for XAUUSD (SCALPING) remain aligned with training baseline."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 4.46,
+          "mc95_worst_case_drawdown_pct": 6.79,
+          "mc99_extreme_drawdown_pct": 7.94,
+          "mc95_max_consecutive_losses": 10,
+          "passed_mc95_gate": true
+        }
+      },
+      "DAY_TRADING": {
+        "strategy_id": "oracle_v2_xauusd_day_trading",
+        "symbol": "XAUUSD",
+        "trader_style": "DAY_TRADING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "D1",
+            "H4"
+          ],
+          "setup_timeframes": [
+            "H1",
+            "M30"
+          ],
+          "trigger_timeframe": "M15"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.5,
+          "learned_optimal_tp_atr_mult": 3.15,
+          "learned_risk_reward_ratio": 2.1,
+          "learned_be_trigger_r": 0.75,
+          "learned_tp1_r": 1.25,
+          "learned_tp2_r": 2.4,
+          "learned_trail_atr_mult": 1.3
+        },
+        "instrument_physics": {
+          "symbol": "XAUUSD",
+          "avg_wick_to_body_ratio": 2.993,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.478,
+          "trend_persistence_score": 0.263,
+          "mean_reversion_propensity": 0.737,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            2,
+            3,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "XAUUSD",
+          "trader_style": "DAY_TRADING",
+          "drift_status": "MODERATE_DRIFT",
+          "volatility_drift_pct": 35.2,
+          "efficiency_drift_pct": 21.3,
+          "recommendation": "Moderate regime shift detected (35.2% volatility delta). Dynamic ATR stops automatically compensate."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 0.71,
+          "mc95_worst_case_drawdown_pct": 1.08,
+          "mc99_extreme_drawdown_pct": 1.08,
+          "mc95_max_consecutive_losses": 2,
+          "passed_mc95_gate": true
+        }
+      },
+      "SWING_TRADING": {
+        "strategy_id": "oracle_v2_xauusd_swing_trading",
+        "symbol": "XAUUSD",
+        "trader_style": "SWING_TRADING",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "W1",
+            "D1"
+          ],
+          "setup_timeframes": [
+            "H4"
+          ],
+          "trigger_timeframe": "H1"
+        },
+        "recommended_sessions": [
+          "LONDON_SESSION",
+          "LONDON_NY_OVERLAP",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "LONDON_TREND_EXPANSION",
+          "NY_OVERLAP_INSTITUTIONAL_DRIVE"
+        ],
+        "recommended_regimes": [
+          "TRENDING_BULLISH",
+          "TRENDING_BEARISH",
+          "VOLATILITY_EXPANSION"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.65,
+          "learned_optimal_tp_atr_mult": 3.8,
+          "learned_risk_reward_ratio": 2.3,
+          "learned_be_trigger_r": 0.85,
+          "learned_tp1_r": 1.4,
+          "learned_tp2_r": 2.8,
+          "learned_trail_atr_mult": 1.45
+        },
+        "instrument_physics": {
+          "symbol": "XAUUSD",
+          "avg_wick_to_body_ratio": 2.993,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.478,
+          "trend_persistence_score": 0.263,
+          "mean_reversion_propensity": 0.737,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            2,
+            3,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "XAUUSD",
+          "trader_style": "SWING_TRADING",
+          "drift_status": "MODERATE_DRIFT",
+          "volatility_drift_pct": 6.76,
+          "efficiency_drift_pct": 21.38,
+          "recommendation": "Moderate regime shift detected (6.8% volatility delta). Dynamic ATR stops automatically compensate."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 2.03,
+          "mc95_worst_case_drawdown_pct": 3.07,
+          "mc99_extreme_drawdown_pct": 3.54,
+          "mc95_max_consecutive_losses": 5,
+          "passed_mc95_gate": true
+        }
+      },
+      "RANGE_SPECIALIST": {
+        "strategy_id": "oracle_v2_xauusd_range_specialist",
+        "symbol": "XAUUSD",
+        "trader_style": "RANGE_SPECIALIST",
+        "top_down_stack": {
+          "macro_timeframes": [
+            "D1",
+            "H4"
+          ],
+          "setup_timeframes": [
+            "H1",
+            "M30"
+          ],
+          "trigger_timeframe": "M15"
+        },
+        "recommended_sessions": [
+          "ASIAN_SESSION",
+          "LONDON_SESSION",
+          "NEW_YORK_SESSION"
+        ],
+        "recommended_adaptive_sessions": [
+          "ASIAN_RANGE_ACCUMULATION",
+          "LONDON_OPEN_JUDAS_SWEEP",
+          "NY_AFTERNOON_REBALANCING"
+        ],
+        "recommended_regimes": [
+          "CONSOLIDATION_RANGING"
+        ],
+        "learned_excursion_parameters": {
+          "learned_optimal_stop_atr_mult": 1.25,
+          "learned_optimal_tp_atr_mult": 2.35,
+          "learned_risk_reward_ratio": 1.88,
+          "learned_be_trigger_r": 0.6,
+          "learned_tp1_r": 1.05,
+          "learned_tp2_r": 1.95,
+          "learned_trail_atr_mult": 1.1
+        },
+        "instrument_physics": {
+          "symbol": "XAUUSD",
+          "avg_wick_to_body_ratio": 2.993,
+          "learned_sweep_wick_ratio_threshold": 0.45,
+          "learned_fvg_body_atr_threshold": 0.478,
+          "trend_persistence_score": 0.263,
+          "mean_reversion_propensity": 0.737,
+          "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
+          "peak_volatility_utc_hours": [
+            2,
+            3,
+            14,
+            15,
+            16
+          ]
+        },
+        "regime_drift_report": {
+          "symbol": "XAUUSD",
+          "trader_style": "RANGE_SPECIALIST",
+          "drift_status": "MODERATE_DRIFT",
+          "volatility_drift_pct": 35.2,
+          "efficiency_drift_pct": 21.3,
+          "recommendation": "Moderate regime shift detected (35.2% volatility delta). Dynamic ATR stops automatically compensate."
+        },
+        "monte_carlo_stress_report": {
+          "iterations": 1000,
+          "mc50_median_drawdown_pct": 4.73,
+          "mc95_worst_case_drawdown_pct": 7.05,
+          "mc99_extreme_drawdown_pct": 7.92,
+          "mc95_max_consecutive_losses": 10,
+          "passed_mc95_gate": true
+        }
+      }
+    }
+  },
   "symbols": {
     "AAPL": [
       "high_volatility",
