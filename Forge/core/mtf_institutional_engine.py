@@ -606,6 +606,110 @@ class MultiTimeframeInstitutionalEngine:
             "dominant_features_discovered": [k for k, _ in top_feats[:3]],
         }
 
+    def load_shadow_win_loss_feedback(
+        self, symbol: str, trader_style: str
+    ) -> Dict[str, Any]:
+        """
+        Loads closed Shadow Runner trade outcomes (`Forge/memory/shadow_trades_ledger.json`)
+        and Mistake-Clinic loss events (`Oracle/memory/forge_strategy_feedback_outbox.jsonl`)
+        for `symbol` and `trader_style` so Forge continuously learns from its own shadow wins and losses.
+        """
+        upper_sym = symbol.upper()
+        style_up = trader_style.upper()
+        ledger_path = self.workspace_root / "Forge" / "memory" / "shadow_trades_ledger.json"
+        trades: List[Dict[str, Any]] = []
+        if ledger_path.exists():
+            try:
+                raw = json.loads(ledger_path.read_text(encoding="utf-8"))
+                sym_block = (raw.get("symbols") or {}).get(upper_sym) or {}
+                for t in sym_block.get("recent_shadow_trades") or []:
+                    if str(t.get("trader_style", "")).upper() == style_up:
+                        trades.append(t)
+            except Exception:
+                pass
+
+        feat_r_deltas: Dict[str, float] = {
+            "ema_trend": 0.0,
+            "bos_breakout": 0.0,
+            "liquidity_sweep": 0.0,
+            "fvg_impulse": 0.0,
+            "dealing_range_reversion": 0.0,
+            "rsi_momentum": 0.0,
+        }
+        session_r_deltas: Dict[str, Dict[str, float]] = {}
+        adaptive_r_deltas: Dict[str, Dict[str, float]] = {}
+        regime_r_deltas: Dict[str, Dict[str, float]] = {}
+        winning_maes_r: List[float] = []
+        all_mfes_r: List[float] = []
+        premature_reversals = 0
+        wins = 0
+        losses = 0
+
+        for t in trades:
+            r_val = float(t.get("realized_r", 0.0) or 0.0)
+            mfe_r = float(t.get("peak_mfe_r", 0.0) or 0.0)
+            mae_r = float(t.get("worst_mae_r", 0.0) or 0.0)
+            if r_val > 0:
+                wins += 1
+                if mae_r > 0:
+                    winning_maes_r.append(mae_r)
+            else:
+                losses += 1
+                if mfe_r >= 0.85:
+                    premature_reversals += 1
+            if mfe_r > 0:
+                all_mfes_r.append(mfe_r)
+
+            why = str(t.get("why_v2_shadow_entered", ""))
+            f_key = str(t.get("trigger_feature_key", ""))
+            if not f_key:
+                if "Sweep" in why:
+                    f_key = "liquidity_sweep"
+                elif "FVG" in why:
+                    f_key = "fvg_impulse"
+                elif "BOS" in why:
+                    f_key = "bos_breakout"
+                elif "DISCOUNT" in why or "PREMIUM" in why:
+                    f_key = "dealing_range_reversion"
+                else:
+                    f_key = "ema_trend"
+            if f_key in feat_r_deltas:
+                feat_r_deltas[f_key] += r_val
+
+            s_k = str(t.get("session") or "")
+            if s_k:
+                st = session_r_deltas.setdefault(s_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
+                st["setups"] += 1.0
+                st["wins"] += 1.0 if r_val > 0 else 0.0
+                st["r_sum"] += r_val
+
+            a_k = str(t.get("adaptive_session") or "")
+            if a_k:
+                at = adaptive_r_deltas.setdefault(a_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
+                at["setups"] += 1.0
+                at["wins"] += 1.0 if r_val > 0 else 0.0
+                at["r_sum"] += r_val
+
+            reg_k = str(t.get("regime") or "")
+            if reg_k:
+                rt = regime_r_deltas.setdefault(reg_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
+                rt["setups"] += 1.0
+                rt["wins"] += 1.0 if r_val > 0 else 0.0
+                rt["r_sum"] += r_val
+
+        return {
+            "shadow_trades_analyzed": len(trades),
+            "shadow_wins": wins,
+            "shadow_losses": losses,
+            "premature_reversals_after_085r": premature_reversals,
+            "feature_r_deltas": {k: round(v, 3) for k, v in feat_r_deltas.items()},
+            "session_r_deltas": session_r_deltas,
+            "adaptive_r_deltas": adaptive_r_deltas,
+            "regime_r_deltas": regime_r_deltas,
+            "winning_maes_r": winning_maes_r,
+            "all_mfes_r": all_mfes_r,
+        }
+
     def discover_strategy_genome_from_data(
         self,
         symbol: str,
@@ -614,17 +718,18 @@ class MultiTimeframeInstitutionalEngine:
         stack: Dict[str, Any],
         dev_end_idx: int,
         horizon: int,
+        shadow_feedback: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Forge Autonomous Strategy Discovery (40% Train Fit -> 20% Validation Screen):
+        Forge Autonomous Strategy Discovery (40% Train Fit -> 20% Validation Screen + Shadow Feedback):
         Instead of a human telling Forge what rules or thresholds to follow, Forge:
           1. Measures the empirical predictive edge (Information Coefficient / Expectancy)
              of each timeframe in the 7-TF stack (`W1, D1, H4, H1, M30, M15, M5`) on the
              training prefix to learn `timeframe_weights`.
           2. Measures the empirical predictive edge of each raw market primitive
              (`ema_trend`, `bos_breakout`, `liquidity_sweep`, `fvg_impulse`,
-             `dealing_range_reversion`, `rsi_momentum`) on the training prefix to learn
-             `feature_weights`.
+             `dealing_range_reversion`, `rsi_momentum`) on the training prefix AND blends
+             closed Shadow Runner win/loss outcomes (`shadow_feedback`) to learn `feature_weights`.
           3. Searches candidate structural thresholds (`macro_range_cap`, `htf_room_atr_min`,
              `entry_score_threshold`, and winning RSI bands) on the validation slice and
              selects the highest-expectancy genome.
@@ -730,22 +835,24 @@ class MultiTimeframeInstitutionalEngine:
         raw_tf_scores: Dict[str, float] = {}
         for tf in all_stack_tfs:
             mean_ic = tf_edge_sums[tf] / max(1, tf_edge_cnts[tf])
-            # Keep bounded positive weight proportional to empirical predictive power
             raw_tf_scores[tf] = max(0.12, min(1.50, 0.45 + abs(mean_ic) * 1.8))
         tf_norm = sum(raw_tf_scores.values()) or 1.0
         learned_tf_weights = {
             tf: round(val / tf_norm, 3) for tf, val in raw_tf_scores.items()
         }
 
-        # Normalize learned Feature Weights from empirical predictive edge
+        # Normalize learned Feature Weights from empirical predictive edge + Shadow Runner Win/Loss Reinforcement
+        fb_feat_deltas = (shadow_feedback or {}).get("feature_r_deltas") or {}
         raw_feat_scores: Dict[str, float] = {}
         for f_name in feat_names:
             mean_edge = feat_edge_sums[f_name] / max(1, feat_edge_cnts[f_name])
-            # If a feature had positive directional edge, boost it; if negative on RANGE_SPECIALIST, allow mean-reversion boost
-            base_w = 0.25 + max(0.0, mean_edge * 1.4)
+            shadow_r_delta = float(fb_feat_deltas.get(f_name, 0.0) or 0.0)
+            # Closed-loop reinforcement: winning shadow trades boost the feature weight; losing shadow trades penalize it
+            reinforcement_shift = max(-0.18, min(0.35, shadow_r_delta * 0.035))
+            base_w = 0.25 + max(0.0, mean_edge * 1.4) + reinforcement_shift
             if trader_style == "RANGE_SPECIALIST" and f_name in ("dealing_range_reversion", "liquidity_sweep"):
                 base_w += max(0.15, abs(mean_edge) * 1.2)
-            raw_feat_scores[f_name] = max(0.10, min(1.60, base_w))
+            raw_feat_scores[f_name] = max(0.08, min(1.65, base_w))
         feat_norm = sum(raw_feat_scores.values()) or 1.0
         learned_feature_weights = {
             f_name: round(val / feat_norm, 3) for f_name, val in raw_feat_scores.items()
@@ -1364,10 +1471,17 @@ class MultiTimeframeInstitutionalEngine:
             trig_series = dataset.get("series", {}).get(trig_tf, [])
             drift = self.inspect_strategy_regime_drift(upper_sym, style_up, trig_series or m15_bars)
 
-            # ── STAGE 1: AUTONOMOUS GENOME & HYPOTHESIS DISCOVERY (60% DEV SPLIT) ──
+            # ── STAGE 1: AUTONOMOUS GENOME & HYPOTHESIS DISCOVERY (60% DEV + SHADOW FEEDBACK) ──
             dev_end_idx = max(35, int(len(trig_series) * 0.60))
+            shadow_fb = self.load_shadow_win_loss_feedback(upper_sym, style_up)
             learned_genome = self.discover_strategy_genome_from_data(
-                upper_sym, style_up, dataset, stack, dev_end_idx, horizon
+                upper_sym,
+                style_up,
+                dataset,
+                stack,
+                dev_end_idx,
+                horizon,
+                shadow_feedback=shadow_fb,
             )
             atlas_hypothesis = self.consult_atlas_for_hypothesis(
                 upper_sym,
@@ -1377,11 +1491,17 @@ class MultiTimeframeInstitutionalEngine:
                 learned_genome["feature_weights"],
             )
 
-            winning_maes_atr: List[float] = []
-            all_mfes_atr: List[float] = []
-            session_stats: Dict[str, Dict[str, float]] = {}
-            adaptive_stats: Dict[str, Dict[str, float]] = {}
-            regime_stats: Dict[str, Dict[str, float]] = {}
+            winning_maes_atr: List[float] = list(shadow_fb.get("winning_maes_r", []))
+            all_mfes_atr: List[float] = list(shadow_fb.get("all_mfes_r", []))
+            session_stats: Dict[str, Dict[str, float]] = {
+                k: dict(v) for k, v in (shadow_fb.get("session_r_deltas") or {}).items()
+            }
+            adaptive_stats: Dict[str, Dict[str, float]] = {
+                k: dict(v) for k, v in (shadow_fb.get("adaptive_r_deltas") or {}).items()
+            }
+            regime_stats: Dict[str, Dict[str, float]] = {
+                k: dict(v) for k, v in (shadow_fb.get("regime_r_deltas") or {}).items()
+            }
 
             for i in range(25, max(26, dev_end_idx - horizon)):
                 b = trig_series[i]
@@ -1458,8 +1578,11 @@ class MultiTimeframeInstitutionalEngine:
             sl_mult = round(min(2.15, max(1.05, p70_mae * 1.12)), 3)
             tp_mult = round(min(4.80, max(sl_mult * 1.65, p65_mfe * 1.05)), 3)
             rr_target = round(tp_mult / max(sl_mult, 0.1), 2)
-            be_r = round(min(1.15, max(0.55, (p65_mfe / max(sl_mult, 0.1)) * 0.45)), 2)
-            tp1_r = round(min(1.85, max(0.95, be_r * 1.45)), 2)
+            # If Shadow Runner detected premature reversals after +0.85R MFE, tighten BE & TP1 ratchets
+            premature_rev = int(shadow_fb.get("premature_reversals_after_085r", 0) or 0)
+            rev_discount = 0.88 if premature_rev >= 2 else 1.0
+            be_r = round(min(1.15, max(0.55, (p65_mfe / max(sl_mult, 0.1)) * 0.45 * rev_discount)), 2)
+            tp1_r = round(min(1.85, max(0.95, be_r * 1.45 * rev_discount)), 2)
             tp2_r = round(min(3.80, max(tp1_r * 1.55, p80_mfe / max(sl_mult, 0.1))), 2)
             trail_mult = round(min(1.75, max(0.95, sl_mult * 0.88)), 2)
 
@@ -1634,6 +1757,13 @@ class MultiTimeframeInstitutionalEngine:
                 "top_down_stack": stack,
                 "atlas_research_hypothesis": atlas_hypothesis,
                 "learned_strategy_genome": learned_genome,
+                "shadow_reinforcement_feedback": {
+                    "shadow_trades_analyzed": shadow_fb.get("shadow_trades_analyzed", 0),
+                    "shadow_wins": shadow_fb.get("shadow_wins", 0),
+                    "shadow_losses": shadow_fb.get("shadow_losses", 0),
+                    "premature_reversals_after_085r": shadow_fb.get("premature_reversals_after_085r", 0),
+                    "feature_r_deltas": shadow_fb.get("feature_r_deltas", {}),
+                },
                 "recommended_sessions": rec_sessions,
                 "recommended_adaptive_sessions": rec_adaptive,
                 "recommended_regimes": rec_regimes,

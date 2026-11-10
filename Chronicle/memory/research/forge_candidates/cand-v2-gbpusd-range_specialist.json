@@ -8,15 +8,15 @@
   "candidate_code": "V2_MTF_RANGE_SPECIALIST",
   "candidate_title": "Atlas+Forge Self-Discovered (D1+H4 -> H1+M30 -> M15) RANGE SPECIALIST",
   "lifecycle_state": "WATCHLIST",
-  "status_reason": "Discovered by Atlas+Forge on 60% Dev Split & Tested on 40% Lockbox: Trades=12, WinRate=33.3%, Net=-1.39%, MC95 DD=3.42%.",
-  "created_at_unix": 1794309872.8785875,
-  "updated_at_unix": 1794309872.8785875,
+  "status_reason": "Discovered by Atlas+Forge on 60% Dev Split & Tested on 40% Lockbox: Trades=12, WinRate=25.0%, Net=-2.33%, MC95 DD=3.67%.",
+  "created_at_unix": 1794312516.8494275,
+  "updated_at_unix": 1794312516.8494275,
   "atlas_research_hypothesis": {
     "hypothesis_id": "hyp-v2-gbpusd-range_specialist",
     "atlas_report_id": "atlas-hyp-gbpusd-range_specialist",
     "proposed_by": "atlas_and_forge_autonomous_discovery",
-    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213). Forge learned feature predictive weights: liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187).",
-    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213), while empirical feature ablation ranks liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187) as the primary edge drivers.",
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.653, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.267), M15 (w=+0.221), H1 (w=+0.213). Forge learned feature predictive weights: bos_breakout (w=+0.207), ema_trend (w=+0.194), liquidity_sweep (w=+0.191).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.653, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.267), M15 (w=+0.221), H1 (w=+0.213), while empirical feature ablation ranks bos_breakout (w=+0.207), ema_trend (w=+0.194), liquidity_sweep (w=+0.191) as the primary edge drivers.",
     "confidence": 0.78,
     "dominant_timeframes_discovered": [
       "H4",
@@ -24,9 +24,9 @@
       "H1"
     ],
     "dominant_features_discovered": [
-      "liquidity_sweep",
       "bos_breakout",
-      "ema_trend"
+      "ema_trend",
+      "liquidity_sweep"
     ]
   },
   "learned_strategy_genome": {
@@ -35,16 +35,16 @@
       "D1": 0.178,
       "H4": 0.267,
       "H1": 0.213,
-      "M30": 0.122,
-      "M15": 0.22
+      "M30": 0.121,
+      "M15": 0.221
     },
     "feature_weights": {
-      "ema_trend": 0.187,
-      "bos_breakout": 0.201,
-      "liquidity_sweep": 0.202,
-      "fvg_impulse": 0.132,
-      "dealing_range_reversion": 0.103,
-      "rsi_momentum": 0.174
+      "ema_trend": 0.194,
+      "bos_breakout": 0.207,
+      "liquidity_sweep": 0.191,
+      "fvg_impulse": 0.121,
+      "dealing_range_reversion": 0.107,
+      "rsi_momentum": 0.181
     },
     "structural_gates": {
       "macro_dealing_range_long_max": 0.68,
@@ -64,30 +64,30 @@
   },
   "evaluation_metrics": {
     "trades_count": 12,
-    "win_rate_pct": 33.3,
-    "total_net_r": -2.787,
-    "expectancy_r": -0.232,
-    "mc95_worst_case_drawdown_pct": 3.42,
+    "win_rate_pct": 25.0,
+    "total_net_r": -4.66,
+    "expectancy_r": -0.388,
+    "mc95_worst_case_drawdown_pct": 3.67,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
       "trades": 12,
-      "wins": 4,
-      "losses": 8,
-      "win_rate": 0.333,
-      "net_return_pct": -1.39,
-      "expectancy_r": -0.232,
+      "wins": 3,
+      "losses": 9,
+      "win_rate": 0.25,
+      "net_return_pct": -2.33,
+      "expectancy_r": -0.388,
       "sharpe_ratio": 0.5,
-      "max_drawdown_pct": 2.37
+      "max_drawdown_pct": 2.89
     }
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 2.37,
-    "mc95_worst_case_drawdown_pct": 3.42,
-    "mc99_extreme_drawdown_pct": 3.96,
-    "mc95_max_consecutive_losses": 6,
+    "mc50_median_drawdown_pct": 2.89,
+    "mc95_worst_case_drawdown_pct": 3.67,
+    "mc99_extreme_drawdown_pct": 4.04,
+    "mc95_max_consecutive_losses": 8,
     "passed_mc95_gate": true
   },
   "v1_compatibility_export": {
@@ -109,8 +109,8 @@
       "hypothesis_id": "hyp-v2-gbpusd-range_specialist",
       "atlas_report_id": "atlas-hyp-gbpusd-range_specialist",
       "proposed_by": "atlas_and_forge_autonomous_discovery",
-      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.654, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213). Forge learned feature predictive weights: liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187).",
-      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.654, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.267), M15 (w=+0.220), H1 (w=+0.213), while empirical feature ablation ranks liquidity_sweep (w=+0.202), bos_breakout (w=+0.201), ema_trend (w=+0.187) as the primary edge drivers.",
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (RANGE_SPECIALIST). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.653, trend_persistence=0.265, mean_reversion=0.735. Forge 60%-development learned timeframe weights: H4 (w=+0.267), M15 (w=+0.221), H1 (w=+0.213). Forge learned feature predictive weights: bos_breakout (w=+0.207), ema_trend (w=+0.194), liquidity_sweep (w=+0.191).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (RANGE_SPECIALIST): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.653, mean-reversion=0.735). Multi-timeframe return regression assigns highest predictive weight to H4 (w=+0.267), M15 (w=+0.221), H1 (w=+0.213), while empirical feature ablation ranks bos_breakout (w=+0.207), ema_trend (w=+0.194), liquidity_sweep (w=+0.191) as the primary edge drivers.",
       "confidence": 0.78,
       "dominant_timeframes_discovered": [
         "H4",
@@ -118,9 +118,9 @@
         "H1"
       ],
       "dominant_features_discovered": [
-        "liquidity_sweep",
         "bos_breakout",
-        "ema_trend"
+        "ema_trend",
+        "liquidity_sweep"
       ]
     },
     "learned_strategy_genome": {
@@ -129,16 +129,16 @@
         "D1": 0.178,
         "H4": 0.267,
         "H1": 0.213,
-        "M30": 0.122,
-        "M15": 0.22
+        "M30": 0.121,
+        "M15": 0.221
       },
       "feature_weights": {
-        "ema_trend": 0.187,
-        "bos_breakout": 0.201,
-        "liquidity_sweep": 0.202,
-        "fvg_impulse": 0.132,
-        "dealing_range_reversion": 0.103,
-        "rsi_momentum": 0.174
+        "ema_trend": 0.194,
+        "bos_breakout": 0.207,
+        "liquidity_sweep": 0.191,
+        "fvg_impulse": 0.121,
+        "dealing_range_reversion": 0.107,
+        "rsi_momentum": 0.181
       },
       "structural_gates": {
         "macro_dealing_range_long_max": 0.68,
@@ -156,6 +156,20 @@
         "validation_screen_score_atr": -0.741
       }
     },
+    "shadow_reinforcement_feedback": {
+      "shadow_trades_analyzed": 3,
+      "shadow_wins": 1,
+      "shadow_losses": 2,
+      "premature_reversals_after_085r": 0,
+      "feature_r_deltas": {
+        "ema_trend": 0.0,
+        "bos_breakout": 0.0,
+        "liquidity_sweep": 0.0,
+        "fvg_impulse": -2.264,
+        "dealing_range_reversion": 0.0,
+        "rsi_momentum": 0.0
+      }
+    },
     "recommended_sessions": [
       "ASIAN_SESSION",
       "LONDON_SESSION",
@@ -171,23 +185,23 @@
       "TRENDING_BEARISH"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 36,
+      "sample_setups_60pct_dev": 38,
       "p70_winning_mae_atr": 0.672,
-      "p65_mfe_atr": 2.801,
+      "p65_mfe_atr": 2.478,
       "p80_mfe_atr": 4.284,
       "learned_optimal_stop_atr_mult": 1.05,
-      "learned_optimal_tp_atr_mult": 2.941,
-      "learned_risk_reward_ratio": 2.8,
-      "learned_be_trigger_r": 1.15,
-      "learned_tp1_r": 1.67,
+      "learned_optimal_tp_atr_mult": 2.602,
+      "learned_risk_reward_ratio": 2.48,
+      "learned_be_trigger_r": 1.06,
+      "learned_tp1_r": 1.54,
       "learned_tp2_r": 3.8,
       "learned_trail_atr_mult": 0.95
     },
     "instrument_physics": {
       "symbol": "GBPUSD",
-      "avg_wick_to_body_ratio": 2.654,
+      "avg_wick_to_body_ratio": 2.653,
       "learned_sweep_wick_ratio_threshold": 0.45,
-      "learned_fvg_body_atr_threshold": 0.55,
+      "learned_fvg_body_atr_threshold": 0.549,
       "trend_persistence_score": 0.265,
       "mean_reversion_propensity": 0.735,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
@@ -203,16 +217,16 @@
       "symbol": "GBPUSD",
       "trader_style": "RANGE_SPECIALIST",
       "drift_status": "STABLE",
-      "volatility_drift_pct": 4.45,
-      "efficiency_drift_pct": 7.02,
+      "volatility_drift_pct": 4.27,
+      "efficiency_drift_pct": 7.98,
       "recommendation": "Market regime physics for GBPUSD (RANGE_SPECIALIST) remain aligned with training baseline."
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 2.37,
-      "mc95_worst_case_drawdown_pct": 3.42,
-      "mc99_extreme_drawdown_pct": 3.96,
-      "mc95_max_consecutive_losses": 6,
+      "mc50_median_drawdown_pct": 2.89,
+      "mc95_worst_case_drawdown_pct": 3.67,
+      "mc99_extreme_drawdown_pct": 4.04,
+      "mc95_max_consecutive_losses": 8,
       "passed_mc95_gate": true
     }
   }

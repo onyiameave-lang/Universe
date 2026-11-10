@@ -555,12 +555,25 @@ class ForgeShadowRunner:
                     else "Institutional Pullback / Edge Reversion"
                 )
 
+                trigger_feature_key = (
+                    "liquidity_sweep"
+                    if (bar.get("liquidity_sweep_bullish") or bar.get("liquidity_sweep_bearish"))
+                    else "fvg_impulse"
+                    if (bar.get("fvg_bullish") or bar.get("fvg_bearish"))
+                    else "bos_breakout"
+                    if bar.get("bos_direction", 0) != 0
+                    else "dealing_range_reversion"
+                    if bar.get("discount_premium_zone") in ("DISCOUNT", "PREMIUM")
+                    else "ema_trend"
+                )
+
                 trade_record = {
                     "shadow_trade_id": f"shd-{upper_sym.lower()}-{style.lower()}-{unix_sec}",
                     "symbol": upper_sym,
                     "trader_style": style,
                     "candidate_id": loaded["candidate_id"],
                     "trigger_timeframe": trigger_tf,
+                    "trigger_feature_key": trigger_feature_key,
                     "direction": "LONG" if is_long else "SHORT",
                     "opened_at_ts": bar["ts"],
                     "closed_at_ts": trigger_series[exit_idx]["ts"],
@@ -596,10 +609,13 @@ class ForgeShadowRunner:
                         "event_type": "forge.shadow_runner.trade_loss",
                         "symbol": upper_sym,
                         "trader_style": style,
+                        "trigger_feature_key": trigger_feature_key,
                         "regime": bar.get("regime"),
                         "session": bar.get("session"),
                         "adaptive_session": bar.get("adaptive_session"),
                         "realized_r": realized_r,
+                        "peak_mfe_r": round(peak_mfe_r, 3),
+                        "worst_mae_r": round(worst_mae_r, 3),
                         "exit_reason": "STOP_INVALIDATION" if shadow_status == "CLOSED_STOP_LOSS" else "TIME_HORIZON_EXIT",
                         "failure_reason": f"Shadow {style} trade stopped out ({realized_r}R) in {bar.get('adaptive_session')} ({bar.get('regime')}); MFE reached +{round(peak_mfe_r, 2)}R before reversal.",
                         "timestamp_unix": time.time(),
@@ -691,6 +707,17 @@ class ForgeShadowRunner:
         self.shadow_ledger_path.write_text(
             json.dumps(existing_ledger, indent=2), encoding="utf-8"
         )
+
+        # Closed-Loop Reinforcement: feed the new Shadow Runner wins & losses directly
+        # back into Forge's genome learner so feature weights, BE/TP1 ratchets, and
+        # session/regime filters continuously adapt from live shadow outcomes.
+        if shadow_trades:
+            try:
+                self.mtf_engine.train_and_certify_symbol_strategies(
+                    upper_sym, styles=styles, force_refresh_data=False
+                )
+            except Exception:
+                pass
 
         return report
 
