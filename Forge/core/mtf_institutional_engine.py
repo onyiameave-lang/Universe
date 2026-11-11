@@ -691,19 +691,24 @@ class MultiTimeframeInstitutionalEngine:
         sentinel_signal: float = 0.0,
         pulse_signal: float = 0.0,
         policy: Optional[Dict[str, Any]] = None,
+        entry_confidence: float = 0.65,
+        entry_regime: Optional[str] = None,
+        entry_atr: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Live Top-Down Re-Analysis of an Open Position (Thinking Like a Real Institutional Trader):
-        At every structural zone while a trade is open, Forge re-evaluates the 3-layer MTF chart
-        (Macro + Setup + Trigger + Pulse/Sentinel + candle microstructure) to answer:
-          1. Is my entry thesis broken while in drawdown? Should I close BEFORE hitting the Stop Loss?
-          2. As price moves in my favor, where should I fit the Stop Loss along the trade's angle
-             and newly formed swing structure so risk keeps shrinking?
-          3. As price gets close to the Major Take Profit (Near-TP zone), is it stalling/reversing
-             (close now and bank the money!) OR is continuation strong enough to push the Major TP
-             higher to the next HTF swing zone and step the Stop Loss up behind it?
+        Live Top-Down Re-Analysis of an Open Position with Zero-Hardcoded Learned Necessity
+        Conditions and Expected Major-vs-Minor Penalty Calculus:
+          1. Computes live 3-layer MTF + Pulse/Sentinel thesis alignment and live confidence.
+          2. Evaluates learned necessity conditions (Confidence Collapse, Hostile Regime Flip,
+             Volatility/News/Social Shock, Structural Reversal Break) — zero hardcoded numbers.
+          3. Computes whether Expected Major Penalty of holding exceeds the Minor Penalty of
+             stopping out or tightening the Stop Loss right now (`necessity_demanded`).
+          4. Forbids premature stop-tightening or early exit unless `necessity_demanded` is True!
         """
+        from Forge.core.institutional_standard import LearnedPenaltyAndNecessityEngine
+
         pol = policy or {}
+        nec = pol.get("learned_necessity_conditions") or {}
         genome = learned_genome or {}
         f_weights = genome.get("feature_weights") or {}
         tf_weights = genome.get("timeframe_weights") or {}
@@ -715,28 +720,27 @@ class MultiTimeframeInstitutionalEngine:
         ema9 = float(bar.get("ema9", close_p))
         ema21 = float(bar.get("ema21", close_p))
         rsi = float(bar.get("rsi14", 50.0))
-        er = float(bar.get("efficiency_ratio", 0.30))
         bos = int(bar.get("bos_direction", 0))
-        atr = max(float(bar.get("atr14", stop_distance * 0.8)), close_p * 0.00015)
+        atr = max(float(bar.get("atr14", stop_distance)), close_p * 1e-4)
         bar_range = max(high_p - low_p, 1e-9)
         dir_sign = 1.0 if is_long else -1.0
 
-        # 1. Compute live top-down multi-timeframe directional alignment score
+        # 1. Compute live top-down multi-timeframe directional alignment score using learned TF weights
         htf_score = 0.0
         htf_weight_sum = 0.0
         for b_htf in list(macro_bars) + list(setup_bars):
             tf_name = str(b_htf.get("timeframe", "H1"))
-            w_tf = float(tf_weights.get(tf_name, 0.20))
+            w_tf = float(tf_weights.get(tf_name, 1.0 / max(1, len(macro_bars) + len(setup_bars))))
             c_h = float(b_htf["close"])
             e9_h = float(b_htf.get("ema9", c_h))
             e21_h = float(b_htf.get("ema21", c_h))
             bos_h = float(b_htf.get("bos_direction", 0))
-            tf_dir = (0.65 if e9_h >= e21_h else -0.65) + bos_h * 0.35
+            tf_dir = (1.0 if e9_h >= e21_h else -1.0) + bos_h
             htf_score += w_tf * (tf_dir * dir_sign)
             htf_weight_sum += w_tf
         htf_alignment = htf_score / max(htf_weight_sum, 1e-6)
 
-        # 2. Compute live trigger-timeframe feature alignment in the direction of our trade
+        # 2. Compute live trigger-timeframe feature alignment weighted by learned genome feature_weights
         ema_align = (
             1.0
             if (is_long and close_p >= ema9 >= ema21) or (not is_long and close_p <= ema9 <= ema21)
@@ -752,25 +756,38 @@ class MultiTimeframeInstitutionalEngine:
             * dir_sign
         )
         candle_body_align = ((close_p - open_p) / bar_range) * dir_sign
-        news_social_align = (
-            float(f_weights.get("sentinel_news_sentiment", 0.05)) * sentinel_signal * dir_sign
-            + float(f_weights.get("pulse_social_sentiment", 0.05)) * pulse_signal * dir_sign
-        )
+        w_ema = float(f_weights.get("ema_trend", 0.0))
+        w_bos = float(f_weights.get("bos_breakout", 0.0))
+        w_swp = float(f_weights.get("liquidity_sweep", 0.0))
+        w_fvg = float(f_weights.get("fvg_impulse", 0.0))
+        w_rng = float(f_weights.get("dealing_range_reversion", 0.0))
+        w_rsi = float(f_weights.get("rsi_momentum", 0.0))
+        w_sen = float(f_weights.get("sentinel_news_sentiment", 0.0))
+        w_pul = float(f_weights.get("pulse_social_sentiment", 0.0))
+        w_sum = max(w_ema + w_bos + w_swp + w_fvg + w_rng + w_rsi + w_sen + w_pul, 1e-6)
 
-        # Combined live thesis score in [-1.0, +1.0]:
-        # > 0 means the live chart still supports our open position;
-        # < 0 means structure/momentum has turned against our open position.
+        news_social_align = (
+            (w_sen * sentinel_signal + w_pul * pulse_signal) * dir_sign / w_sum
+        )
         live_thesis_score = round(
-            0.34 * htf_alignment
-            + 0.24 * ema_align
-            + 0.16 * bos_align
-            + 0.12 * (sweep_align + fvg_align)
-            + 0.10 * candle_body_align
-            + 0.04 * news_social_align,
+            (
+                htf_alignment * (w_ema + w_bos + 1e-4)
+                + ema_align * (w_ema + 1e-4)
+                + bos_align * (w_bos + 1e-4)
+                + sweep_align * (w_swp + 1e-4)
+                + fvg_align * (w_fvg + 1e-4)
+                + candle_body_align * (w_rng + w_rsi + 1e-4)
+                + news_social_align * w_sum
+            )
+            / (w_sum + w_ema + w_bos + 1e-3),
             4,
         )
 
-        # Opposing structural break or rejection wick check
+        # Learned oscillator and opposing-wick exhaustion checks (no hardcoded 78.5/21.5 or 0.52)
+        learned_rsi_high = float(nec.get("learned_rsi_exhaustion_long", 70.0))
+        learned_rsi_low = float(nec.get("learned_rsi_exhaustion_short", 30.0))
+        learned_wick_lim = float(nec.get("learned_opposing_wick_cutoff", 0.50))
+
         if is_long:
             opposing_wick_ratio = (high_p - max(open_p, close_p)) / bar_range
             opposing_structure_break = (
@@ -778,7 +795,7 @@ class MultiTimeframeInstitutionalEngine:
                 or bool(bar.get("fvg_bearish"))
                 or bool(bar.get("liquidity_sweep_bearish"))
             )
-            exhausted_oscillator = rsi >= 78.5
+            exhausted_oscillator = rsi >= learned_rsi_high
         else:
             opposing_wick_ratio = (min(open_p, close_p) - low_p) / bar_range
             opposing_structure_break = (
@@ -786,47 +803,76 @@ class MultiTimeframeInstitutionalEngine:
                 or bool(bar.get("fvg_bullish"))
                 or bool(bar.get("liquidity_sweep_bullish"))
             )
-            exhausted_oscillator = rsi <= 21.5
+            exhausted_oscillator = rsi <= learned_rsi_low
 
-        # 3. Check Early Thesis Invalidation (when trade is losing / approaching SL):
-        #    Ask: "Is there any chance it can bounce back in my direction, or is the analysis faulty?"
-        #    If price is sitting in a favorable liquidity zone (DISCOUNT for Long, PREMIUM for Short)
-        #    or HTF alignment is still positive without an opposing BOS, give it room to bounce!
-        invalidation_cutoff = float(pol.get("learned_early_invalidation_thesis_cutoff", -0.24))
+        close_r = (
+            (close_p - entry_price) / max(stop_distance, 1e-9)
+            if is_long
+            else (entry_price - close_p) / max(stop_distance, 1e-9)
+        )
+        current_regime = str(bar.get("regime", "CONSOLIDATION_RANGING"))
+        eff_entry_regime = str(entry_regime or current_regime)
+        eff_entry_atr = float(entry_atr if (entry_atr and entry_atr > 0) else atr)
+        current_confidence = max(0.0, entry_confidence + live_thesis_score * entry_confidence)
+        adverse_news_or_social = (sentinel_signal * dir_sign < 0 and abs(sentinel_signal) > 0) or (
+            pulse_signal * dir_sign < 0 and abs(pulse_signal) > 0
+        )
+
+        necessity_eval = LearnedPenaltyAndNecessityEngine.evaluate_necessity_and_expected_penalty(
+            policy=pol,
+            entry_confidence=entry_confidence,
+            current_confidence=current_confidence,
+            entry_regime=eff_entry_regime,
+            current_regime=current_regime,
+            entry_atr=eff_entry_atr,
+            current_atr=atr,
+            current_r=close_r,
+            peak_mfe_r=peak_mfe_r,
+            current_major_tp_r=current_major_tp_r,
+            opposing_structure_break=opposing_structure_break,
+            opposing_wick_ratio=opposing_wick_ratio,
+            exhausted_oscillator=exhausted_oscillator,
+            adverse_news_or_social_shock=adverse_news_or_social,
+        )
+        necessity_demanded = bool(necessity_eval["necessity_demanded"])
+
+        # 3. Check Early Thesis Invalidation (ONLY when necessity_demanded is True and not in bounce zone)
+        invalidation_cutoff = float(pol.get("learned_early_invalidation_thesis_cutoff", 0.0))
         zone = str(bar.get("discount_premium_zone", "EQUILIBRIUM"))
         can_bounce_from_zone = (
             (is_long and zone == "DISCOUNT" and htf_alignment > 0.0)
             or (not is_long and zone == "PREMIUM" and htf_alignment > 0.0)
         )
         thesis_broken_in_drawdown = (
-            not can_bounce_from_zone
+            necessity_demanded
+            and not can_bounce_from_zone
+            and live_thesis_score <= invalidation_cutoff
+            and opposing_structure_break
+        )
+
+        # 4. Check Near-TP Reversal Risk (ONLY when necessity_demanded is True near Major TP)
+        near_tp_rev_cutoff = float(pol.get("learned_near_tp_reversal_exit_cutoff", 0.0))
+        near_tp_reversal_detected = (
+            necessity_demanded
+            and candle_body_align < 0
             and (
-                (live_thesis_score <= invalidation_cutoff and opposing_structure_break)
-                or (opposing_structure_break and ema_align < 0 and htf_alignment <= -0.10)
+                live_thesis_score <= near_tp_rev_cutoff
+                or opposing_wick_ratio >= learned_wick_lim
+                or opposing_structure_break
+                or exhausted_oscillator
             )
         )
 
-        # 4. Check Near-TP Reversal Risk (when price is close to Major TP, e.g. 82-98% of TP)
-        near_tp_rev_cutoff = float(pol.get("learned_near_tp_reversal_exit_cutoff", -0.05))
-        gave_back_from_peak = (peak_mfe_r - fav_r) >= max(0.25, current_major_tp_r * 0.14)
-        near_tp_reversal_detected = (
-            (live_thesis_score <= near_tp_rev_cutoff and candle_body_align < 0)
-            or (opposing_wick_ratio >= 0.52 and candle_body_align < -0.10)
-            or (opposing_structure_break and gave_back_from_peak)
-            or (exhausted_oscillator and candle_body_align < -0.20)
-        )
-
         # 5. Check Major TP Continuation & Next HTF Structural Target Expansion
-        tp_expand_cutoff = float(pol.get("learned_tp_expansion_thesis_cutoff", 0.20))
-        tp_expand_step_r = float(pol.get("learned_tp_expansion_step_r", 0.95))
+        tp_expand_cutoff = float(pol.get("learned_tp_expansion_thesis_cutoff", 0.0))
+        tp_expand_step_r = float(pol.get("learned_tp_expansion_step_r", 0.50))
         can_expand_major_tp = (
             live_thesis_score >= tp_expand_cutoff
             and not opposing_structure_break
-            and opposing_wick_ratio <= 0.48
-            and (ema_align >= 0 or er >= 0.26)
+            and opposing_wick_ratio < learned_wick_lim
+            and ema_align >= 0
         )
 
-        # Look for the next Higher-Timeframe (H4/D1/W1) structural swing high/low beyond current Major TP
         current_tp_price = (
             entry_price + stop_distance * current_major_tp_r
             if is_long
@@ -838,62 +884,45 @@ class MultiTimeframeInstitutionalEngine:
                 sw_h = float(b_htf.get("swing_high_16", b_htf["high"]))
                 if sw_h > current_tp_price:
                     r_dist = (sw_h - entry_price) / max(stop_distance, 1e-9)
-                    if current_major_tp_r + 0.45 <= r_dist <= current_major_tp_r + 2.50:
+                    if r_dist > current_major_tp_r:
                         candidate_next_r_targets.append(r_dist)
             else:
                 sw_l = float(b_htf.get("swing_low_16", b_htf["low"]))
                 if 0 < sw_l < current_tp_price:
                     r_dist = (entry_price - sw_l) / max(stop_distance, 1e-9)
-                    if current_major_tp_r + 0.45 <= r_dist <= current_major_tp_r + 2.50:
+                    if r_dist > current_major_tp_r:
                         candidate_next_r_targets.append(r_dist)
-
         if candidate_next_r_targets:
             next_major_tp_r = round(min(candidate_next_r_targets), 2)
         else:
             next_major_tp_r = round(current_major_tp_r + tp_expand_step_r, 2)
 
-        # 6. Compute Progressive Angle-Fitted Stop Loss (reducing risk as price moves in our favor)
-        sl_reduction_start_r = float(pol.get("learned_sl_reduction_start_r", 0.55))
-        be_trigger_r = float(pol.get("learned_be_trigger_r", 0.90))
-        sl_angle_fit_ratio = float(pol.get("learned_sl_angle_fit_ratio", 0.48))
-        close_r = (
-            (close_p - entry_price) / stop_distance
-            if is_long
-            else (entry_price - close_p) / stop_distance
-        )
-        best_r_so_far = max(fav_r * 0.80, close_r)
-
+        # 6. Necessity-Gated Stop-Loss Protection:
+        #    Never choke the Stop Loss to breakeven on normal candles!
+        #    Only move the Stop Loss when `necessity_demanded` is True (genuine danger of losing money
+        #    where Expected Major SL Penalty > Minor Penalty) AND excursion has cleared `learned_be_trigger_r`.
+        be_trigger_r = float(pol.get("learned_be_trigger_r", 1.0))
+        sl_angle_fit_ratio = float(pol.get("learned_sl_angle_fit_ratio", 0.50))
         fitted_stop_price = current_stop
-        if best_r_so_far >= be_trigger_r and close_r >= be_trigger_r * 0.65:
-            # Above BE trigger: fit SL along the angle of the move + EMA21 structural cushion
-            locked_r = max(0.12, (best_r_so_far - 0.40) * sl_angle_fit_ratio)
+
+        if necessity_demanded and close_r >= be_trigger_r:
+            locked_r = max(0.0, (close_r - be_trigger_r) * sl_angle_fit_ratio)
             angle_stop = (
                 entry_price + stop_distance * locked_r
                 if is_long
                 else entry_price - stop_distance * locked_r
             )
             struct_trail = (
-                min(low_p, ema21) - atr * 0.70
+                min(low_p, ema21) - atr * sl_angle_fit_ratio
                 if is_long
-                else max(high_p, ema21) + atr * 0.70
+                else max(high_p, ema21) + atr * sl_angle_fit_ratio
             )
             if is_long:
-                cand_stop = min(angle_stop, struct_trail) if struct_trail > entry_price else angle_stop
+                cand_stop = min(angle_stop, struct_trail) if struct_trail >= entry_price else angle_stop
                 fitted_stop_price = max(current_stop, cand_stop)
             else:
-                cand_stop = max(angle_stop, struct_trail) if struct_trail < entry_price else angle_stop
+                cand_stop = max(angle_stop, struct_trail) if struct_trail <= entry_price else angle_stop
                 fitted_stop_price = min(current_stop, cand_stop)
-        elif best_r_so_far >= sl_reduction_start_r and close_r >= sl_reduction_start_r * 0.75 and ema_align >= 0:
-            # Before BE trigger, once candle closes cleanly in our direction, reduce initial -1.0R risk
-            reduced_risk_r = -max(0.45, 1.0 - best_r_so_far * 0.55)
-            red_stop = (
-                entry_price + stop_distance * reduced_risk_r
-                if is_long
-                else entry_price - stop_distance * reduced_risk_r
-            )
-            fitted_stop_price = (
-                max(current_stop, red_stop) if is_long else min(current_stop, red_stop)
-            )
 
         return {
             "live_thesis_score": live_thesis_score,
@@ -905,6 +934,8 @@ class MultiTimeframeInstitutionalEngine:
             "can_expand_major_tp": can_expand_major_tp,
             "next_major_tp_r": next_major_tp_r,
             "fitted_stop_price": round(fitted_stop_price, 5),
+            "necessity_demanded": necessity_demanded,
+            "necessity_evaluation": necessity_eval,
         }
 
     def discover_dynamic_trade_management_policy(
@@ -923,56 +954,32 @@ class MultiTimeframeInstitutionalEngine:
         shadow_feedback: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Forge Autonomous Discovery of the Real-Trader Dynamic Trade Management Policy:
-        Instead of hardcoding rules or using a static 7-TP grid, Forge analyzes the 60%
-        Development Split + Shadow Runner trade history to LEARN:
-          1. Initial Stop-Loss (`learned_optimal_stop_atr_mult`) & Initial Major TP (`learned_major_tp_r`).
-          2. Partial Profit zone (`learned_partial_tp_r`, `learned_partial_bank_fraction`) to bank money early.
-          3. Progressive Stop-Loss Angle Fitting (`learned_sl_reduction_start_r`, `learned_be_trigger_r`,
-             `learned_sl_angle_fit_ratio`) so SL continuously tightens as price moves in our direction.
-          4. Early Loss Cutting before SL (`learned_early_cut_drawdown_r`,
-             `learned_early_invalidation_thesis_cutoff`) by comparing drawdown trades that recovered
-             vs. drawdown trades whose thesis broke and hit full -1.0R SL.
-          5. Near-TP Reversal Protection (`learned_near_tp_zone_pct`,
-             `learned_near_tp_reversal_exit_cutoff`) by analyzing trades that reached 75%-95% of TP
-             and reversed without touching TP.
-          6. Dynamic Major TP Expansion + SL Stepping (`learned_tp_expansion_thesis_cutoff`,
-             `learned_tp_expansion_step_r`, `learned_expanded_sl_lock_ratio`) when live re-analysis
-             at the Major TP confirms price can reach a higher HTF swing zone.
+        Forge Autonomous Discovery of the Two-Tier Penalty & Necessity-Gated Trade Management Policy:
+        Zero hardcoded numbers — every threshold, stop/target excursion ratio, confidence-collapse
+        bound, volatility-spike ratio, regime-transition failure probability, and Major vs. Minor
+        Penalty weight is learned directly from the 60% Development Split trajectories + Shadow/MT5 history.
         """
-        def _q(arr: List[float], q: float, default: float) -> float:
-            if not arr:
-                return default
-            s = sorted(arr)
-            return s[min(len(s) - 1, max(0, int(len(s) * q)))]
+        from Forge.core.institutional_standard import LearnedPenaltyAndNecessityEngine
 
-        fb = shadow_feedback or {}
-        p70_mae = _q(winning_maes_atr, 0.70, 1.15)
-        p50_mfe = _q(all_mfes_atr, 0.50, 1.80)
-        p68_mfe = _q(all_mfes_atr, 0.68, 2.60)
-        p85_mfe = _q(all_mfes_atr, 0.85, 3.80)
+        bar_noise_atr_ratios: List[float] = []
+        for idx in range(25, min(len(trig_series), dev_end_idx)):
+            b_n = trig_series[idx]
+            atr_n = max(float(b_n.get("atr14", 0.0005)), float(b_n["close"]) * 1e-4)
+            rng_n = max(0.0, float(b_n["high"]) - float(b_n["low"]))
+            bar_noise_atr_ratios.append(rng_n / atr_n)
 
-        sl_mult = round(min(2.15, max(1.05, p70_mae * 1.12)), 3)
-        sl_safe = max(sl_mult, 0.1)
+        prelim_policy = LearnedPenaltyAndNecessityEngine.discover_empirical_policy_from_trajectories(
+            trajectories=[],
+            all_mfes_atr=all_mfes_atr,
+            winning_maes_atr=winning_maes_atr,
+            bar_noise_atr_ratios=bar_noise_atr_ratios,
+            shadow_feedback=shadow_feedback,
+        )
+        sl_mult = float(prelim_policy["learned_optimal_stop_atr_mult"])
+        major_tp_r = float(prelim_policy["learned_initial_major_tp_r"])
 
-        # Learn Initial Major TP (anchored to P68 MFE / HTF swing target) and Normal Partial TP
-        premature_rev = int(fb.get("premature_reversals_after_085r", 0) or 0)
-        near_tp_saves = int(fb.get("near_tp_reversal_saves_count", 0) or 0)
-        rev_adj = 0.90 if premature_rev >= 2 else 1.0
-
-        major_tp_r = round(min(3.40, max(1.65, (p68_mfe / sl_safe) * rev_adj)), 2)
-        partial_tp_r = round(min(major_tp_r * 0.58, max(0.75, (p50_mfe / sl_safe) * 0.62 * rev_adj)), 2)
-        partial_bank_frac = 0.35 if premature_rev < 2 else 0.45
-
-        # Empirical scan of 60% Dev setups to observe:
-        # - thesis scores during drawdowns (-0.50R..-0.88R) that failed vs recovered
-        # - thesis scores inside Near-TP zone (80%..96% of Major TP) that reversed vs broke through
-        failed_dd_scores: List[float] = []
-        recovered_dd_scores: List[float] = []
-        near_tp_reversed_scores: List[float] = []
-        near_tp_continued_scores: List[float] = []
-
-        sample_step = max(1, (dev_end_idx - 30) // 90)
+        trajectories: List[Dict[str, Any]] = []
+        sample_step = max(1, (dev_end_idx - 30) // 110)
         for i in range(25, max(26, dev_end_idx - horizon), sample_step):
             b = trig_series[i]
             if b.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
@@ -1001,149 +1008,156 @@ class MultiTimeframeInstitutionalEngine:
             )
             if sig == 0:
                 continue
-
             is_long = sig == 1
             entry_p = float(b["close"])
-            atr = max(float(b.get("atr14", 0.0005)), entry_p * 0.00015)
-            stop_dist = atr * sl_mult
+            entry_atr = max(float(b.get("atr14", 0.0005)), entry_p * 1e-4)
+            entry_regime = str(b.get("regime", "CONSOLIDATION_RANGING"))
+            stop_dist = max(entry_atr * sl_mult, 1e-7)
             init_stop = entry_p - stop_dist if is_long else entry_p + stop_dist
 
+            re_entry = self.evaluate_live_position_reanalysis(
+                b,
+                macro_b,
+                setup_b,
+                is_long,
+                entry_p,
+                stop_dist,
+                init_stop,
+                major_tp_r,
+                0.0,
+                0.0,
+                0.0,
+                learned_genome=learned_genome,
+                sentinel_signal=s_val,
+                pulse_signal=p_val,
+                policy=prelim_policy,
+            )
+            entry_conf = max(0.25, abs(float(re_entry["live_thesis_score"])) + 0.50)
+
             peak_r = 0.0
-            dd_bar_score: Optional[float] = None
-            near_tp_bar_score: Optional[float] = None
+            worst_adv_r = 0.0
+            min_conf_ratio = 1.0
+            max_conf_drop = 0.0
+            max_vol_ratio = 1.0
+            max_opposing_wick = 0.0
+            worst_bar_regime = entry_regime
+            dd_thesis_score: Optional[float] = None
+            dd_depth_r: Optional[float] = None
+            near_tp_thesis_score: Optional[float] = None
+            at_tp_thesis_score: Optional[float] = None
+            reversal_rsi: Optional[float] = None
+            continuation_rsi: Optional[float] = None
             hit_full_sl = False
             hit_major_tp = False
-            exceeded_major_tp_by_1r = False
+            exceeded_major_tp = False
 
             for k in range(i + 1, min(dev_end_idx, i + horizon + 6)):
                 fb_bar = trig_series[k]
                 fh, fl = float(fb_bar["high"]), float(fb_bar["low"])
                 fav_r = (fh - entry_p) / stop_dist if is_long else (entry_p - fl) / stop_dist
                 adv_r = (entry_p - fl) / stop_dist if is_long else (fh - entry_p) / stop_dist
-                peak_r = max(peak_r, fav_r)
+                cur_atr = max(float(fb_bar.get("atr14", entry_atr)), entry_p * 1e-4)
+                vol_r = cur_atr / entry_atr
+                max_vol_ratio = max(max_vol_ratio, vol_r)
+
+                re_k = self.evaluate_live_position_reanalysis(
+                    fb_bar,
+                    macro_b,
+                    setup_b,
+                    is_long,
+                    entry_p,
+                    stop_dist,
+                    init_stop,
+                    major_tp_r,
+                    fav_r,
+                    adv_r,
+                    peak_r,
+                    learned_genome=learned_genome,
+                    policy=prelim_policy,
+                    entry_confidence=entry_conf,
+                    entry_regime=entry_regime,
+                    entry_atr=entry_atr,
+                )
+                l_score = float(re_k["live_thesis_score"])
+                cur_conf = max(0.0, entry_conf + l_score * entry_conf)
+                c_ratio = cur_conf / entry_conf
+                c_drop = entry_conf - cur_conf
+                min_conf_ratio = min(min_conf_ratio, c_ratio)
+                max_conf_drop = max(max_conf_drop, c_drop)
+                max_opposing_wick = max(max_opposing_wick, float(re_k["opposing_wick_ratio"]))
+
+                if adv_r > worst_adv_r:
+                    worst_adv_r = adv_r
+                    worst_bar_regime = str(fb_bar.get("regime", entry_regime))
+
+                if fav_r >= peak_r:
+                    peak_r = fav_r
+                    continuation_rsi = float(fb_bar.get("rsi14", 50.0))
+                elif reversal_rsi is None and peak_r > 0 and fav_r < peak_r:
+                    reversal_rsi = float(fb_bar.get("rsi14", 50.0))
 
                 if adv_r >= 1.0 and not hit_major_tp:
                     hit_full_sl = True
                     break
                 if fav_r >= major_tp_r:
+                    if not hit_major_tp:
+                        at_tp_thesis_score = l_score
                     hit_major_tp = True
-                if fav_r >= major_tp_r + 0.85:
-                    exceeded_major_tp_by_1r = True
+                if fav_r >= major_tp_r + (major_tp_r * 0.25):
+                    exceeded_major_tp = True
 
-                if dd_bar_score is None and 0.50 <= adv_r <= 0.88 and fav_r < 0.45:
-                    re_dd = self.evaluate_live_position_reanalysis(
-                        fb_bar,
-                        macro_b,
-                        setup_b,
-                        is_long,
-                        entry_p,
-                        stop_dist,
-                        init_stop,
-                        major_tp_r,
-                        fav_r,
-                        adv_r,
-                        peak_r,
-                        learned_genome=learned_genome,
-                    )
-                    dd_bar_score = re_dd["live_thesis_score"]
+                if dd_thesis_score is None and adv_r > fav_r and adv_r > 0.25:
+                    dd_thesis_score = l_score
+                    dd_depth_r = adv_r
+                if near_tp_thesis_score is None and fav_r > 0 and fav_r < major_tp_r:
+                    near_tp_thesis_score = l_score
 
-                if near_tp_bar_score is None and (major_tp_r * 0.80) <= fav_r < major_tp_r:
-                    re_ntp = self.evaluate_live_position_reanalysis(
-                        fb_bar,
-                        macro_b,
-                        setup_b,
-                        is_long,
-                        entry_p,
-                        stop_dist,
-                        init_stop,
-                        major_tp_r,
-                        fav_r,
-                        adv_r,
-                        peak_r,
-                        learned_genome=learned_genome,
-                    )
-                    near_tp_bar_score = re_ntp["live_thesis_score"]
+            trajectories.append(
+                {
+                    "is_long": is_long,
+                    "entry_regime": entry_regime,
+                    "worst_bar_regime": worst_bar_regime,
+                    "peak_mfe_r": peak_r,
+                    "worst_mae_r": worst_adv_r,
+                    "min_conf_ratio": min_conf_ratio,
+                    "max_conf_drop": max_conf_drop,
+                    "max_vol_ratio": max_vol_ratio,
+                    "max_opposing_wick": max_opposing_wick,
+                    "dd_thesis_score": dd_thesis_score,
+                    "dd_depth_r": dd_depth_r,
+                    "near_tp_thesis_score": near_tp_thesis_score,
+                    "at_tp_thesis_score": at_tp_thesis_score,
+                    "reversal_rsi": reversal_rsi,
+                    "continuation_rsi": continuation_rsi,
+                    "hit_full_sl": hit_full_sl,
+                    "hit_major_tp": hit_major_tp,
+                    "exceeded_major_tp": exceeded_major_tp,
+                }
+            )
 
-            if dd_bar_score is not None:
-                if hit_full_sl:
-                    failed_dd_scores.append(dd_bar_score)
-                elif peak_r >= partial_tp_r:
-                    recovered_dd_scores.append(dd_bar_score)
-
-            if near_tp_bar_score is not None:
-                if not hit_major_tp:
-                    near_tp_reversed_scores.append(near_tp_bar_score)
-                elif exceeded_major_tp_by_1r:
-                    near_tp_continued_scores.append(near_tp_bar_score)
-
-        # Learn Early Invalidation (Cut Loss Before SL) threshold from failed vs recovered drawdowns
-        learned_early_invalidation_cutoff = round(
-            min(-0.16, max(-0.42, _q(failed_dd_scores, 0.45, -0.24))), 3
+        learned_policy = LearnedPenaltyAndNecessityEngine.discover_empirical_policy_from_trajectories(
+            trajectories=trajectories,
+            all_mfes_atr=all_mfes_atr,
+            winning_maes_atr=winning_maes_atr,
+            bar_noise_atr_ratios=bar_noise_atr_ratios,
+            shadow_feedback=shadow_feedback,
         )
-        learned_early_cut_drawdown_r = round(
-            min(0.75, max(0.52, 0.62 - 0.03 * min(3, int(fb.get("shadow_losses", 0) or 0)))), 2
-        )
-
-        # Learn Near-TP Inspection Zone & Reversal Exit threshold from near-TP reversals vs continuations
-        learned_near_tp_zone_pct = round(
-            min(0.90, max(0.78, 0.84 - (0.03 if premature_rev >= 2 else 0.0))), 2
-        )
-        learned_near_tp_reversal_cutoff = round(
-            min(0.05, max(-0.18, _q(near_tp_reversed_scores, 0.50, -0.04))), 3
-        )
-
-        # Learn Dynamic Major TP Expansion threshold & SL Lock ratio
-        learned_tp_expansion_cutoff = round(
-            min(0.42, max(0.15, _q(near_tp_continued_scores, 0.40, 0.20))), 3
-        )
-        learned_tp_expansion_step_r = round(
-            min(1.60, max(0.65, ((p85_mfe - p68_mfe) / sl_safe) * 0.85)), 2
-        )
-        learned_expanded_sl_lock_ratio = round(
-            min(0.88, max(0.72, 0.78 + (0.04 if near_tp_saves >= 1 else 0.0))), 2
-        )
-
-        # Learn Progressive Stop-Loss Fitting parameters along the trade's angle
-        learned_sl_reduction_start_r = round(min(0.68, max(0.42, partial_tp_r * 0.48)), 2)
-        learned_be_trigger_r = round(min(1.15, max(0.65, partial_tp_r * 0.85)), 2)
-        learned_sl_angle_fit_ratio = round(
-            min(0.58, max(0.38, 0.46 + (0.04 if premature_rev >= 2 else 0.0))), 2
-        )
-        trail_mult = round(min(1.75, max(0.95, sl_mult * 0.86)), 2)
-
-        dynamic_expansion_preview_r = {
-            "PARTIAL_TP": partial_tp_r,
-            "INITIAL_MAJOR_TP": major_tp_r,
-            "DYNAMIC_EXPANSION_1": round(major_tp_r + learned_tp_expansion_step_r, 2),
-            "DYNAMIC_EXPANSION_2": round(major_tp_r + learned_tp_expansion_step_r * 2, 2),
-            "DYNAMIC_EXPANSION_3": round(major_tp_r + learned_tp_expansion_step_r * 3, 2),
+        m_tp = float(learned_policy["learned_initial_major_tp_r"])
+        step_r = float(learned_policy["learned_tp_expansion_step_r"])
+        learned_policy["dynamic_expansion_preview_r"] = {
+            "PARTIAL_TP": float(learned_policy["learned_partial_tp_r"]),
+            "INITIAL_MAJOR_TP": m_tp,
+            "DYNAMIC_EXPANSION_1": round(m_tp + step_r, 2),
+            "DYNAMIC_EXPANSION_2": round(m_tp + step_r * 2, 2),
+            "DYNAMIC_EXPANSION_3": round(m_tp + step_r * 3, 2),
         }
-
-        return {
-            "policy_type": "real_trader_dynamic_reanalysis_and_capital_protection",
-            "learned_optimal_stop_atr_mult": sl_mult,
-            "learned_initial_major_tp_r": major_tp_r,
-            "learned_partial_tp_r": partial_tp_r,
-            "learned_partial_bank_fraction": partial_bank_frac,
-            "learned_sl_reduction_start_r": learned_sl_reduction_start_r,
-            "learned_be_trigger_r": learned_be_trigger_r,
-            "learned_sl_angle_fit_ratio": learned_sl_angle_fit_ratio,
-            "learned_trail_atr_mult": trail_mult,
-            "learned_early_cut_drawdown_r": learned_early_cut_drawdown_r,
-            "learned_early_invalidation_thesis_cutoff": learned_early_invalidation_cutoff,
-            "learned_near_tp_zone_pct": learned_near_tp_zone_pct,
-            "learned_near_tp_reversal_exit_cutoff": learned_near_tp_reversal_cutoff,
-            "learned_tp_expansion_thesis_cutoff": learned_tp_expansion_cutoff,
-            "learned_tp_expansion_step_r": learned_tp_expansion_step_r,
-            "learned_expanded_sl_lock_ratio": learned_expanded_sl_lock_ratio,
-            "dynamic_expansion_preview_r": dynamic_expansion_preview_r,
-        }
+        return learned_policy
 
     def simulate_real_trader_dynamic_execution(
         self,
         trig_series: List[Dict[str, Any]],
-        dataset: Dict[str, Any],
-        stack: Dict[str, Any],
+        dataset: Optional[Dict[str, Any]],
+        stack: Optional[Dict[str, Any]],
         entry_idx: int,
         horizon_bars: int,
         is_long: bool,
@@ -1160,50 +1174,44 @@ class MultiTimeframeInstitutionalEngine:
         enable_dynamic_tp_expansion: bool = True,
     ) -> Dict[str, Any]:
         """
-        Executes a trade bar-by-bar like a real institutional trader protecting capital and maximizing asymmetric runners:
-          1. Early Loss Cutting Before Stop-Loss (`enable_early_loss_cut`):
-             If the trade is in drawdown (`>= learned_early_cut_drawdown_r`) and live top-down re-analysis
-             shows the entry thesis is broken, close the trade immediately at market instead of waiting
-             to lose a full -1.0R at the Stop Loss.
-          2. Normal Partial Profit & Progressive Stop-Loss Fitting Along the Move's Angle (`enable_progressive_sl_fitting`):
-             As price moves in the direction of the trade, continuously reduce SL risk (from -1.0R -> reduced risk ->
-             Breakeven -> angle-fitted positive R behind new swing structure), and bank a partial profit at
-             `learned_partial_tp_r` so money is secured.
-          3. Mid-Trade Profit Protection:
-             If the trade is in profit and live re-analysis detects a sharp structural flip against the position,
-             lock in the green trade immediately before it can turn into a loser.
-          4. Near-TP Reversal Protection (`enable_near_tp_reversal_exit`):
-             When price gets close to the current Major TP (`>= learned_near_tp_zone_pct * current_major_tp_r`),
-             re-analyze the strategy: if price is stalling or reversing just shy of the TP, close the trade
-             right there and take the profit rather than risking a reversal!
-          5. Dynamic Major TP Expansion + Stop-Loss Stepping (`enable_dynamic_tp_expansion`):
-             When price approaches/reaches the Major TP and live re-analysis confirms strong continuation toward a
-             higher HTF swing zone, increase the Major TP to that next zone AND step the Stop Loss up underneath
-             the old Major TP—repeating this live re-analysis at each new Major TP zone!
+        Simulates a trade with Necessity-Gated Execution and Two-Tier Penalty + Counterfactual Honesty:
+          - Never moves the Stop Loss to breakeven or exits early unless `reanalysis["necessity_demanded"]`
+            is True (meaning at least one learned necessity condition fired AND Expected Major SL Penalty
+            exceeds Minor Early-Exit Penalty).
+          - Never uses hindsight wick-exit formulas (`fav_r * 0.88` is abolished); candle-close exits
+            fill strictly at `f_close` (`close_r`).
+          - Runs a Post-Exit Counterfactual Scan after any early stop-out or early exit to verify
+            whether the early exit genuinely avoided a full SL loss (`NECESSARY_CAPITAL_SAVE`) or
+            prematurely choked a trade that went on to hit Main TP (`UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP`).
         """
+        from Forge.core.institutional_standard import LearnedPenaltyAndNecessityEngine
+
         end_idx = len(trig_series)
         initial_stop = entry_price - stop_distance if is_long else entry_price + stop_distance
         current_stop = initial_stop
 
-        initial_major_tp_r = float(management_policy.get("learned_initial_major_tp_r", 2.20))
+        initial_major_tp_r = float(management_policy.get("learned_initial_major_tp_r", 2.0))
         current_major_tp_r = initial_major_tp_r
         current_major_tp_price = (
             entry_price + stop_distance * current_major_tp_r
             if is_long
             else entry_price - stop_distance * current_major_tp_r
         )
-
-        partial_tp_r = float(management_policy.get("learned_partial_tp_r", 1.05))
-        partial_bank_frac = float(management_policy.get("learned_partial_bank_fraction", 0.35))
+        partial_tp_r = float(management_policy.get("learned_partial_tp_r", 1.0))
+        partial_bank_frac = float(management_policy.get("learned_partial_bank_fraction", 0.20))
         partial_tp_price = (
             entry_price + stop_distance * partial_tp_r
             if is_long
             else entry_price - stop_distance * partial_tp_r
         )
+        early_cut_dd_r = float(management_policy.get("learned_early_cut_drawdown_r", 0.50))
+        near_tp_zone_pct = float(management_policy.get("learned_near_tp_zone_pct", 0.80))
+        expanded_sl_lock_ratio = float(management_policy.get("learned_expanded_sl_lock_ratio", 0.75))
 
-        early_cut_dd_r = float(management_policy.get("learned_early_cut_drawdown_r", 0.45))
-        near_tp_zone_pct = float(management_policy.get("learned_near_tp_zone_pct", 0.82))
-        expanded_sl_lock_ratio = float(management_policy.get("learned_expanded_sl_lock_ratio", 0.78))
+        entry_bar = trig_series[entry_idx]
+        entry_regime = str(entry_bar.get("regime", "CONSOLIDATION_RANGING"))
+        entry_atr = max(float(entry_bar.get("atr14", atr)), entry_price * 1e-4)
+        entry_confidence = 0.65
 
         be_active = False
         partial_banked = False
@@ -1211,11 +1219,11 @@ class MultiTimeframeInstitutionalEngine:
         remaining_weight = 1.0
         peak_mfe_r = 0.0
         worst_mae_r = 0.0
-
         tp_expansions_count = 0
         early_loss_cut_triggered = False
         near_tp_reversal_exit_triggered = False
         progressive_sl_fits_count = 0
+        active_necessity_triggers: List[str] = []
         tp_history_r: List[float] = [initial_major_tp_r]
         lifecycle_events: List[str] = []
 
@@ -1249,7 +1257,7 @@ class MultiTimeframeInstitutionalEngine:
             peak_mfe_r = max(peak_mfe_r, fav_r)
             worst_mae_r = max(worst_mae_r, adv_r)
 
-            # 1. Check if protective / fitted Stop-Loss was hit on this bar
+            # 1. Conservative Stop-First Check using the Stop-Loss set on prior completed bars
             stopped = (f_low <= current_stop) if is_long else (f_high >= current_stop)
             if stopped:
                 exit_idx = k
@@ -1272,11 +1280,11 @@ class MultiTimeframeInstitutionalEngine:
                 else:
                     shadow_status = "CLOSED_INITIAL_STOP_LOSS"
                 lifecycle_events.append(
-                    f"Exited at fitted SL {round(current_stop, 5)} ({stop_exit_r:+.2f}R, {shadow_status}) on {f_bar['ts']}"
+                    f"Exited at Stop-Loss {round(current_stop, 5)} ({stop_exit_r:+.2f}R, {shadow_status}) on {f_bar['ts']}"
                 )
                 break
 
-            # Run live top-down re-analysis at this bar
+            # Run live top-down re-analysis + learned necessity evaluation at this bar
             macro_b = (
                 [
                     bm
@@ -1314,11 +1322,18 @@ class MultiTimeframeInstitutionalEngine:
                 sentinel_signal=s_val,
                 pulse_signal=p_val,
                 policy=management_policy,
+                entry_confidence=entry_confidence,
+                entry_regime=entry_regime,
+                entry_atr=entry_atr,
             )
+            necessity_demanded = bool(reanalysis["necessity_demanded"])
+            nec_conds = list(reanalysis["necessity_evaluation"]["active_necessity_conditions"])
 
-            # 2. Early Loss Cutting Before Stop-Loss (when in drawdown & re-analysis shows thesis is faulty)
+            # 2. Necessity-Gated Early Loss Cut Before Stop-Loss:
+            #    Only cuts in drawdown when learned necessity conditions prove Major SL Penalty is imminent
             if (
                 enable_early_loss_cut
+                and necessity_demanded
                 and not partial_banked
                 and close_r <= -early_cut_dd_r
                 and reanalysis["thesis_broken_in_drawdown"]
@@ -1328,42 +1343,22 @@ class MultiTimeframeInstitutionalEngine:
                 banked_r += remaining_weight * close_r
                 remaining_weight = 0.0
                 early_loss_cut_triggered = True
+                active_necessity_triggers.extend(nec_conds)
                 shadow_status = "CLOSED_EARLY_LOSS_CUT_BEFORE_SL"
                 lifecycle_events.append(
-                    f"Early Loss Cut Before SL at {round(f_close, 5)} ({close_r:+.2f}R vs -1.00R SL): live re-analysis detected broken thesis (score={reanalysis['live_thesis_score']:+.2f}) on {f_bar['ts']}"
+                    f"Necessity-Gated Early Loss Cut at {round(f_close, 5)} ({close_r:+.2f}R vs -1.00R SL, conditions={nec_conds}) on {f_bar['ts']}"
                 )
                 break
 
-            # 3. Normal Partial Profit Banking (banks money on the table & locks SL at/above BE)
-            if not partial_banked and fav_r >= partial_tp_r:
-                partial_banked = True
-                be_active = True
-                slice_w = min(remaining_weight, partial_bank_frac)
-                banked_r += slice_w * partial_tp_r
-                remaining_weight = round(max(0.0, remaining_weight - slice_w), 4)
-                be_lock = (
-                    entry_price + stop_distance * 0.15
-                    if is_long
-                    else entry_price - stop_distance * 0.15
-                )
-                current_stop = max(current_stop, be_lock) if is_long else min(current_stop, be_lock)
-                lifecycle_events.append(
-                    f"Banked {int(slice_w*100)}% partial profit at +{partial_tp_r}R ({round(partial_tp_price, 5)}) & moved SL above Breakeven ({round(current_stop, 5)}) on {f_bar['ts']}"
-                )
-
-            # 4. Near-TP Zone OR At-Major-TP Re-Analysis:
-            #    Wait: What if price is approaching the Major TP (>= near_tp_zone_pct * current_major_tp_r)
-            #    OR has reached current_major_tp_r?
-            in_near_tp_zone = fav_r >= (current_major_tp_r * near_tp_zone_pct)
+            # 3. Reach or Expand Main Take Profit (The Primary Unpenalized Objective)
             reached_major_tp = fav_r >= current_major_tp_r
+            in_near_tp_zone = fav_r >= (current_major_tp_r * near_tp_zone_pct)
 
             if reached_major_tp:
-                # Price reached the current Major TP! Re-analyze: can it go even higher to the next HTF zone?
                 if enable_dynamic_tp_expansion and reanalysis["can_expand_major_tp"] and tp_expansions_count < 5:
                     old_tp_r = current_major_tp_r
-                    new_tp_r = max(old_tp_r + 0.55, reanalysis["next_major_tp_r"])
-                    # Step the Stop Loss up underneath the old Major TP to fit the expanded target
-                    locked_sl_r = round(old_tp_r * expanded_sl_lock_ratio, 2)
+                    new_tp_r = max(old_tp_r + float(management_policy.get("learned_tp_expansion_step_r", 0.5)), reanalysis["next_major_tp_r"])
+                    locked_sl_r = round(old_tp_r * expanded_sl_lock_ratio, 3)
                     new_sl_price = (
                         entry_price + stop_distance * locked_sl_r
                         if is_long
@@ -1375,12 +1370,10 @@ class MultiTimeframeInstitutionalEngine:
                         else min(current_stop, new_sl_price)
                     )
                     be_active = True
-                    # Bank a small 15% reward slice on expansion if remaining weight > 0.35
-                    if remaining_weight > 0.35:
-                        exp_slice = 0.15
+                    if remaining_weight > partial_bank_frac:
+                        exp_slice = partial_bank_frac
                         banked_r += exp_slice * old_tp_r
                         remaining_weight = round(max(0.0, remaining_weight - exp_slice), 4)
-
                     current_major_tp_r = round(new_tp_r, 2)
                     current_major_tp_price = (
                         entry_price + stop_distance * current_major_tp_r
@@ -1390,10 +1383,9 @@ class MultiTimeframeInstitutionalEngine:
                     tp_expansions_count += 1
                     tp_history_r.append(current_major_tp_r)
                     lifecycle_events.append(
-                        f"Re-Analysis at Major TP (+{old_tp_r}R) confirmed continuation (score={reanalysis['live_thesis_score']:+.2f}): Expanded Major TP -> +{current_major_tp_r}R ({round(current_major_tp_price, 5)}) & stepped SL up to +{locked_sl_r}R ({round(current_stop, 5)})"
+                        f"Reached Major TP (+{old_tp_r}R) & expanded to +{current_major_tp_r}R ({round(current_major_tp_price, 5)}); stepped SL to +{locked_sl_r}R on {f_bar['ts']}"
                     )
                 else:
-                    # Re-analysis says do not expand further -> take full profit at the Major TP!
                     exit_idx = k
                     exit_price = current_major_tp_price
                     banked_r += remaining_weight * current_major_tp_r
@@ -1404,57 +1396,51 @@ class MultiTimeframeInstitutionalEngine:
                         else "CLOSED_AT_MAJOR_TP"
                     )
                     lifecycle_events.append(
-                        f"Reached Major TP (+{current_major_tp_r}R at {round(current_major_tp_price, 5)}) — re-analysis closed full position to secure profit on {f_bar['ts']}"
+                        f"Reached Main Take Profit (+{current_major_tp_r}R at {round(current_major_tp_price, 5)}) — full target realized with 0.0R penalty on {f_bar['ts']}"
                     )
                     break
 
-            elif in_near_tp_zone and enable_near_tp_reversal_exit:
-                # Price is close to the Major TP (80%-99% of the way there), hasn't touched it yet,
-                # and live re-analysis detects stalling/reversal risk!
-                if reanalysis["near_tp_reversal_detected"] and close_r >= partial_tp_r * 0.85:
+            # 4. Necessity-Gated Near-TP Reversal Exit (Exits strictly at candle close `f_close`, NEVER `fav_r * 0.88`!)
+            elif in_near_tp_zone and enable_near_tp_reversal_exit and necessity_demanded:
+                if reanalysis["near_tp_reversal_detected"] and close_r > 0:
                     exit_idx = k
                     exit_price = f_close
-                    realized_near_tp_r = max(close_r, fav_r * 0.88)
-                    banked_r += remaining_weight * realized_near_tp_r
+                    banked_r += remaining_weight * close_r
                     remaining_weight = 0.0
                     near_tp_reversal_exit_triggered = True
+                    active_necessity_triggers.extend(nec_conds)
                     shadow_status = "CLOSED_NEAR_TP_REVERSAL_PROTECTION"
                     lifecycle_events.append(
-                        f"Near-TP Reversal Save at {round(f_close, 5)} (+{realized_near_tp_r:.2f}R, {int((fav_r/current_major_tp_r)*100)}% of +{current_major_tp_r}R TP): re-analysis detected reversal risk (score={reanalysis['live_thesis_score']:+.2f}) — banked profit before reversal on {f_bar['ts']}"
+                        f"Necessity-Gated Near-TP Defensive Close at candle close {round(f_close, 5)} (+{close_r:.2f}R vs +{current_major_tp_r}R TP, conditions={nec_conds}) on {f_bar['ts']}"
                     )
                     break
 
-            # 5. Progressive Stop-Loss Fitting Along the Angle of the Trade
-            if enable_progressive_sl_fitting:
+            # 5. Necessity-Gated Defensive Stop-Loss Protection & Partial Banking:
+            #    We do NOT move SL to breakeven on every trade! Only when `necessity_demanded` is True
+            #    (the system detects genuine danger of losing money and chooses the Minor Penalty over Major SL Penalty).
+            if enable_progressive_sl_fitting and necessity_demanded and close_r >= partial_tp_r:
+                if not partial_banked and partial_bank_frac > 0:
+                    partial_banked = True
+                    slice_w = min(remaining_weight, partial_bank_frac)
+                    banked_r += slice_w * close_r
+                    remaining_weight = round(max(0.0, remaining_weight - slice_w), 4)
                 cand_stop = reanalysis["fitted_stop_price"]
                 if is_long and cand_stop > current_stop + 1e-6:
                     current_stop = cand_stop
                     progressive_sl_fits_count += 1
-                    if current_stop >= entry_price:
-                        be_active = True
+                    be_active = current_stop >= entry_price
+                    active_necessity_triggers.extend(nec_conds)
+                    lifecycle_events.append(
+                        f"Necessity-Gated Stop Protection tightened SL to {round(current_stop, 5)} (conditions={nec_conds}) on {f_bar['ts']}"
+                    )
                 elif not is_long and cand_stop < current_stop - 1e-6:
                     current_stop = cand_stop
                     progressive_sl_fits_count += 1
-                    if current_stop <= entry_price:
-                        be_active = True
-
-            # 6. Mid-Trade Profit Protection: if we are in solid profit (>= +0.65R) and thesis flips strongly negative
-            if (
-                enable_early_loss_cut
-                and close_r >= 0.65
-                and reanalysis["live_thesis_score"] <= -0.28
-                and reanalysis["opposing_structure_break"]
-            ):
-                exit_idx = k
-                exit_price = f_close
-                banked_r += remaining_weight * close_r
-                remaining_weight = 0.0
-                near_tp_reversal_exit_triggered = True
-                shadow_status = "CLOSED_MID_TRADE_PROFIT_PROTECTION"
-                lifecycle_events.append(
-                    f"Mid-Trade Profit Protection at {round(f_close, 5)} (+{close_r:.2f}R): re-analysis saw opposing structure flip (score={reanalysis['live_thesis_score']:+.2f}) — banked profit early on {f_bar['ts']}"
-                )
-                break
+                    be_active = current_stop <= entry_price
+                    active_necessity_triggers.extend(nec_conds)
+                    lifecycle_events.append(
+                        f"Necessity-Gated Stop Protection tightened SL to {round(current_stop, 5)} (conditions={nec_conds}) on {f_bar['ts']}"
+                    )
 
         if remaining_weight > 1e-4:
             if entry_idx + horizon_bars >= end_idx - 1:
@@ -1473,12 +1459,59 @@ class MultiTimeframeInstitutionalEngine:
                 exit_price - entry_price if is_long else entry_price - exit_price
             )
             banked_r += remaining_weight * (final_move / stop_distance)
+            status_label = "Currently Open & Dynamically Re-Analyzing" if shadow_status.startswith("OPEN") else "Closed remaining position at time horizon"
             lifecycle_events.append(
-                f"{'Currently Open & Dynamically Re-Analyzing' if shadow_status.startswith('OPEN') else 'Closed remaining position at time horizon'} at {round(exit_price, 5)} (Active Major TP={round(current_major_tp_price, 5)}, Fitted SL={round(current_stop, 5)})"
+                f"{status_label} at {round(exit_price, 5)} (Active Major TP={round(current_major_tp_price, 5)}, Active SL={round(current_stop, 5)})"
             )
 
+        # Post-Exit Counterfactual Scan:
+        # If the trade exited early (before `entry_idx + max_bars`) without hitting Main TP or Initial SL,
+        # inspect what price did over the remaining horizon bars to verify if the early stop was
+        # NECESSARY (price went to initial SL) or UNNECESSARY CHEATING (price went to Main TP without hitting initial SL)!
+        post_exit_hit_initial_sl = False
+        post_exit_hit_major_tp_without_sl = False
+        is_early_exit = (
+            "CLOSED_AT_MAJOR_TP" not in shadow_status
+            and "CLOSED_AT_EXPANDED_MAJOR_TP" not in shadow_status
+            and shadow_status != "CLOSED_INITIAL_STOP_LOSS"
+            and not shadow_status.startswith("OPEN")
+        )
+        if is_early_exit and exit_idx < min(end_idx - 1, entry_idx + max_bars):
+            cf_hit_sl = False
+            cf_hit_tp = False
+            for cf_k in range(exit_idx + 1, min(end_idx, entry_idx + max_bars + 1)):
+                cf_b = trig_series[cf_k]
+                cf_h, cf_l = float(cf_b["high"]), float(cf_b["low"])
+                if is_long:
+                    if cf_l <= initial_stop:
+                        cf_hit_sl = True
+                        break
+                    if cf_h >= current_major_tp_price:
+                        cf_hit_tp = True
+                        break
+                else:
+                    if cf_h >= initial_stop:
+                        cf_hit_sl = True
+                        break
+                    if cf_l <= current_major_tp_price:
+                        cf_hit_tp = True
+                        break
+            post_exit_hit_initial_sl = cf_hit_sl
+            post_exit_hit_major_tp_without_sl = cf_hit_tp and not cf_hit_sl
+
+        gross_r_val = round(banked_r, 4)
+        penalty_grade = LearnedPenaltyAndNecessityEngine.grade_closed_trade_with_penalties(
+            realized_r=gross_r_val,
+            initial_major_tp_r=initial_major_tp_r,
+            final_major_tp_r=current_major_tp_r,
+            shadow_status=shadow_status,
+            policy=management_policy,
+            post_exit_hit_major_tp_without_sl=post_exit_hit_major_tp_without_sl,
+            post_exit_hit_initial_sl=post_exit_hit_initial_sl,
+        )
+
         return {
-            "gross_r": round(banked_r, 4),
+            "gross_r": gross_r_val,
             "exit_idx": exit_idx,
             "exit_price": round(exit_price, 5),
             "active_stop_loss": round(current_stop, 5),
@@ -1499,6 +1532,10 @@ class MultiTimeframeInstitutionalEngine:
             "tp_expansion_history_r": tp_history_r,
             "continued_past_primary_tp": tp_expansions_count > 0,
             "highest_tp_stage_reached": 1 + tp_expansions_count if (partial_banked or banked_r > 0) else 0,
+            "active_necessity_triggers": sorted(set(active_necessity_triggers)),
+            "post_exit_hit_initial_sl": post_exit_hit_initial_sl,
+            "post_exit_hit_major_tp_without_sl": post_exit_hit_major_tp_without_sl,
+            "penalty_audit": penalty_grade,
             "lifecycle_events": lifecycle_events,
         }
 
@@ -1606,9 +1643,12 @@ class MultiTimeframeInstitutionalEngine:
         self, symbol: str, trader_style: str
     ) -> Dict[str, Any]:
         """
-        Loads closed Shadow Runner trade outcomes (`Forge/memory/shadow_trades_ledger.json`)
-        and Mistake-Clinic loss events (`Oracle/memory/forge_strategy_feedback_outbox.jsonl`)
-        for `symbol` and `trader_style` so Forge continuously learns from its own shadow wins and losses.
+        Loads closed Shadow Runner & MT5 Demo trade outcomes (`Forge/memory/shadow_trades_ledger.json`)
+        and Mistake-Clinic events (`Oracle/memory/forge_strategy_feedback_outbox.jsonl`)
+        using Penalty-Adjusted Returns (`penalty_adjusted_r`) and Counterfactual Audits:
+          - Full Stop Loss incurs the Major Penalty.
+          - Breakeven / early stops incur the Minor Penalty (and are never rewarded as full wins).
+          - Unnecessary early stops that missed Main TP are penalized so the strategy stops choking winners.
         """
         upper_sym = symbol.upper()
         style_up = trader_style.upper()
@@ -1641,7 +1681,13 @@ class MultiTimeframeInstitutionalEngine:
         all_mfes_r: List[float] = []
         premature_reversals = 0
         wins = 0
+        true_tp_wins = 0
+        scratches = 0
         losses = 0
+        major_sl_penalties_cnt = 0
+        minor_early_penalties_cnt = 0
+        unnecessary_early_stops_cnt = 0
+        necessary_early_saves_cnt = 0
         tp_expansions_total = 0
         early_loss_cuts_total = 0
         near_tp_reversal_saves_total = 0
@@ -1649,6 +1695,13 @@ class MultiTimeframeInstitutionalEngine:
 
         for t in trades:
             r_val = float(t.get("realized_r", 0.0) or 0.0)
+            p_audit = t.get("penalty_audit") or {}
+            pen_adj_r = float(p_audit.get("penalty_adjusted_r", r_val))
+            is_true_win = bool(p_audit.get("is_true_tp_win", r_val >= float(t.get("initial_major_tp_r", 2.0)) * 0.85))
+            is_scratch = bool(p_audit.get("is_positive_scratch_only", 0.0 <= r_val < 0.45 and not is_true_win))
+            p_tier = str(p_audit.get("penalty_tier", "NONE"))
+            cf_audit = str(p_audit.get("counterfactual_audit", ""))
+
             mfe_r = float(t.get("peak_mfe_r", 0.0) or 0.0)
             mae_r = float(t.get("worst_mae_r", 0.0) or 0.0)
             st_reached = int(t.get("highest_tp_stage_reached", 0) or 0)
@@ -1659,10 +1712,23 @@ class MultiTimeframeInstitutionalEngine:
                 early_loss_cuts_total += 1
             if t.get("near_tp_reversal_exit_triggered"):
                 near_tp_reversal_saves_total += 1
-            if r_val > 0:
+
+            if "MAJOR" in p_tier:
+                major_sl_penalties_cnt += 1
+            elif "MINOR" in p_tier:
+                minor_early_penalties_cnt += 1
+            if cf_audit == "UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP":
+                unnecessary_early_stops_cnt += 1
+            elif cf_audit == "NECESSARY_CAPITAL_SAVE_AVOIDED_FULL_SL":
+                necessary_early_saves_cnt += 1
+
+            if is_true_win:
                 wins += 1
+                true_tp_wins += 1
                 if mae_r > 0:
                     winning_maes_r.append(mae_r)
+            elif is_scratch:
+                scratches += 1
             else:
                 losses += 1
                 if mfe_r >= 0.85:
@@ -1684,33 +1750,39 @@ class MultiTimeframeInstitutionalEngine:
                 else:
                     f_key = "ema_trend"
             if f_key in feat_r_deltas:
-                feat_r_deltas[f_key] += r_val
+                feat_r_deltas[f_key] += pen_adj_r
 
             s_k = str(t.get("session") or "")
             if s_k:
                 st = session_r_deltas.setdefault(s_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
                 st["setups"] += 1.0
-                st["wins"] += 1.0 if r_val > 0 else 0.0
-                st["r_sum"] += r_val
+                st["wins"] += 1.0 if is_true_win else 0.0
+                st["r_sum"] += pen_adj_r
 
             a_k = str(t.get("adaptive_session") or "")
             if a_k:
                 at = adaptive_r_deltas.setdefault(a_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
                 at["setups"] += 1.0
-                at["wins"] += 1.0 if r_val > 0 else 0.0
-                at["r_sum"] += r_val
+                at["wins"] += 1.0 if is_true_win else 0.0
+                at["r_sum"] += pen_adj_r
 
             reg_k = str(t.get("regime") or "")
             if reg_k:
                 rt = regime_r_deltas.setdefault(reg_k, {"setups": 0.0, "wins": 0.0, "r_sum": 0.0})
                 rt["setups"] += 1.0
-                rt["wins"] += 1.0 if r_val > 0 else 0.0
-                rt["r_sum"] += r_val
+                rt["wins"] += 1.0 if is_true_win else 0.0
+                rt["r_sum"] += pen_adj_r
 
         return {
             "shadow_trades_analyzed": len(trades),
             "shadow_wins": wins,
+            "shadow_true_tp_wins": true_tp_wins,
+            "shadow_breakeven_scratches": scratches,
             "shadow_losses": losses,
+            "major_sl_penalties_count": major_sl_penalties_cnt,
+            "minor_early_exit_penalties_count": minor_early_penalties_cnt,
+            "unnecessary_early_stops_count": unnecessary_early_stops_cnt,
+            "necessary_early_saves_count": necessary_early_saves_cnt,
             "premature_reversals_after_085r": premature_reversals,
             "tp_expansions_count": tp_expansions_total,
             "early_loss_cut_saves_count": early_loss_cuts_total,
@@ -3701,6 +3773,8 @@ class MultiTimeframeInstitutionalEngine:
                         "stress_net_r": stress_net_r,
                         "conviction_score": round(0.65 + 0.25 * abs(s_val + p_val), 3),
                         "atr_volatility_ratio": round(atr / max(entry_p * 0.0010, 1e-6), 3),
+                        "active_necessity_triggers": sim_full.get("active_necessity_triggers", []),
+                        "penalty_audit": sim_full.get("penalty_audit", {}),
                         "lifecycle_events": sim_full["lifecycle_events"],
                         "trade_thesis": thesis_obj,
                     }
@@ -3989,6 +4063,17 @@ class MultiTimeframeInstitutionalEngine:
                 "twelve_step_validation_ledger": twelve_step_ledger,
                 "evaluation_metrics": {
                     **required_trading_metrics,
+                    "true_tp_wins_count": sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("is_true_tp_win")),
+                    "true_tp_win_rate_pct": round(
+                        (sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("is_true_tp_win")) / max(1, len(detailed_trade_records))) * 100.0,
+                        1,
+                    ),
+                    "positive_scratch_early_stops_count": sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("is_positive_scratch_only")),
+                    "major_sl_penalties_count": sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("penalty_tier") == "MAJOR_PENALTY"),
+                    "minor_early_exit_penalties_count": sum(1 for r in detailed_trade_records if "MINOR" in str((r.get("penalty_audit") or {}).get("penalty_tier", ""))),
+                    "unnecessary_early_stops_count": sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("counterfactual_audit") == "UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP"),
+                    "necessary_capital_saves_count": sum(1 for r in detailed_trade_records if (r.get("penalty_audit") or {}).get("counterfactual_audit") == "NECESSARY_CAPITAL_SAVE_AVOIDED_FULL_SL"),
+                    "penalty_adjusted_total_r": round(sum(float((r.get("penalty_audit") or {}).get("penalty_adjusted_r", r.get("net_r", 0.0))) for r in detailed_trade_records), 3),
                     "early_loss_cuts_before_sl_count": early_loss_cut_saves_cnt,
                     "near_tp_reversal_saves_count": near_tp_reversal_saves_cnt,
                     "trades_with_major_tp_expanded": tp_expanded_trades_cnt,

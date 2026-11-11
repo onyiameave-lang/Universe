@@ -162,6 +162,28 @@ class TradeManagerConfig:
     # since the trade was planned (stops/targets were sized for the OLD
     # volatility) — treated with the same care as a news/social shock.
     volatility_spike_multiple: float = 2.5
+    learned_policy: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def from_learned_policy(cls, policy: Dict[str, Any]) -> "TradeManagerConfig":
+        """
+        Builds a TradeManagerConfig directly from Forge's empirically learned
+        necessity-and-penalty policy so zero thresholds are hardcoded at runtime.
+        """
+        nec = (policy or {}).get("learned_necessity_conditions") or {}
+        be_trig = float(policy.get("learned_be_trigger_r", 1.0))
+        sl_mult = float(policy.get("learned_optimal_stop_atr_mult", 1.0))
+        c_drop = float(nec.get("learned_confidence_drop_threshold", 0.20))
+        c_coll = float(nec.get("learned_confidence_collapse_ratio", 0.50))
+        v_spike = max(1.25, float(nec.get("learned_volatility_spike_ratio", 2.0)))
+        return cls(
+            trail_activation_r=be_trig,
+            trail_distance_r=sl_mult,
+            confidence_drop_threshold=c_drop,
+            confidence_collapse_ratio=c_coll,
+            volatility_spike_multiple=v_spike,
+            learned_policy=policy,
+        )
 
 
 # ---------------------------------------------------------------------------

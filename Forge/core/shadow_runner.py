@@ -1,38 +1,38 @@
 """
 Forge.core.shadow_runner
 ========================
-Native Python 3.10 Shadow Runner for Forge V2 × Oracle V2 Strategies.
+Native Python 3.10 Shadow & MT5 Demo Execution Runner for Forge V2 × Oracle V2 Strategies.
 
-Purpose:
-  While Oracle V1 runs on the cTrader Demo account, there are many intraday
-  sessions and setups where Oracle V1 is unable to place a trade (e.g. V1 is
-  waiting on a daily D1 signal or static regime filter).
-  
-  The Shadow Runner runs Forge's newly certified 7-timeframe strategies
-  (SCALPING, DAY_TRADING, SWING_TRADING, RANGE_SPECIALIST) in the background
-  ("Shadow Mode" — NEVER placing orders on the cTrader demo/live account).
-
-  1. Detects setups where Oracle V1 did NOT place a trade ("V1_NO_TRADE_OPPORTUNITY")
-     or where V1 and V2 diverge.
-  2. Opens a background Shadow Trade with the strategy's learned Stop-Loss,
-     Break-Even ratchet, 50% TP1 scale-out, and 50% Chandelier-trailed TP2.
-  3. Monitors the Shadow Trade bar-by-bar across real intraday candles (including
-     verified cTrader spread, slippage, and commission).
-  4. Records whether the shadow trade succeeded or failed in:
-     - `Forge/memory/shadow_trades_ledger.json`
-     - `Oracle/memory/forge_strategy_feedback_outbox.jsonl`
-     - `Chronicle` (using non-duplicating "Happened again on <date>" consolidation)
-     so Forge continuously learns from shadow execution before any strategy is
-     promoted to live trading.
+Features:
+  1. Zero-Hardcoding Learned Necessity & Two-Tier Penalty Standard:
+     - True Wins (`is_true_tp_win = True`) require reaching/expanding the Main Take Profit
+       (or a verified near-TP reversal save).
+     - Breakeven / early stops (`is_positive_scratch_only = True`) are NEVER counted as
+       unpenalized full Wins; they receive a learned Minor Penalty proportional to the
+       uncaptured Main Take Profit shortfall.
+     - Full Stop-Loss hits receive a learned Major Penalty.
+     - Unnecessary early stops (where post-exit price action reached the Main Take Profit
+       without hitting the initial Stop Loss) receive an additional counterfactual cheating
+       penalty in the Mistake Clinic.
+  2. Direct Oracle MetaTrader 5 (`MT5Broker` + `TradeManager` + `MT5Logger`) Wiring:
+     - Connects to `Oracle/execution/mt5_broker.py` (`MT5Broker`), `SymbolMapper`,
+       `TradeManager` (configured via `TradeManagerConfig.from_learned_policy`), and `MT5Logger`.
+     - Reads real MT5 account equity, balance, server, and symbol contract specs
+       (`trade_contract_size`, `volume_min`, `volume_step`, `point`), computes broker-clamped
+       MT5 lot sizes (`0.01` lot step), logs trades to `Oracle/logs/mt5_demo_trades.csv`,
+       and supports live MT5 Demo order execution via `--mt5-demo`.
 
 CLI Usage (from repository root):
-  python3 -m Forge.core.shadow_runner --symbol GBPUSD --style ALL
+  python3 -m Forge.core.shadow_runner --symbol GBPUSD --style ALL --mt5-demo
 """
+
 from __future__ import annotations
 
 import argparse
 import bisect
 import json
+import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +41,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from Chronicle.core.dedup_ledger import ChronicleDeduplicatingLedger
 from Forge.core.institutional_standard import (
     ExplainabilityAndNoTradeEngine,
+    LearnedPenaltyAndNecessityEngine,
     PositionSizingAndSafetyEngine,
 )
 from Forge.core.mtf_institutional_engine import (
@@ -50,21 +51,290 @@ from Forge.core.mtf_institutional_engine import (
 )
 
 
-class ForgeShadowRunner:
+class MT5ShadowExecutionBridge:
     """
-    Background Shadow Mode execution & monitoring engine for Forge V2 strategies.
-    Never touches cTrader demo/live orders; evaluates and monitors trades in shadow mode.
+    Wires ForgeShadowRunner directly to Oracle's MetaTrader 5 execution stack:
+      - `Oracle/execution/mt5_broker.py` (`MT5Broker`)
+      - `Oracle/execution/mt5_demo_trader.py` (`SymbolMapper`)
+      - `Oracle/execution/trade_manager.py` (`TradeManager`, `TradeManagerConfig`, `Position`, `MarketSnapshot`, `Direction`)
+      - `Oracle/execution/mt5_logger.py` (`MT5Logger`)
     """
 
-    def __init__(self, workspace_root: Optional[Path] = None) -> None:
+    def __init__(self, workspace_root: Path, execute_mt5_demo_orders: bool = False) -> None:
+        self.workspace_root = workspace_root
+        self.oracle_root = self.workspace_root / "Oracle"
+        self.execute_mt5_demo_orders = execute_mt5_demo_orders
+        self.broker: Any = None
+        self.sym_mapper: Any = None
+        self.mt5_logger: Any = None
+        self.trade_manager_cls: Any = None
+        self.trade_manager_cfg_cls: Any = None
+        self.position_cls: Any = None
+        self.snapshot_cls: Any = None
+        self.direction_enum: Any = None
+        self.connection_status: Dict[str, Any] = {}
+        self._init_oracle_mt5_components()
+
+    def _init_oracle_mt5_components(self) -> None:
+        oracle_str = str(self.oracle_root)
+        if oracle_str not in sys.path:
+            sys.path.insert(0, oracle_str)
+        try:
+            from execution.mt5_broker import MT5Broker  # type: ignore
+            from execution.mt5_demo_trader import SymbolMapper  # type: ignore
+            from execution.mt5_logger import TradeLogger as MT5Logger  # type: ignore
+            from execution.trade_manager import (  # type: ignore
+                Direction,
+                MarketSnapshot,
+                Position,
+                TradeManager,
+                TradeManagerConfig,
+            )
+
+            paper_mode = not self.execute_mt5_demo_orders
+            self.broker = MT5Broker(paper=paper_mode, allow_live=False)
+            self.connection_status = self.broker.connect()
+            self.sym_mapper = SymbolMapper()
+            broker_syms = self.broker.symbols() if self.broker.status.connected else []
+            self.sym_mapper.build(broker_syms or list(ALL_WATCHLIST_SYMBOLS), list(ALL_WATCHLIST_SYMBOLS))
+            self.mt5_logger = MT5Logger(
+                trade_log="logs/mt5_demo_trades.csv",
+                session_log="logs/mt5_demo_sessions.csv",
+                oracle_root=self.oracle_root,
+            )
+            self.trade_manager_cls = TradeManager
+            self.trade_manager_cfg_cls = TradeManagerConfig
+            self.position_cls = Position
+            self.snapshot_cls = MarketSnapshot
+            self.direction_enum = Direction
+        except Exception as exc:
+            self.connection_status = {
+                "connected": False,
+                "account_type": "paper_fallback",
+                "equity": 100000.0,
+                "balance": 100000.0,
+                "currency": "USD",
+                "reason": f"Oracle MT5 module load fallback: {exc}",
+            }
+
+    def get_account_equity_usd(self) -> float:
+        if self.broker is not None:
+            try:
+                acct = self.broker.account()
+                eq = float(acct.get("equity") or acct.get("balance") or 0.0)
+                if eq > 0:
+                    return eq
+            except Exception:
+                pass
+        return 100000.0
+
+    def resolve_broker_symbol(self, symbol: str) -> str:
+        if self.sym_mapper is not None:
+            try:
+                mapped = self.sym_mapper.translate(symbol.upper())
+                if mapped:
+                    return str(mapped)
+            except Exception:
+                pass
+        return symbol.upper()
+
+    def get_mt5_symbol_specs(self, symbol: str, entry_price: float) -> Dict[str, Any]:
+        broker_sym = self.resolve_broker_symbol(symbol)
+        base_specs = PositionSizingAndSafetyEngine.contract_specs_for_symbol(symbol, entry_price)
+        specs = {
+            "canonical_symbol": symbol.upper(),
+            "broker_symbol": broker_sym,
+            "trade_contract_size": float(base_specs["contract_units_per_lot"]),
+            "point": float(base_specs["pip_size"]) / 10.0,
+            "volume_min": 0.01,
+            "volume_max": 100.0,
+            "volume_step": 0.01,
+            "stops_level_points": 10,
+            "source": "mt5_terminal_live" if (self.broker and getattr(self.broker, "_mt5", None)) else "mt5_standard_contract_profile",
+        }
+        if self.broker is not None and getattr(self.broker, "_mt5", None) is not None:
+            try:
+                mt5 = self.broker._mt5
+                info = mt5.symbol_info(broker_sym)
+                if info is not None:
+                    specs["trade_contract_size"] = float(getattr(info, "trade_contract_size", specs["trade_contract_size"]) or specs["trade_contract_size"])
+                    specs["point"] = float(getattr(info, "point", specs["point"]) or specs["point"])
+                    specs["volume_min"] = float(getattr(info, "volume_min", 0.01) or 0.01)
+                    specs["volume_max"] = float(getattr(info, "volume_max", 100.0) or 100.0)
+                    specs["volume_step"] = float(getattr(info, "volume_step", 0.01) or 0.01)
+                    specs["stops_level_points"] = int(getattr(info, "trade_stops_level", 10) or 10)
+            except Exception:
+                pass
+        return specs
+
+    def evaluate_with_oracle_trade_manager(
+        self,
+        *,
+        symbol: str,
+        is_long: bool,
+        entry_price: float,
+        initial_stop: float,
+        target_price: float,
+        entry_regime: str,
+        entry_atr: float,
+        exit_bar: Dict[str, Any],
+        management_policy: Dict[str, Any],
+        sentinel_signal: float,
+        pulse_signal: float,
+    ) -> Dict[str, Any]:
+        """
+        Runs Oracle's `TradeManager.evaluate()` initialized with `TradeManagerConfig.from_learned_policy(management_policy)`
+        so we can inspect the exact MT5 Demo Trader stop/exit decision alongside the shadow trade.
+        """
+        if not (self.trade_manager_cls and self.trade_manager_cfg_cls and self.position_cls and self.snapshot_cls):
+            return {"action": "hold", "reason": "trade_manager_unavailable"}
+
+        cfg = self.trade_manager_cfg_cls.from_learned_policy(management_policy)
+        mgr = self.trade_manager_cls(config=cfg)
+        dir_val = self.direction_enum.BUY if is_long else self.direction_enum.SELL
+        emp_probs = management_policy.get("empirical_probabilities") or {}
+        learned_entry_conf = float(emp_probs.get("empirical_major_tp_hit_probability", 0.55))
+        pos = self.position_cls(
+            symbol=symbol.upper(),
+            direction=dir_val,
+            entry_price=entry_price,
+            initial_stop=initial_stop,
+            initial_target=target_price,
+            entry_confidence=learned_entry_conf,
+            entry_regime=entry_regime,
+            entry_atr=entry_atr,
+            execution_environment="demo",
+        )
+        close_p = float(exit_bar["close"])
+        cur_atr = float(exit_bar.get("atr14", entry_atr))
+        cur_regime = str(exit_bar.get("regime", entry_regime))
+        dir_sign = 1.0 if is_long else -1.0
+        invalidation_cut = float(management_policy.get("learned_early_invalidation_thesis_cutoff", -0.25))
+        news_imp = "high" if (sentinel_signal * dir_sign <= invalidation_cut) else "none"
+        soc_risk = "high" if (pulse_signal * dir_sign <= invalidation_cut) else "none"
+        snap = self.snapshot_cls(
+            price=close_p,
+            confidence=learned_entry_conf,
+            regime=cur_regime,
+            atr=cur_atr,
+            news_impact=news_imp,
+            social_risk=soc_risk,
+        )
+        dec = mgr.evaluate(pos, snap)
+        return {
+            "mt5_trade_manager_action": str(dec.action.value),
+            "mt5_trade_manager_new_stop": round(float(dec.new_stop), 5) if dec.new_stop is not None else None,
+            "mt5_trade_manager_reason": str(dec.reason),
+            "mt5_trade_manager_unrealized_r": round(float(dec.unrealized_r), 3),
+            "learned_config_used": {
+                "trail_activation_r": cfg.trail_activation_r,
+                "trail_distance_r": cfg.trail_distance_r,
+                "confidence_drop_threshold": cfg.confidence_drop_threshold,
+                "confidence_collapse_ratio": cfg.confidence_collapse_ratio,
+                "volatility_spike_multiple": cfg.volatility_spike_multiple,
+            },
+        }
+
+    def execute_or_log_mt5_demo_trade(
+        self,
+        *,
+        cycle: int,
+        symbol: str,
+        direction: str,
+        confidence: float,
+        regime: str,
+        sizing_info: Dict[str, Any],
+        entry_price: float,
+        stop_price: float,
+        target_price: float,
+        reward_risk: float,
+        shadow_status: str,
+        realized_r: float,
+        penalty_audit: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        broker_sym = self.resolve_broker_symbol(symbol)
+        lots = float(sizing_info.get("mt5_broker_lots", sizing_info.get("position_lots", 0.01)))
+        units = float(sizing_info.get("position_units", 1000.0))
+        equity_now = self.get_account_equity_usd()
+        order_result: Dict[str, Any] = {
+            "broker_symbol": broker_sym,
+            "mt5_broker_lots": lots,
+            "mt5_connected": bool(self.broker and self.broker.status.connected),
+            "paper_mode": bool(self.broker.paper) if self.broker else True,
+            "execution_status": "shadow_logged_to_mt5_csv",
+        }
+        if self.execute_mt5_demo_orders and self.broker is not None and self.broker.status.connected:
+            plan = {
+                "approved": True,
+                "symbol": symbol.upper(),
+                "broker_symbol": broker_sym,
+                "direction": "long" if direction.upper() == "LONG" else "short",
+                "size": units,
+                "entry": entry_price,
+                "stop": stop_price,
+                "target": target_price,
+            }
+            res = self.broker.place_order(plan, human_confirm=False)
+            order_result["execution_status"] = res.get("status", "filled")
+            order_result["ticket"] = res.get("order") or res.get("ticket")
+            order_result["retcode"] = res.get("retcode", "")
+
+        if self.mt5_logger is not None:
+            try:
+                if not getattr(self.mt5_logger, "_session_id", ""):
+                    self.mt5_logger.start_session(
+                        start_equity=equity_now,
+                        paper=not self.execute_mt5_demo_orders,
+                    )
+                self.mt5_logger.log_trade(
+                    cycle=cycle,
+                    symbol=symbol.upper(),
+                    broker_symbol=broker_sym,
+                    direction=direction.lower(),
+                    confidence=confidence,
+                    regime=regime,
+                    size=lots,
+                    price=entry_price,
+                    stop=stop_price,
+                    target=target_price,
+                    reward_risk=reward_risk,
+                    outcome=str(penalty_audit.get("outcome_class", shadow_status)),
+                    retcode=order_result.get("retcode", ""),
+                    reason=f"realized_r={realized_r:+.3f}R | penalty={penalty_audit.get('applied_penalty_r', 0.0):.3f}R ({penalty_audit.get('penalty_tier')})",
+                    account_type="demo",
+                    equity_before=equity_now,
+                    note=f"cf={penalty_audit.get('counterfactual_audit')}",
+                )
+                order_result["mt5_csv_trade_log"] = self.mt5_logger.paths().get("trades")
+            except Exception as exc:
+                order_result["logger_warning"] = str(exc)
+
+        return order_result
+
+
+class ForgeShadowRunner:
+    """
+    Shadow & MT5 Demo execution and monitoring engine for Forge V2 strategies.
+    Enforces the Learned Two-Tier Penalty (Major SL Penalty vs. Minor Early-Exit Penalty)
+    and Necessity-Only Stop/Exit Standard while wiring directly into Oracle's MT5 Broker & TradeManager.
+    """
+
+    def __init__(
+        self,
+        workspace_root: Optional[Path] = None,
+        execute_mt5_demo_orders: bool = False,
+    ) -> None:
         self.workspace_root = workspace_root or Path(__file__).resolve().parents[2]
         self.mtf_engine = MultiTimeframeInstitutionalEngine(self.workspace_root)
         self.chronicle_ledger = ChronicleDeduplicatingLedger(self.workspace_root)
-
+        env_mt5 = os.getenv("FORGE_MT5_DEMO_EXECUTION", "false").lower() in ("true", "1", "yes")
+        self.execute_mt5_demo_orders = execute_mt5_demo_orders or env_mt5
+        self.mt5_bridge = MT5ShadowExecutionBridge(
+            self.workspace_root, execute_mt5_demo_orders=self.execute_mt5_demo_orders
+        )
         self.forge_mem_dir = self.workspace_root / "Forge" / "memory"
         self.forge_mem_dir.mkdir(parents=True, exist_ok=True)
         self.shadow_ledger_path = self.forge_mem_dir / "shadow_trades_ledger.json"
-
         self.candidates_dir = (
             self.workspace_root / "Chronicle" / "memory" / "research" / "forge_candidates"
         )
@@ -126,12 +396,6 @@ class ForgeShadowRunner:
         return "V1_IDLE_WAITING_FOR_DAILY_CLOSE"
 
     def load_v1_api_bridge_state(self, symbol: str) -> Dict[str, Any]:
-        """
-        Reads the live V1 -> V2 API bridge telemetry stored in Chronicle via
-        `POST /internal/forge/act` (`oracle.decision.observation` & `oracle.trader.heartbeat`).
-        Whenever V1 fails to place a trade (e.g. `no_setup`, `risk_rejected`, `signal_timeout`),
-        V1 posts that observation to the API, which persists `forge.oracle.decision_summary.*`.
-        """
         upper = symbol.upper()
         kv_path = (
             self.workspace_root / "Chronicle" / "memory" / "store" / "kv_state.json"
@@ -139,29 +403,23 @@ class ForgeShadowRunner:
         kv_store = self._read_json(kv_path, {})
         summaries: List[Dict[str, Any]] = []
         latest_heartbeat: Optional[Dict[str, Any]] = None
+        for k, entry in kv_store.items():
+            if not isinstance(entry, dict):
+                continue
+            val = entry.get("value")
+            if not isinstance(val, dict):
+                continue
+            if k.startswith("forge.oracle.decision_summary.") and str(val.get("symbol", "")).upper() == upper:
+                summaries.append(val)
+            elif k.startswith("forge.oracle.heartbeat."):
+                if latest_heartbeat is None or float(val.get("last_seen_at_unix", 0)) > float(
+                    latest_heartbeat.get("last_seen_at_unix", 0)
+                ):
+                    latest_heartbeat = val
 
-        if isinstance(kv_store, dict):
-            for k, entry in kv_store.items():
-                val = entry.get("value") if isinstance(entry, dict) else None
-                if not isinstance(val, dict):
-                    continue
-                if k.startswith("forge.oracle.decision_summary.") and str(val.get("symbol", "")).upper() == upper:
-                    summaries.append(val)
-                elif k.startswith("forge.oracle.trader_heartbeat.latest."):
-                    if (
-                        latest_heartbeat is None
-                        or float(val.get("last_seen_at_unix", 0) or 0)
-                        > float(latest_heartbeat.get("last_seen_at_unix", 0) or 0)
-                    ):
-                        latest_heartbeat = val
-
-        summaries.sort(
-            key=lambda s: float(s.get("last_event_at_unix", 0) or 0), reverse=True
-        )
+        summaries.sort(key=lambda s: float(s.get("last_event_at_unix") or 0), reverse=True)
         top_summary = summaries[0] if summaries else {}
-        recent_events = top_summary.get("recent_events") or []
-        latest_event = recent_events[-1] if recent_events else {}
-
+        latest_event = top_summary.get("latest_event") or {}
         return {
             "bridge_endpoint": "POST /internal/forge/act (oracle.decision.observation & oracle.trader.heartbeat)",
             "active": True,
@@ -245,10 +503,12 @@ class ForgeShadowRunner:
         refresh_live: bool = True,
     ) -> Dict[str, Any]:
         """
-        Runs the Shadow Runner across the live 7-timeframe market feed for `symbol`,
-        placing background shadow trades whenever Oracle V1 is idle/blocked (monitored via
-        `POST /internal/forge/act` decision observations + D1 signal state) and
-        monitoring each shadow trade to completion (or active open status).
+        Runs the Shadow & MT5 Demo Runner across the 7-timeframe market feed for `symbol`:
+          - Uses empirically learned Necessity-Only Stop/Exit conditions (zero hardcoded thresholds).
+          - Grades every trade under the Two-Tier Penalty Standard (Major SL Penalty vs. Minor
+            Early-Exit/Breakeven Penalty + Post-Exit Counterfactual Cheating Audit).
+          - Connects directly to Oracle's `MT5Broker`, `SymbolMapper`, `TradeManager`, and `MT5Logger`
+            for broker-accurate position sizing, lot-step clamping, and MT5 demo execution/logging.
         """
         upper_sym = symbol.upper()
         dataset = (
@@ -271,19 +531,31 @@ class ForgeShadowRunner:
         v1_timestamps = self.load_v1_demo_trade_timestamps(upper_sym)
         v1_api_bridge = self.load_v1_api_bridge_state(upper_sym)
         total_cost_bps = self.load_verified_cost_bps(upper_sym)
+        account_equity_usd = self.mt5_bridge.get_account_equity_usd()
 
         shadow_trades: List[Dict[str, Any]] = []
         style_summaries: Dict[str, Any] = {}
+        trade_cycle_counter = 0
 
         for style in styles:
             loaded = self.load_v2_candidate_blueprint(upper_sym, style)
             if not loaded:
-                # Auto-train and certify V2 strategies for this symbol on the spot
                 self.mtf_engine.train_and_certify_symbol_strategies(upper_sym)
                 loaded = self.load_v2_candidate_blueprint(upper_sym, style)
             if not loaded:
                 continue
+
             bp = loaded["blueprint"]
+            management_policy = bp.get("dynamic_trade_management_policy") or {}
+            # If candidate on disk predates the learned two-tier penalty & necessity engine, retrain it now
+            if not management_policy.get("zero_hardcoded_parameters_verified"):
+                self.mtf_engine.train_and_certify_symbol_strategies(
+                    upper_sym, styles=[style], force_refresh_data=False
+                )
+                loaded = self.load_v2_candidate_blueprint(upper_sym, style) or loaded
+                bp = loaded["blueprint"]
+                management_policy = bp.get("dynamic_trade_management_policy") or {}
+
             stack = bp.get("top_down_stack", {})
             trigger_tf = stack.get("trigger_timeframe", "M15")
             macro_tfs = stack.get("macro_timeframes", ["D1", "H4"])
@@ -298,31 +570,13 @@ class ForgeShadowRunner:
             best_regimes = bp.get("recommended_regimes", [])
 
             exc = bp.get("learned_excursion_parameters", {})
-            sl_atr_mult = float(exc.get("learned_optimal_stop_atr_mult", 1.5))
-            be_trigger_r = float(exc.get("learned_be_trigger_r", 0.75))
-            partial_tp_r = float(exc.get("learned_partial_tp_r", exc.get("learned_tp1_r", 1.15)))
-            primary_tp_r = float(exc.get("learned_primary_tp_r", exc.get("learned_tp2_r", 2.25)))
-            trail_atr_mult = float(exc.get("learned_trail_atr_mult", 1.35))
+            sl_atr_mult = float(
+                management_policy.get(
+                    "learned_optimal_stop_atr_mult",
+                    exc.get("learned_optimal_stop_atr_mult", 1.2),
+                )
+            )
 
-            management_policy = bp.get("dynamic_trade_management_policy") or {
-                "learned_optimal_stop_atr_mult": sl_atr_mult,
-                "learned_initial_major_tp_r": primary_tp_r,
-                "learned_partial_tp_r": partial_tp_r,
-                "learned_partial_bank_fraction": float(exc.get("learned_partial_bank_fraction", 0.35)),
-                "learned_sl_reduction_start_r": float(exc.get("learned_sl_reduction_start_r", 0.40)),
-                "learned_be_trigger_r": be_trigger_r,
-                "learned_sl_angle_fit_ratio": float(exc.get("learned_sl_angle_fit_ratio", 0.54)),
-                "learned_trail_atr_mult": trail_atr_mult,
-                "learned_early_cut_drawdown_r": float(exc.get("learned_early_cut_drawdown_r", 0.45)),
-                "learned_early_invalidation_thesis_cutoff": -0.20,
-                "learned_near_tp_zone_pct": float(exc.get("learned_near_tp_zone_pct", 0.82)),
-                "learned_near_tp_reversal_exit_cutoff": 0.02,
-                "learned_tp_expansion_thesis_cutoff": 0.22,
-                "learned_tp_expansion_step_r": float(exc.get("learned_tp_expansion_step_r", 0.90)),
-                "learned_expanded_sl_lock_ratio": float(exc.get("learned_expanded_sl_lock_ratio", 0.78)),
-            }
-
-            # Fetch bar-aligned Sentinel (News) & Pulse (Social) signals for this trigger series
             news_social_ctx = self.mtf_engine.fetch_pulse_and_sentinel_context(
                 upper_sym, trigger_series
             )
@@ -332,13 +586,11 @@ class ForgeShadowRunner:
             horizon_bars = (
                 12 if style == "SCALPING" else (16 if style in ("DAY_TRADING", "RANGE_SPECIALIST") else 24)
             )
-
             start_idx = max(30, len(trigger_series) - lookback_bars)
             end_idx = len(trigger_series)
 
             style_trades: List[Dict[str, Any]] = []
             i = start_idx
-
             while i < end_idx - 1:
                 bar = trigger_series[i]
                 unix_sec = int(bar["unix_sec"])
@@ -371,7 +623,6 @@ class ForgeShadowRunner:
                 ]
                 s_val = float(sentinel_scores[i]) if i < len(sentinel_scores) else 0.0
                 p_val = float(pulse_scores[i]) if i < len(pulse_scores) else 0.0
-
                 sig = self.mtf_engine.evaluate_trader_archetype_signal(
                     bar=bar,
                     macro_bars=macro_bars,
@@ -389,7 +640,6 @@ class ForgeShadowRunner:
                 d1_bar = self._find_latest_completed_bar(dataset["series"].get("D1", []), unix_sec)
                 v1_status = self.evaluate_v1_legacy_signal(d1_bar)
                 v1_placed_demo = self.did_oracle_v1_trade_near(v1_timestamps, unix_sec)
-
                 v1_missed_opportunity = (
                     (not v1_placed_demo)
                     or v1_status.startswith("V1_BLOCKED")
@@ -401,18 +651,15 @@ class ForgeShadowRunner:
 
                 is_long = sig == 1
                 entry_price = float(bar["close"])
-                atr = max(float(bar.get("atr14", 0.0005)), entry_price * 0.00015)
-
+                atr = max(float(bar.get("atr14", 0.0005)), entry_price * 1e-4)
+                mt5_specs = self.mt5_bridge.get_mt5_symbol_specs(upper_sym, entry_price)
+                min_broker_stop = float(mt5_specs["point"]) * max(float(mt5_specs["stops_level_points"]), 10.0)
                 struct_dist = (
-                    max(entry_price - float(bar["swing_low_16"]), atr * 0.75)
+                    max(entry_price - float(bar["swing_low_16"]), atr * sl_atr_mult)
                     if is_long
-                    else max(float(bar["swing_high_16"]) - entry_price, atr * 0.75)
+                    else max(float(bar["swing_high_16"]) - entry_price, atr * sl_atr_mult)
                 )
-                stop_distance = min(
-                    max(struct_dist, atr * (sl_atr_mult * 0.85)),
-                    atr * (sl_atr_mult * 1.35),
-                )
-
+                stop_distance = max(struct_dist, atr * sl_atr_mult, min_broker_stop)
                 stop_distance_bps = (stop_distance / entry_price) * 10000.0
                 if total_cost_bps > stop_distance_bps * 0.38:
                     i += 1
@@ -422,7 +669,7 @@ class ForgeShadowRunner:
                     entry_price - stop_distance if is_long else entry_price + stop_distance, 5
                 )
 
-                # 4. Execute & Monitor the Shadow Trade with Real-Trader Dynamic Re-Analysis
+                # 4. Execute & Monitor the Shadow Trade with Necessity-Gated Re-Analysis & Two-Tier Penalties
                 sim = self.mtf_engine.simulate_real_trader_dynamic_execution(
                     trig_series=trigger_series,
                     dataset=dataset,
@@ -438,7 +685,6 @@ class ForgeShadowRunner:
                     sentinel_scores=sentinel_scores,
                     pulse_scores=pulse_scores,
                 )
-
                 gross_r = float(sim["gross_r"])
                 exit_idx = int(sim["exit_idx"])
                 exit_price = float(sim["exit_price"])
@@ -461,6 +707,17 @@ class ForgeShadowRunner:
                 realized_r = round(gross_r - cost_drag_r, 4)
                 net_return_pct = round(realized_r * 0.5, 4)
 
+                # Grade net realized_r with Two-Tier Penalty + Post-Exit Counterfactual Honesty
+                penalty_audit = LearnedPenaltyAndNecessityEngine.grade_closed_trade_with_penalties(
+                    realized_r=realized_r,
+                    initial_major_tp_r=float(sim["initial_major_tp_r"]),
+                    final_major_tp_r=float(sim["final_major_tp_r"]),
+                    shadow_status=shadow_status,
+                    policy=management_policy,
+                    post_exit_hit_major_tp_without_sl=bool(sim.get("post_exit_hit_major_tp_without_sl")),
+                    post_exit_hit_initial_sl=bool(sim.get("post_exit_hit_initial_sl")),
+                )
+
                 micro_trigger = (
                     "Bullish Liquidity Sweep"
                     if bar.get("liquidity_sweep_bullish")
@@ -478,7 +735,6 @@ class ForgeShadowRunner:
                     if abs(p_val) >= 0.35
                     else "Institutional Pullback / Edge Reversion"
                 )
-
                 trigger_feature_key = (
                     "liquidity_sweep"
                     if (bar.get("liquidity_sweep_bullish") or bar.get("liquidity_sweep_bearish"))
@@ -499,8 +755,9 @@ class ForgeShadowRunner:
                     symbol=upper_sym,
                     entry_price=entry_price,
                     stop_distance=stop_distance,
-                    account_equity_usd=100000.0,
+                    account_equity_usd=account_equity_usd,
                     risk_budget_pct=0.50,
+                    mt5_symbol_specs=mt5_specs,
                 )
                 trade_thesis = ExplainabilityAndNoTradeEngine.build_structured_trade_thesis(
                     symbol=upper_sym,
@@ -523,9 +780,41 @@ class ForgeShadowRunner:
                     pulse_score=p_val,
                 )
 
+                # Evaluate through Oracle's TradeManager (wired with learned policy) & log to MT5 Demo Logger
+                trade_cycle_counter += 1
+                mt5_tm_eval = self.mt5_bridge.evaluate_with_oracle_trade_manager(
+                    symbol=upper_sym,
+                    is_long=is_long,
+                    entry_price=entry_price,
+                    initial_stop=initial_stop,
+                    target_price=float(sim["active_major_tp_price"]),
+                    entry_regime=str(bar.get("regime", "CONSOLIDATION_RANGING")),
+                    entry_atr=atr,
+                    exit_bar=trigger_series[exit_idx],
+                    management_policy=management_policy,
+                    sentinel_signal=s_val,
+                    pulse_signal=p_val,
+                )
+                mt5_exec_record = self.mt5_bridge.execute_or_log_mt5_demo_trade(
+                    cycle=trade_cycle_counter,
+                    symbol=upper_sym,
+                    direction="LONG" if is_long else "SHORT",
+                    confidence=0.68,
+                    regime=str(bar.get("regime", "CONSOLIDATION_RANGING")),
+                    sizing_info=sizing_info,
+                    entry_price=entry_price,
+                    stop_price=initial_stop,
+                    target_price=float(sim["active_major_tp_price"]),
+                    reward_risk=float(sim["initial_major_tp_r"]),
+                    shadow_status=shadow_status,
+                    realized_r=realized_r,
+                    penalty_audit=penalty_audit,
+                )
+
                 trade_record = {
                     "shadow_trade_id": f"shd-{upper_sym.lower()}-{style.lower()}-{unix_sec}",
                     "symbol": upper_sym,
+                    "broker_symbol": mt5_specs["broker_symbol"],
                     "trader_style": style,
                     "candidate_id": loaded["candidate_id"],
                     "lifecycle_state": loaded.get("lifecycle_state", "CERTIFIED"),
@@ -556,27 +845,40 @@ class ForgeShadowRunner:
                     "progressive_sl_fits_count": sl_fits,
                     "highest_tp_stage_reached": highest_stage,
                     "continued_past_primary_tp": continued_past_tp,
+                    "active_necessity_triggers": sim.get("active_necessity_triggers", []),
                     "exit_price": round(exit_price, 5),
                     "shadow_status": shadow_status,
-                    "profitable": realized_r > 0,
+                    "profitable": bool(penalty_audit["is_true_tp_win"]),
+                    "is_true_tp_win": bool(penalty_audit["is_true_tp_win"]),
+                    "is_positive_scratch_only": bool(penalty_audit["is_positive_scratch_only"]),
                     "realized_r": realized_r,
+                    "penalty_adjusted_r": penalty_audit["penalty_adjusted_r"],
+                    "penalty_audit": penalty_audit,
                     "net_return_pct": net_return_pct,
                     "peak_mfe_r": round(peak_mfe_r, 3),
                     "worst_mae_r": round(worst_mae_r, 3),
                     "be_ratchet_triggered": be_active,
                     "tp1_partial_banked": tp1_filled,
                     "position_sizing": sizing_info,
+                    "mt5_demo_execution": mt5_exec_record,
+                    "oracle_mt5_trade_manager": mt5_tm_eval,
                     "trade_thesis": trade_thesis,
                     "lifecycle_events": lifecycle_events,
                 }
-
                 style_trades.append(trade_record)
                 shadow_trades.append(trade_record)
 
-                if realized_r < 0:
+                # Emit Mistake Clinic feedback for BOTH Major SL Penalties AND Minor Early-Exit/Breakeven Penalties!
+                if penalty_audit["penalty_tier"] != "NONE":
                     feedback_event = {
                         "event_id": f"shd-fb-{unix_sec}-{upper_sym}-{style}",
-                        "event_type": "forge.shadow_runner.trade_loss",
+                        "event_type": (
+                            "forge.shadow_runner.major_sl_penalty"
+                            if penalty_audit["penalty_tier"] == "MAJOR_PENALTY"
+                            else "forge.shadow_runner.unnecessary_early_stop_penalty"
+                            if penalty_audit["counterfactual_audit"] == "UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP"
+                            else "forge.shadow_runner.minor_early_exit_penalty"
+                        ),
                         "symbol": upper_sym,
                         "trader_style": style,
                         "trigger_feature_key": trigger_feature_key,
@@ -584,15 +886,19 @@ class ForgeShadowRunner:
                         "session": bar.get("session"),
                         "adaptive_session": bar.get("adaptive_session"),
                         "realized_r": realized_r,
+                        "applied_penalty_r": penalty_audit["applied_penalty_r"],
+                        "penalty_adjusted_r": penalty_audit["penalty_adjusted_r"],
+                        "penalty_tier": penalty_audit["penalty_tier"],
+                        "counterfactual_audit": penalty_audit["counterfactual_audit"],
                         "peak_mfe_r": round(peak_mfe_r, 3),
                         "worst_mae_r": round(worst_mae_r, 3),
                         "early_loss_cut_triggered": early_cut,
-                        "exit_reason": (
-                            "EARLY_THESIS_INVALIDATION_CUT"
-                            if early_cut
-                            else ("STOP_INVALIDATION" if "STOP" in shadow_status else "TIME_HORIZON_EXIT")
+                        "exit_reason": shadow_status,
+                        "failure_reason": (
+                            f"Shadow {style} trade ({realized_r:+.3f}R, {shadow_status}) incurred "
+                            f"{penalty_audit['penalty_tier']} (-{penalty_audit['applied_penalty_r']:.3f}R -> "
+                            f"adj={penalty_audit['penalty_adjusted_r']:+.3f}R, counterfactual={penalty_audit['counterfactual_audit']})."
                         ),
-                        "failure_reason": f"Shadow {style} trade closed ({realized_r}R, {shadow_status}) in {bar.get('adaptive_session')} ({bar.get('regime')}); MFE reached +{round(peak_mfe_r, 2)}R.",
                         "timestamp_unix": time.time(),
                     }
                     with self.feedback_outbox_path.open("a", encoding="utf-8") as f:
@@ -600,12 +906,27 @@ class ForgeShadowRunner:
 
                 i = max(i + 1, exit_idx + 1)
 
-            wins = sum(1 for t in style_trades if t["realized_r"] > 0)
-            losses = sum(1 for t in style_trades if t["realized_r"] <= 0)
+            true_wins = sum(1 for t in style_trades if t["is_true_tp_win"])
+            scratches = sum(1 for t in style_trades if t["is_positive_scratch_only"])
+            losses = sum(1 for t in style_trades if t["realized_r"] < 0)
             total_r = round(sum(t["realized_r"] for t in style_trades), 3)
+            pen_adj_total_r = round(sum(t["penalty_adjusted_r"] for t in style_trades), 3)
             avg_r = round(total_r / max(1, len(style_trades)), 3)
-            be_saves = sum(
-                1 for t in style_trades if t["be_ratchet_triggered"] and t["realized_r"] > 0
+            major_pen_cnt = sum(
+                1 for t in style_trades if t["penalty_audit"]["penalty_tier"] == "MAJOR_PENALTY"
+            )
+            minor_pen_cnt = sum(
+                1 for t in style_trades if "MINOR" in t["penalty_audit"]["penalty_tier"]
+            )
+            unnecessary_stops_cnt = sum(
+                1
+                for t in style_trades
+                if t["penalty_audit"]["counterfactual_audit"] == "UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP"
+            )
+            necessary_saves_cnt = sum(
+                1
+                for t in style_trades
+                if t["penalty_audit"]["counterfactual_audit"] == "NECESSARY_CAPITAL_SAVE_AVOIDED_FULL_SL"
             )
             early_cuts_cnt = sum(1 for t in style_trades if t.get("early_loss_cut_triggered"))
             near_tp_saves_cnt = sum(1 for t in style_trades if t.get("near_tp_reversal_exit_triggered"))
@@ -616,19 +937,25 @@ class ForgeShadowRunner:
                 "candidate_id": loaded["candidate_id"],
                 "trigger_timeframe": trigger_tf,
                 "shadow_trades_count": len(style_trades),
-                "wins": wins,
+                "wins": true_wins,
+                "true_tp_wins": true_wins,
+                "breakeven_and_early_scratches": scratches,
                 "losses": losses,
-                "win_rate_pct": round((wins / max(1, len(style_trades))) * 100.0, 1),
+                "win_rate_pct": round((true_wins / max(1, len(style_trades))) * 100.0, 1),
                 "total_realized_r": total_r,
+                "penalty_adjusted_total_r": pen_adj_total_r,
                 "expectancy_r": avg_r,
                 "net_shadow_return_pct": round(total_r * 0.5, 2),
-                "dynamic_be_and_tp1_saves": be_saves,
+                "major_sl_penalties_count": major_pen_cnt,
+                "minor_early_exit_penalties_count": minor_pen_cnt,
+                "unnecessary_early_stops_count": unnecessary_stops_cnt,
+                "necessary_capital_saves_count": necessary_saves_cnt,
                 "early_loss_cuts_before_sl": early_cuts_cnt,
                 "near_tp_reversal_saves": near_tp_saves_cnt,
                 "major_tp_expansions_count": tp_expansions_cnt,
                 "verdict": (
-                    "PROFITABLE_IN_SHADOW"
-                    if total_r > 0 and wins / max(1, len(style_trades)) >= 0.45
+                    "PROFITABLE_AND_HONEST_IN_SHADOW"
+                    if pen_adj_total_r > 0 and true_wins > 0
                     else "NEEDS_MISTAKE_CLINIC_REFINEMENT"
                 ),
             }
@@ -636,27 +963,44 @@ class ForgeShadowRunner:
             self.chronicle_ledger.record_lesson(
                 domain="shadow_runner_evaluation",
                 content=(
-                    f"Shadow Runner evaluated {upper_sym} {style} ({trigger_tf}) with Real-Trader Dynamic Re-Analysis: "
-                    f"{len(style_trades)} shadow trades, WinRate={style_summaries[style]['win_rate_pct']}%, "
-                    f"Total={total_r}R (Expectancy={avg_r}R, EarlyLossCuts={early_cuts_cnt}, NearTPSaves={near_tp_saves_cnt}, TPExpansions={tp_expansions_cnt})."
+                    f"Shadow & MT5 Demo Runner evaluated {upper_sym} {style} ({trigger_tf}) under Two-Tier Penalty Standard: "
+                    f"{len(style_trades)} trades, TrueTPWins={true_wins} ({style_summaries[style]['win_rate_pct']}%), "
+                    f"Scratches={scratches}, Losses={losses}, Net={total_r}R, PenaltyAdj={pen_adj_total_r}R "
+                    f"(MajorPenalties={major_pen_cnt}, MinorPenalties={minor_pen_cnt}, UnnecessaryStops={unnecessary_stops_cnt})."
                 ),
                 concept_key=f"shadow_runner::{upper_sym}::{style}",
-                tags=["forge", "shadow_runner", upper_sym, style],
+                tags=["forge", "shadow_runner", "mt5_demo", upper_sym, style],
                 source_repository="forge",
             )
 
         shadow_trades.sort(key=lambda x: x["opened_at_ts"], reverse=True)
-        total_wins = sum(1 for t in shadow_trades if t["realized_r"] > 0)
+        total_true_wins = sum(1 for t in shadow_trades if t["is_true_tp_win"])
+        total_scratches = sum(1 for t in shadow_trades if t["is_positive_scratch_only"])
         total_net_r = round(sum(t["realized_r"] for t in shadow_trades), 3)
+        total_pen_adj_r = round(sum(t["penalty_adjusted_r"] for t in shadow_trades), 3)
 
         m5_series = dataset.get("series", {}).get("M5", [])
         m15_series = dataset.get("series", {}).get("M15", [])
-
         report = {
-            "schema": "forge.shadow_runner.report.v1",
-            "mode": "BACKGROUND_SHADOW_ONLY_NO_DEMO_ORDERS",
+            "schema": "forge.shadow_runner.report.v2",
+            "mode": (
+                "MT5_DEMO_LIVE_EXECUTION_AND_SHADOW"
+                if self.execute_mt5_demo_orders
+                else "MT5_PAPER_BRIDGE_AND_SHADOW_VERIFICATION"
+            ),
             "symbol": upper_sym,
+            "broker_symbol": self.mt5_bridge.resolve_broker_symbol(upper_sym),
             "evaluated_at_unix": time.time(),
+            "mt5_demo_bridge_status": {
+                **self.mt5_bridge.connection_status,
+                "account_equity_usd": account_equity_usd,
+                "broker_symbol": self.mt5_bridge.resolve_broker_symbol(upper_sym),
+                "mt5_symbol_specs": self.mt5_bridge.get_mt5_symbol_specs(
+                    upper_sym,
+                    float(m15_series[-1]["close"]) if m15_series else 1.0,
+                ),
+                "mt5_csv_logs": self.mt5_bridge.mt5_logger.paths() if self.mt5_bridge.mt5_logger else {},
+            },
             "live_data_feed": {
                 "source": dataset.get("source", "yahoo_finance_live_7tf_institutional"),
                 "fetched_at_unix": dataset.get("fetched_at_unix"),
@@ -668,15 +1012,17 @@ class ForgeShadowRunner:
             "oracle_v1_demo_trades_in_history": len(v1_timestamps),
             "v1_missed_opportunities_captured_by_v2": len(shadow_trades),
             "overall_shadow_win_rate_pct": round(
-                (total_wins / max(1, len(shadow_trades))) * 100.0, 1
+                (total_true_wins / max(1, len(shadow_trades))) * 100.0, 1
             ),
+            "overall_true_tp_wins_count": total_true_wins,
+            "overall_breakeven_scratches_count": total_scratches,
             "overall_shadow_total_r": total_net_r,
+            "overall_penalty_adjusted_total_r": total_pen_adj_r,
             "overall_shadow_net_return_pct": round(total_net_r * 0.5, 2),
             "style_summaries": style_summaries,
             "recent_shadow_trades": shadow_trades[:40],
         }
 
-        # Persist to Forge/memory/shadow_trades_ledger.json
         existing_ledger = self._read_json(self.shadow_ledger_path, {"symbols": {}})
         if not isinstance(existing_ledger, dict):
             existing_ledger = {"symbols": {}}
@@ -688,9 +1034,7 @@ class ForgeShadowRunner:
             json.dumps(existing_ledger, indent=2), encoding="utf-8"
         )
 
-        # Closed-Loop Reinforcement: feed the new Shadow Runner wins & losses directly
-        # back into Forge's genome learner so feature weights, BE/TP1 ratchets, and
-        # session/regime filters continuously adapt from live shadow outcomes.
+        # Closed-Loop Reinforcement: feed the penalty-adjusted outcomes back into Forge's genome learner
         if shadow_trades:
             try:
                 self.mtf_engine.train_and_certify_symbol_strategies(
@@ -704,7 +1048,7 @@ class ForgeShadowRunner:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Forge V2 Background Shadow Runner (Tests V2 Strategies When Oracle V1 Is Idle)"
+        description="Forge V2 Shadow & MT5 Demo Runner (Learned Two-Tier Penalty & Necessity Standard)"
     )
     parser.add_argument(
         "--symbol", default="GBPUSD", help="Single symbol (e.g. GBPUSD, EURUSD)"
@@ -729,12 +1073,17 @@ def main() -> None:
         "--lookback-bars",
         type=int,
         default=260,
-        help="Number of recent trigger-timeframe bars to shadow-monitor",
+        help="Number of recent trigger-timeframe bars to monitor",
+    )
+    parser.add_argument(
+        "--mt5-demo",
+        action="store_true",
+        help="Enable live order execution on connected MetaTrader 5 Demo account via Oracle MT5Broker",
     )
     parser.add_argument(
         "--daemon",
         action="store_true",
-        help="Run continuously in a background loop alongside Oracle V1",
+        help="Run continuously in a background loop alongside Oracle",
     )
     parser.add_argument(
         "--interval-sec",
@@ -753,8 +1102,7 @@ def main() -> None:
     else:
         symbols_list = [args.symbol.upper()]
 
-    runner = ForgeShadowRunner()
-
+    runner = ForgeShadowRunner(execute_mt5_demo_orders=args.mt5_demo)
     while True:
         for sym in symbols_list:
             report = runner.run_shadow_session(
@@ -769,16 +1117,18 @@ def main() -> None:
                         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                         "mode": report.get("mode"),
                         "symbol": report.get("symbol"),
+                        "broker_symbol": report.get("broker_symbol"),
+                        "mt5_demo_bridge_status": report.get("mt5_demo_bridge_status"),
                         "v1_missed_opportunities_captured_by_v2": report.get(
                             "v1_missed_opportunities_captured_by_v2"
                         ),
-                        "overall_shadow_win_rate_pct": report.get(
+                        "overall_true_tp_win_rate_pct": report.get(
                             "overall_shadow_win_rate_pct"
                         ),
+                        "overall_true_tp_wins_count": report.get("overall_true_tp_wins_count"),
+                        "overall_breakeven_scratches_count": report.get("overall_breakeven_scratches_count"),
                         "overall_shadow_total_r": report.get("overall_shadow_total_r"),
-                        "overall_shadow_net_return_pct": report.get(
-                            "overall_shadow_net_return_pct"
-                        ),
+                        "overall_penalty_adjusted_total_r": report.get("overall_penalty_adjusted_total_r"),
                         "style_summaries": report.get("style_summaries"),
                         "sample_shadow_trade": (
                             report.get("recent_shadow_trades") or [None]
@@ -795,4 +1145,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

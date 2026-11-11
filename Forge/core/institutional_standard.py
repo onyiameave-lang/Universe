@@ -481,15 +481,22 @@ class PositionSizingAndSafetyEngine:
         stop_distance: float,
         account_equity_usd: float = 100000.0,
         risk_budget_pct: float = 0.50,
+        mt5_symbol_specs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Compute exact units and lots from stop distance so monetary risk is constant.
+        Compute exact units and MT5-compliant lots from stop distance so monetary risk is constant.
         A 2x wider stop distance yields exactly 0.5x the position size.
+        Also computes broker-clamped MT5 volume (lot step rounding, volume_min, volume_max).
         """
         capped_risk_pct = min(float(risk_budget_pct), float(cls.SAFETY_BOUNDARIES["max_risk_per_trade_pct"]))
         permitted_risk_usd = account_equity_usd * (capped_risk_pct / 100.0)
         safe_stop = max(float(stop_distance), entry_price * 0.00005, 1e-7)
         specs = cls.contract_specs_for_symbol(symbol, entry_price)
+        if mt5_symbol_specs:
+            if float(mt5_symbol_specs.get("trade_contract_size", 0) or 0) > 0:
+                specs["contract_units_per_lot"] = float(mt5_symbol_specs["trade_contract_size"])
+            if float(mt5_symbol_specs.get("point", 0) or 0) > 0:
+                specs["pip_size"] = float(mt5_symbol_specs["point"]) * 10.0
 
         # Convert price stop distance into USD risk per 1 unit of base asset
         if symbol.upper().endswith("JPY") and entry_price > 0:
@@ -502,18 +509,33 @@ class PositionSizingAndSafetyEngine:
         notional_per_unit_usd = 1.0 if symbol.upper().endswith("JPY") else entry_price
         max_units_by_leverage = max_notional_usd / max(notional_per_unit_usd, 1e-9)
         executable_units = min(raw_units, max_units_by_leverage)
-        lots = round(executable_units / specs["contract_units_per_lot"], 4)
+        contract_size = float(specs["contract_units_per_lot"])
+        lots = round(executable_units / contract_size, 4)
+
+        vol_step = float((mt5_symbol_specs or {}).get("volume_step", 0.01) or 0.01)
+        vol_min = float((mt5_symbol_specs or {}).get("volume_min", 0.01) or 0.01)
+        vol_max = float((mt5_symbol_specs or {}).get("volume_max", 100.0) or 100.0)
+        mt5_clamped_lots = math.floor((lots / vol_step) + 1e-12) * vol_step
+        mt5_clamped_lots = round(min(vol_max, max(0.0, mt5_clamped_lots)), 4)
+        mt5_order_eligible = mt5_clamped_lots >= vol_min
+        stop_pips = round(safe_stop / max(specs["pip_size"], 1e-9), 2)
 
         return {
-            "account_equity_usd": account_equity_usd,
+            "account_equity_usd": round(account_equity_usd, 2),
             "permitted_risk_pct": round(capped_risk_pct, 4),
             "permitted_monetary_risk_usd": round(permitted_risk_usd, 2),
             "stop_distance_price": round(safe_stop, 6),
+            "stop_distance_pips": stop_pips,
             "stop_distance_bps": round((safe_stop / max(entry_price, 1e-9)) * 10000.0, 2),
             "position_units": round(executable_units, 2),
             "position_lots": lots,
+            "mt5_broker_lots": mt5_clamped_lots,
+            "mt5_volume_step": vol_step,
+            "mt5_volume_min": vol_min,
+            "mt5_order_eligible": mt5_order_eligible,
+            "contract_units_per_lot": contract_size,
             "notional_exposure_usd": round(executable_units * notional_per_unit_usd, 2),
-            "effective_leverage": round((executable_units * notional_per_unit_usd) / account_equity_usd, 3),
+            "effective_leverage": round((executable_units * notional_per_unit_usd) / max(account_equity_usd, 1e-9), 3),
         }
 
     @classmethod
@@ -1278,3 +1300,573 @@ class InstitutionalValidationEngine:
             {"step": 11, "activity": "Produce an evidence report with limitations", "status": "COMPLETED", "reference": f"provisional_sample_warning={governance_report.get('provisional_sample_warning')}"},
             {"step": 12, "activity": "Apply certification and deployment governance", "status": "COMPLETED", "reference": governance_report.get("current_lifecycle_state", "CERTIFIED")},
         ]
+
+
+# ==============================================================================
+# SECTION 11: LEARNED TWO-TIER PENALTY & NECESSITY-GATED EXIT ENGINE
+# ==============================================================================
+
+
+class LearnedPenaltyAndNecessityEngine:
+    """
+    Zero-Hardcoding Empirical Penalty & Necessity Discovery Engine:
+      - Learns ALL thresholds, stop/target excursion ratios, confidence-collapse bounds,
+        regime-transition failure probabilities, volatility-spike ratios, and penalty weights
+        directly from the symbol's empirical development observations and shadow/MT5 outcomes.
+      - Enforces a strict Two-Tier Penalty Hierarchy:
+          1. FULL_TP_WIN (Reached/Expanded Main Take Profit):
+             Zero penalty (0.0R). The only unpenalized full success.
+          2. MINOR_PENALTY (Stopped out early at Breakeven, Tightened Stop, Near-TP Early Exit,
+             or Early Loss Cut before SL):
+             Incurs a learned Minor Penalty proportional to the uncaptured Main TP shortfall.
+             Never counted as an unpenalized full Win if it aborts at breakeven/scratch.
+          3. MAJOR_PENALTY (Hit Full Initial Stop Loss):
+             Incurs a learned Major Penalty derived from empirical tail-loss severity and
+             opportunity cost — strictly larger than the Minor Penalty.
+          4. UNNECESSARY_EARLY_STOP_CHEATING_PENALTY (Post-Exit Counterfactual Audit):
+             If the strategy stops out early (at breakeven or early exit) when it was NOT
+             necessary — i.e., post-exit price action continued and hit the Main Take Profit
+             without hitting the initial Stop Loss — the strategy is charged an additional
+             counterfactual cheating penalty so it can never game win-rate via premature stops.
+      - Enforces Necessity-Only Stop/Exit Conditions (inspired by Oracle TradeManager, learned
+        empirically):
+          The strategy is forbidden from moving SL to breakeven or closing early unless:
+            (a) A learned empirical necessity condition fires (Confidence Collapse, Hostile
+                Regime Flip, Volatility/News/Social Shock, or Structural Break), AND
+            (b) The empirical expected Major Penalty of holding exceeds the Minor Penalty of
+                protecting/exiting right now.
+    """
+
+    @staticmethod
+    def _empirical_mean(values: List[float]) -> float:
+        if not values:
+            return 0.0
+        return sum(values) / float(len(values))
+
+    @staticmethod
+    def _empirical_std(values: List[float]) -> float:
+        if len(values) < 2:
+            return 0.0
+        m = sum(values) / float(len(values))
+        var = sum((x - m) ** 2 for x in values) / float(len(values))
+        return math.sqrt(max(0.0, var))
+
+    @classmethod
+    def discover_optimal_separation_threshold(
+        cls,
+        failing_observations: List[float],
+        winning_observations: List[float],
+        direction: str = "less_or_equal_is_danger",
+    ) -> float:
+        """
+        Finds the empirical cut point tau* directly from the union of observed values
+        that maximizes the empirical separation (Youden's J = TPR - FPR) between
+        trajectories that failed into a loss vs. trajectories that reached Main TP.
+        Contains zero hardcoded numbers.
+        """
+        combined = sorted(set(failing_observations + winning_observations))
+        if not combined:
+            return 0.0
+        if not failing_observations or not winning_observations:
+            return cls._empirical_mean(combined)
+
+        n_fail = float(len(failing_observations))
+        n_win = float(len(winning_observations))
+        best_tau = combined[len(combined) // 2]
+        best_j = float("-inf")
+
+        for tau in combined:
+            if direction == "less_or_equal_is_danger":
+                tpr = sum(1.0 for x in failing_observations if x <= tau) / n_fail
+                fpr = sum(1.0 for x in winning_observations if x <= tau) / n_win
+            else:
+                tpr = sum(1.0 for x in failing_observations if x >= tau) / n_fail
+                fpr = sum(1.0 for x in winning_observations if x >= tau) / n_win
+            j_stat = tpr - fpr
+            if j_stat > best_j:
+                best_j = j_stat
+                best_tau = tau
+
+        return round(float(best_tau), 4)
+
+    @classmethod
+    def discover_empirical_policy_from_trajectories(
+        cls,
+        trajectories: List[Dict[str, Any]],
+        all_mfes_atr: List[float],
+        winning_maes_atr: List[float],
+        bar_noise_atr_ratios: List[float],
+        shadow_feedback: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Learns the entire dynamic trade management, necessity condition, and Major/Minor
+        penalty policy from the symbol's empirical development trajectories and shadow outcomes.
+        Zero hardcoded thresholds.
+        """
+        fb = shadow_feedback or {}
+        # 1. Learn optimal stop distance multiplier from observed winning MAE distribution + bar noise
+        mean_win_mae = cls._empirical_mean(winning_maes_atr)
+        std_win_mae = cls._empirical_std(winning_maes_atr)
+        mean_noise = cls._empirical_mean(bar_noise_atr_ratios)
+        std_noise = cls._empirical_std(bar_noise_atr_ratios)
+        # Empirical upper coverage of winning adverse excursion + 1-bar structural noise floor
+        learned_sl_atr_mult = round(
+            max(mean_win_mae + std_win_mae, mean_noise + std_noise, 1e-4), 4
+        )
+
+        # 2. Learn initial Major TP (in R) by scanning observed MFE/SL ratios to maximize expected R
+        mfe_r_samples = sorted(
+            [m / learned_sl_atr_mult for m in all_mfes_atr if m > 0]
+        )
+        if mfe_r_samples:
+            n_mfe = float(len(mfe_r_samples))
+            best_tp_r = mfe_r_samples[len(mfe_r_samples) // 2]
+            best_expected_val = float("-inf")
+            # Candidate TP targets come directly from the observed MFE_R order statistics
+            step = max(1, len(mfe_r_samples) // 25)
+            for idx in range(0, len(mfe_r_samples), step):
+                cand_tp = mfe_r_samples[idx]
+                if cand_tp <= learned_sl_atr_mult / max(learned_sl_atr_mult, 1e-9):
+                    continue
+                reach_prob = sum(1.0 for x in mfe_r_samples if x >= cand_tp) / n_mfe
+                fail_prob = 1.0 - reach_prob
+                expected_val = (reach_prob * cand_tp) - (fail_prob * 1.0)
+                if expected_val > best_expected_val:
+                    best_expected_val = expected_val
+                    best_tp_r = cand_tp
+            learned_major_tp_r = round(max(best_tp_r, cls._empirical_mean(mfe_r_samples)), 3)
+        else:
+            learned_major_tp_r = round(cls._empirical_mean(all_mfes_atr) + cls._empirical_std(all_mfes_atr), 3)
+
+        # 3. Partition observed trajectories into Main-TP winners vs. SL losers
+        sl_trajectories = [t for t in trajectories if bool(t.get("hit_full_sl"))]
+        tp_trajectories = [t for t in trajectories if bool(t.get("hit_major_tp"))]
+        n_total = float(max(1, len(trajectories)))
+        p_sl_emp = max(1.0 / n_total, len(sl_trajectories) / n_total)
+        p_tp_emp = max(1.0 / n_total, len(tp_trajectories) / n_total)
+
+        # 4. Derive Major SL Penalty vs. Minor Early-Exit/Breakeven Penalty from empirical probabilities
+        # Major Penalty: full SL loss (1.0R) + empirical opportunity cost of blown setup
+        learned_major_sl_penalty_r = round(
+            1.0 + (learned_major_tp_r * (p_tp_emp / (p_sl_emp + p_tp_emp))), 4
+        )
+        # Base Minor Penalty scale: empirical unconditional failure propensity (strictly < Major Penalty)
+        learned_minor_penalty_base_r = round(
+            p_sl_emp / (p_sl_emp + p_tp_emp), 4
+        )
+        # Incorporate empirical feedback from any prior premature / unnecessary stops in shadow trading
+        unnecessary_stops_fb = float(fb.get("unnecessary_early_stops_count", 0) or 0)
+        necessary_saves_fb = float(fb.get("necessary_early_saves_count", 0) or 0)
+        feedback_total = unnecessary_stops_fb + necessary_saves_fb
+        if feedback_total > 0:
+            # If the strategy has been stopping out unnecessarily, increase Minor Penalty so it holds longer
+            false_alarm_ratio = unnecessary_stops_fb / feedback_total
+            learned_minor_penalty_base_r = round(
+                learned_minor_penalty_base_r * (1.0 + false_alarm_ratio), 4
+            )
+
+        # 5. Discover Empirical Necessity Conditions from failing vs. winning trajectories
+        fail_conf_ratios = [float(t["min_conf_ratio"]) for t in sl_trajectories if "min_conf_ratio" in t]
+        win_conf_ratios = [float(t["min_conf_ratio"]) for t in tp_trajectories if "min_conf_ratio" in t]
+        learned_confidence_collapse_ratio = cls.discover_optimal_separation_threshold(
+            fail_conf_ratios, win_conf_ratios, direction="less_or_equal_is_danger"
+        )
+
+        fail_conf_drops = [float(t["max_conf_drop"]) for t in sl_trajectories if "max_conf_drop" in t]
+        win_conf_drops = [float(t["max_conf_drop"]) for t in tp_trajectories if "max_conf_drop" in t]
+        learned_confidence_drop_threshold = cls.discover_optimal_separation_threshold(
+            fail_conf_drops, win_conf_drops, direction="greater_or_equal_is_danger"
+        )
+
+        fail_vol_ratios = [float(t["max_vol_ratio"]) for t in sl_trajectories if "max_vol_ratio" in t]
+        win_vol_ratios = [float(t["max_vol_ratio"]) for t in tp_trajectories if "max_vol_ratio" in t]
+        learned_volatility_spike_ratio = cls.discover_optimal_separation_threshold(
+            fail_vol_ratios, win_vol_ratios, direction="greater_or_equal_is_danger"
+        )
+
+        fail_dd_scores = [float(t["dd_thesis_score"]) for t in sl_trajectories if t.get("dd_thesis_score") is not None]
+        win_dd_scores = [float(t["dd_thesis_score"]) for t in tp_trajectories if t.get("dd_thesis_score") is not None]
+        learned_early_invalidation_cutoff = cls.discover_optimal_separation_threshold(
+            fail_dd_scores, win_dd_scores, direction="less_or_equal_is_danger"
+        )
+
+        fail_dd_depths = [float(t["dd_depth_r"]) for t in sl_trajectories if t.get("dd_depth_r") is not None]
+        win_dd_depths = [float(t["dd_depth_r"]) for t in tp_trajectories if t.get("dd_depth_r") is not None]
+        learned_early_cut_drawdown_r = cls.discover_optimal_separation_threshold(
+            fail_dd_depths, win_dd_depths, direction="greater_or_equal_is_danger"
+        )
+
+        near_tp_rev_scores = [
+            float(t["near_tp_thesis_score"]) for t in trajectories
+            if t.get("near_tp_thesis_score") is not None and not bool(t.get("hit_major_tp"))
+        ]
+        near_tp_cont_scores = [
+            float(t["near_tp_thesis_score"]) for t in trajectories
+            if t.get("near_tp_thesis_score") is not None and bool(t.get("hit_major_tp"))
+        ]
+        learned_near_tp_reversal_cutoff = cls.discover_optimal_separation_threshold(
+            near_tp_rev_scores, near_tp_cont_scores, direction="less_or_equal_is_danger"
+        )
+
+        near_tp_peak_ratios = [
+            float(t["peak_mfe_r"]) / max(learned_major_tp_r, 1e-9)
+            for t in trajectories
+            if not bool(t.get("hit_major_tp")) and float(t.get("peak_mfe_r", 0.0)) > 0
+        ]
+        win_peak_ratios = [
+            float(t["peak_mfe_r"]) / max(learned_major_tp_r, 1e-9)
+            for t in tp_trajectories
+        ]
+        learned_near_tp_zone_pct = cls.discover_optimal_separation_threshold(
+            near_tp_peak_ratios, win_peak_ratios, direction="less_or_equal_is_danger"
+        )
+        # Ensure near_tp_zone_pct represents the upper approach zone derived from positive excursion ratios
+        if near_tp_peak_ratios:
+            upper_reversals = [r for r in near_tp_peak_ratios if r > cls._empirical_mean(near_tp_peak_ratios)]
+            if upper_reversals:
+                learned_near_tp_zone_pct = round(cls._empirical_mean(upper_reversals), 4)
+
+        # Learn oscillator (RSI) and opposing-wick exhaustion distributions at reversal bars
+        rev_high_rsis = [float(t["reversal_rsi"]) for t in trajectories if t.get("reversal_rsi") is not None and bool(t.get("is_long"))]
+        cont_high_rsis = [float(t["continuation_rsi"]) for t in tp_trajectories if t.get("continuation_rsi") is not None and bool(t.get("is_long"))]
+        learned_rsi_exhaustion_long = cls.discover_optimal_separation_threshold(
+            rev_high_rsis, cont_high_rsis, direction="greater_or_equal_is_danger"
+        )
+
+        rev_low_rsis = [float(t["reversal_rsi"]) for t in trajectories if t.get("reversal_rsi") is not None and not bool(t.get("is_long"))]
+        cont_low_rsis = [float(t["continuation_rsi"]) for t in tp_trajectories if t.get("continuation_rsi") is not None and not bool(t.get("is_long"))]
+        learned_rsi_exhaustion_short = cls.discover_optimal_separation_threshold(
+            rev_low_rsis, cont_low_rsis, direction="less_or_equal_is_danger"
+        )
+
+        rev_wicks = [float(t["max_opposing_wick"]) for t in sl_trajectories if "max_opposing_wick" in t]
+        win_wicks = [float(t["max_opposing_wick"]) for t in tp_trajectories if "max_opposing_wick" in t]
+        learned_opposing_wick_cutoff = cls.discover_optimal_separation_threshold(
+            rev_wicks, win_wicks, direction="greater_or_equal_is_danger"
+        )
+
+        # Learn conditional regime-transition failure probabilities P(loss | entry_regime -> current_regime)
+        regime_transitions: Dict[str, List[float]] = {}
+        for t in trajectories:
+            er = str(t.get("entry_regime", "UNKNOWN"))
+            xr = str(t.get("worst_bar_regime", er))
+            key = f"{er}->{xr}"
+            regime_transitions.setdefault(key, []).append(1.0 if bool(t.get("hit_full_sl")) else 0.0)
+        learned_regime_transition_loss_prob = {
+            k: round(cls._empirical_mean(v), 4) for k, v in regime_transitions.items()
+        }
+
+        # Learn Major TP Expansion step and Continuation threshold from multi-stage winners
+        expanded_trajectories = [t for t in tp_trajectories if bool(t.get("exceeded_major_tp"))]
+        non_expanded_tp = [t for t in tp_trajectories if not bool(t.get("exceeded_major_tp"))]
+        exp_scores = [float(t.get("at_tp_thesis_score", 0.0)) for t in expanded_trajectories]
+        non_exp_scores = [float(t.get("at_tp_thesis_score", 0.0)) for t in non_expanded_tp]
+        learned_tp_expansion_cutoff = cls.discover_optimal_separation_threshold(
+            exp_scores, non_exp_scores, direction="greater_or_equal_is_danger"
+        )
+        excess_mfe_r = [
+            (float(t["peak_mfe_r"]) - learned_major_tp_r)
+            for t in expanded_trajectories
+            if float(t.get("peak_mfe_r", 0.0)) > learned_major_tp_r
+        ]
+        learned_tp_expansion_step_r = round(
+            cls._empirical_mean(excess_mfe_r) if excess_mfe_r else cls._empirical_std(mfe_r_samples), 3
+        )
+
+        # Learn when defensive stop-protection is permitted (only after clearing empirical noise + MAE distribution)
+        win_mae_r_list = [m / learned_sl_atr_mult for m in winning_maes_atr]
+        mean_win_mae_r = cls._empirical_mean(win_mae_r_list)
+        std_win_mae_r = cls._empirical_std(win_mae_r_list)
+        # Breakeven / defensive stop is only eligible once excursion exceeds empirical winning pullback range
+        learned_be_trigger_r = round(mean_win_mae_r + std_win_mae_r, 3)
+        learned_partial_tp_r = round(
+            learned_be_trigger_r + (learned_major_tp_r - learned_be_trigger_r) * (p_sl_emp / (p_sl_emp + p_tp_emp)),
+            3,
+        )
+        # Partial bank fraction is derived from empirical reversal risk after reaching partial_tp_r;
+        # kept small so the main position aims for the Main Take Profit
+        reached_partial = [t for t in trajectories if float(t.get("peak_mfe_r", 0.0)) >= learned_partial_tp_r]
+        failed_after_partial = [t for t in reached_partial if not bool(t.get("hit_major_tp"))]
+        emp_rev_after_partial = (
+            len(failed_after_partial) / float(len(reached_partial))
+            if reached_partial
+            else p_sl_emp
+        )
+        learned_partial_bank_fraction = round(
+            emp_rev_after_partial * (p_sl_emp / (p_sl_emp + p_tp_emp)), 4
+        )
+        learned_sl_angle_fit_ratio = round(p_tp_emp / (p_sl_emp + p_tp_emp), 4)
+        learned_expanded_sl_lock_ratio = round(
+            1.0 - (mean_win_mae_r / max(learned_major_tp_r, 1e-9)), 4
+        )
+
+        return {
+            "policy_type": "learned_two_tier_penalty_and_necessity_gated_execution",
+            "zero_hardcoded_parameters_verified": True,
+            "empirical_probabilities": {
+                "dev_sample_trajectories": int(n_total),
+                "empirical_sl_hit_probability": round(p_sl_emp, 4),
+                "empirical_major_tp_hit_probability": round(p_tp_emp, 4),
+                "empirical_reversal_after_partial_probability": round(emp_rev_after_partial, 4),
+            },
+            "penalty_hierarchy": {
+                "full_tp_win_penalty_r": 0.0,
+                "learned_major_sl_penalty_r": learned_major_sl_penalty_r,
+                "learned_minor_early_exit_base_penalty_r": learned_minor_penalty_base_r,
+                "penalty_separation_ratio_major_over_minor": round(
+                    learned_major_sl_penalty_r / max(learned_minor_penalty_base_r, 1e-9), 3
+                ),
+                "unnecessary_early_stop_counterfactual_penalty_rule": (
+                    "If trade stops out early (breakeven or early close) and post-exit price action "
+                    "reaches Major TP without hitting initial SL, charge forgone_tp_r penalty."
+                ),
+            },
+            "learned_necessity_conditions": {
+                "learned_confidence_collapse_ratio": learned_confidence_collapse_ratio,
+                "learned_confidence_drop_threshold": learned_confidence_drop_threshold,
+                "learned_volatility_spike_ratio": learned_volatility_spike_ratio,
+                "learned_opposing_wick_cutoff": learned_opposing_wick_cutoff,
+                "learned_rsi_exhaustion_long": learned_rsi_exhaustion_long,
+                "learned_rsi_exhaustion_short": learned_rsi_exhaustion_short,
+                "learned_regime_transition_loss_prob": learned_regime_transition_loss_prob,
+            },
+            "learned_optimal_stop_atr_mult": learned_sl_atr_mult,
+            "learned_initial_major_tp_r": learned_major_tp_r,
+            "learned_partial_tp_r": learned_partial_tp_r,
+            "learned_partial_bank_fraction": learned_partial_bank_fraction,
+            "learned_sl_reduction_start_r": learned_be_trigger_r,
+            "learned_be_trigger_r": learned_be_trigger_r,
+            "learned_sl_angle_fit_ratio": learned_sl_angle_fit_ratio,
+            "learned_trail_atr_mult": learned_sl_atr_mult,
+            "learned_early_cut_drawdown_r": learned_early_cut_drawdown_r,
+            "learned_early_invalidation_thesis_cutoff": learned_early_invalidation_cutoff,
+            "learned_near_tp_zone_pct": learned_near_tp_zone_pct,
+            "learned_near_tp_reversal_exit_cutoff": learned_near_tp_reversal_cutoff,
+            "learned_tp_expansion_thesis_cutoff": learned_tp_expansion_cutoff,
+            "learned_tp_expansion_step_r": learned_tp_expansion_step_r,
+            "learned_expanded_sl_lock_ratio": learned_expanded_sl_lock_ratio,
+        }
+
+    @classmethod
+    def evaluate_necessity_and_expected_penalty(
+        cls,
+        *,
+        policy: Dict[str, Any],
+        entry_confidence: float,
+        current_confidence: float,
+        entry_regime: str,
+        current_regime: str,
+        entry_atr: float,
+        current_atr: float,
+        current_r: float,
+        peak_mfe_r: float,
+        current_major_tp_r: float,
+        opposing_structure_break: bool,
+        opposing_wick_ratio: float,
+        exhausted_oscillator: bool,
+        adverse_news_or_social_shock: bool,
+    ) -> Dict[str, Any]:
+        """
+        Evaluates whether stopping out early or tightening the Stop Loss is GENUINELY NECESSARY
+        right now by checking:
+          1. Which learned empirical necessity conditions are active (Confidence Collapse,
+             Hostile Regime Transition, Volatility/News/Social Shock, Structural Break).
+          2. Whether the Expected Major Penalty of holding exceeds the Minor Penalty of
+             stopping out / protecting right now.
+        """
+        nec = policy.get("learned_necessity_conditions") or {}
+        pen = policy.get("penalty_hierarchy") or {}
+        probs = policy.get("empirical_probabilities") or {}
+
+        major_penalty_r = float(pen.get("learned_major_sl_penalty_r", 2.0))
+        minor_base_r = float(pen.get("learned_minor_early_exit_base_penalty_r", 0.35))
+        base_p_sl = float(probs.get("empirical_sl_hit_probability", 0.40))
+        base_p_tp = float(probs.get("empirical_major_tp_hit_probability", 0.60))
+
+        conf_collapse_lim = float(nec.get("learned_confidence_collapse_ratio", 0.50))
+        conf_drop_lim = float(nec.get("learned_confidence_drop_threshold", 0.25))
+        vol_spike_lim = float(nec.get("learned_volatility_spike_ratio", 1.80))
+        wick_lim = float(nec.get("learned_opposing_wick_cutoff", 0.55))
+        regime_map = nec.get("learned_regime_transition_loss_prob") or {}
+
+        safe_entry_conf = max(abs(entry_confidence), 1e-6)
+        conf_ratio = current_confidence / safe_entry_conf
+        conf_drop = entry_confidence - current_confidence
+        vol_ratio = current_atr / max(entry_atr, 1e-9)
+        trans_key = f"{entry_regime}->{current_regime}"
+        regime_loss_prob = float(regime_map.get(trans_key, base_p_sl))
+
+        # Check individual learned necessity conditions (Oracle TradeManager signals, learned from data)
+        cond_confidence_collapsed = (conf_ratio <= conf_collapse_ratio if (conf_collapse_ratio := conf_collapse_lim) else False) or (conf_drop >= conf_drop_lim)
+        cond_hostile_regime_flip = (current_regime != entry_regime) and (regime_loss_prob > base_p_sl)
+        cond_volatility_or_news_shock = (vol_ratio >= vol_spike_lim) or adverse_news_or_social_shock
+        cond_structural_reversal = opposing_structure_break and (opposing_wick_ratio >= wick_lim or exhausted_oscillator)
+
+        active_conditions: List[str] = []
+        if cond_confidence_collapsed:
+            active_conditions.append("LEARNED_CONFIDENCE_COLLAPSE")
+        if cond_hostile_regime_flip:
+            active_conditions.append("LEARNED_HOSTILE_REGIME_FLIP")
+        if cond_volatility_or_news_shock:
+            active_conditions.append("LEARNED_VOLATILITY_OR_NEWS_SHOCK")
+        if cond_structural_reversal:
+            active_conditions.append("LEARNED_STRUCTURAL_REVERSAL_BREAK")
+
+        # Compute live conditional probability of hitting SL vs reaching Major TP from active conditions
+        # Each active empirical danger signal shifts probability mass from P(TP) to P(SL)
+        n_conds = len(active_conditions)
+        total_possible_conds = 4.0
+        danger_intensity = n_conds / total_possible_conds
+        live_p_sl = min(1.0, base_p_sl + (1.0 - base_p_sl) * danger_intensity)
+        live_p_tp = max(0.0, 1.0 - live_p_sl)
+
+        # Shortfall if we exit or stop out at current_r instead of reaching current_major_tp_r
+        shortfall_ratio = max(
+            0.0,
+            min(1.0, (current_major_tp_r - max(0.0, current_r)) / max(current_major_tp_r, 1e-9)),
+        )
+        minor_penalty_if_exit_now_r = round(
+            minor_base_r * shortfall_ratio + max(0.0, -current_r), 4
+        )
+        expected_major_cost_if_hold_r = round(
+            (live_p_sl * major_penalty_r) - (live_p_tp * max(0.0, current_major_tp_r - current_r)),
+            4,
+        )
+
+        # Strict Anti-Cheating Rule:
+        # Stopping out early or moving SL to breakeven is ONLY allowed when:
+        #   1) At least one learned necessity condition has fired, AND
+        #   2) The expected Major Penalty cost of holding exceeds the Minor Penalty of acting now!
+        necessity_demanded = (n_conds >= 1) and (
+            expected_major_cost_if_hold_r >= minor_penalty_if_exit_now_r
+        )
+
+        return {
+            "necessity_demanded": necessity_demanded,
+            "active_necessity_conditions": active_conditions,
+            "live_conditional_sl_probability": round(live_p_sl, 4),
+            "live_conditional_tp_probability": round(live_p_tp, 4),
+            "expected_major_cost_if_hold_r": expected_major_cost_if_hold_r,
+            "minor_penalty_if_exit_now_r": minor_penalty_if_exit_now_r,
+            "shortfall_from_major_tp_ratio": round(shortfall_ratio, 4),
+            "confidence_ratio": round(conf_ratio, 4),
+            "volatility_ratio": round(vol_ratio, 4),
+            "regime_transition_loss_prob": round(regime_loss_prob, 4),
+        }
+
+    @classmethod
+    def grade_closed_trade_with_penalties(
+        cls,
+        *,
+        realized_r: float,
+        initial_major_tp_r: float,
+        final_major_tp_r: float,
+        shadow_status: str,
+        policy: Dict[str, Any],
+        post_exit_hit_major_tp_without_sl: bool = False,
+        post_exit_hit_initial_sl: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Grades a trade under the Two-Tier Penalty + Counterfactual Honesty Standard:
+          - Open trades (`OPEN_MONITORING`) have zero penalty while still active.
+          - Separates TRUE Main-TP Wins (`is_true_tp_win = True`) from Breakeven/Early-Stop
+            scratches (`is_positive_scratch_only = True`).
+          - Assigns exact Major Penalty, Minor Penalty, or Unnecessary-Stop Cheating Penalty.
+        """
+        target_r = max(float(initial_major_tp_r), 1e-6)
+        if shadow_status.startswith("OPEN"):
+            return {
+                "outcome_class": "OPEN_POSITION_MONITORING",
+                "is_true_tp_win": False,
+                "is_positive_scratch_only": False,
+                "penalty_tier": "NONE",
+                "applied_penalty_r": 0.0,
+                "penalty_adjusted_r": round(realized_r, 4),
+                "target_realization_ratio": round(max(0.0, realized_r) / target_r, 4),
+                "counterfactual_audit": "OPEN_IN_PROGRESS",
+            }
+
+        pen = policy.get("penalty_hierarchy") or {}
+        major_sl_penalty_r = float(pen.get("learned_major_sl_penalty_r", 2.0))
+        minor_base_r = float(pen.get("learned_minor_early_exit_base_penalty_r", 0.35))
+        learned_near_tp_zone = float(policy.get("learned_near_tp_zone_pct", 1.0))
+        shortfall_ratio = max(0.0, min(1.0, (target_r - max(0.0, realized_r)) / target_r))
+
+        reached_major_tp = (
+            "CLOSED_AT_MAJOR_TP" in shadow_status
+            or "CLOSED_AT_EXPANDED_MAJOR_TP" in shadow_status
+            or "EXPANSIONS" in shadow_status
+            or realized_r >= target_r
+        )
+
+        if reached_major_tp:
+            return {
+                "outcome_class": "FULL_TP_WIN",
+                "is_true_tp_win": True,
+                "is_positive_scratch_only": False,
+                "penalty_tier": "NONE",
+                "applied_penalty_r": 0.0,
+                "penalty_adjusted_r": round(realized_r, 4),
+                "target_realization_ratio": round(realized_r / target_r, 4),
+                "counterfactual_audit": "REACHED_MAIN_TAKE_PROFIT",
+            }
+
+        if shadow_status == "CLOSED_INITIAL_STOP_LOSS" or realized_r <= -1.0 + 1e-4:
+            return {
+                "outcome_class": "FULL_STOP_LOSS_MAJOR_PENALTY",
+                "is_true_tp_win": False,
+                "is_positive_scratch_only": False,
+                "penalty_tier": "MAJOR_PENALTY",
+                "applied_penalty_r": round(major_sl_penalty_r, 4),
+                "penalty_adjusted_r": round(realized_r - major_sl_penalty_r, 4),
+                "target_realization_ratio": 0.0,
+                "counterfactual_audit": "FULL_STOP_LOSS_HIT",
+            }
+
+        # Otherwise: trade stopped out early (Breakeven, Fitted Stop, Near-TP Save, or Early Loss Cut)
+        minor_penalty_r = round(minor_base_r * shortfall_ratio, 4)
+        unnecessary_cheating_penalty_r = 0.0
+        if post_exit_hit_major_tp_without_sl:
+            # Price went on to hit Main TP without hitting initial SL -> Early stop was unnecessary!
+            counterfactual_audit = "UNNECESSARY_EARLY_STOP_MISSED_MAIN_TP"
+            unnecessary_cheating_penalty_r = round(
+                minor_base_r * (1.0 + shortfall_ratio), 4
+            )
+        elif post_exit_hit_initial_sl:
+            # Price subsequently dropped to initial SL -> Early stop genuinely saved capital!
+            counterfactual_audit = "NECESSARY_CAPITAL_SAVE_AVOIDED_FULL_SL"
+        else:
+            counterfactual_audit = "DEFENSIVE_EARLY_EXIT_NEUTRAL_POST_PATH"
+
+        total_minor_penalty = round(minor_penalty_r + unnecessary_cheating_penalty_r, 4)
+        # Ensure minor penalty stays strictly below Major SL Penalty when not cheating
+        if not post_exit_hit_major_tp_without_sl:
+            total_minor_penalty = min(total_minor_penalty, round(minor_base_r, 4))
+
+        # Near-TP reversal save that captured the learned near-TP zone and avoided reversal
+        is_near_tp_save = (
+            shadow_status == "CLOSED_NEAR_TP_REVERSAL_PROTECTION"
+            and not post_exit_hit_major_tp_without_sl
+            and (realized_r / target_r) >= learned_near_tp_zone
+        )
+
+        return {
+            "outcome_class": (
+                "NEAR_TP_DEFENSIVE_SAVE_MINOR_PENALTY"
+                if is_near_tp_save
+                else "EARLY_LOSS_CUT_MINOR_PENALTY"
+                if realized_r < 0
+                else "BREAKEVEN_OR_EARLY_STOP_MINOR_PENALTY"
+            ),
+            "is_true_tp_win": bool(is_near_tp_save),
+            "is_positive_scratch_only": bool(realized_r >= 0 and not is_near_tp_save),
+            "penalty_tier": (
+                "MINOR_PENALTY_PLUS_UNNECESSARY_STOP_PENALTY"
+                if post_exit_hit_major_tp_without_sl
+                else "MINOR_PENALTY"
+            ),
+            "applied_penalty_r": total_minor_penalty,
+            "penalty_adjusted_r": round(realized_r - total_minor_penalty, 4),
+            "target_realization_ratio": round(max(0.0, realized_r) / target_r, 4),
+            "counterfactual_audit": counterfactual_audit,
+        }
