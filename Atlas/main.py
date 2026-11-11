@@ -74,18 +74,69 @@ def _try_chronicle():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Atlas Institutional Research Desk (V1 Frozen Baseline + V2 Institutional Engine)")
+    parser.add_argument("--query", type=str, help="Run a non-interactive research query")
+    parser.add_argument("--domain", type=str, default="general", help="Research domain")
+    parser.add_argument("--v2", action="store_true", help="Run Atlas V2 11-Stage Institutional Research Engine")
+    parser.add_argument("--mode", type=str, default="deep_research", help="Atlas V2 operating mode")
+    parser.add_argument("--handoff", type=str, help="Build structured Section 19 Universe agent handoff")
+    parser.add_argument("--pilot-benchmark", action="store_true", help="Run Section 22 5-assignment Pilot Programme & Frozen V1 vs V2 Benchmark")
+    args, _ = parser.parse_known_args()
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     chronicle = _try_chronicle()
     agent = AtlasAgent(chronicle_client=chronicle)
     agent.start()
 
+    if args.pilot_benchmark:
+        print(json.dumps(agent.execute("research.pilot_benchmark", {}), indent=2, default=str))
+        agent.stop()
+        if chronicle:
+            chronicle.stop()
+        return
+
+    if args.handoff and args.query:
+        print(json.dumps(agent.execute("research.handoff", {
+            "target_agent": args.handoff,
+            "query": args.query,
+            "domain": args.domain,
+        }), indent=2, default=str))
+        agent.stop()
+        if chronicle:
+            chronicle.stop()
+        return
+
+    if args.v2 and args.query:
+        print(json.dumps(agent.execute("research.dossier_v2", {
+            "query": args.query,
+            "domain": args.domain,
+            "operating_mode": args.mode,
+        }), indent=2, default=str))
+        agent.stop()
+        if chronicle:
+            chronicle.stop()
+        return
+
+    if args.query:
+        print(json.dumps(agent.act("research.investigate", {
+            "query": args.query,
+            "domain": args.domain,
+            "_sender": "user",
+        }), indent=2, default=str))
+        agent.stop()
+        if chronicle:
+            chronicle.stop()
+        return
+
     print("=" * 64)
-    print("  ATLAS - Institutional Research Desk")
+    print("  ATLAS - Institutional Research Desk (V1 Frozen + V2 Institutional)")
     print("  Multi-source. Corroborated. Contradiction-aware. Calibrated.")
     print("=" * 64)
     print(f"  Chronicle: {chronicle is not None} | Brain: {agent.has_brain}")
     print("  Sources: wikipedia, arxiv, semantic_scholar, pubmed, crossref, hackernews, gdelt, web, pdf")
-    print("  Commands: investigate <q> | academic <q> | market <q> | hypothesis <s> | validate <id> | fetch <url> | status | quit")
+    print("  V1 Commands: investigate <q> | academic <q> | market <q> | hypothesis <s> | validate <id> | fetch <url>")
+    print("  V2 Commands: dossier_v2 <q> | package_v2 <q> | red_team <q> | handoff <agent> <q> | pilot_benchmark | status | quit")
 
     while True:
         try:
@@ -94,7 +145,24 @@ def main():
                 continue
             if line.lower() in ("quit", "exit", "q"):
                 break
-            if line.startswith("investigate "):
+            if line.startswith("dossier_v2 "):
+                print(json.dumps(agent.execute("research.dossier_v2",
+                    {"query": line[11:].strip(), "domain": "general", "operating_mode": "deep_research"}), indent=2, default=str))
+            elif line.startswith("package_v2 "):
+                print(json.dumps(agent.execute("research.package_v2",
+                    {"query": line[11:].strip(), "domain": "general", "operating_mode": "deep_research"}), indent=2, default=str))
+            elif line.startswith("red_team "):
+                print(json.dumps(agent.execute("research.red_team",
+                    {"query": line[9:].strip(), "domain": "forensic"}), indent=2, default=str))
+            elif line.startswith("handoff "):
+                parts = line[8:].strip().split(" ", 1)
+                target = parts[0] if parts else "Universal_Coordinator"
+                q_str = parts[1] if len(parts) > 1 else "Institutional intelligence brief"
+                print(json.dumps(agent.execute("research.handoff",
+                    {"target_agent": target, "query": q_str, "domain": "general"}), indent=2, default=str))
+            elif line == "pilot_benchmark":
+                print(json.dumps(agent.execute("research.pilot_benchmark", {}), indent=2, default=str))
+            elif line.startswith("investigate "):
                 print(json.dumps(agent.act("research.investigate",
                     {"query": line[12:], "domain": "general", "_sender": "user"}), indent=2))
             elif line.startswith("academic "):
@@ -115,7 +183,7 @@ def main():
             elif line == "status":
                 print(json.dumps(agent.get_status(), indent=2))
             else:
-                print("Unknown command. Try: investigate CRISPR off-target effects")
+                print("Unknown command. Try: dossier_v2 EURUSD rate differential transmission")
         except KeyboardInterrupt:
             break
         except Exception as exc:

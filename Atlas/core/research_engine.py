@@ -87,6 +87,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from core.sources import SourceRegistry, Evidence  # type: ignore
 from core.chronicle_access import bounded_chronicle_search  # type: ignore
+from core.institutional_research_v2 import AtlasV2InstitutionalEngine  # type: ignore
 from intelligence.analysis import (relevance, summarize, keywords, extract_claims,  # type: ignore
                                    compute_corroboration, compute_confidence)
 from intelligence.contradiction import ContradictionEngine  # type: ignore
@@ -109,6 +110,8 @@ class ResearchEngine:
         self.confidence_target = confidence_target
         self._reports: Dict[str, Dict[str, Any]] = {}
         self._hypotheses: Dict[str, Dict[str, Any]] = {}
+        # ATLAS V2 Institutional Engine (with Frozen V1 baseline preserved)
+        self.v2_engine = AtlasV2InstitutionalEngine(v1_engine=self)
 
     # ---- primary: investigate with automatic depth escalation ----
 
@@ -804,6 +807,76 @@ class ResearchEngine:
         except Exception:
             pass  # aegis:allow-silent
 
+    def investigate_v2(
+        self,
+        query: str,
+        domain: str = "general",
+        operating_mode: str = "deep_research",
+        audience: str = "analyst",
+        decision_context: str = "",
+        horizon: str = "medium_term",
+        as_of_timestamp: Optional[str] = None,
+        publication_cutoff_timestamp: Optional[str] = None,
+        freshness_hours: float = 168.0,
+        budget_sec: float = 60.0,
+        injected_evidence: Optional[List[Any]] = None,
+        context_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Run the full 11-stage Atlas V2 Institutional Research lifecycle."""
+        return self.v2_engine.run_institutional_research(
+            query=query,
+            domain=domain,
+            operating_mode=operating_mode,
+            audience=audience,
+            decision_context=decision_context,
+            horizon=horizon,
+            as_of_timestamp=as_of_timestamp,
+            publication_cutoff_timestamp=publication_cutoff_timestamp,
+            freshness_hours=freshness_hours,
+            budget_sec=budget_sec,
+            injected_evidence=injected_evidence,
+            context_data=context_data,
+        )
+
+    def build_research_package_v2(
+        self,
+        query: str,
+        domain: str = "general",
+        operating_mode: str = "deep_research",
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Return the machine-readable Section 18 ResearchPackage from Atlas V2."""
+        res = self.investigate_v2(query=query, domain=domain, operating_mode=operating_mode, **kwargs)
+        return res["research_package"]
+
+    def build_agent_handoff_v2(
+        self,
+        target_agent: str,
+        query: str,
+        domain: str = "general",
+        decision_context: str = "",
+        injected_evidence: Optional[List[Any]] = None,
+        context_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build a structured Section 19 Universe agent handoff package."""
+        return self.v2_engine.build_agent_handoff(
+            target_agent=target_agent,
+            query=query,
+            domain=domain,
+            decision_context=decision_context,
+            injected_evidence=injected_evidence,
+            context_data=context_data,
+        )
+
+    def run_pilot_benchmark_v2(self) -> Dict[str, Any]:
+        """Execute the Section 22 5-assignment Pilot Programme & Frozen V1 vs V2 Benchmark."""
+        return self.v2_engine.run_pilot_programme_benchmark()
+
     def stats(self) -> Dict[str, Any]:
-        return {"reports": len(self._reports), "hypotheses": len(self._hypotheses),
-               "confidence_target": self.confidence_target}
+        return {
+            "reports": len(self._reports),
+            "hypotheses": len(self._hypotheses),
+            "confidence_target": self.confidence_target,
+            "v1_frozen_baseline": True,
+            "v2_institutional_engine": True,
+        }

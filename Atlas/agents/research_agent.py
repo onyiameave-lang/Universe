@@ -87,8 +87,12 @@ class AtlasAgent(BaseAgent):
     repository = "Atlas"
     domain = "research"
     description = "The institutional research and knowledge-synthesis desk."
-    capabilities = ["research.investigate", "research.validate", "research.synthesize",
-                    "research.cite", "hypothesis.generate", "hypothesis.test", "web.fetch"]
+    capabilities = [
+        "research.investigate", "research.validate", "research.synthesize",
+        "research.cite", "hypothesis.generate", "hypothesis.test", "web.fetch",
+        "research.dossier_v2", "research.package_v2", "research.red_team",
+        "research.handoff", "research.pilot_benchmark", "research.monitor",
+    ]
     channels = ["ecosystem.research", "ecosystem.knowledge", "ecosystem.broadcast"]
     memory_namespace = "atlas_memory"
     security_level = "standard"
@@ -132,21 +136,11 @@ class AtlasAgent(BaseAgent):
         summary = report.get("summary", "")
         source_summary = report.get("source_status", {}).get("_summary", "")
 
-        # FIX-P2-13: Accept the report as "complete" when:
-        #   (a) summary is non-empty and not the sentinel failure string, OR
-        #   (b) source_status._summary is "llm_only" (LLM fallback succeeded), OR
-        #   (c) confidence >= target with any evidence present.
-        # The original check (confidence >= target AND evidence) caused every
-        # rate-limited query to return status="error" even when the LLM answered.
-        # (Book II Graceful Degradation — partial answers are better than errors.)
         has_answer = bool(summary and summary != "Insufficient evidence to synthesize.")
         llm_only = source_summary == "llm_only"
         above_target = (report["confidence"] >= self.engine.confidence_target
                         and bool(report["evidence"]))
         ok = has_answer and (above_target or llm_only or bool(report.get("evidence")))
-
-        # ResearchEngine is the single Chronicle write boundary for its reports.
-        # Re-storing the same result here created a second memory per investigation.
 
         return {"status": "complete" if ok else "error",
                "message": "" if ok else "below confidence target via this path",
@@ -156,18 +150,82 @@ class AtlasAgent(BaseAgent):
 
     def execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ctx = context
+        if task in ("research.dossier_v2", "research.package_v2"):
+            v2_res = self.engine.investigate_v2(
+                query=ctx.get("query", ""),
+                domain=ctx.get("domain", "general"),
+                operating_mode=ctx.get("operating_mode", "deep_research"),
+                audience=ctx.get("audience", "analyst"),
+                decision_context=ctx.get("decision_context", ""),
+                horizon=ctx.get("horizon", "medium_term"),
+                as_of_timestamp=ctx.get("as_of_timestamp"),
+                publication_cutoff_timestamp=ctx.get("publication_cutoff_timestamp"),
+                freshness_hours=float(ctx.get("freshness_hours", 168.0)),
+                budget_sec=float(ctx.get("budget_sec", 60.0)),
+                injected_evidence=ctx.get("injected_evidence"),
+                context_data=ctx.get("context_data"),
+            )
+            if task == "research.package_v2":
+                return {"status": "complete", "research_package": v2_res["research_package"]}
+            return v2_res
+
+        if task == "research.red_team":
+            v2_res = self.engine.investigate_v2(
+                query=ctx.get("query", ""),
+                domain=ctx.get("domain", "forensic"),
+                operating_mode="forensic_research",
+                injected_evidence=ctx.get("injected_evidence"),
+                as_of_timestamp=ctx.get("as_of_timestamp"),
+                publication_cutoff_timestamp=ctx.get("publication_cutoff_timestamp"),
+            )
+            return {
+                "status": "complete",
+                "red_team_memo": v2_res["lifecycle_stages"]["7_challenge_red_team_memo"],
+                "review_record": v2_res["lifecycle_stages"]["8_review_record"],
+                "confidence_assessments": v2_res["research_package"]["confidence_assessments"],
+            }
+
+        if task == "research.handoff":
+            handoff = self.engine.build_agent_handoff_v2(
+                target_agent=ctx.get("target_agent", "Universal_Coordinator"),
+                query=ctx.get("query", ""),
+                domain=ctx.get("domain", "general"),
+                decision_context=ctx.get("decision_context", ""),
+                injected_evidence=ctx.get("injected_evidence"),
+                context_data=ctx.get("context_data"),
+            )
+            return {"status": "complete", "handoff": handoff}
+
+        if task == "research.pilot_benchmark":
+            return {"status": "complete", "benchmark": self.engine.run_pilot_benchmark_v2()}
+
+        if task == "research.monitor":
+            v2_res = self.engine.investigate_v2(
+                query=ctx.get("query", ""),
+                domain=ctx.get("domain", "general"),
+                operating_mode="continuous_monitoring",
+                injected_evidence=ctx.get("injected_evidence"),
+            )
+            return {
+                "status": "complete",
+                "monitoring_plan": v2_res["research_package"]["monitoring_plan"],
+                "confidence_assessments": v2_res["research_package"]["confidence_assessments"],
+                "invalidation_triggers": v2_res["research_package"]["invalidation_triggers"],
+            }
+
         if task == "research.investigate":
             query = ctx.get("query", "")
             domain = ctx.get("domain", "general")
 
-            # Deep research mode: for callers with no live-trading deadline
-            # to respect (e.g. Chronicle's nightly Research Director) --
-            # bypasses self.solve()'s fast-strategy picker entirely and
-            # calls the engine directly with a much larger time budget and
-            # multiple rounds, so the citation-chasing depth escalation
-            # (previously dead code at the default max_rounds=1) can
-            # actually run. Every existing caller is completely unaffected
-            # unless it explicitly passes deep_research=True.
+            if ctx.get("v2_institutional"):
+                return self.engine.investigate_v2(
+                    query=query,
+                    domain=domain,
+                    operating_mode=ctx.get("operating_mode", "deep_research"),
+                    injected_evidence=ctx.get("injected_evidence"),
+                    context_data=ctx.get("context_data"),
+                )
+
             if ctx.get("deep_research"):
                 report = self.engine.investigate(
                     query, domain=domain, depth="deep",
@@ -197,9 +255,6 @@ class AtlasAgent(BaseAgent):
                     return {"status": "complete", "report": solved.get("report"),
                            "research_path": solved.get("path")}
 
-                # FIX-P2-14: solve() exhausted — return best available report
-                # from the reasoning trace instead of triggering another doomed
-                # broad-desk sweep. (Book IV resilience.)
                 trace = solved.get("trace", [])
                 best_report = None
                 for step in reversed(trace):
@@ -214,22 +269,6 @@ class AtlasAgent(BaseAgent):
                     return {"status": "complete", "report": best_report,
                             "note": "all paths below target; returned best-effort from trace"}
 
-                # FIX-AGT-V6-01 (2026-07-22): REMOVED broad-desk sweep fallback.
-                # ROOT CAUSE: When solve() exhausted all 3 strategies AND the trace had
-                # no usable report, this code fired a FOURTH engine.investigate() call
-                # with ALL 5 sources (broad_desk). This was the 37-second second gap
-                # visible in the logs: "no usable trace report — falling back to broad-desk sweep"
-                # followed by 37s of silence before the Gemini call.
-                # The broad-desk sweep is ALWAYS doomed when the 3 strategy paths already
-                # failed — if wikipedia/arxiv/semantic_scholar couldn't answer in 3 attempts,
-                # querying all 5 sources won't help. It just wastes 37 more seconds.
-                # FIX: Return a graceful degradation response immediately. The LLM-only
-                # fallback in research_engine._llm_only_answer() already handles the case
-                # where all external sources fail. If that also failed, we return an honest
-                # "insufficient evidence" response rather than burning 37 more seconds.
-                # Constitutional law: Book II Principle V Graceful Degradation — return
-                # partial results immediately rather than retrying a doomed path.
-                # Book IV No Silent Failures — log the failure clearly.
                 log.warning(
                     "atlas: no usable trace report after %d strategies — returning graceful degradation. "
                     "FIX-AGT-V6-01: broad-desk sweep removed (was adding 37s with no benefit). "
