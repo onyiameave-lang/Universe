@@ -1343,6 +1343,7 @@ class SkepticRedTeamSpecialist:
         claims: List[ClaimRecord],
         sources: List[SourceRecord],
         verification_summary: Dict[str, Any],
+        learned_genome: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         ind_origins = int(verification_summary.get("independent_origin_count_admissible", 0))
         syndicated_collapsed = int(verification_summary.get("syndicated_duplicates_collapsed", 0))
@@ -1395,6 +1396,9 @@ class SkepticRedTeamSpecialist:
             "3. Execution/Implementation Friction: Transaction costs, spread widening, or timing lags erode theoretical edge.",
         ]
 
+        cal_params = (learned_genome or {}).get("calibration_parameters") or {}
+        per_vuln_haircut = float(cal_params.get("red_team_haircut_per_vulnerability", 0.08))
+
         return {
             "red_team_passed": True,
             "strongest_opposing_thesis": strongest_opposing_thesis,
@@ -1403,7 +1407,7 @@ class SkepticRedTeamSpecialist:
             "circular_validation_check": "PASSED — Red-team evaluated independent origin clusters and opposing claims separately from synthesis.",
             "disconfirming_evidence_search_executed": True,
             "confidence_haircut_recommended": round(
-                min(0.35, 0.08 * len(vulnerabilities)), 3
+                min(0.35, per_vuln_haircut * len(vulnerabilities)), 3
             ),
         }
 
@@ -1423,6 +1427,7 @@ class GovernanceAuditSpecialist:
         claims: List[ClaimRecord],
         verification_summary: Dict[str, Any],
         red_team_memo: Dict[str, Any],
+        learned_genome: Optional[Dict[str, Any]] = None,
     ) -> NineDimensionConfidenceMatrix:
         tier_dist = verification_summary.get("tier_distribution", {})
         total_non_e = max(
@@ -1432,12 +1437,18 @@ class GovernanceAuditSpecialist:
             + tier_dist.get("Tier C", 0)
             + tier_dist.get("Tier D", 0),
         )
-        # 1. Source quality (weighted by Tier A=1.0, Tier B=0.88, Tier C=0.72, Tier D=0.45)
+        tier_priors = (learned_genome or {}).get("source_tier_credibility_priors") or {
+            "Tier A": 1.00,
+            "Tier B": 0.88,
+            "Tier C": 0.72,
+            "Tier D": 0.45,
+        }
+        # 1. Source quality (weighted by Forge-learned or default Tier A-D priors)
         weighted_tier = (
-            1.00 * tier_dist.get("Tier A", 0)
-            + 0.88 * tier_dist.get("Tier B", 0)
-            + 0.72 * tier_dist.get("Tier C", 0)
-            + 0.45 * tier_dist.get("Tier D", 0)
+            float(tier_priors.get("Tier A", 1.00)) * tier_dist.get("Tier A", 0)
+            + float(tier_priors.get("Tier B", 0.88)) * tier_dist.get("Tier B", 0)
+            + float(tier_priors.get("Tier C", 0.72)) * tier_dist.get("Tier C", 0)
+            + float(tier_priors.get("Tier D", 0.45)) * tier_dist.get("Tier D", 0)
         ) / total_non_e if (sources and total_non_e > 0) else 0.20
         if not any(tier_dist.get(t, 0) for t in ("Tier A", "Tier B", "Tier C", "Tier D")):
             weighted_tier = 0.15
@@ -1472,16 +1483,27 @@ class GovernanceAuditSpecialist:
         stale_cnt = len(verification_summary.get("stale_sources_detected", []))
         freshness = max(0.25, 0.92 - 0.20 * stale_cnt)
 
+        dim_w = (learned_genome or {}).get("confidence_dimension_weights") or {
+            "source_quality": 0.18,
+            "independence": 0.18,
+            "completeness": 0.12,
+            "method_fit": 0.10,
+            "data_integrity": 0.12,
+            "reproducibility": 0.08,
+            "robustness": 0.08,
+            "counterevidence": 0.07,
+            "freshness": 0.07,
+        }
         raw_overall = (
-            0.18 * weighted_tier
-            + 0.18 * independence_score
-            + 0.12 * completeness_score
-            + 0.10 * method_fit
-            + 0.12 * data_integrity
-            + 0.08 * reproducibility
-            + 0.08 * robustness
-            + 0.07 * counterevidence
-            + 0.07 * freshness
+            float(dim_w.get("source_quality", 0.18)) * weighted_tier
+            + float(dim_w.get("independence", 0.18)) * independence_score
+            + float(dim_w.get("completeness", 0.12)) * completeness_score
+            + float(dim_w.get("method_fit", 0.10)) * method_fit
+            + float(dim_w.get("data_integrity", 0.12)) * data_integrity
+            + float(dim_w.get("reproducibility", 0.08)) * reproducibility
+            + float(dim_w.get("robustness", 0.08)) * robustness
+            + float(dim_w.get("counterevidence", 0.07)) * counterevidence
+            + float(dim_w.get("freshness", 0.07)) * freshness
         )
         haircut = float(red_team_memo.get("confidence_haircut_recommended", 0.0) or 0.0)
         overall = max(0.10, min(0.95, raw_overall - haircut * 0.5))
@@ -1492,8 +1514,9 @@ class GovernanceAuditSpecialist:
         causal_conf = min(0.85, max(0.10, overall * 0.82))
         forecast_conf = min(0.80, max(0.10, overall * 0.75))
 
+        genome_tag = f"Forge-trained desk={learned_genome.get('desk')}" if learned_genome else "default institutional weights"
         rationale = (
-            f"Calibrated across 9 institutional dimensions: {ind_origins} independent admissible origin(s), "
+            f"Calibrated across 9 institutional dimensions ({genome_tag}): {ind_origins} independent admissible origin(s), "
             f"Tier A/B/C/D/E mix={tier_dist}, point-in-time verified={look_ahead_cnt == 0}, "
             f"red-team haircut={haircut:.2f}."
         )
@@ -2203,14 +2226,24 @@ class AtlasV2InstitutionalEngine:
             mandate, claims, verification_summary
         )
 
+        # Load Forge-trained Desk Genome if available for this (domain, operating_mode)
+        learned_genome: Optional[Dict[str, Any]] = None
+        try:
+            from Forge.core.atlas_research_trainer import ForgeAtlasResearchTrainer
+            learned_genome = ForgeAtlasResearchTrainer().load_trained_genome_for_domain(
+                domain=domain, operating_mode=mandate.operating_mode
+            )
+        except Exception:
+            learned_genome = None
+
         # Stage 7: Challenge (Independent Skeptic / Red-Team Pass)
         red_team_memo = self.red_team.execute_red_team_challenge(
-            mandate, claims, sources, verification_summary
+            mandate, claims, sources, verification_summary, learned_genome=learned_genome
         )
 
         # Stage 8: Review (9-Dimension Confidence + Risk Register + 10 Audits + 17 Failure Modes)
         confidence_matrix = self.governance.compute_nine_dimension_confidence(
-            mandate, sources, claims, verification_summary, red_team_memo
+            mandate, sources, claims, verification_summary, red_team_memo, learned_genome=learned_genome
         )
         risk_register = self.governance.build_risk_register(mandate, red_team_memo)
         qa_record = self.governance.run_ten_audit_qa_and_failure_mode_scan(
@@ -2294,6 +2327,8 @@ class AtlasV2InstitutionalEngine:
             "known_gaps": red_team_memo["vulnerabilities_identified"],
             "confidence_assessments": confidence_matrix.to_dict(),
             "monitoring_plan": monitoring_plan,
+            "forge_trained_desk_genome_active": learned_genome is not None,
+            "forge_trained_desk_name": learned_genome.get("desk") if learned_genome else None,
             "audit_trail": {
                 "verification_summary": verification_summary,
                 "data_lineage": lineage.to_dict(),
@@ -2337,6 +2372,12 @@ class AtlasV2InstitutionalEngine:
                 "11_learn_performance_record": performance_record,
             },
         }
+
+    def train_atlas_desks_via_forge(self, approve_for_deployment: bool = False) -> Dict[str, Any]:
+        """Invoke ForgeAtlasResearchTrainer to train, ablate, walk-forward validate, and certify all 5 Atlas Research Desks."""
+        from Forge.core.atlas_research_trainer import ForgeAtlasResearchTrainer
+        trainer = ForgeAtlasResearchTrainer()
+        return trainer.train_all_atlas_desks(approve_for_deployment=approve_for_deployment)
 
     def build_agent_handoff(
         self,

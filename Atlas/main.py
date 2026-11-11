@@ -82,12 +82,20 @@ def main():
     parser.add_argument("--mode", type=str, default="deep_research", help="Atlas V2 operating mode")
     parser.add_argument("--handoff", type=str, help="Build structured Section 19 Universe agent handoff")
     parser.add_argument("--pilot-benchmark", action="store_true", help="Run Section 22 5-assignment Pilot Programme & Frozen V1 vs V2 Benchmark")
+    parser.add_argument("--train-atlas", action="store_true", help="Train, ablate, walk-forward validate, and certify all 5 Atlas Research Desks via Forge")
     args, _ = parser.parse_known_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     chronicle = _try_chronicle()
     agent = AtlasAgent(chronicle_client=chronicle)
     agent.start()
+
+    if args.train_atlas:
+        print(json.dumps(agent.execute("research.train_atlas", {}), indent=2, default=str))
+        agent.stop()
+        if chronicle:
+            chronicle.stop()
+        return
 
     if args.pilot_benchmark:
         print(json.dumps(agent.execute("research.pilot_benchmark", {}), indent=2, default=str))

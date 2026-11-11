@@ -171,30 +171,58 @@ class AtlasTrainingAdapter(BaseUniverseAgentAdapter):
         "retrieval_ranking_and_source_verification",
         "contradiction_and_limitation_extraction",
         "multi_timeframe_evidence_contextualization",
+        "nine_dimension_confidence_and_brier_calibration",
+        "dynamic_multi_round_investigation_escalation_policy",
+        "leave_one_out_evidence_signal_ablation",
+        "shadow_research_ledger_and_mistake_clinic_loop",
     )
     configurable_parameters = (
         "citation_minimum_sources",
         "retrieval_relevance_threshold",
         "hypothesis_confidence_calibration_alpha",
         "evidence_contradiction_penalty",
+        "feature_weights",
+        "confidence_dimension_weights",
+        "source_tier_credibility_priors",
+        "red_team_haircut_per_vulnerability",
+        "learned_sufficiency_stop_conf",
     )
     training_interfaces = (
         "consult_atlas_for_hypothesis",
         "evaluate_hypothesis_predictive_hit_rate",
         "ablate_retrieval_sources",
+        "train_and_certify_atlas_desk",
+        "train_all_atlas_desks",
     )
     success_metrics = {
         "hypothesis_out_of_sample_confirmation_rate": "higher_is_better",
+        "brier_calibration_score": "lower_is_better",
+        "total_research_edge_r": "higher_is_better",
         "citation_verifiability_score": "higher_is_better",
         "research_latency_sec": "lower_is_better",
     }
     safety_constraints = {
         "require_cited_empirical_evidence": True,
         "forbid_uncited_causal_claims": True,
+        "require_point_in_time_cutoff_and_red_team": True,
         "max_query_budget_sec": 30.0,
     }
-    evaluation_methodology = "paired_hypothesis_outcome_calibration_on_lockbox_experiments"
-    deployment_artifact_format = "atlas.research_pipeline_config.v2"
+    evaluation_methodology = (
+        "60pct_dev_40pct_untouched_lockbox_plus_4_window_walk_forward_plus_500_iteration_paired_bootstrap_vs_frozen_v1"
+    )
+    deployment_artifact_format = "forge.v2.atlas_research_candidate.v1"
+
+    def train_desk(self, desk: str = "QUANT_MARKET_DESK", approve_for_deployment: bool = False) -> Dict[str, Any]:
+        from Forge.core.atlas_research_trainer import ForgeAtlasResearchTrainer
+        return ForgeAtlasResearchTrainer().train_and_certify_atlas_desk(
+            desk=desk, approve_for_deployment=approve_for_deployment
+        )
+
+    def train_all_desks(self, approve_for_deployment: bool = False) -> Dict[str, Any]:
+        from Forge.core.atlas_research_trainer import ForgeAtlasResearchTrainer
+        return ForgeAtlasResearchTrainer().train_all_atlas_desks(
+            approve_for_deployment=approve_for_deployment
+        )
 
 
 class ChronicleTrainingAdapter(BaseUniverseAgentAdapter):

@@ -4121,6 +4121,11 @@ def main() -> None:
         help="Train, Monte-Carlo stress test, and certify all 4 Trader Archetypes for the selected symbols",
     )
     parser.add_argument(
+        "--train-atlas",
+        action="store_true",
+        help="Train, ablate, walk-forward validate, and certify all 5 Atlas V2 Institutional Research Desks via Forge",
+    )
+    parser.add_argument(
         "--daemon",
         action="store_true",
         help="Continuously train and recalibrate strategies across all selected symbols in a loop",
@@ -4132,6 +4137,14 @@ def main() -> None:
         help="Seconds between continuous training cycles when --daemon is set (default: 900s / 15m)",
     )
     args = parser.parse_args()
+
+    if args.train_atlas:
+        from Forge.core.atlas_research_trainer import ForgeAtlasResearchTrainer
+        atlas_trainer = ForgeAtlasResearchTrainer()
+        atlas_cat = atlas_trainer.train_all_atlas_desks()
+        print(json.dumps(atlas_cat, indent=2), flush=True)
+        if not args.train and args.preset == "single" and not args.symbols.strip():
+            return
 
     if args.preset == "all" or args.symbols.strip().upper() == "ALL":
         symbols_list = list(ALL_WATCHLIST_SYMBOLS)

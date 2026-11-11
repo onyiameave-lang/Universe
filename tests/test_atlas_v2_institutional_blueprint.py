@@ -196,6 +196,67 @@ class TestAtlasV2InstitutionalBlueprint(unittest.TestCase):
         self.assertGreaterEqual(a5["look_ahead_violations_blocked"], 1)
         self.assertGreaterEqual(a5["stale_sources_flagged"], 1)
 
+    def test_06_forge_trains_atlas_desks_ablation_and_shadow_mistake_clinic(self) -> None:
+        """Verify Forge trains all 5 Atlas Research Desks via 60/40 Lockbox, Leave-One-Out Ablation, Walk-Forward, and Mistake Clinic."""
+        from Forge.core.atlas_research_trainer import ATLAS_RESEARCH_DESKS, ForgeAtlasResearchTrainer
+
+        trainer = ForgeAtlasResearchTrainer()
+
+        # 1. Fail-closed check: disabling provenance/red-team verification must return BLOCKED
+        blocked = trainer.train_and_certify_atlas_desk(
+            desk="QUANT_MARKET_DESK",
+            verify_provenance_and_red_team=False,
+        )
+        self.assertEqual(blocked["lifecycle_state"], "BLOCKED")
+
+        # 2. Train all 5 Atlas Research Desks via AtlasAgent ('research.train_atlas')
+        train_out = self.agent.execute("research.train_atlas", {"approve_for_deployment": False})
+        self.assertEqual(train_out["status"], "complete")
+        catalog = train_out["atlas_training_catalog"]
+        self.assertEqual(catalog["desks_trained"], 5)
+
+        for desk in ATLAS_RESEARCH_DESKS:
+            self.assertIn(desk, catalog["desks"])
+            art = catalog["desks"][desk]
+            # Autonomous training caps at CERTIFIED (never auto-DEPLOYED without explicit approval)
+            self.assertEqual(art["lifecycle_state"], "CERTIFIED")
+            self.assertIn("ablation_study", art)
+            self.assertGreaterEqual(len(art["ablation_study"]["retained_features"]), 4)
+            # Verify out-of-sample lockbox uplift over Frozen Atlas V1
+            uplift = art["validation_and_benchmark"]["v2_vs_frozen_v1_uplift"]
+            self.assertGreater(uplift["total_research_edge_uplift_r"], 0.0)
+            self.assertGreater(uplift["brier_calibration_improvement"], 0.0)
+
+        # 3. Verify that running an Atlas V2 investigation now automatically loads the Forge-trained Desk Genome!
+        res = self.engine.investigate_v2(
+            query="Evaluate EURUSD rate differential transmission with Forge-trained QUANT_MARKET_DESK genome",
+            domain="trading",
+            operating_mode="deep_research",
+            injected_evidence=[
+                {
+                    "source": "bis.org",
+                    "title": "BIS FX Transmission Paper",
+                    "text": "2Y rate differentials explain 64% of medium-term variance.",
+                    "url": "https://www.bis.org/publ/work1102.htm",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "credibility": 0.95,
+                },
+                {
+                    "source": "semantic_scholar",
+                    "title": "Peer-Reviewed FX Carry Regime Study",
+                    "text": "Regime-conditioned carry outperforms unconditioned baseline out of sample.",
+                    "url": "https://api.semanticscholar.org/CorpusID:20491",
+                    "published_at": "2026-04-12T00:00:00Z",
+                    "credibility": 0.91,
+                },
+            ],
+        )
+        pkg = res["research_package"]
+        self.assertTrue(pkg["forge_trained_desk_genome_active"])
+        self.assertEqual(pkg["forge_trained_desk_name"], "QUANT_MARKET_DESK")
+        self.assertTrue(trainer.shadow_ledger_path.exists())
+        self.assertTrue(trainer.mistake_clinic_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

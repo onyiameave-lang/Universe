@@ -199,6 +199,14 @@ class AtlasAgent(BaseAgent):
         if task == "research.pilot_benchmark":
             return {"status": "complete", "benchmark": self.engine.run_pilot_benchmark_v2()}
 
+        if task == "research.train_atlas":
+            return {
+                "status": "complete",
+                "atlas_training_catalog": self.engine.train_atlas_desks_v2(
+                    approve_for_deployment=bool(ctx.get("approve_for_deployment", False))
+                ),
+            }
+
         if task == "research.monitor":
             v2_res = self.engine.investigate_v2(
                 query=ctx.get("query", ""),

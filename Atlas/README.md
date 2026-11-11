@@ -64,6 +64,11 @@ python3 Atlas/main.py --handoff Forge --query "EURUSD multi-timeframe microstruc
 # Run the Section 22 5-Assignment Pilot Programme & Frozen V1 vs V2 Benchmark Suite
 python3 Atlas/main.py --pilot-benchmark
 
+# Train, Ablate, Walk-Forward Validate & Certify all 5 Atlas Research Desks via Forge
+python3 Atlas/main.py --train-atlas
+# (Or via Forge CLI directly):
+python3 -m Forge.core.mtf_institutional_engine --train-atlas
+
 # Run Frozen Atlas V1 quick investigation
 python3 Atlas/main.py --query "CRISPR off-target effects" --domain science
 ```
@@ -75,7 +80,11 @@ from Atlas.agents.research_agent import AtlasAgent
 agent = AtlasAgent()
 agent.start()
 
+# 0. Train & Certify all 5 Atlas Research Desks via Forge (60/40 Lockbox + Leave-One-Out Ablation + Mistake Clinic)
+training_catalog = agent.execute("research.train_atlas", {"approve_for_deployment": False})
+
 # 1. Full 14-Section Deep-Research Dossier + 12-Section Investment Dossier + ResearchPackage
+#    (Automatically loads the Forge-trained Desk Genome for the domain/mode!)
 res = agent.execute("research.dossier_v2", {
     "query": "Evaluate rate differential transmission to EURUSD across volatility regimes",
     "domain": "trading",
@@ -95,7 +104,21 @@ benchmark = agent.execute("research.pilot_benchmark", {})
 
 ---
 
-## 5. Directory Structure
+## 5. How Forge Trains Atlas (`Forge/core/atlas_research_trainer.py`)
+
+Just as Forge trains `Oracle` across 4 trading styles per symbol, **Forge trains `Atlas` across 5 Institutional Research Desk Archetypes**:
+- `MACRO_POLICY_DESK` · `QUANT_MARKET_DESK` · `FUNDAMENTAL_ASSET_DESK` · `FORENSIC_RED_TEAM_DESK` · `SCIENTIFIC_TECH_DESK`
+
+For every desk, `ForgeAtlasResearchTrainer`:
+1. **Splits Historical Point-in-Time Research & Forecast Episodes (`60% Development / 40% Untouched Lockbox`)** and runs **4-Window Chronological Walk-Forward** + **500-Iteration Paired Circular Block Bootstrap** against Frozen Atlas V1.
+2. **Runs Leave-One-Out Ablation Across 8 Evidence & Verification Signals** (`primary_tier_a_anchor`, `peer_reviewed_tier_b_synthesis`, `syndication_origin_deduplicator`, `point_in_time_cutoff_gate`, `causal_dag_confounder_filter`, `outside_view_base_rate_anchor`, `skeptic_red_team_haircut`, `crowd_sentiment_tier_d_lead`), pruning any signal (such as noisy `crowd_sentiment_tier_d_lead`) whose removal improves out-of-sample Brier calibration and research edge.
+3. **Optimizes the 9-Dimension Confidence Matrix Weights, 5-Tier Credibility Priors & Dynamic Multi-Round Escalation Policy** (`learned_sufficiency_stop_conf`, `learned_escalation_uncertainty_band`, `learned_contradiction_cut_threshold`).
+4. **Maintains the Atlas Shadow Research Ledger (`Atlas/memory/shadow_research_ledger.json`) & Research Mistake Clinic (`Atlas/memory/research_mistake_clinic.jsonl`)**, diagnosing miscalibrated forecasts or syndication traps (`SYNDICATION_ECHO_TRAP`, `CROWD_NOISE_CONTAMINATION`, `OVERCONFIDENT_FORECAST_BRIER_MISS`, `PRIMARY_ANCHOR_UNDERWEIGHTED`) and feeding corrective weight updates into the next Forge training cycle.
+5. **Publishes Certified Desk Genomes to Chronicle (`Chronicle/memory/research/forge_atlas_candidates/cand-atlas-v2-<desk>.json` & `Chronicle/memory/research/atlas_desk_catalog/latest.json`)**, which `AtlasV2InstitutionalEngine` automatically loads at runtime.
+
+---
+
+## 6. Directory Structure
 
 ```text
 Atlas/

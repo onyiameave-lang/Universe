@@ -151,3 +151,25 @@ Every source separates `published_at`, `event_effective_at`, and `retrieved_at`.
 3. **Macro-to-Market Transmission Study** (BIS & Federal Reserve working papers on 2Y rate differentials and FX carry)
 4. **Quantitative Probability Forecast** (4-scenario probability sum == 1.0000 + Brier score + t-test workpaper)
 5. **Adversarial Red-Team Injection Test** (deliberately injects an unattributed Tier E rumor, 3 syndicated PR copies, stale 2015 data, post-cutoff 2027 look-ahead paper, and overconfident language `"undeniably guaranteed"`, verifying that every single anomaly is caught, quarantined, deduplicated, or calibrated).
+
+---
+
+## Section 26. How Forge Trains Atlas (`Forge/core/atlas_research_trainer.py`)
+
+To ensure Atlas continuously improves in what it does—just as `Oracle` improves its trading strategies through `Forge`—`ForgeAtlasResearchTrainer` trains, ablates, walk-forward validates, shadow-monitors, and certifies **5 Specialized Atlas Research Desks**:
+
+1. `MACRO_POLICY_DESK` (`domain="macro"`, `operating_mode="thematic_research"`)
+2. `QUANT_MARKET_DESK` (`domain="trading"`, `operating_mode="deep_research"`)
+3. `FUNDAMENTAL_ASSET_DESK` (`domain="company"`, `operating_mode="company_asset_research"`)
+4. `FORENSIC_RED_TEAM_DESK` (`domain="forensic"`, `operating_mode="forensic_research"`)
+5. `SCIENTIFIC_TECH_DESK` (`domain="science"`, `operating_mode="technical_scientific_research"`)
+
+### Key Mechanisms of Forge-for-Atlas Training:
+- **60% Development / 40% Untouched Out-of-Sample Lockbox + 4-Window Walk-Forward + 500-Iteration Paired Bootstrap**: Evaluates each candidate `AtlasResearchGenome` on point-in-time historical research & forecasting episodes against **Frozen Atlas V1**, requiring positive out-of-sample Research Edge uplift, improved Brier score calibration, and $\ge 3/4$ positive walk-forward windows.
+- **Leave-One-Out Ablation Across 8 Research Evidence & Verification Signals**: Tests `primary_tier_a_anchor`, `peer_reviewed_tier_b_synthesis`, `syndication_origin_deduplicator`, `point_in_time_cutoff_gate`, `causal_dag_confounder_filter`, `outside_view_base_rate_anchor`, `skeptic_red_team_haircut`, and `crowd_sentiment_tier_d_lead`, pruning noisy signals that degrade out-of-sample Brier accuracy.
+- **Dynamic Multi-Round Investigation Re-Analysis (`evaluate_live_investigation_reanalysis`)**: Mirrors real-trader live position re-analysis in the research domain:
+  - **Early Sufficiency Lock**: Stops after Round 1 when primary corroboration and confidence exceed `learned_sufficiency_stop_conf`.
+  - **Early False-Narrative Cut**: Cuts syndicated wire narratives immediately when contradicted by primary Tier A releases.
+  - **Round-2 Primary Archive Escalation**: Automatically escalates to deeper Tier A/B retrieval when Round 1 detects syndication echo chambers or mid-band uncertainty.
+- **Atlas Shadow Research Ledger & Research Mistake Clinic**: Logs predictions and resolved outcomes to `Atlas/memory/shadow_research_ledger.json` and diagnoses miscalibrated calls (`SYNDICATION_ECHO_TRAP`, `CROWD_NOISE_CONTAMINATION`, `OVERCONFIDENT_FORECAST_BRIER_MISS`, `PRIMARY_ANCHOR_UNDERWEIGHTED`) into `Atlas/memory/research_mistake_clinic.jsonl`, which feeds directly into the next Forge training cycle.
+

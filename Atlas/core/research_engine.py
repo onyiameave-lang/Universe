@@ -872,6 +872,10 @@ class ResearchEngine:
         """Execute the Section 22 5-assignment Pilot Programme & Frozen V1 vs V2 Benchmark."""
         return self.v2_engine.run_pilot_programme_benchmark()
 
+    def train_atlas_desks_v2(self, approve_for_deployment: bool = False) -> Dict[str, Any]:
+        """Train, ablate, walk-forward validate, and certify all 5 Atlas Research Desks via Forge."""
+        return self.v2_engine.train_atlas_desks_via_forge(approve_for_deployment=approve_for_deployment)
+
     def stats(self) -> Dict[str, Any]:
         return {
             "reports": len(self._reports),
