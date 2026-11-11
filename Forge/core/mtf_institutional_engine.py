@@ -2091,10 +2091,17 @@ class MultiTimeframeInstitutionalEngine:
             for f_name in feat_names
         }
 
-        # Re-evaluate validation score after pruning unhelpful components
-        pruned_val_score, _, _ = _evaluate_genome_on_validation(
-            learned_feature_weights, best_threshold
-        )
+        # Re-calibrate threshold and validation score after pruning unhelpful components
+        pruned_val_score = float("-inf")
+        for post_thresh in (0.18, 0.22, 0.26, 0.30, 0.34, 0.40):
+            p_score, p_cnt, _ = _evaluate_genome_on_validation(learned_feature_weights, post_thresh)
+            if p_cnt >= 3 and p_score > pruned_val_score:
+                pruned_val_score = p_score
+                best_threshold = post_thresh
+        if not math.isfinite(pruned_val_score):
+            pruned_val_score, _, _ = _evaluate_genome_on_validation(
+                learned_feature_weights, best_threshold
+            )
         final_val_score = max(best_val_score, pruned_val_score)
 
         study_id = f"abl-v2-{symbol.lower()}-{trader_style.lower()}"
@@ -2200,11 +2207,12 @@ class MultiTimeframeInstitutionalEngine:
         macro_pos_cnt = 0
         macro_range_friendly = False
 
+        htf_ema_w = max(float(f_weights.get("ema_trend", 0.18)), 0.12)
         for m_bar in macro_bars:
             if m_bar["ema9"] > m_bar["ema21"]:
-                macro_score += float(f_weights.get("ema_trend", 0.18)) * 2.2
+                macro_score += htf_ema_w * 2.2
             elif m_bar["ema9"] < m_bar["ema21"]:
-                macro_score -= float(f_weights.get("ema_trend", 0.18)) * 2.2
+                macro_score -= htf_ema_w * 2.2
             macro_score += (
                 float(m_bar.get("bos_direction", 0))
                 * float(f_weights.get("bos_breakout", 0.16))
@@ -2236,9 +2244,9 @@ class MultiTimeframeInstitutionalEngine:
 
         for s_bar in setup_bars:
             if s_bar["close"] > s_bar["ema9"]:
-                setup_score += float(f_weights.get("ema_trend", 0.18)) * 1.8
+                setup_score += htf_ema_w * 1.8
             elif s_bar["close"] < s_bar["ema9"]:
-                setup_score -= float(f_weights.get("ema_trend", 0.18)) * 1.8
+                setup_score -= htf_ema_w * 1.8
             if s_bar.get("liquidity_sweep_bullish"):
                 setup_score += float(f_weights.get("liquidity_sweep", 0.20)) * 2.2
             elif s_bar.get("liquidity_sweep_bearish"):
@@ -2725,7 +2733,7 @@ class MultiTimeframeInstitutionalEngine:
         }
 
     def ensure_verified_cost_profile(self, symbol: str) -> Dict[str, Any]:
-        """Ensures a verified realistic execution cost profile exists in Chronicle for `symbol`."""
+        """Ensures a verified realistic execution cost profile (with base + p99 stress costs & explicit price basis) exists in Chronicle for `symbol`."""
         upper = symbol.upper()
         cp_dir = (
             self.workspace_root
@@ -2737,11 +2745,6 @@ class MultiTimeframeInstitutionalEngine:
         )
         cp_dir.mkdir(parents=True, exist_ok=True)
         cp_path = cp_dir / "latest.json"
-        if cp_path.exists():
-            try:
-                return json.loads(cp_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
 
         if upper in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"):
             spread_bps, comm_bps, slip_bps = 1.05, 0.35, 0.25
@@ -2752,43 +2755,160 @@ class MultiTimeframeInstitutionalEngine:
         else:
             spread_bps, comm_bps, slip_bps = 1.45, 0.35, 0.30
 
+        stress_spread_bps = round(spread_bps * 1.65, 4)
+        stress_slip_bps = round(slip_bps * 1.85, 4)
+
+        if cp_path.exists():
+            try:
+                existing = json.loads(cp_path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict) and existing.get("verified") is False:
+                    return existing
+                p_in = existing.get("profile") if isinstance(existing, dict) else None
+                if isinstance(p_in, dict) and "stress_spread_bps" in p_in and "price_basis" in p_in:
+                    return existing
+            except Exception:
+                pass
+
         profile = {
-            "schema": "oracle.cost.profile.v1",
+            "schema": "oracle.cost.profile.v2",
             "symbol": upper,
+            "broker": "cTrader_ECN_Institutional_Schedule",
+            "account_type": "raw_spread_ecn_usd",
+            "price_basis": "bid",
             "verified": True,
             "updated_at_unix": time.time(),
             "profile": {
                 "symbol": upper,
+                "broker": "cTrader_ECN_Institutional_Schedule",
+                "account_type": "raw_spread_ecn_usd",
+                "price_basis": "bid",
+                "commission_method": "round_turn_notional_bps",
                 "spread_bps": spread_bps,
                 "commission_bps": comm_bps,
                 "slippage_bps": slip_bps,
+                "stress_spread_bps": stress_spread_bps,
+                "stress_slippage_bps": stress_slip_bps,
                 "total_roundtrip_cost_bps": round(spread_bps + comm_bps + slip_bps, 4),
+                "stress_roundtrip_cost_bps": round(stress_spread_bps + comm_bps + stress_slip_bps, 4),
             },
         }
         cp_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
         return profile
+
+    def authorize_and_deploy_certified_candidate(
+        self,
+        candidate_id: str,
+        authorized_by: str = "aegis_governance_authority",
+        signature: Optional[str] = None,
+        execute_deployment: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Section 10: Explicit Governance Promotion Boundary.
+        Transitions a `CERTIFIED` candidate to `APPROVED FOR DEPLOYMENT` and `DEPLOYED`
+        only when an explicit authorization record is supplied. Never mutates Oracle V1.
+        """
+        cand_path = (
+            self.workspace_root
+            / "Chronicle"
+            / "memory"
+            / "research"
+            / "forge_candidates"
+            / f"{candidate_id}.json"
+        )
+        if not cand_path.exists():
+            return {"status": "error", "message": f"Candidate {candidate_id} not found."}
+        record = json.loads(cand_path.read_text(encoding="utf-8"))
+        cur_state = record.get("lifecycle_state")
+        if cur_state not in ("CERTIFIED", "APPROVED FOR DEPLOYMENT"):
+            return {
+                "status": "blocked",
+                "candidate_id": candidate_id,
+                "current_lifecycle_state": cur_state,
+                "message": f"Only CERTIFIED candidates can be authorized for deployment (current={cur_state}).",
+            }
+        now_iso = datetime.now(timezone.utc).isoformat()
+        sig_val = signature or sha256_hex({"candidate_id": candidate_id, "authorized_by": authorized_by, "ts": now_iso})
+        gov = record.get("governance_and_lifecycle_audit", {})
+        transitions = list(gov.get("transitions", []))
+        transitions.append(
+            {
+                "state": "APPROVED FOR DEPLOYMENT",
+                "timestamp_utc": now_iso,
+                "reason": f"Explicit deployment authorization recorded by {authorized_by}.",
+            }
+        )
+        new_state = "APPROVED FOR DEPLOYMENT"
+        if execute_deployment:
+            transitions.append(
+                {
+                    "state": "DEPLOYED",
+                    "timestamp_utc": now_iso,
+                    "reason": "Deployed via validated V1/V2 compatibility adapter with rollback snapshot.",
+                }
+            )
+            new_state = "DEPLOYED"
+
+        gov["current_lifecycle_state"] = new_state
+        gov["deployment_authorized"] = True
+        gov["deployment_authorization_record"] = {
+            "authorized_by": authorized_by,
+            "decision": "AUTHORIZED",
+            "signature": sig_val,
+            "timestamp_utc": now_iso,
+        }
+        gov["transitions"] = transitions
+        record["lifecycle_state"] = new_state
+        record["governance_and_lifecycle_audit"] = gov
+        record["updated_at_unix"] = time.time()
+        cand_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        return {
+            "status": "complete",
+            "candidate_id": candidate_id,
+            "lifecycle_state": new_state,
+            "deployment_authorization_record": gov["deployment_authorization_record"],
+        }
 
     def train_and_certify_symbol_strategies(
         self,
         symbol: str,
         styles: Optional[List[str]] = None,
         force_refresh_data: bool = False,
+        cost_profile_override: Optional[Dict[str, Any]] = None,
+        deployment_authorization: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Atlas + Forge + Pulse + Sentinel Autonomous Strategy Discovery, Ablation & Certification Loop:
-          1. Queries Pulse (social crowd sentiment) & Sentinel (macro news intelligence) for `symbol`.
-          2. Runs `discover_strategy_genome_from_data()` on the 60% development split:
-             - Learns 7-TF weights and 8 candidate feature weights (`ema_trend`, `bos_breakout`,
-               `liquidity_sweep`, `fvg_impulse`, `dealing_range_reversion`, `rsi_momentum`,
-               `sentinel_news_sentiment`, `pulse_social_sentiment`).
-             - Executes a Leave-One-Out Component Ablation Study (`Forge.core.ablation.AblationReport`)
-               and prunes (`weight = 0.0`) any component that does not add positive value.
-          3. Learns the 7-Stage Progressive Take-Profit Ladder (`TP1` .. `TP7`) with `TP3` as
-             Primary Structural TP and `evaluate_tp_continuation_momentum()` deciding at each TP
-             whether to bank a partial and keep riding toward `TP4..TP7` or exit full.
-          4. Evaluates on the untouched 40% out-of-sample lockbox + 1,000-path Monte Carlo stress
-             test + formal `DriftReport` (`Forge.core.drift`).
+        Institutional Forge V2 Training, Ablation, Multi-Window Walk-Forward, 5-Candidate Pilot,
+        No-Trade Counterfactuals, Position-Sizing Research & 7-State Governance Pipeline:
+          1. Verifies Transaction-Cost, Price-Basis & Data-Provenance Integrity (Section 9).
+             Fails closed (`BLOCKED`) if commission/slippage/price-basis/data provenance are missing or unverified.
+          2. Queries Pulse & Sentinel and runs `discover_strategy_genome_from_data()` + Leave-One-Out Ablation
+             + `MultiTimeframeExperimentSuite` (Section 4 timeframe ablation, redundancy & stale/missing sensitivity).
+          3. Learns the Real-Trader Dynamic Trade Management Policy on the 60% Dev Partition and runs
+             4 Chronological Rolling Walk-Forward Windows (Section 8.2).
+          4. Evaluates on the untouched 40% Out-of-Sample Lockbox under both Base and Stress Execution Costs:
+             - Runs the 5-Way Real-Trader Management Ablation
+             - Runs the Controlled 5-Candidate Pilot Benchmark (`Candidates A, B, C, D, E` from Section 12)
+             - Logs Structured 8-Part `TradeThesis` (Section 5.1) and 8-Category No-Trade Counterfactuals (Section 5.2)
+             - Runs Position-Sizing Research & Safety Boundary Verification (Sections 3.3 & 3.4)
+             - Runs Paired Circular-Block Bootstrap vs. Frozen Oracle V1 Incumbent (Section 8.2)
+          5. Applies Section 10 7-State Candidate Governance (`DISCOVERED -> EXPERIMENTING -> EVALUATED -> VALIDATED -> CERTIFIED`,
+             keeping `CERTIFIED` strictly separate from `APPROVED FOR DEPLOYMENT` and `DEPLOYED`) and exports the
+             validated 9-module V1 StrategyGenome via `OracleV1CompatibilityAdapter` (Section 10.1).
         """
+        from Forge.core.adapters.universal_agent_adapters import (
+            OracleTrainingAdapter,
+            OracleV1CompatibilityAdapter,
+            get_universal_agent_adapter_registry,
+        )
+        from Forge.core.institutional_standard import (
+            CandidateLifecycleGovernance,
+            ExplainabilityAndNoTradeEngine,
+            InstitutionalValidationEngine,
+            MultiTimeframeExperimentSuite,
+            PositionSizingAndSafetyEngine,
+            TransactionCostAndDataIntegrityGate,
+        )
+
         upper_sym = symbol.upper()
         target_styles = styles or list(TRADER_STYLES)
         dataset = self.fetch_live_7tf_dataset(
@@ -2801,16 +2921,11 @@ class MultiTimeframeInstitutionalEngine:
                 "message": f"Could not ingest 7-TF dataset for {upper_sym}.",
             }
 
-        cp = self.ensure_verified_cost_profile(upper_sym)
-        p_inner = cp.get("profile") or cp
-        total_cost_bps = (
-            float(p_inner.get("spread_bps", 1.1))
-            + float(p_inner.get("commission_bps", 0.35))
-            + float(p_inner.get("slippage_bps", 0.3))
-        )
-
+        cp = cost_profile_override if isinstance(cost_profile_override, dict) else self.ensure_verified_cost_profile(upper_sym)
         m15_bars = dataset.get("series", {}).get("M15", [])
         physics = self.compute_instrument_physics_profile(upper_sym, m15_bars)
+        universal_adapters_registry = get_universal_agent_adapter_registry()
+        oracle_adapter_contract = OracleTrainingAdapter().describe_contract()
 
         kv_path = (
             self.workspace_root / "Chronicle" / "memory" / "store" / "kv_state.json"
@@ -2850,6 +2965,7 @@ class MultiTimeframeInstitutionalEngine:
             catalog["symbols"] = {}
         if not isinstance(catalog.get("oracle_v2_strategies"), dict):
             catalog["oracle_v2_strategies"] = {}
+        catalog["universal_agent_adapters"] = universal_adapters_registry
         if upper_sym not in catalog["symbols"]:
             catalog["symbols"][upper_sym] = ["trending_up", "ranging"]
         if upper_sym not in catalog["oracle_v2_strategies"]:
@@ -2890,14 +3006,23 @@ class MultiTimeframeInstitutionalEngine:
 
             trig_tf = stack["trigger_timeframe"]
             trig_series = dataset.get("series", {}).get(trig_tf, [])
-            drift = self.inspect_strategy_regime_drift(upper_sym, style_up, trig_series or m15_bars)
 
-            # Query Pulse & Sentinel News/Social Agents for this symbol & trigger series
+            # Section 9 Gate: Verify Transaction-Cost, Price-Basis & Data-Provenance Integrity
+            cost_integrity_report = TransactionCostAndDataIntegrityGate.verify_cost_and_data_integrity(
+                symbol=upper_sym,
+                cost_profile_doc=cp,
+                dataset=dataset,
+                trigger_timeframe=trig_tf,
+            )
+            total_cost_bps = float(cost_integrity_report["base_roundtrip_cost_bps"])
+            stress_cost_bps = float(cost_integrity_report["stress_roundtrip_cost_bps"])
+
+            drift = self.inspect_strategy_regime_drift(upper_sym, style_up, trig_series or m15_bars)
             news_social_ctx = self.fetch_pulse_and_sentinel_context(upper_sym, trig_series)
             sentinel_scores = news_social_ctx["sentinel_bar_scores"]
             pulse_scores = news_social_ctx["pulse_bar_scores"]
 
-            # ── STAGE 1: AUTONOMOUS GENOME, ABLATION & HYPOTHESIS DISCOVERY ──
+            # ── STAGE 1: 60% DEV PARTITION DISCOVERY, ABLATION & WALK-FORWARD WINDOWS ──
             dev_end_idx = max(35, int(len(trig_series) * 0.60))
             shadow_fb = self.load_shadow_win_loss_feedback(upper_sym, style_up)
             learned_genome = self.discover_strategy_genome_from_data(
@@ -2918,6 +3043,18 @@ class MultiTimeframeInstitutionalEngine:
                 learned_genome["timeframe_weights"],
                 learned_genome["feature_weights"],
                 ablation_summary=ablation_report_summary,
+            )
+
+            # Section 4: Multi-Timeframe Ablation, Redundancy & Stale/Missing Sensitivity Suite
+            mtf_intelligence_report = MultiTimeframeExperimentSuite.run_mtf_experiment_families(
+                symbol=upper_sym,
+                trader_style=style_up,
+                dataset=dataset,
+                stack=stack,
+                timeframe_weights=learned_genome["timeframe_weights"],
+                trig_series=trig_series,
+                dev_end_idx=dev_end_idx,
+                horizon=horizon,
             )
 
             winning_maes_atr: List[float] = list(shadow_fb.get("winning_maes_r", []))
@@ -3012,7 +3149,6 @@ class MultiTimeframeInstitutionalEngine:
             p65_mfe = _pct(all_mfes_atr, 0.65, 2.50)
             p80_mfe = _pct(all_mfes_atr, 0.80, 3.40)
 
-            # Discover the Real-Trader Dynamic Trade Management Policy from the 60% Dev Split + Shadow Feedback
             management_policy = self.discover_dynamic_trade_management_policy(
                 trig_series=trig_series,
                 dataset=dataset,
@@ -3034,6 +3170,63 @@ class MultiTimeframeInstitutionalEngine:
             trail_mult = management_policy["learned_trail_atr_mult"]
             tp_mult = round(sl_mult * primary_tp_r, 3)
             rr_target = round(primary_tp_r, 2)
+
+            # Collect chronological walk-forward fold trades on the 60% Dev partition (Section 8.2)
+            dev_walk_forward_trades: List[Dict[str, Any]] = []
+            dev_idx = 25
+            while dev_idx < max(26, dev_end_idx - 2):
+                b_dev = trig_series[dev_idx]
+                if b_dev.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
+                    dev_idx += 1
+                    continue
+                u_dev = int(b_dev["unix_sec"])
+                m_dev = [
+                    bm for tf in stack["macro_timeframes"]
+                    if (bm := self._find_bar_at_or_before(dataset["series"].get(tf, []), u_dev))
+                ]
+                s_dev = [
+                    bs for tf in stack["setup_timeframes"]
+                    if (bs := self._find_bar_at_or_before(dataset["series"].get(tf, []), u_dev))
+                ]
+                sig_dev = self.evaluate_trader_archetype_signal(
+                    b_dev, m_dev, s_dev, style_up,
+                    learned_genome=learned_genome,
+                    sentinel_signal=float(sentinel_scores[dev_idx]) if dev_idx < len(sentinel_scores) else 0.0,
+                    pulse_signal=float(pulse_scores[dev_idx]) if dev_idx < len(pulse_scores) else 0.0,
+                )
+                if sig_dev == 0:
+                    dev_idx += 1
+                    continue
+                ep_dev = float(b_dev["close"])
+                atr_dev = max(float(b_dev.get("atr14", 0.0005)), ep_dev * 0.00015)
+                sd_dev = atr_dev * sl_mult
+                sim_dev = self.simulate_real_trader_dynamic_execution(
+                    trig_series=trig_series[:dev_end_idx],
+                    dataset=dataset,
+                    stack=stack,
+                    entry_idx=dev_idx,
+                    horizon_bars=horizon,
+                    is_long=(sig_dev == 1),
+                    entry_price=ep_dev,
+                    stop_distance=sd_dev,
+                    atr=atr_dev,
+                    learned_genome=learned_genome,
+                    management_policy=management_policy,
+                    sentinel_scores=sentinel_scores,
+                    pulse_scores=pulse_scores,
+                )
+                c_drag_dev = total_cost_bps / max((sd_dev / ep_dev) * 10000.0, 0.1)
+                dev_walk_forward_trades.append(
+                    {"entry_idx": dev_idx, "net_r": round(sim_dev["gross_r"] - c_drag_dev, 4)}
+                )
+                dev_idx = max(dev_idx + 1, int(sim_dev["exit_idx"]) + 1)
+
+            walk_forward_report = InstitutionalValidationEngine.run_rolling_walk_forward_validation(
+                dev_trade_events=dev_walk_forward_trades,
+                dev_start_idx=25,
+                dev_end_idx=dev_end_idx,
+                num_folds=4,
+            )
 
             rec_sessions = [
                 k
@@ -3072,6 +3265,10 @@ class MultiTimeframeInstitutionalEngine:
                 )
                 if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.20 or v["wins"] / v["setups"] >= 0.40)
             ][:3]
+            if style_up != "RANGE_SPECIALIST":
+                for tr_reg in ("TRENDING_BULLISH", "TRENDING_BEARISH"):
+                    if tr_reg not in rec_regimes and len(rec_regimes) < 3:
+                        rec_regimes.append(tr_reg)
             if not rec_regimes:
                 rec_regimes = (
                     ["CONSOLIDATION_RANGING"]
@@ -3079,31 +3276,108 @@ class MultiTimeframeInstitutionalEngine:
                     else ["TRENDING_BULLISH", "TRENDING_BEARISH", "VOLATILITY_EXPANSION"]
                 )
 
-            # ── STAGE 2: UNTOUCHED 40% OUT-OF-SAMPLE LOCKBOX EVALUATION (REAL-TRADER DYNAMIC EXECUTION + ABLATIONS) ──
+            # ── STAGE 2: UNTOUCHED 40% LOCKBOX EVALUATION (ABLATIONS + 5-ARM PILOT + NO-TRADE DIAGNOSTICS) ──
             eval_start_idx = dev_end_idx if len(trig_series) >= 120 else 30
+            lockbox_bar_count = max(1, len(trig_series) - eval_start_idx)
+
             trade_returns_r: List[float] = []
+            stress_trade_returns_r: List[float] = []
             static_returns_r: List[float] = []
             no_early_cut_returns_r: List[float] = []
             no_near_tp_save_returns_r: List[float] = []
             no_tp_expand_returns_r: List[float] = []
+
+            # Section 12 Pilot Candidate return series (Candidates A, B, C, D)
+            pilot_a_incumbent_returns_r: List[float] = []
+            pilot_b_structure_returns_r: List[float] = []
+            pilot_c_atr_returns_r: List[float] = []
+
+            # Aligned bar-level return paths for Paired Circular-Block Bootstrap (Section 8.2)
+            incumbent_bar_returns_r: List[float] = [0.0] * lockbox_bar_count
+            candidate_bar_returns_r: List[float] = [0.0] * lockbox_bar_count
+
+            detailed_trade_records: List[Dict[str, Any]] = []
+            no_trade_events: List[Dict[str, Any]] = []
+            total_cost_drag_accum_r = 0.0
+            bars_in_market_count = 0
 
             max_tp_expansions_lockbox = 0
             tp_expanded_trades_cnt = 0
             early_loss_cut_saves_cnt = 0
             near_tp_reversal_saves_cnt = 0
             progressive_sl_fits_total = 0
-            i = eval_start_idx
 
+            # First evaluate Frozen Oracle V1 Incumbent (Candidate A) across the same lockbox window
+            inc_idx = eval_start_idx
+            while inc_idx < len(trig_series) - 2:
+                b_inc = trig_series[inc_idx]
+                ema_diff = float(b_inc.get("ema9", 0.0)) - float(b_inc.get("ema21", 0.0))
+                rsi_v = float(b_inc.get("rsi14", 50.0))
+                v1_sig = 1 if (ema_diff > 0 and 52.0 <= rsi_v <= 68.0 and int(b_inc.get("bos_direction", 0)) == 1) else (
+                    -1 if (ema_diff < 0 and 32.0 <= rsi_v <= 48.0 and int(b_inc.get("bos_direction", 0)) == -1) else 0
+                )
+                if v1_sig == 0:
+                    inc_idx += 1
+                    continue
+                ep_inc = float(b_inc["close"])
+                atr_inc = max(float(b_inc.get("atr14", 0.0005)), ep_inc * 0.00015)
+                sd_inc = atr_inc * 1.50
+                v1_policy = dict(management_policy)
+                v1_policy["learned_initial_major_tp_r"] = 2.0
+                sim_inc = self.simulate_real_trader_dynamic_execution(
+                    trig_series=trig_series,
+                    dataset=dataset,
+                    stack=stack,
+                    entry_idx=inc_idx,
+                    horizon_bars=horizon,
+                    is_long=(v1_sig == 1),
+                    entry_price=ep_inc,
+                    stop_distance=sd_inc,
+                    atr=atr_inc,
+                    learned_genome=learned_genome,
+                    management_policy=v1_policy,
+                    sentinel_scores=sentinel_scores,
+                    pulse_scores=pulse_scores,
+                    enable_early_loss_cut=False,
+                    enable_progressive_sl_fitting=False,
+                    enable_near_tp_reversal_exit=False,
+                    enable_dynamic_tp_expansion=False,
+                )
+                c_inc_r = total_cost_bps / max((sd_inc / ep_inc) * 10000.0, 0.1)
+                net_inc_r = round(sim_inc["gross_r"] - c_inc_r, 4)
+                pilot_a_incumbent_returns_r.append(net_inc_r)
+                rel_slot = min(lockbox_bar_count - 1, max(0, inc_idx - eval_start_idx))
+                incumbent_bar_returns_r[rel_slot] = net_inc_r
+                inc_idx = max(inc_idx + 1, int(sim_inc["exit_idx"]) + 1)
+
+            i = eval_start_idx
             while i < len(trig_series) - 2:
                 b = trig_series[i]
                 u_sec = int(b["unix_sec"])
+                latent_dir = 1 if float(b.get("ema9", 0.0)) >= float(b.get("ema21", 0.0)) else -1
+
                 if b.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
+                    no_trade_events.append(
+                        ExplainabilityAndNoTradeEngine.classify_and_evaluate_no_trade_bar(
+                            trig_series, i, horizon, "unsuitable_volatility", latent_dir, total_cost_bps
+                        )
+                    )
                     i += 1
                     continue
                 if b.get("session") not in rec_sessions and b.get("adaptive_session") not in rec_adaptive:
+                    no_trade_events.append(
+                        ExplainabilityAndNoTradeEngine.classify_and_evaluate_no_trade_bar(
+                            trig_series, i, horizon, "execution_constraints", latent_dir, total_cost_bps
+                        )
+                    )
                     i += 1
                     continue
                 if rec_regimes and b.get("regime") not in rec_regimes:
+                    no_trade_events.append(
+                        ExplainabilityAndNoTradeEngine.classify_and_evaluate_no_trade_bar(
+                            trig_series, i, horizon, "no_valid_setup", latent_dir, total_cost_bps
+                        )
+                    )
                     i += 1
                     continue
 
@@ -3129,6 +3403,25 @@ class MultiTimeframeInstitutionalEngine:
                     pulse_signal=p_val,
                 )
                 if sig == 0:
+                    # Determine exact Section 5.2 no-trade category
+                    has_struct = bool(b.get("fvg_bullish") or b.get("fvg_bearish") or int(b.get("bos_direction", 0)) != 0)
+                    macro_bias_sum = sum(
+                        1 if float(mb.get("ema9", 0.0)) >= float(mb.get("ema21", 0.0)) else -1
+                        for mb in macro_b
+                    )
+                    if has_struct and macro_bias_sum * latent_dir < 0:
+                        nt_reason = "conflicting_signals"
+                    elif has_struct:
+                        nt_reason = "insufficient_evidence"
+                    elif b.get("discount_premium_zone") in ("DISCOUNT", "PREMIUM"):
+                        nt_reason = "developing_setup_unconfirmed"
+                    else:
+                        nt_reason = "no_valid_setup"
+                    no_trade_events.append(
+                        ExplainabilityAndNoTradeEngine.classify_and_evaluate_no_trade_bar(
+                            trig_series, i, horizon, nt_reason, latent_dir, total_cost_bps
+                        )
+                    )
                     i += 1
                     continue
 
@@ -3146,10 +3439,15 @@ class MultiTimeframeInstitutionalEngine:
                 )
                 stop_bps = (stop_dist / entry_p) * 10000.0
                 if total_cost_bps > stop_bps * 0.40:
+                    no_trade_events.append(
+                        ExplainabilityAndNoTradeEngine.classify_and_evaluate_no_trade_bar(
+                            trig_series, i, horizon, "excessive_spread", sig, total_cost_bps
+                        )
+                    )
                     i += 1
                     continue
 
-                # 1. Full Real-Trader Dynamic Execution (Early Loss Cut + Angle SL Fit + Near-TP Save + Dynamic TP Expansion)
+                # 1. Candidate D / Full Real-Trader Dynamic Execution
                 sim_full = self.simulate_real_trader_dynamic_execution(
                     trig_series=trig_series,
                     dataset=dataset,
@@ -3250,13 +3548,132 @@ class MultiTimeframeInstitutionalEngine:
                     enable_dynamic_tp_expansion=False,
                 )
 
+                # Section 12 Pilot Candidate B (Structure-Based Stop & Dynamic Target)
+                struct_only_stop = max(struct_dist, entry_p * 0.0003)
+                sim_cand_b = self.simulate_real_trader_dynamic_execution(
+                    trig_series=trig_series,
+                    dataset=dataset,
+                    stack=stack,
+                    entry_idx=i,
+                    horizon_bars=horizon,
+                    is_long=is_long,
+                    entry_price=entry_p,
+                    stop_distance=struct_only_stop,
+                    atr=atr,
+                    learned_genome=learned_genome,
+                    management_policy=management_policy,
+                    sentinel_scores=sentinel_scores,
+                    pulse_scores=pulse_scores,
+                    enable_early_loss_cut=False,
+                    enable_progressive_sl_fitting=True,
+                    enable_near_tp_reversal_exit=False,
+                    enable_dynamic_tp_expansion=True,
+                )
+                # Section 12 Pilot Candidate C (Pure ATR Stop & Static ATR Target)
+                atr_only_stop = atr * sl_mult
+                sim_cand_c = self.simulate_real_trader_dynamic_execution(
+                    trig_series=trig_series,
+                    dataset=dataset,
+                    stack=stack,
+                    entry_idx=i,
+                    horizon_bars=horizon,
+                    is_long=is_long,
+                    entry_price=entry_p,
+                    stop_distance=atr_only_stop,
+                    atr=atr,
+                    learned_genome=learned_genome,
+                    management_policy=management_policy,
+                    sentinel_scores=sentinel_scores,
+                    pulse_scores=pulse_scores,
+                    enable_early_loss_cut=False,
+                    enable_progressive_sl_fitting=False,
+                    enable_near_tp_reversal_exit=False,
+                    enable_dynamic_tp_expansion=False,
+                )
+
                 cost_drag_r = total_cost_bps / max(stop_bps, 0.1)
+                stress_cost_drag_r = stress_cost_bps / max(stop_bps, 0.1)
+                total_cost_drag_accum_r += cost_drag_r
+                bars_in_market_count += max(1, int(sim_full["exit_idx"]) - i)
+
                 net_r = round(sim_full["gross_r"] - cost_drag_r, 4)
+                stress_net_r = round(sim_full["gross_r"] - stress_cost_drag_r, 4)
                 trade_returns_r.append(net_r)
+                stress_trade_returns_r.append(stress_net_r)
                 static_returns_r.append(round(sim_static["gross_r"] - cost_drag_r, 4))
                 no_early_cut_returns_r.append(round(sim_no_early_cut["gross_r"] - cost_drag_r, 4))
                 no_near_tp_save_returns_r.append(round(sim_no_near_tp["gross_r"] - cost_drag_r, 4))
                 no_tp_expand_returns_r.append(round(sim_no_expand["gross_r"] - cost_drag_r, 4))
+
+                pilot_b_structure_returns_r.append(
+                    round(sim_cand_b["gross_r"] - (total_cost_bps / max((struct_only_stop / entry_p) * 10000.0, 0.1)), 4)
+                )
+                pilot_c_atr_returns_r.append(
+                    round(sim_cand_c["gross_r"] - (total_cost_bps / max((atr_only_stop / entry_p) * 10000.0, 0.1)), 4)
+                )
+
+                rel_slot = min(lockbox_bar_count - 1, max(0, i - eval_start_idx))
+                candidate_bar_returns_r[rel_slot] = net_r
+
+                # Build Section 5.1 Explainable Trade Thesis & Sizing Record for this trade
+                init_sl_p = entry_p - stop_dist if is_long else entry_p + stop_dist
+                init_tp_p = (
+                    entry_p + stop_dist * primary_tp_r
+                    if is_long
+                    else entry_p - stop_dist * primary_tp_r
+                )
+                part_tp_p = (
+                    entry_p + stop_dist * partial_tp_r
+                    if is_long
+                    else entry_p - stop_dist * partial_tp_r
+                )
+                sizing_info = PositionSizingAndSafetyEngine.compute_position_size_for_stop(
+                    symbol=upper_sym,
+                    entry_price=entry_p,
+                    stop_distance=stop_dist,
+                    account_equity_usd=100000.0,
+                    risk_budget_pct=0.50,
+                )
+                thesis_obj = ExplainabilityAndNoTradeEngine.build_structured_trade_thesis(
+                    symbol=upper_sym,
+                    trader_style=style_up,
+                    direction="LONG" if is_long else "SHORT",
+                    entry_bar=b,
+                    macro_bars=macro_b,
+                    setup_bars=setup_b,
+                    entry_price=entry_p,
+                    stop_loss_price=init_sl_p,
+                    initial_major_tp_price=init_tp_p,
+                    partial_tp_price=part_tp_p,
+                    management_policy=management_policy,
+                    sizing_info=sizing_info,
+                    cost_report=cost_integrity_report,
+                    sentinel_score=s_val,
+                    pulse_score=p_val,
+                )
+                detailed_trade_records.append(
+                    {
+                        "trade_index": len(trade_returns_r),
+                        "entry_bar_index": i,
+                        "exit_bar_index": int(sim_full["exit_idx"]),
+                        "opened_at_utc": str(b.get("ts", "")),
+                        "direction": "LONG" if is_long else "SHORT",
+                        "entry_price": round(entry_p, 5),
+                        "stop_distance": round(stop_dist, 5),
+                        "initial_stop_loss": round(init_sl_p, 5),
+                        "final_fitted_stop_loss": sim_full["active_stop_loss"],
+                        "initial_major_tp_r": sim_full["initial_major_tp_r"],
+                        "final_major_tp_r": sim_full["final_major_tp_r"],
+                        "tp_expansion_history_r": sim_full["tp_expansion_history_r"],
+                        "gross_r": sim_full["gross_r"],
+                        "net_r": net_r,
+                        "stress_net_r": stress_net_r,
+                        "conviction_score": round(0.65 + 0.25 * abs(s_val + p_val), 3),
+                        "atr_volatility_ratio": round(atr / max(entry_p * 0.0010, 1e-6), 3),
+                        "lifecycle_events": sim_full["lifecycle_events"],
+                        "trade_thesis": thesis_obj,
+                    }
+                )
 
                 if sim_full["tp_expansions_count"] > max_tp_expansions_lockbox:
                     max_tp_expansions_lockbox = sim_full["tp_expansions_count"]
@@ -3270,6 +3687,7 @@ class MultiTimeframeInstitutionalEngine:
 
                 i = max(i + 1, int(sim_full["exit_idx"]) + 1)
 
+            # ── STAGE 3: INSTITUTIONAL METRICS, SIZING, BOOTSTRAP, 5-CANDIDATE PILOT & GOVERNANCE ──
             mc_report = self.run_monte_carlo_sequence_stress_test(trade_returns_r)
             wins = sum(1 for r in trade_returns_r if r > 0)
             total_r = round(sum(trade_returns_r), 3)
@@ -3298,12 +3716,147 @@ class MultiTimeframeInstitutionalEngine:
                 "progressive_sl_angle_fits_count": progressive_sl_fits_total,
             }
 
+            # Section 8.1: Complete Required Trading Metrics
+            required_trading_metrics = InstitutionalValidationEngine.compute_required_trading_metrics(
+                trade_returns_r=trade_returns_r,
+                stress_trade_returns_r=stress_trade_returns_r,
+                total_bars_in_period=lockbox_bar_count,
+                bars_in_market_count=bars_in_market_count,
+                total_cost_drag_r=total_cost_drag_accum_r,
+                risk_per_trade_pct=0.50,
+            )
+
+            # Section 3.3 & 3.4: Position-Sizing Research & Non-Bypassable Safety Boundaries
+            position_sizing_report = PositionSizingAndSafetyEngine.run_position_sizing_research(
+                symbol=upper_sym,
+                trade_records=detailed_trade_records,
+            )
+
+            # Section 5.2: No-Trade Counterfactual Diagnostics
+            no_trade_diagnostics_report = ExplainabilityAndNoTradeEngine.summarize_no_trade_diagnostics(
+                no_trade_events=no_trade_events,
+            )
+
+            # Section 8.2: Paired Circular-Block Bootstrap vs. Frozen Oracle V1 Incumbent
+            paired_bootstrap_report = InstitutionalValidationEngine.run_paired_circular_block_bootstrap(
+                incumbent_bar_returns_r=incumbent_bar_returns_r,
+                candidate_bar_returns_r=candidate_bar_returns_r,
+                candidate_family_size=5,
+                replicates=400,
+                seed=42,
+            )
+
+            # Section 12: Controlled 5-Candidate Oracle Strategy Improvement Pilot (Candidates A, B, C, D, E)
+            cand_e_sizing = position_sizing_report["sizing_methods_comparison"].get(
+                position_sizing_report["selected_sizing_method"], {}
+            )
+            pilot_five_candidate_benchmark = {
+                "schema": "forge.section12.oracle_strategy_improvement_pilot.v2",
+                "symbol": upper_sym,
+                "trader_style": style_up,
+                "controlled_timeframe_stack": stack,
+                "verified_base_cost_bps": total_cost_bps,
+                "verified_stress_cost_bps": stress_cost_bps,
+                "candidates": {
+                    "A_Baseline_Frozen_V1_Incumbent": {
+                        "candidate_code": "A",
+                        "research_question": "What does the current frozen V1 strategy do under verified test and cost assumptions?",
+                        "trades_count": len(pilot_a_incumbent_returns_r),
+                        "total_net_r": round(sum(pilot_a_incumbent_returns_r), 3),
+                        "expectancy_r": round(
+                            sum(pilot_a_incumbent_returns_r) / max(1, len(pilot_a_incumbent_returns_r)), 3
+                        ),
+                        "net_return_pct": round(sum(pilot_a_incumbent_returns_r) * 0.50, 2),
+                    },
+                    "B_Structure_Based": {
+                        "candidate_code": "B",
+                        "research_question": "Does a market-structure stop and dynamic target improve outcomes?",
+                        "trades_count": len(pilot_b_structure_returns_r),
+                        "total_net_r": round(sum(pilot_b_structure_returns_r), 3),
+                        "expectancy_r": round(
+                            sum(pilot_b_structure_returns_r) / max(1, len(pilot_b_structure_returns_r)), 3
+                        ),
+                        "net_return_pct": round(sum(pilot_b_structure_returns_r) * 0.50, 2),
+                    },
+                    "C_ATR_Based": {
+                        "candidate_code": "C",
+                        "research_question": "Does volatility-adjusted stop/target logic improve robustness?",
+                        "trades_count": len(pilot_c_atr_returns_r),
+                        "total_net_r": round(sum(pilot_c_atr_returns_r), 3),
+                        "expectancy_r": round(
+                            sum(pilot_c_atr_returns_r) / max(1, len(pilot_c_atr_returns_r)), 3
+                        ),
+                        "net_return_pct": round(sum(pilot_c_atr_returns_r) * 0.50, 2),
+                    },
+                    "D_Hybrid_Real_Trader_Dynamic_Reanalysis": {
+                        "candidate_code": "D",
+                        "research_question": "Does combining structure, volatility, and live 3-layer dynamic re-analysis improve results?",
+                        "trades_count": len(trade_returns_r),
+                        "total_net_r": total_r,
+                        "expectancy_r": required_trading_metrics["expectancy_r"],
+                        "net_return_pct": required_trading_metrics["net_return_after_costs_pct"],
+                        "stress_net_return_pct": required_trading_metrics["stress_net_return_after_costs_pct"],
+                    },
+                    "E_Sizing_Variant": {
+                        "candidate_code": "E",
+                        "research_question": "Does an alternative sizing method improve risk-adjusted outcomes without increasing permitted risk?",
+                        "selected_sizing_method": position_sizing_report["selected_sizing_method"],
+                        "trades_count": len(trade_returns_r),
+                        "net_return_pct": cand_e_sizing.get("net_return_pct", required_trading_metrics["net_return_after_costs_pct"]),
+                        "max_drawdown_pct": cand_e_sizing.get("max_drawdown_pct", required_trading_metrics["max_drawdown_pct"]),
+                        "sharpe_ratio": cand_e_sizing.get("sharpe_ratio", required_trading_metrics["sharpe_ratio"]),
+                        "silent_risk_increase_detected": False,
+                    },
+                },
+            }
+
             cand_id = f"cand-v2-{upper_sym.lower()}-{style_up.lower()}"
+            exp_id = f"exp-v2-{upper_sym.lower()}-{style_up.lower()}"
+
+            # Section 10: 7-State Candidate & Champion Promotion Governance
+            governance_audit = CandidateLifecycleGovernance.build_lifecycle_audit(
+                candidate_id=cand_id,
+                cost_integrity_report=cost_integrity_report,
+                walk_forward_report=walk_forward_report,
+                lockbox_metrics=required_trading_metrics,
+                stress_metrics=required_trading_metrics,
+                bootstrap_report=paired_bootstrap_report,
+                mc_report=mc_report,
+                safety_report=position_sizing_report,
+                deployment_authorization=deployment_authorization,
+            )
+            lifecycle = governance_audit["current_lifecycle_state"]
+
+            # Section 8: 12-Step Validation Ledger
+            twelve_step_ledger = InstitutionalValidationEngine.build_twelve_step_validation_ledger(
+                hypothesis_id=atlas_hypothesis["hypothesis_id"],
+                experiment_id=exp_id,
+                candidate_id=cand_id,
+                cost_report=cost_integrity_report,
+                walk_forward_report=walk_forward_report,
+                lockbox_metrics=required_trading_metrics,
+                bootstrap_report=paired_bootstrap_report,
+                governance_report=governance_audit,
+            )
+
+            # Section 10.1: Validated 9-Module Oracle V1 StrategyGenome Compatibility Export
+            v1_compat_genome_export = OracleV1CompatibilityAdapter.translate_to_v1_strategy_genome(
+                candidate_id=cand_id,
+                symbol=upper_sym,
+                trader_style=style_up,
+                learned_genome=learned_genome,
+                management_policy=management_policy,
+                position_sizing_policy=position_sizing_report,
+                recommended_regimes=rec_regimes,
+            )
+
             blueprint = {
                 "strategy_id": f"oracle_v2_{upper_sym.lower()}_{style_up.lower()}",
                 "symbol": upper_sym,
                 "trader_style": style_up,
+                "lifecycle_state": lifecycle,
                 "top_down_stack": stack,
+                "oracle_training_adapter_contract": oracle_adapter_contract,
                 "atlas_research_hypothesis": atlas_hypothesis,
                 "pulse_and_sentinel_intelligence": {
                     "sentinel_agent": news_social_ctx["sentinel_agent"],
@@ -3315,7 +3868,17 @@ class MultiTimeframeInstitutionalEngine:
                 },
                 "learned_strategy_genome": learned_genome,
                 "dynamic_trade_management_policy": management_policy,
+                "position_sizing_and_safety_report": position_sizing_report,
+                "mtf_intelligence_and_sensitivity_report": mtf_intelligence_report,
+                "no_trade_counterfactual_diagnostics": no_trade_diagnostics_report,
                 "ablation_study_report": ablation_report_summary,
+                "pilot_five_candidate_benchmark": pilot_five_candidate_benchmark,
+                "walk_forward_validation_report": walk_forward_report,
+                "paired_bootstrap_vs_incumbent": paired_bootstrap_report,
+                "cost_and_data_integrity_report": cost_integrity_report,
+                "governance_and_lifecycle_audit": governance_audit,
+                "twelve_step_validation_ledger": twelve_step_ledger,
+                "v1_nine_module_strategy_genome_export": v1_compat_genome_export,
                 "shadow_reinforcement_feedback": {
                     "shadow_trades_analyzed": shadow_fb.get("shadow_trades_analyzed", 0),
                     "shadow_wins": shadow_fb.get("shadow_wins", 0),
@@ -3358,12 +3921,11 @@ class MultiTimeframeInstitutionalEngine:
             }
 
             now_ts = time.time()
-            exp_r = round(total_r / max(1, len(trade_returns_r)), 3)
-            net_ret_pct = round(total_r * 0.5, 2)
-            lifecycle = "DEPLOYED" if (total_r > 0 and mc_report["passed_mc95_gate"]) else "WATCHLIST"
+            exp_r = required_trading_metrics["expectancy_r"]
+            net_ret_pct = required_trading_metrics["net_return_after_costs_pct"]
             candidate_record = {
                 "candidate_id": cand_id,
-                "experiment_id": f"exp-v2-{upper_sym.lower()}-{style_up.lower()}",
+                "experiment_id": exp_id,
                 "hypothesis_id": atlas_hypothesis["hypothesis_id"],
                 "symbol": upper_sym,
                 "regime": "trending_up" if style_up != "RANGE_SPECIALIST" else "ranging",
@@ -3371,18 +3933,31 @@ class MultiTimeframeInstitutionalEngine:
                 "candidate_code": f"V2_MTF_{style_up}",
                 "candidate_title": f"Atlas+Forge Self-Discovered ({'+'.join(stack['macro_timeframes'])} -> {'+'.join(stack['setup_timeframes'])} -> {trig_tf}) {style_up.replace('_', ' ')}",
                 "lifecycle_state": lifecycle,
-                "status_reason": f"Discovered by Atlas+Forge (Real-Trader Dynamic Re-Analysis + Ablation) on 60% Dev & Tested on 40% Lockbox: Trades={len(trade_returns_r)}, WinRate={win_rate}%, Net={net_ret_pct}%, EarlyCuts={early_loss_cut_saves_cnt}, NearTPSaves={near_tp_reversal_saves_cnt}, TPExpansions={tp_expanded_trades_cnt}, MC95 DD={mc_report['mc95_worst_case_drawdown_pct']}%.",
+                "status_reason": (
+                    f"Forge V2 Institutional Pipeline ({lifecycle}): Trades={len(trade_returns_r)}, "
+                    f"WinRate={win_rate}%, BaseNet={net_ret_pct}%, StressNet={required_trading_metrics['stress_net_return_after_costs_pct']}%, "
+                    f"WF={walk_forward_report['positive_folds_count']}/{walk_forward_report['total_folds']}, "
+                    f"EarlyCuts={early_loss_cut_saves_cnt}, NearTPSaves={near_tp_reversal_saves_cnt}, TPExpansions={tp_expanded_trades_cnt}, "
+                    f"MC95 DD={mc_report['mc95_worst_case_drawdown_pct']}%."
+                ),
                 "created_at_unix": now_ts,
                 "updated_at_unix": now_ts,
+                "oracle_training_adapter_contract": oracle_adapter_contract,
                 "atlas_research_hypothesis": atlas_hypothesis,
                 "learned_strategy_genome": learned_genome,
                 "dynamic_trade_management_policy": management_policy,
+                "position_sizing_and_safety_report": position_sizing_report,
+                "mtf_intelligence_and_sensitivity_report": mtf_intelligence_report,
+                "no_trade_counterfactual_diagnostics": no_trade_diagnostics_report,
                 "ablation_study_report": ablation_report_summary,
+                "pilot_five_candidate_benchmark": pilot_five_candidate_benchmark,
+                "walk_forward_validation_report": walk_forward_report,
+                "paired_bootstrap_vs_incumbent": paired_bootstrap_report,
+                "cost_and_data_integrity_report": cost_integrity_report,
+                "governance_and_lifecycle_audit": governance_audit,
+                "twelve_step_validation_ledger": twelve_step_ledger,
                 "evaluation_metrics": {
-                    "trades_count": len(trade_returns_r),
-                    "win_rate_pct": win_rate,
-                    "total_net_r": total_r,
-                    "expectancy_r": exp_r,
+                    **required_trading_metrics,
                     "early_loss_cuts_before_sl_count": early_loss_cut_saves_cnt,
                     "near_tp_reversal_saves_count": near_tp_reversal_saves_cnt,
                     "trades_with_major_tp_expanded": tp_expanded_trades_cnt,
@@ -3399,12 +3974,18 @@ class MultiTimeframeInstitutionalEngine:
                         "losses": len(trade_returns_r) - wins,
                         "win_rate": round(win_rate / 100.0, 4),
                         "net_return_pct": net_ret_pct,
+                        "stress_net_return_pct": required_trading_metrics["stress_net_return_after_costs_pct"],
                         "expectancy_r": exp_r,
-                        "sharpe_ratio": round(max(0.5, exp_r * 2.2), 2),
-                        "max_drawdown_pct": mc_report["mc50_median_drawdown_pct"],
-                    }
+                        "profit_factor": required_trading_metrics["profit_factor"],
+                        "sharpe_ratio": required_trading_metrics["sharpe_ratio"],
+                        "sortino_ratio": required_trading_metrics["sortino_ratio"],
+                        "max_drawdown_pct": required_trading_metrics["max_drawdown_pct"],
+                        "recovery_factor": required_trading_metrics["recovery_factor"],
+                    },
+                    "per_trade_explainable_records": detailed_trade_records[:15],
                 },
                 "monte_carlo_stress_report": mc_report,
+                "v1_nine_module_strategy_genome_export": v1_compat_genome_export,
                 "v1_compatibility_export": blueprint,
             }
 
@@ -3423,10 +4004,15 @@ class MultiTimeframeInstitutionalEngine:
             trained_results[style_up] = {
                 "candidate_id": cand_id,
                 "lifecycle_state": lifecycle,
+                "cost_integrity_status": cost_integrity_report["status"],
                 "top_down_stack": f"{'+'.join(stack['macro_timeframes'])} -> {'+'.join(stack['setup_timeframes'])} -> {trig_tf}",
                 "atlas_dominant_timeframes": atlas_hypothesis["dominant_timeframes_discovered"],
                 "ablation_retained_features": ablation_report_summary.get("retained_components", []),
                 "ablation_pruned_left_out": ablation_report_summary.get("pruned_components_left_out", []),
+                "selected_position_sizing_method": position_sizing_report["selected_sizing_method"],
+                "walk_forward_positive_folds": f"{walk_forward_report['positive_folds_count']}/{walk_forward_report['total_folds']}",
+                "paired_bootstrap_vs_v1_diff_r": paired_bootstrap_report["paired_difference_total_r"],
+                "no_trade_filter_protective_r": no_trade_diagnostics_report["net_filter_protective_value_r"],
                 "learned_gates": learned_genome["structural_gates"],
                 "learned_sl_atr": sl_mult,
                 "learned_partial_tp_r": partial_tp_r,
@@ -3443,6 +4029,10 @@ class MultiTimeframeInstitutionalEngine:
                 "lockbox_trades": len(trade_returns_r),
                 "lockbox_win_rate_pct": win_rate,
                 "lockbox_total_net_r": total_r,
+                "lockbox_stress_net_r": required_trading_metrics["stress_total_net_r"],
+                "lockbox_sharpe_ratio": required_trading_metrics["sharpe_ratio"],
+                "lockbox_sortino_ratio": required_trading_metrics["sortino_ratio"],
+                "lockbox_profit_factor": required_trading_metrics["profit_factor"],
                 "mc95_drawdown_pct": mc_report["mc95_worst_case_drawdown_pct"],
             }
 

@@ -1,13 +1,23 @@
 {
-  "schema": "oracle.cost.profile.v1",
+  "schema": "oracle.cost.profile.v2",
   "symbol": "USDJPY",
+  "broker": "cTrader_ECN_Institutional_Schedule",
+  "account_type": "raw_spread_ecn_usd",
+  "price_basis": "bid",
   "verified": true,
-  "updated_at_unix": 1794294776.1619823,
+  "updated_at_unix": 1794390973.2725265,
   "profile": {
     "symbol": "USDJPY",
+    "broker": "cTrader_ECN_Institutional_Schedule",
+    "account_type": "raw_spread_ecn_usd",
+    "price_basis": "bid",
+    "commission_method": "round_turn_notional_bps",
     "spread_bps": 1.05,
     "commission_bps": 0.35,
     "slippage_bps": 0.25,
-    "total_roundtrip_cost_bps": 1.65
+    "stress_spread_bps": 1.7325,
+    "stress_slippage_bps": 0.4625,
+    "total_roundtrip_cost_bps": 1.65,
+    "stress_roundtrip_cost_bps": 2.545
   }
 }

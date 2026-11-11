@@ -7,16 +7,78 @@
   "trader_style": "SWING_TRADING",
   "candidate_code": "V2_MTF_SWING_TRADING",
   "candidate_title": "Atlas+Forge Self-Discovered (W1+D1 -> H4 -> H1) SWING TRADING",
-  "lifecycle_state": "DEPLOYED",
-  "status_reason": "Discovered by Atlas+Forge (Real-Trader Dynamic Re-Analysis + Ablation) on 60% Dev & Tested on 40% Lockbox: Trades=25, WinRate=60.0%, Net=7.23%, EarlyCuts=1, NearTPSaves=3, TPExpansions=3, MC95 DD=2.34%.",
-  "created_at_unix": 1794328641.8424304,
-  "updated_at_unix": 1794328641.8424304,
+  "lifecycle_state": "CERTIFIED",
+  "status_reason": "Forge V2 Institutional Pipeline (CERTIFIED): Trades=20, WinRate=70.0%, BaseNet=7.811%, StressNet=7.647%, WF=3/4, EarlyCuts=1, NearTPSaves=1, TPExpansions=4, MC95 DD=1.63%.",
+  "created_at_unix": 1794390990.2509809,
+  "updated_at_unix": 1794390990.2509809,
+  "oracle_training_adapter_contract": {
+    "schema": "forge.universal.agent_adapter_contract.v2",
+    "adapter_id": "forge.adapter.oracle.v2",
+    "target_agent": "Oracle",
+    "domain": "ORACLE_STRATEGY",
+    "trainable_components": [
+      "strategy_generation_and_selection",
+      "market_regime_detection",
+      "entry_and_exit_conditions",
+      "stop_loss_placement_and_progressive_angle_fitting",
+      "take_profit_selection_and_dynamic_htf_expansion",
+      "position_sizing_and_risk_allocation",
+      "multi_timeframe_weighting_and_confirmation",
+      "feature_discovery_and_news_social_fusion"
+    ],
+    "configurable_parameters": [
+      "timeframe_weights",
+      "feature_weights",
+      "entry_score_threshold",
+      "learned_optimal_stop_atr_mult",
+      "learned_initial_major_tp_r",
+      "learned_partial_tp_r",
+      "learned_partial_bank_fraction",
+      "learned_sl_reduction_start_r",
+      "learned_be_trigger_r",
+      "learned_sl_angle_fit_ratio",
+      "learned_early_cut_drawdown_r",
+      "learned_early_invalidation_thesis_cutoff",
+      "learned_near_tp_zone_pct",
+      "learned_tp_expansion_thesis_cutoff",
+      "position_sizing_method",
+      "risk_per_trade_pct"
+    ],
+    "training_interfaces": [
+      "discover_strategy_genome_from_data",
+      "discover_dynamic_trade_management_policy",
+      "evaluate_live_position_reanalysis",
+      "run_leave_one_out_ablation",
+      "run_pilot_five_candidate_benchmark"
+    ],
+    "success_metrics": {
+      "net_return_after_costs_pct": "higher_is_better",
+      "expectancy_r": "higher_is_better",
+      "sharpe_ratio": "higher_is_better",
+      "sortino_ratio": "higher_is_better",
+      "profit_factor": "higher_is_better",
+      "max_drawdown_pct": "lower_is_better",
+      "mc95_worst_case_drawdown_pct": "lower_is_better"
+    },
+    "safety_constraints": {
+      "max_risk_per_trade_pct": 0.5,
+      "max_aggregate_open_risk_pct": 2.0,
+      "max_daily_session_loss_pct": 2.0,
+      "max_portfolio_drawdown_pct": 8.5,
+      "max_leverage": 30.0,
+      "require_verified_cost_profile": true,
+      "require_untouched_lockbox_validation": true,
+      "forbid_silent_v1_mutation": true
+    },
+    "evaluation_methodology": "4_window_chronological_walk_forward_plus_40pct_untouched_lockbox_plus_paired_circular_block_bootstrap",
+    "deployment_artifact_format": "oracle.v1_and_v2_compatible_strategy_artifact.v2"
+  },
   "atlas_research_hypothesis": {
     "hypothesis_id": "hyp-v2-gbpusd-swing_trading",
     "atlas_report_id": "atlas-hyp-gbpusd-swing_trading",
     "proposed_by": "atlas_and_forge_autonomous_discovery",
-    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.644, trend_persistence=0.268, mean_reversion=0.732. Learned timeframe weights: W1 (w=+0.282), H4 (w=+0.282), H1 (w=+0.248). Ablation-retained features: ema_trend (w=+0.882), dealing_range_reversion (w=+0.066), liquidity_sweep (w=+0.034), bos_breakout (w=+0.010) (pruned/left out by ablation: fvg_impulse, rsi_momentum, sentinel_news_sentiment).",
-    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.644, mean-reversion=0.732). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.282), H4 (w=+0.282), H1 (w=+0.248). Controlled leave-one-out ablation retained [ema_trend (w=+0.882), dealing_range_reversion (w=+0.066), liquidity_sweep (w=+0.034), bos_breakout (w=+0.010)] and pruned [fvg_impulse, rsi_momentum, sentinel_news_sentiment].",
+    "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.651, trend_persistence=0.269, mean_reversion=0.731. Learned timeframe weights: W1 (w=+0.297), H4 (w=+0.297), H1 (w=+0.211). Ablation-retained features: ema_trend (w=+0.378), dealing_range_reversion (w=+0.206), bos_breakout (w=+0.156), pulse_social_sentiment (w=+0.131) (pruned/left out by ablation: liquidity_sweep, rsi_momentum, sentinel_news_sentiment).",
+    "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.651, mean-reversion=0.731). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.297), H4 (w=+0.297), H1 (w=+0.211). Controlled leave-one-out ablation retained [ema_trend (w=+0.378), dealing_range_reversion (w=+0.206), bos_breakout (w=+0.156), pulse_social_sentiment (w=+0.131)] and pruned [liquidity_sweep, rsi_momentum, sentinel_news_sentiment].",
     "confidence": 0.82,
     "dominant_timeframes_discovered": [
       "W1",
@@ -26,11 +88,11 @@
     "dominant_features_discovered": [
       "ema_trend",
       "dealing_range_reversion",
-      "liquidity_sweep",
-      "bos_breakout"
+      "bos_breakout",
+      "pulse_social_sentiment"
     ],
     "pruned_features_left_out_by_ablation": [
-      "fvg_impulse",
+      "liquidity_sweep",
       "rsi_momentum",
       "sentinel_news_sentiment"
     ]
@@ -38,45 +100,45 @@
   "learned_strategy_genome": {
     "discovery_method": "forge_autonomous_60pct_dev_ridge_and_leave_one_out_ablation",
     "timeframe_weights": {
-      "W1": 0.282,
-      "D1": 0.189,
-      "H4": 0.282,
-      "H1": 0.248
+      "W1": 0.297,
+      "D1": 0.195,
+      "H4": 0.297,
+      "H1": 0.211
     },
     "feature_weights": {
-      "ema_trend": 0.882,
-      "bos_breakout": 0.01,
-      "liquidity_sweep": 0.034,
-      "fvg_impulse": 0.0,
-      "dealing_range_reversion": 0.066,
+      "ema_trend": 0.378,
+      "bos_breakout": 0.156,
+      "liquidity_sweep": 0.0,
+      "fvg_impulse": 0.128,
+      "dealing_range_reversion": 0.206,
       "rsi_momentum": 0.0,
       "sentinel_news_sentiment": 0.0,
-      "pulse_social_sentiment": 0.008
+      "pulse_social_sentiment": 0.131
     },
     "pre_ablation_feature_weights": {
-      "ema_trend": 0.268,
-      "bos_breakout": 0.095,
-      "liquidity_sweep": 0.075,
-      "fvg_impulse": 0.068,
-      "dealing_range_reversion": 0.101,
-      "rsi_momentum": 0.283,
-      "sentinel_news_sentiment": 0.035,
-      "pulse_social_sentiment": 0.074
+      "ema_trend": 0.242,
+      "bos_breakout": 0.1,
+      "liquidity_sweep": 0.071,
+      "fvg_impulse": 0.082,
+      "dealing_range_reversion": 0.132,
+      "rsi_momentum": 0.253,
+      "sentinel_news_sentiment": 0.036,
+      "pulse_social_sentiment": 0.084
     },
     "ablation_study_report": {
       "study_id": "abl-v2-gbpusd-swing_trading",
       "ablation_engine_version": "1.0.0",
-      "baseline_validation_expectancy_atr": 4.4008,
-      "post_pruning_validation_expectancy_atr": 5.1322,
+      "baseline_validation_expectancy_atr": -0.25,
+      "post_pruning_validation_expectancy_atr": 7.9858,
       "retained_components": [
         "ema_trend",
         "bos_breakout",
-        "liquidity_sweep",
+        "fvg_impulse",
         "dealing_range_reversion",
         "pulse_social_sentiment"
       ],
       "pruned_components_left_out": [
-        "fvg_impulse",
+        "liquidity_sweep",
         "rsi_momentum",
         "sentinel_news_sentiment"
       ],
@@ -84,89 +146,89 @@
         "ema_trend": {
           "component_id": "ema_trend",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
           "without_component_expectancy_atr": -0.25,
-          "marginal_value_added_atr": 4.6508,
+          "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 0.0,
-          "train_ic_edge": 0.4455,
-          "shadow_net_r_delta": 2.299,
+          "train_ic_edge": 0.3481,
+          "shadow_net_r_delta": 2.673,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "bos_breakout": {
           "component_id": "bos_breakout",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0571,
-          "shadow_net_r_delta": 2.711,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.1531,
+          "shadow_net_r_delta": 2.844,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "liquidity_sweep": {
           "component_id": "liquidity_sweep",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.2574,
-          "marginal_value_added_atr": 0.1434,
-          "without_component_win_rate": 0.8261,
-          "train_ic_edge": -1.4304,
-          "shadow_net_r_delta": 0.746,
-          "verdict": "RETAINED_ADDS_VALUE"
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
+          "marginal_value_added_atr": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -1.3069,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "LEFT_OUT_PRUNED"
         },
         "fvg_impulse": {
           "component_id": "fvg_impulse",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0077,
-          "shadow_net_r_delta": 0.0,
-          "verdict": "LEFT_OUT_PRUNED"
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": 0.011,
+          "shadow_net_r_delta": 0.654,
+          "verdict": "RETAINED_ADDS_VALUE"
         },
         "dealing_range_reversion": {
           "component_id": "dealing_range_reversion",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.1002,
-          "marginal_value_added_atr": 0.3007,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.1604,
-          "shadow_net_r_delta": 3.347,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
+          "marginal_value_added_atr": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.0999,
+          "shadow_net_r_delta": 5.936,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "rsi_momentum": {
           "component_id": "rsi_momentum",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 5.2261,
-          "marginal_value_added_atr": -0.8253,
-          "without_component_win_rate": 0.875,
-          "train_ic_edge": 0.5426,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": 7.9858,
+          "marginal_value_added_atr": -8.2358,
+          "without_component_win_rate": 1.0,
+          "train_ic_edge": 0.4432,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "sentinel_news_sentiment": {
           "component_id": "sentinel_news_sentiment",
           "component_type": "data_source",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0797,
-          "shadow_net_r_delta": -1.061,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.0501,
+          "shadow_net_r_delta": -1.045,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "pulse_social_sentiment": {
           "component_id": "pulse_social_sentiment",
           "component_type": "data_source",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": 0.0728,
-          "shadow_net_r_delta": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": 0.0726,
+          "shadow_net_r_delta": 0.657,
           "verdict": "RETAINED_ADDS_VALUE"
         }
       },
@@ -179,18 +241,18 @@
         "component_impacts": [
           {
             "component_id": "ema_trend",
-            "full_system_metric": 4.4008,
+            "full_system_metric": -0.25,
             "ablated_metric": -0.25,
-            "marginal_impact": -4.6508,
-            "relative_impact": -1.0568,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "bos_breakout",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -199,18 +261,18 @@
           },
           {
             "component_id": "liquidity_sweep",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.2574,
-            "marginal_impact": -0.1434,
-            "relative_impact": -0.0326,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "fvg_impulse",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -219,28 +281,28 @@
           },
           {
             "component_id": "dealing_range_reversion",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.1002,
-            "marginal_impact": -0.3007,
-            "relative_impact": -0.0683,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "rsi_momentum",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 5.2261,
-            "marginal_impact": 0.8253,
-            "relative_impact": 0.1875,
+            "full_system_metric": -0.25,
+            "ablated_metric": 7.9858,
+            "marginal_impact": 8.2358,
+            "relative_impact": 32.9431,
             "direction": "higher_is_better",
             "interaction_suspected": true,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "sentinel_news_sentiment",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -249,8 +311,8 @@
           },
           {
             "component_id": "pulse_social_sentiment",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -259,83 +321,378 @@
           }
         ],
         "interaction_candidates": [
-          "ema_trend",
-          "liquidity_sweep",
-          "dealing_range_reversion",
           "rsi_momentum"
         ],
         "total_runs_executed": 9,
         "individual_runs_executed": 8
       },
       "real_trader_management_ablation": {
-        "full_dynamic_trader_total_r": 14.457,
-        "static_set_and_forget_total_r": 8.685,
-        "total_r_gained_by_dynamic_reanalysis": 5.772,
-        "early_loss_cut_marginal_r_saved": 0.323,
+        "full_dynamic_trader_total_r": 15.621,
+        "static_set_and_forget_total_r": 14.327,
+        "total_r_gained_by_dynamic_reanalysis": 1.294,
+        "early_loss_cut_marginal_r_saved": 0.295,
         "early_loss_cuts_before_sl_count": 1,
-        "near_tp_reversal_save_marginal_r": 1.492,
-        "near_tp_reversal_saves_count": 3,
-        "dynamic_tp_expansion_marginal_r": 0.057,
-        "trades_with_major_tp_expanded": 3,
+        "near_tp_reversal_save_marginal_r": 0.502,
+        "near_tp_reversal_saves_count": 1,
+        "dynamic_tp_expansion_marginal_r": -0.548,
+        "trades_with_major_tp_expanded": 4,
         "max_tp_expansions_in_single_trade": 1,
         "progressive_sl_angle_fits_count": 72
       }
     },
     "structural_gates": {
-      "macro_dealing_range_long_max": 0.86,
-      "macro_dealing_range_short_min": 0.14,
+      "macro_dealing_range_long_max": 0.74,
+      "macro_dealing_range_short_min": 0.26,
       "htf_room_to_run_atr_min": 1.35,
       "rsi_long_band": [
-        33.19,
-        58.91
+        32.84,
+        53.14
       ],
       "rsi_short_band": [
-        36.67,
-        56.81
+        37.33,
+        57.3
       ],
-      "entry_score_threshold": 0.24,
-      "validation_screen_score_atr": 5.132
+      "entry_score_threshold": 0.18,
+      "validation_screen_score_atr": 7.986
     }
   },
   "dynamic_trade_management_policy": {
     "policy_type": "real_trader_dynamic_reanalysis_and_capital_protection",
-    "learned_optimal_stop_atr_mult": 1.301,
+    "learned_optimal_stop_atr_mult": 1.252,
     "learned_initial_major_tp_r": 3.4,
-    "learned_partial_tp_r": 1.53,
+    "learned_partial_tp_r": 1.42,
     "learned_partial_bank_fraction": 0.35,
     "learned_sl_reduction_start_r": 0.68,
     "learned_be_trigger_r": 1.15,
     "learned_sl_angle_fit_ratio": 0.46,
-    "learned_trail_atr_mult": 1.12,
-    "learned_early_cut_drawdown_r": 0.59,
-    "learned_early_invalidation_thesis_cutoff": -0.25,
+    "learned_trail_atr_mult": 1.08,
+    "learned_early_cut_drawdown_r": 0.53,
+    "learned_early_invalidation_thesis_cutoff": -0.16,
     "learned_near_tp_zone_pct": 0.84,
-    "learned_near_tp_reversal_exit_cutoff": 0.05,
-    "learned_tp_expansion_thesis_cutoff": 0.42,
+    "learned_near_tp_reversal_exit_cutoff": -0.04,
+    "learned_tp_expansion_thesis_cutoff": 0.309,
     "learned_tp_expansion_step_r": 1.6,
-    "learned_expanded_sl_lock_ratio": 0.78,
+    "learned_expanded_sl_lock_ratio": 0.82,
     "dynamic_expansion_preview_r": {
-      "PARTIAL_TP": 1.53,
+      "PARTIAL_TP": 1.42,
       "INITIAL_MAJOR_TP": 3.4,
       "DYNAMIC_EXPANSION_1": 5.0,
       "DYNAMIC_EXPANSION_2": 6.6,
       "DYNAMIC_EXPANSION_3": 8.2
     }
   },
+  "position_sizing_and_safety_report": {
+    "schema": "forge.section3_3.position_sizing_and_safety_report.v2",
+    "selected_sizing_method": "kelly_fractional_capped",
+    "base_risk_per_trade_pct": 0.5,
+    "max_risk_per_trade_pct": 0.5,
+    "wider_stop_smaller_size_proof": {
+      "narrow_stop_distance": 0.00162,
+      "narrow_stop_lots": 3.0864,
+      "narrow_stop_monetary_risk_usd": 500.0,
+      "wide_2x_stop_distance": 0.00324,
+      "wide_2x_stop_lots": 1.5432,
+      "wide_2x_stop_monetary_risk_usd": 500.0,
+      "constant_monetary_risk_verified": true
+    },
+    "sizing_methods_comparison": {
+      "fixed_fractional_stop_distance": {
+        "sizing_method": "fixed_fractional_stop_distance",
+        "net_return_pct": 7.811,
+        "max_drawdown_pct": 1.41,
+        "sharpe_ratio": 2.628,
+        "return_to_drawdown_calmar": 5.554,
+        "mean_risk_per_trade_pct": 0.5,
+        "max_risk_per_trade_pct_observed": 0.5,
+        "silent_risk_increase_detected": false
+      },
+      "volatility_regime_adjusted": {
+        "sizing_method": "volatility_regime_adjusted",
+        "net_return_pct": 7.577,
+        "max_drawdown_pct": 1.38,
+        "sharpe_ratio": 2.616,
+        "return_to_drawdown_calmar": 5.477,
+        "mean_risk_per_trade_pct": 0.4925,
+        "max_risk_per_trade_pct_observed": 0.5,
+        "silent_risk_increase_detected": false
+      },
+      "confidence_tier_adjusted": {
+        "sizing_method": "confidence_tier_adjusted",
+        "net_return_pct": 7.029,
+        "max_drawdown_pct": 1.26,
+        "sharpe_ratio": 2.617,
+        "return_to_drawdown_calmar": 5.564,
+        "mean_risk_per_trade_pct": 0.4503,
+        "max_risk_per_trade_pct_observed": 0.5,
+        "silent_risk_increase_detected": false
+      },
+      "kelly_fractional_capped": {
+        "sizing_method": "kelly_fractional_capped",
+        "net_return_pct": 6.191,
+        "max_drawdown_pct": 1.07,
+        "sharpe_ratio": 2.61,
+        "return_to_drawdown_calmar": 5.794,
+        "mean_risk_per_trade_pct": 0.3978,
+        "max_risk_per_trade_pct_observed": 0.4618,
+        "silent_risk_increase_detected": false
+      },
+      "drawdown_adaptive_risk_budget": {
+        "sizing_method": "drawdown_adaptive_risk_budget",
+        "net_return_pct": 7.686,
+        "max_drawdown_pct": 1.37,
+        "sharpe_ratio": 2.635,
+        "return_to_drawdown_calmar": 5.615,
+        "mean_risk_per_trade_pct": 0.4929,
+        "max_risk_per_trade_pct_observed": 0.5,
+        "silent_risk_increase_detected": false
+      }
+    },
+    "safety_boundaries": {
+      "max_risk_per_trade_pct": 0.5,
+      "max_aggregate_open_risk_pct": 2.0,
+      "max_daily_session_loss_pct": 2.0,
+      "max_portfolio_drawdown_pct": 8.5,
+      "max_leverage": 30.0,
+      "emergency_shutdown_on_breach": true
+    },
+    "passed_all_safety_boundaries": true,
+    "violations": []
+  },
+  "mtf_intelligence_and_sensitivity_report": {
+    "schema": "forge.section4.mtf_intelligence_report.v2",
+    "symbol": "GBPUSD",
+    "trader_style": "SWING_TRADING",
+    "design_rule_enforced": "Contextual weighted agreement: trades are evaluated via learned timeframe weights and never rejected solely because all 7 timeframes do not point in the same direction.",
+    "data_synchronization_audit": {
+      "candle_close_semantics": "Higher-timeframe values become available only after bar_open + timeframe_duration <= trigger_close.",
+      "timezone": "UTC",
+      "look_ahead_leakage_detected": false
+    },
+    "timeframe_ablation_and_redundancy": {
+      "essential_timeframes": [
+        "W1",
+        "D1",
+        "H4",
+        "H1"
+      ],
+      "redundant_timeframes": [
+        "M30",
+        "M15",
+        "M5"
+      ],
+      "per_timeframe_breakdown": {
+        "W1": {
+          "timeframe": "W1",
+          "initial_research_role": "Broad market direction, major structure and long-term price zones.",
+          "active_in_style_hierarchy": true,
+          "learned_weight": 0.297,
+          "marginal_predictive_contribution": 0.3415,
+          "completed_bars_available": 106,
+          "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+        },
+        "D1": {
+          "timeframe": "D1",
+          "initial_research_role": "Daily structure, support/resistance, supply/demand and regime context.",
+          "active_in_style_hierarchy": true,
+          "learned_weight": 0.195,
+          "marginal_predictive_contribution": 0.2242,
+          "completed_bars_available": 260,
+          "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+        },
+        "H4": {
+          "timeframe": "H4",
+          "initial_research_role": "Intermediate trend, structural changes and developing opportunities.",
+          "active_in_style_hierarchy": true,
+          "learned_weight": 0.297,
+          "marginal_predictive_contribution": 0.3415,
+          "completed_bars_available": 367,
+          "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+        },
+        "H1": {
+          "timeframe": "H1",
+          "initial_research_role": "Refined directional bias and developing trade setups.",
+          "active_in_style_hierarchy": true,
+          "learned_weight": 0.211,
+          "marginal_predictive_contribution": 0.2426,
+          "completed_bars_available": 1415,
+          "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+        },
+        "M30": {
+          "timeframe": "M30",
+          "initial_research_role": "Entry-structure development.",
+          "active_in_style_hierarchy": false,
+          "learned_weight": 0.0,
+          "marginal_predictive_contribution": 0.0,
+          "completed_bars_available": 1392,
+          "verdict": "REDUNDANT_FOR_STYLE_STACK"
+        },
+        "M15": {
+          "timeframe": "M15",
+          "initial_research_role": "Setup refinement, confirmation and invalidation.",
+          "active_in_style_hierarchy": false,
+          "learned_weight": 0.0,
+          "marginal_predictive_contribution": 0.0,
+          "completed_bars_available": 2779,
+          "verdict": "REDUNDANT_FOR_STYLE_STACK"
+        },
+        "M5": {
+          "timeframe": "M5",
+          "initial_research_role": "Entry timing and execution precision.",
+          "active_in_style_hierarchy": false,
+          "learned_weight": 0.0,
+          "marginal_predictive_contribution": 0.0,
+          "completed_bars_available": 4067,
+          "verdict": "REDUNDANT_FOR_STYLE_STACK"
+        }
+      }
+    },
+    "regime_specific_timeframe_policies": {
+      "trending": {
+        "dominant_timeframes": [
+          "W1",
+          "D1",
+          "H1"
+        ],
+        "htf_pullback_ltf_entry_allowed": true,
+        "minimum_weighted_agreement": 0.55
+      },
+      "ranging": {
+        "dominant_timeframes": [
+          "H4",
+          "H1"
+        ],
+        "htf_pullback_ltf_entry_allowed": true,
+        "minimum_weighted_agreement": 0.48
+      },
+      "volatile": {
+        "dominant_timeframes": [
+          "W1",
+          "D1",
+          "H4"
+        ],
+        "htf_pullback_ltf_entry_allowed": false,
+        "minimum_weighted_agreement": 0.62
+      },
+      "transitional": {
+        "dominant_timeframes": [
+          "H4",
+          "H1"
+        ],
+        "htf_pullback_ltf_entry_allowed": true,
+        "minimum_weighted_agreement": 0.52
+      }
+    },
+    "stale_missing_misaligned_sensitivity_tests": {
+      "stale_1bar_htf_signal_retention_ratio": 0.884,
+      "missing_single_htf_graceful_fallback_ratio": 1.0,
+      "misaligned_timestamp_guard": "strict_utc_monotonic_bisect_right",
+      "passed_sensitivity_suite": true
+    }
+  },
+  "no_trade_counterfactual_diagnostics": {
+    "schema": "forge.section5_2.no_trade_counterfactual_report.v2",
+    "total_no_trade_bars_analyzed": 320,
+    "category_counts": {
+      "no_valid_setup": 99,
+      "insufficient_evidence": 15,
+      "conflicting_signals": 10,
+      "unfavourable_reward_risk": 0,
+      "unsuitable_volatility": 49,
+      "excessive_spread": 0,
+      "execution_constraints": 79,
+      "developing_setup_unconfirmed": 68
+    },
+    "total_prevented_losing_trades": 238,
+    "total_suppressed_winning_opportunities": 82,
+    "net_filter_protective_value_r": -21.956,
+    "filter_verdict": "FILTERS_OVER_SUPPRESSING_OPPORTUNITIES",
+    "by_category_breakdown": {
+      "no_valid_setup": {
+        "count": 99,
+        "prevented_losing_trades": 61,
+        "suppressed_winning_opportunities": 38,
+        "net_protective_value_r": -59.551
+      },
+      "insufficient_evidence": {
+        "count": 15,
+        "prevented_losing_trades": 15,
+        "suppressed_winning_opportunities": 0,
+        "net_protective_value_r": 16.265
+      },
+      "conflicting_signals": {
+        "count": 10,
+        "prevented_losing_trades": 6,
+        "suppressed_winning_opportunities": 4,
+        "net_protective_value_r": -5.468
+      },
+      "unfavourable_reward_risk": {
+        "count": 0,
+        "prevented_losing_trades": 0,
+        "suppressed_winning_opportunities": 0,
+        "net_protective_value_r": 0.0
+      },
+      "unsuitable_volatility": {
+        "count": 49,
+        "prevented_losing_trades": 34,
+        "suppressed_winning_opportunities": 15,
+        "net_protective_value_r": -14.457
+      },
+      "excessive_spread": {
+        "count": 0,
+        "prevented_losing_trades": 0,
+        "suppressed_winning_opportunities": 0,
+        "net_protective_value_r": 0.0
+      },
+      "execution_constraints": {
+        "count": 79,
+        "prevented_losing_trades": 61,
+        "suppressed_winning_opportunities": 18,
+        "net_protective_value_r": -0.209
+      },
+      "developing_setup_unconfirmed": {
+        "count": 68,
+        "prevented_losing_trades": 61,
+        "suppressed_winning_opportunities": 7,
+        "net_protective_value_r": 41.464
+      }
+    },
+    "by_regime_breakdown": {
+      "VOLATILITY_EXPANSION": {
+        "rejected_bars": 25,
+        "prevented_losses": 21,
+        "suppressed_winners": 4
+      },
+      "CONSOLIDATION_RANGING": {
+        "rejected_bars": 146,
+        "prevented_losses": 114,
+        "suppressed_winners": 32
+      },
+      "TRENDING_BULLISH": {
+        "rejected_bars": 110,
+        "prevented_losses": 71,
+        "suppressed_winners": 39
+      },
+      "TRENDING_BEARISH": {
+        "rejected_bars": 39,
+        "prevented_losses": 32,
+        "suppressed_winners": 7
+      }
+    }
+  },
   "ablation_study_report": {
     "study_id": "abl-v2-gbpusd-swing_trading",
     "ablation_engine_version": "1.0.0",
-    "baseline_validation_expectancy_atr": 4.4008,
-    "post_pruning_validation_expectancy_atr": 5.1322,
+    "baseline_validation_expectancy_atr": -0.25,
+    "post_pruning_validation_expectancy_atr": 7.9858,
     "retained_components": [
       "ema_trend",
       "bos_breakout",
-      "liquidity_sweep",
+      "fvg_impulse",
       "dealing_range_reversion",
       "pulse_social_sentiment"
     ],
     "pruned_components_left_out": [
-      "fvg_impulse",
+      "liquidity_sweep",
       "rsi_momentum",
       "sentinel_news_sentiment"
     ],
@@ -343,89 +700,89 @@
       "ema_trend": {
         "component_id": "ema_trend",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
+        "full_system_expectancy_atr": -0.25,
         "without_component_expectancy_atr": -0.25,
-        "marginal_value_added_atr": 4.6508,
+        "marginal_value_added_atr": 0.0,
         "without_component_win_rate": 0.0,
-        "train_ic_edge": 0.4455,
-        "shadow_net_r_delta": 2.299,
+        "train_ic_edge": 0.3481,
+        "shadow_net_r_delta": 2.673,
         "verdict": "RETAINED_ADDS_VALUE"
       },
       "bos_breakout": {
         "component_id": "bos_breakout",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.4008,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
         "marginal_value_added_atr": 0.0,
-        "without_component_win_rate": 0.8182,
-        "train_ic_edge": -0.0571,
-        "shadow_net_r_delta": 2.711,
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": -0.1531,
+        "shadow_net_r_delta": 2.844,
         "verdict": "RETAINED_ADDS_VALUE"
       },
       "liquidity_sweep": {
         "component_id": "liquidity_sweep",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.2574,
-        "marginal_value_added_atr": 0.1434,
-        "without_component_win_rate": 0.8261,
-        "train_ic_edge": -1.4304,
-        "shadow_net_r_delta": 0.746,
-        "verdict": "RETAINED_ADDS_VALUE"
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
+        "marginal_value_added_atr": 0.0,
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": -1.3069,
+        "shadow_net_r_delta": 0.0,
+        "verdict": "LEFT_OUT_PRUNED"
       },
       "fvg_impulse": {
         "component_id": "fvg_impulse",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.4008,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
         "marginal_value_added_atr": 0.0,
-        "without_component_win_rate": 0.8182,
-        "train_ic_edge": -0.0077,
-        "shadow_net_r_delta": 0.0,
-        "verdict": "LEFT_OUT_PRUNED"
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": 0.011,
+        "shadow_net_r_delta": 0.654,
+        "verdict": "RETAINED_ADDS_VALUE"
       },
       "dealing_range_reversion": {
         "component_id": "dealing_range_reversion",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.1002,
-        "marginal_value_added_atr": 0.3007,
-        "without_component_win_rate": 0.8182,
-        "train_ic_edge": -0.1604,
-        "shadow_net_r_delta": 3.347,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
+        "marginal_value_added_atr": 0.0,
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": -0.0999,
+        "shadow_net_r_delta": 5.936,
         "verdict": "RETAINED_ADDS_VALUE"
       },
       "rsi_momentum": {
         "component_id": "rsi_momentum",
         "component_type": "signal",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 5.2261,
-        "marginal_value_added_atr": -0.8253,
-        "without_component_win_rate": 0.875,
-        "train_ic_edge": 0.5426,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": 7.9858,
+        "marginal_value_added_atr": -8.2358,
+        "without_component_win_rate": 1.0,
+        "train_ic_edge": 0.4432,
         "shadow_net_r_delta": 0.0,
         "verdict": "LEFT_OUT_PRUNED"
       },
       "sentinel_news_sentiment": {
         "component_id": "sentinel_news_sentiment",
         "component_type": "data_source",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.4008,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
         "marginal_value_added_atr": 0.0,
-        "without_component_win_rate": 0.8182,
-        "train_ic_edge": -0.0797,
-        "shadow_net_r_delta": -1.061,
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": -0.0501,
+        "shadow_net_r_delta": -1.045,
         "verdict": "LEFT_OUT_PRUNED"
       },
       "pulse_social_sentiment": {
         "component_id": "pulse_social_sentiment",
         "component_type": "data_source",
-        "full_system_expectancy_atr": 4.4008,
-        "without_component_expectancy_atr": 4.4008,
+        "full_system_expectancy_atr": -0.25,
+        "without_component_expectancy_atr": -0.25,
         "marginal_value_added_atr": 0.0,
-        "without_component_win_rate": 0.8182,
-        "train_ic_edge": 0.0728,
-        "shadow_net_r_delta": 0.0,
+        "without_component_win_rate": 0.0,
+        "train_ic_edge": 0.0726,
+        "shadow_net_r_delta": 0.657,
         "verdict": "RETAINED_ADDS_VALUE"
       }
     },
@@ -438,18 +795,18 @@
       "component_impacts": [
         {
           "component_id": "ema_trend",
-          "full_system_metric": 4.4008,
+          "full_system_metric": -0.25,
           "ablated_metric": -0.25,
-          "marginal_impact": -4.6508,
-          "relative_impact": -1.0568,
+          "marginal_impact": 0.0,
+          "relative_impact": 0.0,
           "direction": "higher_is_better",
-          "interaction_suspected": true,
+          "interaction_suspected": false,
           "evidence_quality": "validation_partition_leave_one_out"
         },
         {
           "component_id": "bos_breakout",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.4008,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
           "marginal_impact": 0.0,
           "relative_impact": 0.0,
           "direction": "higher_is_better",
@@ -458,18 +815,18 @@
         },
         {
           "component_id": "liquidity_sweep",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.2574,
-          "marginal_impact": -0.1434,
-          "relative_impact": -0.0326,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
+          "marginal_impact": 0.0,
+          "relative_impact": 0.0,
           "direction": "higher_is_better",
-          "interaction_suspected": true,
+          "interaction_suspected": false,
           "evidence_quality": "validation_partition_leave_one_out"
         },
         {
           "component_id": "fvg_impulse",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.4008,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
           "marginal_impact": 0.0,
           "relative_impact": 0.0,
           "direction": "higher_is_better",
@@ -478,28 +835,28 @@
         },
         {
           "component_id": "dealing_range_reversion",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.1002,
-          "marginal_impact": -0.3007,
-          "relative_impact": -0.0683,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
+          "marginal_impact": 0.0,
+          "relative_impact": 0.0,
           "direction": "higher_is_better",
-          "interaction_suspected": true,
+          "interaction_suspected": false,
           "evidence_quality": "validation_partition_leave_one_out"
         },
         {
           "component_id": "rsi_momentum",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 5.2261,
-          "marginal_impact": 0.8253,
-          "relative_impact": 0.1875,
+          "full_system_metric": -0.25,
+          "ablated_metric": 7.9858,
+          "marginal_impact": 8.2358,
+          "relative_impact": 32.9431,
           "direction": "higher_is_better",
           "interaction_suspected": true,
           "evidence_quality": "validation_partition_leave_one_out"
         },
         {
           "component_id": "sentinel_news_sentiment",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.4008,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
           "marginal_impact": 0.0,
           "relative_impact": 0.0,
           "direction": "higher_is_better",
@@ -508,8 +865,8 @@
         },
         {
           "component_id": "pulse_social_sentiment",
-          "full_system_metric": 4.4008,
-          "ablated_metric": 4.4008,
+          "full_system_metric": -0.25,
+          "ablated_metric": -0.25,
           "marginal_impact": 0.0,
           "relative_impact": 0.0,
           "direction": "higher_is_better",
@@ -518,66 +875,1812 @@
         }
       ],
       "interaction_candidates": [
-        "ema_trend",
-        "liquidity_sweep",
-        "dealing_range_reversion",
         "rsi_momentum"
       ],
       "total_runs_executed": 9,
       "individual_runs_executed": 8
     },
     "real_trader_management_ablation": {
-      "full_dynamic_trader_total_r": 14.457,
-      "static_set_and_forget_total_r": 8.685,
-      "total_r_gained_by_dynamic_reanalysis": 5.772,
-      "early_loss_cut_marginal_r_saved": 0.323,
+      "full_dynamic_trader_total_r": 15.621,
+      "static_set_and_forget_total_r": 14.327,
+      "total_r_gained_by_dynamic_reanalysis": 1.294,
+      "early_loss_cut_marginal_r_saved": 0.295,
       "early_loss_cuts_before_sl_count": 1,
-      "near_tp_reversal_save_marginal_r": 1.492,
-      "near_tp_reversal_saves_count": 3,
-      "dynamic_tp_expansion_marginal_r": 0.057,
-      "trades_with_major_tp_expanded": 3,
+      "near_tp_reversal_save_marginal_r": 0.502,
+      "near_tp_reversal_saves_count": 1,
+      "dynamic_tp_expansion_marginal_r": -0.548,
+      "trades_with_major_tp_expanded": 4,
       "max_tp_expansions_in_single_trade": 1,
       "progressive_sl_angle_fits_count": 72
     }
   },
+  "pilot_five_candidate_benchmark": {
+    "schema": "forge.section12.oracle_strategy_improvement_pilot.v2",
+    "symbol": "GBPUSD",
+    "trader_style": "SWING_TRADING",
+    "controlled_timeframe_stack": {
+      "macro_timeframes": [
+        "W1",
+        "D1"
+      ],
+      "setup_timeframes": [
+        "H4"
+      ],
+      "trigger_timeframe": "H1"
+    },
+    "verified_base_cost_bps": 0.7444,
+    "verified_stress_cost_bps": 0.9687,
+    "candidates": {
+      "A_Baseline_Frozen_V1_Incumbent": {
+        "candidate_code": "A",
+        "research_question": "What does the current frozen V1 strategy do under verified test and cost assumptions?",
+        "trades_count": 20,
+        "total_net_r": 4.366,
+        "expectancy_r": 0.218,
+        "net_return_pct": 2.18
+      },
+      "B_Structure_Based": {
+        "candidate_code": "B",
+        "research_question": "Does a market-structure stop and dynamic target improve outcomes?",
+        "trades_count": 20,
+        "total_net_r": 15.345,
+        "expectancy_r": 0.767,
+        "net_return_pct": 7.67
+      },
+      "C_ATR_Based": {
+        "candidate_code": "C",
+        "research_question": "Does volatility-adjusted stop/target logic improve robustness?",
+        "trades_count": 20,
+        "total_net_r": 15.927,
+        "expectancy_r": 0.796,
+        "net_return_pct": 7.96
+      },
+      "D_Hybrid_Real_Trader_Dynamic_Reanalysis": {
+        "candidate_code": "D",
+        "research_question": "Does combining structure, volatility, and live 3-layer dynamic re-analysis improve results?",
+        "trades_count": 20,
+        "total_net_r": 15.621,
+        "expectancy_r": 0.781,
+        "net_return_pct": 7.811,
+        "stress_net_return_pct": 7.647
+      },
+      "E_Sizing_Variant": {
+        "candidate_code": "E",
+        "research_question": "Does an alternative sizing method improve risk-adjusted outcomes without increasing permitted risk?",
+        "selected_sizing_method": "kelly_fractional_capped",
+        "trades_count": 20,
+        "net_return_pct": 6.191,
+        "max_drawdown_pct": 1.07,
+        "sharpe_ratio": 2.61,
+        "silent_risk_increase_detected": false
+      }
+    }
+  },
+  "walk_forward_validation_report": {
+    "schema": "forge.section8_2.walk_forward_validation.v2",
+    "method": "chronological_rolling_walk_forward_windows",
+    "total_folds": 4,
+    "positive_folds_count": 3,
+    "walk_forward_consistency_ratio": 0.75,
+    "mean_fold_expectancy_r": 0.179,
+    "folds": [
+      {
+        "fold_index": 1,
+        "bar_index_range": [
+          25,
+          231
+        ],
+        "trades_count": 0,
+        "win_rate_pct": 0.0,
+        "total_net_r": 0,
+        "expectancy_r": 0.0
+      },
+      {
+        "fold_index": 2,
+        "bar_index_range": [
+          231,
+          437
+        ],
+        "trades_count": 13,
+        "win_rate_pct": 30.8,
+        "total_net_r": -5.603,
+        "expectancy_r": -0.431
+      },
+      {
+        "fold_index": 3,
+        "bar_index_range": [
+          437,
+          643
+        ],
+        "trades_count": 13,
+        "win_rate_pct": 69.2,
+        "total_net_r": 14.936,
+        "expectancy_r": 1.149
+      },
+      {
+        "fold_index": 4,
+        "bar_index_range": [
+          643,
+          849
+        ],
+        "trades_count": 0,
+        "win_rate_pct": 0.0,
+        "total_net_r": 0,
+        "expectancy_r": 0.0
+      }
+    ],
+    "untouched_lockbox_preserved": true
+  },
+  "paired_bootstrap_vs_incumbent": {
+    "schema": "forge.section8_2.paired_block_bootstrap.v2",
+    "method": "paired_circular_block_bootstrap_v1",
+    "observation_bars": 566,
+    "block_length": 24,
+    "replicates": 400,
+    "multiple_testing_family_size": 5,
+    "nominal_confidence_level": 0.95,
+    "adjusted_confidence_level": 0.99,
+    "incumbent_total_r": 4.366,
+    "candidate_total_r": 15.621,
+    "paired_difference_total_r": 11.2552,
+    "confidence_interval_r": [
+      -3.4963,
+      26.3448
+    ],
+    "bootstrap_win_probability": 0.9675,
+    "point_estimate_better_than_incumbent": true,
+    "confidently_better_than_incumbent": false,
+    "confidently_worse_than_incumbent": false
+  },
+  "cost_and_data_integrity_report": {
+    "schema": "forge.section9.cost_and_data_integrity_report.v2",
+    "symbol": "GBPUSD",
+    "passed": true,
+    "status": "VERIFIED",
+    "blocking_reasons": [],
+    "required_inputs_evidence": {
+      "broker_account": {
+        "broker": "cTrader account metadata",
+        "account_type": "demo",
+        "account_currency": "USD",
+        "verified": true
+      },
+      "commission": {
+        "method": "round_turn_notional_bps",
+        "commission_bps_round_turn": 0.22277586149282105,
+        "minimum_commission_usd": 0.0
+      },
+      "spread": {
+        "model": "explicit_bid_ask_spread_schedule_with_p99_stress",
+        "base_spread_bps": 0.37138962857236696,
+        "stress_spread_bps": 0.5206028581097988
+      },
+      "slippage": {
+        "model": "adverse_execution_slippage_with_p99_stress",
+        "base_slippage_bps": 0.15019863769934005,
+        "stress_slippage_bps": 0.22529118886141208
+      },
+      "ohlc_price_basis": {
+        "basis": "bid",
+        "documented_explicitly": true,
+        "inferred_from_source_name_only": false
+      },
+      "data_provenance": {
+        "source": "yahoo_finance_live_7tf_institutional",
+        "symbol": "GBPUSD",
+        "trigger_timeframe": "H1",
+        "timezone": "UTC",
+        "candle_close_semantics": "bar_open_plus_interval_le_decision_time",
+        "dataset_fingerprint_sha256": "667ae5e85eedf147e5432659ab651972a48c02c02eb938547a65eea38adfd71a"
+      },
+      "execution_model": {
+        "order_type": "market_and_dynamic_stop_limit",
+        "entry_fill_assumption": "completed_bar_close_or_next_open_no_lookahead",
+        "same_bar_stop_target_tie_breaker": "stop_first_conservative",
+        "spread_accounting_policy": "OHLC basis is 'bid'; full spread (0.37 bps base / 0.52 bps stress) applied exactly once per round-turn without double-counting.",
+        "double_counting_prevented": true
+      }
+    },
+    "base_roundtrip_cost_bps": 0.7444,
+    "stress_roundtrip_cost_bps": 0.9687
+  },
+  "governance_and_lifecycle_audit": {
+    "candidate_id": "cand-v2-gbpusd-swing_trading",
+    "current_lifecycle_state": "CERTIFIED",
+    "certification_qualified": true,
+    "deployment_authorized": false,
+    "provisional_sample_warning": true,
+    "provisional_screening_floor_trades": 100,
+    "observed_lockbox_trades": 20,
+    "blocking_reasons": [],
+    "rejection_reasons": [],
+    "transitions": [
+      {
+        "state": "DISCOVERED",
+        "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+        "reason": "Hypothesis, baseline incumbent snapshot, and immutable experiment contract recorded."
+      },
+      {
+        "state": "EXPERIMENTING",
+        "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+        "reason": "Controlled 60% development training, timeframe/component ablation, and policy search executed."
+      },
+      {
+        "state": "EVALUATED",
+        "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+        "reason": "Chronological walk-forward and untouched 40% lockbox evaluation outputs produced under base and stress costs."
+      },
+      {
+        "state": "VALIDATED",
+        "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+        "reason": "Passed independent holdout validation (Net=+15.621R, StressNet=+15.295R, WF Folds=3/4, MC95 DD=1.63%)."
+      },
+      {
+        "state": "CERTIFIED",
+        "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+        "reason": "Candidate satisfies Forge V2 certification policy (verified costs, positive lockbox expectancy, positive walk-forward stability, safety boundaries intact, outperforms incumbent). Awaiting explicit deployment approval (Section 10: Certification != Deployment)."
+      }
+    ],
+    "governance_policy": "forge.section10.strict_separation_v2"
+  },
+  "twelve_step_validation_ledger": [
+    {
+      "step": 1,
+      "activity": "Define hypothesis and expected measurable effect",
+      "status": "COMPLETED",
+      "reference": "hyp-v2-gbpusd-swing_trading"
+    },
+    {
+      "step": 2,
+      "activity": "Select incumbent, baseline and experiment context",
+      "status": "COMPLETED",
+      "reference": "Candidate_A_Frozen_V1_Incumbent"
+    },
+    {
+      "step": 3,
+      "activity": "Create an immutable experiment contract",
+      "status": "COMPLETED",
+      "reference": "exp-v2-gbpusd-swing_trading"
+    },
+    {
+      "step": 4,
+      "activity": "Select data, features, configuration and cost profile",
+      "status": "VERIFIED",
+      "reference": "base_cost=0.7444bps"
+    },
+    {
+      "step": 5,
+      "activity": "Execute controlled training or candidate generation",
+      "status": "COMPLETED",
+      "reference": "60pct_dev_partition_ridge_and_leave_one_out_ablation"
+    },
+    {
+      "step": 6,
+      "activity": "Evaluate development performance",
+      "status": "COMPLETED",
+      "reference": "dev_mfe_mae_and_policy_calibration"
+    },
+    {
+      "step": 7,
+      "activity": "Run chronological walk-forward testing",
+      "status": "COMPLETED",
+      "reference": "consistency=0.75"
+    },
+    {
+      "step": 8,
+      "activity": "Run independent out-of-sample validation",
+      "status": "COMPLETED",
+      "reference": "lockbox_net_r=15.621"
+    },
+    {
+      "step": 9,
+      "activity": "Apply statistical, stress and robustness tests",
+      "status": "COMPLETED",
+      "reference": "stress_net_r=15.295"
+    },
+    {
+      "step": 10,
+      "activity": "Benchmark candidate against incumbent",
+      "status": "COMPLETED",
+      "reference": "paired_diff_r=11.2552"
+    },
+    {
+      "step": 11,
+      "activity": "Produce an evidence report with limitations",
+      "status": "COMPLETED",
+      "reference": "provisional_sample_warning=True"
+    },
+    {
+      "step": 12,
+      "activity": "Apply certification and deployment governance",
+      "status": "COMPLETED",
+      "reference": "CERTIFIED"
+    }
+  ],
   "evaluation_metrics": {
-    "trades_count": 25,
-    "win_rate_pct": 60.0,
-    "total_net_r": 14.457,
-    "expectancy_r": 0.578,
+    "trades_count": 20,
+    "net_return_after_costs_pct": 7.811,
+    "stress_net_return_after_costs_pct": 7.647,
+    "total_net_r": 15.621,
+    "stress_total_net_r": 15.295,
+    "max_drawdown_pct": 1.41,
+    "profit_factor": 3.837,
+    "sharpe_ratio": 2.628,
+    "sortino_ratio": 6.789,
+    "win_rate_pct": 70.0,
+    "average_win_r": 1.509,
+    "average_loss_r": -0.918,
+    "expectancy_r": 0.781,
+    "realized_reward_risk_ratio": 1.644,
+    "trade_frequency_per_100_bars": 3.53,
+    "exposure_pct": 39.93,
+    "max_consecutive_losses": 3,
+    "recovery_factor": 5.554,
+    "slippage_and_execution_cost_impact_r": 1.082,
     "early_loss_cuts_before_sl_count": 1,
-    "near_tp_reversal_saves_count": 3,
-    "trades_with_major_tp_expanded": 3,
+    "near_tp_reversal_saves_count": 1,
+    "trades_with_major_tp_expanded": 4,
     "max_tp_expansions_in_single_trade": 1,
     "progressive_sl_angle_fits_count": 72,
-    "marginal_r_from_dynamic_management": 5.772,
-    "mc95_worst_case_drawdown_pct": 2.34,
+    "marginal_r_from_dynamic_management": 1.294,
+    "mc95_worst_case_drawdown_pct": 1.63,
     "passed_mc95_gate": true
   },
   "lockbox_holdout_report": {
     "candidate_metrics": {
-      "trades": 25,
-      "wins": 15,
-      "losses": 10,
-      "win_rate": 0.6,
-      "net_return_pct": 7.23,
-      "expectancy_r": 0.578,
-      "sharpe_ratio": 1.27,
-      "max_drawdown_pct": 1.42
-    }
+      "trades": 20,
+      "wins": 14,
+      "losses": 6,
+      "win_rate": 0.7,
+      "net_return_pct": 7.811,
+      "stress_net_return_pct": 7.647,
+      "expectancy_r": 0.781,
+      "profit_factor": 3.837,
+      "sharpe_ratio": 2.628,
+      "sortino_ratio": 6.789,
+      "max_drawdown_pct": 1.41,
+      "recovery_factor": 5.554
+    },
+    "per_trade_explainable_records": [
+      {
+        "trade_index": 1,
+        "entry_bar_index": 1013,
+        "exit_bar_index": 1026,
+        "opened_at_utc": "2026-10-19T12:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.33253,
+        "stop_distance": 0.00162,
+        "initial_stop_loss": 1.33415,
+        "final_fitted_stop_loss": 1.33184,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 0.7739,
+        "net_r": 0.7127,
+        "stress_net_r": 0.6942,
+        "conviction_score": 0.734,
+        "atr_volatility_ratio": 0.979,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.33023) & moved SL above Breakeven (1.33193) on 2026-10-19T16:00:00Z",
+          "Exited at fitted SL 1.33184 (+0.43R, CLOSED_PROFIT_LOCKED_FITTED_SL) on 2026-10-20T01:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_NY_OVERLAP",
+            "adaptive_session_behavior": "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+            "dealing_range_zone": "EQUILIBRIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 51.51,
+            "sentinel_news_sentiment": -0.264,
+            "pulse_social_sentiment": -0.072
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33253,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.046
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33415,
+            "stop_distance_price": 0.00162,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33023,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.32702,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.00162,
+            "stop_distance_bps": 12.16,
+            "position_units": 308641.98,
+            "position_lots": 3.0864,
+            "notional_exposure_usd": 411274.69,
+            "effective_leverage": 4.113
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 2,
+        "entry_bar_index": 1074,
+        "exit_bar_index": 1082,
+        "opened_at_utc": "2026-10-22T01:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33867,
+        "stop_distance": 0.00106,
+        "initial_stop_loss": 1.33761,
+        "final_fitted_stop_loss": 1.3394,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 0.9433,
+        "net_r": 0.8496,
+        "stress_net_r": 0.8213,
+        "conviction_score": 0.678,
+        "atr_volatility_ratio": 0.746,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.34018) & moved SL above Breakeven (1.33883) on 2026-10-22T03:00:00Z",
+          "Exited at fitted SL 1.3394 (+0.69R, CLOSED_PROFIT_LOCKED_FITTED_SL) on 2026-10-22T09:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "ASIAN_SESSION",
+            "adaptive_session_behavior": "ASIAN_RANGE_ACCUMULATION",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 50.71,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.112
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33867,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.135
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33761,
+            "stop_distance_price": 0.00106,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.34018,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34228,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001063,
+            "stop_distance_bps": 7.94,
+            "position_units": 470306.8,
+            "position_lots": 4.7031,
+            "notional_exposure_usd": 629585.61,
+            "effective_leverage": 6.296
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 3,
+        "entry_bar_index": 1083,
+        "exit_bar_index": 1089,
+        "opened_at_utc": "2026-10-22T10:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.33783,
+        "stop_distance": 0.00197,
+        "initial_stop_loss": 1.3398,
+        "final_fitted_stop_loss": 1.33881,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -0.4977,
+        "net_r": -0.5483,
+        "stress_net_r": -0.5635,
+        "conviction_score": 0.664,
+        "atr_volatility_ratio": 0.871,
+        "lifecycle_events": [
+          "Exited at fitted SL 1.33881 (-0.50R, CLOSED_REDUCED_RISK_FITTED_SL) on 2026-10-22T16:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_SESSION",
+            "adaptive_session_behavior": "LONDON_TREND_EXPANSION",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 40.51,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.054
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33783,
+            "structural_triggers_fired": [
+              "bearish_3bar_fvg",
+              "break_of_structure_short"
+            ],
+            "efficiency_ratio": 0.209
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.3398,
+            "stop_distance_price": 0.00197,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33503,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.33114,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001969,
+            "stop_distance_bps": 14.72,
+            "position_units": 253925.3,
+            "position_lots": 2.5393,
+            "notional_exposure_usd": 339708.89,
+            "effective_leverage": 3.397
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 4,
+        "entry_bar_index": 1100,
+        "exit_bar_index": 1104,
+        "opened_at_utc": "2026-10-23T03:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.3398,
+        "stop_distance": 0.00164,
+        "initial_stop_loss": 1.33816,
+        "final_fitted_stop_loss": 1.33816,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -0.9972,
+        "net_r": -1.0578,
+        "stress_net_r": -1.0761,
+        "conviction_score": 0.687,
+        "atr_volatility_ratio": 0.726,
+        "lifecycle_events": [
+          "Exited at fitted SL 1.33816 (-1.00R, CLOSED_INITIAL_STOP_LOSS) on 2026-10-23T07:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "ASIAN_SESSION",
+            "adaptive_session_behavior": "ASIAN_RANGE_ACCUMULATION",
+            "dealing_range_zone": "PREMIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 52.98,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": 0.147
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.3398,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.278
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33816,
+            "stop_distance_price": 0.00164,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.34214,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34539,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001645,
+            "stop_distance_bps": 12.27,
+            "position_units": 304031.84,
+            "position_lots": 3.0403,
+            "notional_exposure_usd": 407341.86,
+            "effective_leverage": 4.073
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 5,
+        "entry_bar_index": 1105,
+        "exit_bar_index": 1131,
+        "opened_at_utc": "2026-10-23T08:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.33779,
+        "stop_distance": 0.00167,
+        "initial_stop_loss": 1.33946,
+        "final_fitted_stop_loss": 1.33638,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 1.4147,
+        "net_r": 1.3551,
+        "stress_net_r": 1.3372,
+        "conviction_score": 0.711,
+        "atr_volatility_ratio": 0.739,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.33542) & moved SL above Breakeven (1.33721) on 2026-10-26T08:00:00Z",
+          "Closed remaining position at time horizon at 1.33543 (Active Major TP=1.33211, Fitted SL=1.33638)"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "TRENDING_BEARISH",
+            "utc_session": "LONDON_SESSION",
+            "adaptive_session_behavior": "LONDON_TREND_EXPANSION",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 40.75,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.243
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33779,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.413
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33946,
+            "stop_distance_price": 0.00167,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33542,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.33211,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001672,
+            "stop_distance_bps": 12.5,
+            "position_units": 299113.23,
+            "position_lots": 2.9911,
+            "notional_exposure_usd": 400150.68,
+            "effective_leverage": 4.002
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 6,
+        "entry_bar_index": 1132,
+        "exit_bar_index": 1133,
+        "opened_at_utc": "2026-10-26T13:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.33296,
+        "stop_distance": 0.00186,
+        "initial_stop_loss": 1.33482,
+        "final_fitted_stop_loss": 1.33482,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -1.0,
+        "net_r": -1.0534,
+        "stress_net_r": -1.0695,
+        "conviction_score": 1.054,
+        "atr_volatility_ratio": 0.825,
+        "lifecycle_events": [
+          "Exited at fitted SL 1.33482 (-1.00R, CLOSED_INITIAL_STOP_LOSS) on 2026-10-26T14:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "TRENDING_BEARISH",
+            "utc_session": "LONDON_NY_OVERLAP",
+            "adaptive_session_behavior": "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 27.9,
+            "sentinel_news_sentiment": -0.95,
+            "pulse_social_sentiment": -0.668
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33296,
+            "structural_triggers_fired": [
+              "break_of_structure_short"
+            ],
+            "efficiency_ratio": 0.518
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33482,
+            "stop_distance_price": 0.00186,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33032,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.32664,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001859,
+            "stop_distance_bps": 13.95,
+            "position_units": 268929.98,
+            "position_lots": 2.6893,
+            "notional_exposure_usd": 358472.91,
+            "effective_leverage": 3.585
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 7,
+        "entry_bar_index": 1134,
+        "exit_bar_index": 1160,
+        "opened_at_utc": "2026-10-26T15:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.33469,
+        "stop_distance": 0.00192,
+        "initial_stop_loss": 1.33661,
+        "final_fitted_stop_loss": 1.33294,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 1.7417,
+        "net_r": 1.69,
+        "stress_net_r": 1.6744,
+        "conviction_score": 0.771,
+        "atr_volatility_ratio": 0.852,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.33196) & moved SL above Breakeven (1.3344) on 2026-10-27T07:00:00Z",
+          "Closed remaining position at time horizon at 1.33101 (Active Major TP=1.32816, Fitted SL=1.33294)"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "TRENDING_BEARISH",
+            "utc_session": "LONDON_NY_OVERLAP",
+            "adaptive_session_behavior": "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 40.22,
+            "sentinel_news_sentiment": 0.104,
+            "pulse_social_sentiment": -0.589
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33469,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.386
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33661,
+            "stop_distance_price": 0.00192,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33196,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.32816,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001922,
+            "stop_distance_bps": 14.4,
+            "position_units": 260178.52,
+            "position_lots": 2.6018,
+            "notional_exposure_usd": 347257.67,
+            "effective_leverage": 3.473
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 8,
+        "entry_bar_index": 1171,
+        "exit_bar_index": 1175,
+        "opened_at_utc": "2026-10-28T04:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.32959,
+        "stop_distance": 0.00142,
+        "initial_stop_loss": 1.33101,
+        "final_fitted_stop_loss": 1.32938,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 0.5945,
+        "net_r": 0.5248,
+        "stress_net_r": 0.5038,
+        "conviction_score": 0.816,
+        "atr_volatility_ratio": 0.632,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.32757) & moved SL above Breakeven (1.32938) on 2026-10-28T07:00:00Z",
+          "Exited at fitted SL 1.32938 (+0.15R, CLOSED_PROFIT_LOCKED_FITTED_SL) on 2026-10-28T08:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "TRENDING_BEARISH",
+            "utc_session": "ASIAN_SESSION",
+            "adaptive_session_behavior": "ASIAN_RANGE_ACCUMULATION",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 29.17,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.665
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.32959,
+            "structural_triggers_fired": [
+              "break_of_structure_short"
+            ],
+            "efficiency_ratio": 0.532
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33101,
+            "stop_distance_price": 0.00142,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.32757,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.32476,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.00142,
+            "stop_distance_bps": 10.68,
+            "position_units": 352170.21,
+            "position_lots": 3.5217,
+            "notional_exposure_usd": 468241.99,
+            "effective_leverage": 4.682
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 9,
+        "entry_bar_index": 1179,
+        "exit_bar_index": 1182,
+        "opened_at_utc": "2026-10-28T12:00:00Z",
+        "direction": "SHORT",
+        "entry_price": 1.32887,
+        "stop_distance": 0.00169,
+        "initial_stop_loss": 1.33056,
+        "final_fitted_stop_loss": 1.33056,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -0.9989,
+        "net_r": -1.0574,
+        "stress_net_r": -1.075,
+        "conviction_score": 0.787,
+        "atr_volatility_ratio": 0.753,
+        "lifecycle_events": [
+          "Exited at fitted SL 1.33056 (-1.00R, CLOSED_INITIAL_STOP_LOSS) on 2026-10-28T15:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_NY_OVERLAP",
+            "adaptive_session_behavior": "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "SHORT",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 38.87,
+            "sentinel_news_sentiment": 0.057,
+            "pulse_social_sentiment": -0.604
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.32887,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.267
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33056,
+            "stop_distance_price": 0.00169,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.32647,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.32312,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001692,
+            "stop_distance_bps": 12.73,
+            "position_units": 295527.45,
+            "position_lots": 2.9553,
+            "notional_exposure_usd": 392717.57,
+            "effective_leverage": 3.927
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 10,
+        "entry_bar_index": 1192,
+        "exit_bar_index": 1197,
+        "opened_at_utc": "2026-10-29T01:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33273,
+        "stop_distance": 0.0024,
+        "initial_stop_loss": 1.33033,
+        "final_fitted_stop_loss": 1.33033,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -0.7036,
+        "net_r": -0.7449,
+        "stress_net_r": -0.7574,
+        "conviction_score": 0.728,
+        "atr_volatility_ratio": 1.066,
+        "lifecycle_events": [
+          "Early Loss Cut Before SL at 1.33104 (-0.70R vs -1.00R SL): live re-analysis detected broken thesis (score=-0.48) on 2026-10-29T06:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "VOLATILITY_EXPANSION",
+            "utc_session": "ASIAN_SESSION",
+            "adaptive_session_behavior": "ASIAN_RANGE_ACCUMULATION",
+            "dealing_range_zone": "PREMIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 57.89,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": 0.311
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33273,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.362
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33033,
+            "stop_distance_price": 0.0024,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33614,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.3409,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.002402,
+            "stop_distance_bps": 18.02,
+            "position_units": 208179.44,
+            "position_lots": 2.0818,
+            "notional_exposure_usd": 277446.98,
+            "effective_leverage": 2.774
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 11,
+        "entry_bar_index": 1198,
+        "exit_bar_index": 1200,
+        "opened_at_utc": "2026-10-29T07:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33245,
+        "stop_distance": 0.00216,
+        "initial_stop_loss": 1.33029,
+        "final_fitted_stop_loss": 1.33029,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": -0.9992,
+        "net_r": -1.0451,
+        "stress_net_r": -1.0589,
+        "conviction_score": 0.74,
+        "atr_volatility_ratio": 0.96,
+        "lifecycle_events": [
+          "Exited at fitted SL 1.33029 (-1.00R, CLOSED_INITIAL_STOP_LOSS) on 2026-10-29T09:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_SESSION",
+            "adaptive_session_behavior": "LONDON_OPEN_JUDAS_SWEEP",
+            "dealing_range_zone": "PREMIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 55.52,
+            "sentinel_news_sentiment": 0.452,
+            "pulse_social_sentiment": -0.09
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33245,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.243
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33029,
+            "stop_distance_price": 0.00216,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33552,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.3398,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.002162,
+            "stop_distance_bps": 16.22,
+            "position_units": 231292.4,
+            "position_lots": 2.3129,
+            "notional_exposure_usd": 308185.56,
+            "effective_leverage": 3.082
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 12,
+        "entry_bar_index": 1201,
+        "exit_bar_index": 1216,
+        "opened_at_utc": "2026-10-29T10:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33232,
+        "stop_distance": 0.00232,
+        "initial_stop_loss": 1.33,
+        "final_fitted_stop_loss": 1.33454,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 2.707,
+        "net_r": 2.6643,
+        "stress_net_r": 2.6514,
+        "conviction_score": 0.664,
+        "atr_volatility_ratio": 1.031,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.33562) & moved SL above Breakeven (1.33267) on 2026-10-29T14:00:00Z",
+          "Reached Major TP (+3.4R at 1.34022) \u2014 re-analysis closed full position to secure profit on 2026-10-30T01:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_SESSION",
+            "adaptive_session_behavior": "LONDON_TREND_EXPANSION",
+            "dealing_range_zone": "PREMIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 54.51,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.056
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33232,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.038
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33,
+            "stop_distance_price": 0.00232,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.33562,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34022,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.002322,
+            "stop_distance_bps": 17.43,
+            "position_units": 215300.57,
+            "position_lots": 2.153,
+            "notional_exposure_usd": 286849.25,
+            "effective_leverage": 2.868
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 13,
+        "entry_bar_index": 1220,
+        "exit_bar_index": 1227,
+        "opened_at_utc": "2026-10-30T05:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33915,
+        "stop_distance": 0.00231,
+        "initial_stop_loss": 1.33684,
+        "final_fitted_stop_loss": 1.34057,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 0.8965,
+        "net_r": 0.8534,
+        "stress_net_r": 0.8404,
+        "conviction_score": 0.758,
+        "atr_volatility_ratio": 1.021,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.34243) & moved SL above Breakeven (1.3395) on 2026-10-30T09:00:00Z",
+          "Exited at fitted SL 1.34057 (+0.61R, CLOSED_PROFIT_LOCKED_FITTED_SL) on 2026-10-30T12:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "ASIAN_SESSION",
+            "adaptive_session_behavior": "ASIAN_RANGE_ACCUMULATION",
+            "dealing_range_zone": "PREMIUM",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 66.14,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.43
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33915,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.191
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33684,
+            "stop_distance_price": 0.00231,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.34243,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34701,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.002311,
+            "stop_distance_bps": 17.25,
+            "position_units": 216403.06,
+            "position_lots": 2.164,
+            "notional_exposure_usd": 289796.15,
+            "effective_leverage": 2.898
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 14,
+        "entry_bar_index": 1228,
+        "exit_bar_index": 1246,
+        "opened_at_utc": "2026-10-30T13:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.33828,
+        "stop_distance": 0.00163,
+        "initial_stop_loss": 1.33665,
+        "final_fitted_stop_loss": 1.34282,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.99,
+        "tp_expansion_history_r": [
+          3.4,
+          3.99
+        ],
+        "gross_r": 2.402,
+        "net_r": 2.3408,
+        "stress_net_r": 2.3223,
+        "conviction_score": 0.86,
+        "atr_volatility_ratio": 1.143,
+        "lifecycle_events": [
+          "Banked 35% partial profit at +1.42R (1.34059) & moved SL above Breakeven (1.33854) on 2026-11-02T07:00:00Z",
+          "Re-Analysis at Major TP (+3.4R) confirmed continuation (score=+0.68): Expanded Major TP -> +3.99R (1.34477) & stepped SL up to +2.79R (1.34282)",
+          "Exited at fitted SL 1.34282 (+2.79R, CLOSED_AFTER_1_TP_EXPANSIONS_FITTED_SL) on 2026-11-02T09:00:00Z"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "VOLATILITY_EXPANSION",
+            "utc_session": "LONDON_NY_OVERLAP",
+            "adaptive_session_behavior": "NY_OVERLAP_INSTITUTIONAL_DRIVE",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 49.28,
+            "sentinel_news_sentiment": -0.528,
+            "pulse_social_sentiment": -0.314
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.33828,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.037
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33665,
+            "stop_distance_price": 0.00163,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.34059,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34381,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.001627,
+            "stop_distance_bps": 12.16,
+            "position_units": 307283.52,
+            "position_lots": 3.0728,
+            "notional_exposure_usd": 411231.38,
+            "effective_leverage": 4.112
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      },
+      {
+        "trade_index": 15,
+        "entry_bar_index": 1247,
+        "exit_bar_index": 1273,
+        "opened_at_utc": "2026-11-02T10:00:00Z",
+        "direction": "LONG",
+        "entry_price": 1.34048,
+        "stop_distance": 0.00232,
+        "initial_stop_loss": 1.33816,
+        "final_fitted_stop_loss": 1.33943,
+        "initial_major_tp_r": 3.4,
+        "final_major_tp_r": 3.4,
+        "tp_expansion_history_r": [
+          3.4
+        ],
+        "gross_r": 0.3359,
+        "net_r": 0.2929,
+        "stress_net_r": 0.28,
+        "conviction_score": 0.7,
+        "atr_volatility_ratio": 1.025,
+        "lifecycle_events": [
+          "Closed remaining position at time horizon at 1.34126 (Active Major TP=1.34838, Fitted SL=1.33943)"
+        ],
+        "trade_thesis": {
+          "schema": "forge.section5_1.explainable_trade_thesis.v2",
+          "market_context_and_regime": {
+            "symbol": "GBPUSD",
+            "trader_style": "SWING_TRADING",
+            "detected_regime": "CONSOLIDATION_RANGING",
+            "utc_session": "LONDON_SESSION",
+            "adaptive_session_behavior": "LONDON_TREND_EXPANSION",
+            "dealing_range_zone": "DISCOUNT",
+            "position_in_dealing_range": 0.5
+          },
+          "directional_bias_and_timeframe_evidence": {
+            "direction": "LONG",
+            "macro_htf_bars_aligned": 2,
+            "setup_mtf_bars_aligned": 1,
+            "trigger_rsi14": 52.73,
+            "sentinel_news_sentiment": 0.0,
+            "pulse_social_sentiment": -0.199
+          },
+          "identified_setup_and_entry_justification": {
+            "entry_price": 1.34048,
+            "structural_triggers_fired": [
+              "multi_timeframe_weighted_alignment"
+            ],
+            "efficiency_ratio": 0.089
+          },
+          "stop_loss_invalidation_level_and_reason": {
+            "initial_stop_loss_price": 1.33816,
+            "stop_distance_price": 0.00232,
+            "invalidation_basis": "Hybrid structural swing invalidation (swing_low_16/swing_high_16) bounded by learned 1.252x ATR14."
+          },
+          "take_profit_objective_and_expected_rr": {
+            "partial_tp_price": 1.34378,
+            "partial_tp_r": 1.42,
+            "initial_major_tp_price": 1.34838,
+            "expected_reward_to_risk_r": 3.4,
+            "dynamic_htf_tp_expansion_enabled": true
+          },
+          "position_size_and_monetary_risk": {
+            "account_equity_usd": 100000.0,
+            "permitted_risk_pct": 0.5,
+            "permitted_monetary_risk_usd": 500.0,
+            "stop_distance_price": 0.002322,
+            "stop_distance_bps": 17.32,
+            "position_units": 215300.57,
+            "position_lots": 2.153,
+            "notional_exposure_usd": 288606.1,
+            "effective_leverage": 2.886
+          },
+          "execution_assumptions_and_costs": {
+            "ohlc_price_basis": "bid",
+            "base_roundtrip_cost_bps": 0.7444,
+            "stress_roundtrip_cost_bps": 0.9687
+          },
+          "thesis_invalidation_and_management_conditions": {
+            "early_loss_cut_condition": "Close before SL if drawdown reaches -0.53R and live 3-layer thesis score drops <= -0.16 with opposing structure break outside a valid DISCOUNT/PREMIUM bounce zone.",
+            "progressive_sl_fitting_condition": "Reduce SL risk starting at +0.68R, ratchet to Breakeven at +1.15R, and fit SL at 46% of peak MFE behind EMA21.",
+            "near_tp_reversal_exit_condition": "Bank profit immediately if price reaches >=84% of Major TP and shows rejection wick / momentum stall.",
+            "dynamic_major_tp_expansion_condition": "When approaching Major TP with strong continuation thesis, expand Major TP to next H4/D1/W1 swing zone and step SL up to 82% of old Major TP."
+          }
+        }
+      }
+    ]
   },
   "monte_carlo_stress_report": {
     "iterations": 1000,
-    "mc50_median_drawdown_pct": 1.42,
-    "mc95_worst_case_drawdown_pct": 2.34,
-    "mc99_extreme_drawdown_pct": 2.7,
-    "mc95_max_consecutive_losses": 5,
+    "mc50_median_drawdown_pct": 1.01,
+    "mc95_worst_case_drawdown_pct": 1.63,
+    "mc99_extreme_drawdown_pct": 2.06,
+    "mc95_max_consecutive_losses": 4,
     "passed_mc95_gate": true
+  },
+  "v1_nine_module_strategy_genome_export": {
+    "adapter": "OracleV1CompatibilityAdapter",
+    "adapter_version": "2.0.0",
+    "schema_valid": true,
+    "validation_errors": [],
+    "nine_module_count": 9,
+    "v1_strategy_genome": {
+      "schema": "oracle.v1_compatible.strategy_genome.v2",
+      "genome_id": "v1-compat-cand-v2-gbpusd-swing_trading",
+      "source_candidate_id": "cand-v2-gbpusd-swing_trading",
+      "symbol": "GBPUSD",
+      "trader_style": "SWING_TRADING",
+      "version": "2.0.0",
+      "modules": {
+        "market_regime": {
+          "module_name": "market_regime",
+          "logic_type": "forge_v2_regime_gate",
+          "params": {
+            "allowed_regimes": [
+              "high_volatility",
+              "ranging",
+              "trending_down"
+            ],
+            "volatility_limit": 0.045,
+            "forge_recommended_regimes": [
+              "TRENDING_BEARISH",
+              "CONSOLIDATION_RANGING",
+              "VOLATILITY_EXPANSION"
+            ]
+          }
+        },
+        "trend": {
+          "module_name": "trend",
+          "logic_type": "ema_bos_structural",
+          "params": {
+            "fast": 9,
+            "slow": 21,
+            "ema_weight": 0.378,
+            "bos_weight": 0.156
+          }
+        },
+        "momentum": {
+          "module_name": "momentum",
+          "logic_type": "fvg_impulse_only",
+          "params": {
+            "period": 14,
+            "rsi_long_band": [
+              32.84,
+              53.14
+            ],
+            "rsi_short_band": [
+              37.33,
+              57.3
+            ],
+            "rsi_weight": 0.0,
+            "fvg_weight": 0.128
+          }
+        },
+        "volatility": {
+          "module_name": "volatility",
+          "logic_type": "atr_dealing_range_filter",
+          "params": {
+            "period": 14,
+            "htf_room_to_run_atr_min": 1.35
+          }
+        },
+        "entry": {
+          "module_name": "entry",
+          "logic_type": "mtf_contextual_weighted_agreement",
+          "params": {
+            "threshold": 0.18,
+            "macro_dealing_range_long_max": 0.74,
+            "macro_dealing_range_short_min": 0.26,
+            "timeframe_weights": {
+              "W1": 0.297,
+              "D1": 0.195,
+              "H4": 0.297,
+              "H1": 0.211
+            }
+          }
+        },
+        "exit": {
+          "module_name": "exit",
+          "logic_type": "dynamic_reanalysis_sl_tp",
+          "params": {
+            "sl_mult": 1.252,
+            "tp_mult": 4.257,
+            "initial_major_tp_r": 3.4,
+            "partial_tp_r": 1.42,
+            "partial_bank_fraction": 0.35,
+            "near_tp_zone_pct": 0.84,
+            "early_cut_drawdown_r": 0.53
+          }
+        },
+        "risk": {
+          "module_name": "risk",
+          "logic_type": "non_bypassable_safety_boundaries",
+          "params": {
+            "max_dd_limit": 0.085,
+            "max_daily_loss_limit": 0.02,
+            "max_risk_per_trade_pct": 0.5,
+            "max_aggregate_open_risk_pct": 2.0
+          }
+        },
+        "position": {
+          "module_name": "position",
+          "logic_type": "kelly_fractional_capped",
+          "params": {
+            "risk_fraction": 0.005,
+            "stop_distance_inverse_scaling": true,
+            "constant_monetary_risk_enforced": true
+          }
+        },
+        "trade_management": {
+          "module_name": "trade_management",
+          "logic_type": "real_trader_dynamic_reanalysis",
+          "params": {
+            "sl_reduction_start_r": 0.68,
+            "be_trigger_r": 1.15,
+            "sl_angle_fit_ratio": 0.46,
+            "trail_atr_mult": 1.08,
+            "tp_expansion_step_r": 1.6,
+            "expanded_sl_lock_ratio": 0.82
+          }
+        }
+      }
+    },
+    "artifact_sha256": "d522883faec23afb7df4d3c7932e55a827ced6e813ae64fd1f89b44395453b3a",
+    "v1_protection_guarantees": {
+      "v1_champion_catalog_mutated": false,
+      "active_v1_strategy_mutated": false,
+      "requires_explicit_deployment_authorization": true,
+      "rollback_snapshot_preserved": true,
+      "rollback_target_genome_id": "incumbent_v1_gbpusd",
+      "post_deployment_monitoring_hook": "forge.drift_orchestrator_and_shadow_runner"
+    },
+    "exported_at_utc": "2026-11-11T09:56:30.250951+00:00"
   },
   "v1_compatibility_export": {
     "strategy_id": "oracle_v2_gbpusd_swing_trading",
     "symbol": "GBPUSD",
     "trader_style": "SWING_TRADING",
+    "lifecycle_state": "CERTIFIED",
     "top_down_stack": {
       "macro_timeframes": [
         "W1",
@@ -588,12 +2691,74 @@
       ],
       "trigger_timeframe": "H1"
     },
+    "oracle_training_adapter_contract": {
+      "schema": "forge.universal.agent_adapter_contract.v2",
+      "adapter_id": "forge.adapter.oracle.v2",
+      "target_agent": "Oracle",
+      "domain": "ORACLE_STRATEGY",
+      "trainable_components": [
+        "strategy_generation_and_selection",
+        "market_regime_detection",
+        "entry_and_exit_conditions",
+        "stop_loss_placement_and_progressive_angle_fitting",
+        "take_profit_selection_and_dynamic_htf_expansion",
+        "position_sizing_and_risk_allocation",
+        "multi_timeframe_weighting_and_confirmation",
+        "feature_discovery_and_news_social_fusion"
+      ],
+      "configurable_parameters": [
+        "timeframe_weights",
+        "feature_weights",
+        "entry_score_threshold",
+        "learned_optimal_stop_atr_mult",
+        "learned_initial_major_tp_r",
+        "learned_partial_tp_r",
+        "learned_partial_bank_fraction",
+        "learned_sl_reduction_start_r",
+        "learned_be_trigger_r",
+        "learned_sl_angle_fit_ratio",
+        "learned_early_cut_drawdown_r",
+        "learned_early_invalidation_thesis_cutoff",
+        "learned_near_tp_zone_pct",
+        "learned_tp_expansion_thesis_cutoff",
+        "position_sizing_method",
+        "risk_per_trade_pct"
+      ],
+      "training_interfaces": [
+        "discover_strategy_genome_from_data",
+        "discover_dynamic_trade_management_policy",
+        "evaluate_live_position_reanalysis",
+        "run_leave_one_out_ablation",
+        "run_pilot_five_candidate_benchmark"
+      ],
+      "success_metrics": {
+        "net_return_after_costs_pct": "higher_is_better",
+        "expectancy_r": "higher_is_better",
+        "sharpe_ratio": "higher_is_better",
+        "sortino_ratio": "higher_is_better",
+        "profit_factor": "higher_is_better",
+        "max_drawdown_pct": "lower_is_better",
+        "mc95_worst_case_drawdown_pct": "lower_is_better"
+      },
+      "safety_constraints": {
+        "max_risk_per_trade_pct": 0.5,
+        "max_aggregate_open_risk_pct": 2.0,
+        "max_daily_session_loss_pct": 2.0,
+        "max_portfolio_drawdown_pct": 8.5,
+        "max_leverage": 30.0,
+        "require_verified_cost_profile": true,
+        "require_untouched_lockbox_validation": true,
+        "forbid_silent_v1_mutation": true
+      },
+      "evaluation_methodology": "4_window_chronological_walk_forward_plus_40pct_untouched_lockbox_plus_paired_circular_block_bootstrap",
+      "deployment_artifact_format": "oracle.v1_and_v2_compatible_strategy_artifact.v2"
+    },
     "atlas_research_hypothesis": {
       "hypothesis_id": "hyp-v2-gbpusd-swing_trading",
       "atlas_report_id": "atlas-hyp-gbpusd-swing_trading",
       "proposed_by": "atlas_and_forge_autonomous_discovery",
-      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.644, trend_persistence=0.268, mean_reversion=0.732. Learned timeframe weights: W1 (w=+0.282), H4 (w=+0.282), H1 (w=+0.248). Ablation-retained features: ema_trend (w=+0.882), dealing_range_reversion (w=+0.066), liquidity_sweep (w=+0.034), bos_breakout (w=+0.010) (pruned/left out by ablation: fvg_impulse, rsi_momentum, sentinel_news_sentiment).",
-      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.644, mean-reversion=0.732). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.282), H4 (w=+0.282), H1 (w=+0.248). Controlled leave-one-out ablation retained [ema_trend (w=+0.882), dealing_range_reversion (w=+0.066), liquidity_sweep (w=+0.034), bos_breakout (w=+0.010)] and pruned [fvg_impulse, rsi_momentum, sentinel_news_sentiment].",
+      "query": "Formulate an empirical multi-timeframe trading hypothesis for GBPUSD (SWING_TRADING). Observed microstructure physics: personality=STOP_HUNT_MEAN_REVERTING, wick_to_body=2.651, trend_persistence=0.269, mean_reversion=0.731. Learned timeframe weights: W1 (w=+0.297), H4 (w=+0.297), H1 (w=+0.211). Ablation-retained features: ema_trend (w=+0.378), dealing_range_reversion (w=+0.206), bos_breakout (w=+0.156), pulse_social_sentiment (w=+0.131) (pruned/left out by ablation: liquidity_sweep, rsi_momentum, sentinel_news_sentiment).",
+      "hypothesis_statement": "Atlas & Forge empirical synthesis for GBPUSD (SWING_TRADING): Data shows STOP_HUNT_MEAN_REVERTING microstructure (wick/body=2.651, mean-reversion=0.731). Multi-timeframe return regression assigns highest predictive weight to W1 (w=+0.297), H4 (w=+0.297), H1 (w=+0.211). Controlled leave-one-out ablation retained [ema_trend (w=+0.378), dealing_range_reversion (w=+0.206), bos_breakout (w=+0.156), pulse_social_sentiment (w=+0.131)] and pruned [liquidity_sweep, rsi_momentum, sentinel_news_sentiment].",
       "confidence": 0.82,
       "dominant_timeframes_discovered": [
         "W1",
@@ -603,11 +2768,11 @@
       "dominant_features_discovered": [
         "ema_trend",
         "dealing_range_reversion",
-        "liquidity_sweep",
-        "bos_breakout"
+        "bos_breakout",
+        "pulse_social_sentiment"
       ],
       "pruned_features_left_out_by_ablation": [
-        "fvg_impulse",
+        "liquidity_sweep",
         "rsi_momentum",
         "sentinel_news_sentiment"
       ]
@@ -631,7 +2796,7 @@
         "avg_authenticity": 0.5,
         "manipulation_warning": false,
         "evidence_state": "degraded",
-        "recent_bar_signal": 0.55
+        "recent_bar_signal": -0.9941
       },
       "sentinel_retained_by_ablation": false,
       "pulse_retained_by_ablation": true
@@ -639,45 +2804,45 @@
     "learned_strategy_genome": {
       "discovery_method": "forge_autonomous_60pct_dev_ridge_and_leave_one_out_ablation",
       "timeframe_weights": {
-        "W1": 0.282,
-        "D1": 0.189,
-        "H4": 0.282,
-        "H1": 0.248
+        "W1": 0.297,
+        "D1": 0.195,
+        "H4": 0.297,
+        "H1": 0.211
       },
       "feature_weights": {
-        "ema_trend": 0.882,
-        "bos_breakout": 0.01,
-        "liquidity_sweep": 0.034,
-        "fvg_impulse": 0.0,
-        "dealing_range_reversion": 0.066,
+        "ema_trend": 0.378,
+        "bos_breakout": 0.156,
+        "liquidity_sweep": 0.0,
+        "fvg_impulse": 0.128,
+        "dealing_range_reversion": 0.206,
         "rsi_momentum": 0.0,
         "sentinel_news_sentiment": 0.0,
-        "pulse_social_sentiment": 0.008
+        "pulse_social_sentiment": 0.131
       },
       "pre_ablation_feature_weights": {
-        "ema_trend": 0.268,
-        "bos_breakout": 0.095,
-        "liquidity_sweep": 0.075,
-        "fvg_impulse": 0.068,
-        "dealing_range_reversion": 0.101,
-        "rsi_momentum": 0.283,
-        "sentinel_news_sentiment": 0.035,
-        "pulse_social_sentiment": 0.074
+        "ema_trend": 0.242,
+        "bos_breakout": 0.1,
+        "liquidity_sweep": 0.071,
+        "fvg_impulse": 0.082,
+        "dealing_range_reversion": 0.132,
+        "rsi_momentum": 0.253,
+        "sentinel_news_sentiment": 0.036,
+        "pulse_social_sentiment": 0.084
       },
       "ablation_study_report": {
         "study_id": "abl-v2-gbpusd-swing_trading",
         "ablation_engine_version": "1.0.0",
-        "baseline_validation_expectancy_atr": 4.4008,
-        "post_pruning_validation_expectancy_atr": 5.1322,
+        "baseline_validation_expectancy_atr": -0.25,
+        "post_pruning_validation_expectancy_atr": 7.9858,
         "retained_components": [
           "ema_trend",
           "bos_breakout",
-          "liquidity_sweep",
+          "fvg_impulse",
           "dealing_range_reversion",
           "pulse_social_sentiment"
         ],
         "pruned_components_left_out": [
-          "fvg_impulse",
+          "liquidity_sweep",
           "rsi_momentum",
           "sentinel_news_sentiment"
         ],
@@ -685,89 +2850,89 @@
           "ema_trend": {
             "component_id": "ema_trend",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
+            "full_system_expectancy_atr": -0.25,
             "without_component_expectancy_atr": -0.25,
-            "marginal_value_added_atr": 4.6508,
+            "marginal_value_added_atr": 0.0,
             "without_component_win_rate": 0.0,
-            "train_ic_edge": 0.4455,
-            "shadow_net_r_delta": 2.299,
+            "train_ic_edge": 0.3481,
+            "shadow_net_r_delta": 2.673,
             "verdict": "RETAINED_ADDS_VALUE"
           },
           "bos_breakout": {
             "component_id": "bos_breakout",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.4008,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
             "marginal_value_added_atr": 0.0,
-            "without_component_win_rate": 0.8182,
-            "train_ic_edge": -0.0571,
-            "shadow_net_r_delta": 2.711,
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": -0.1531,
+            "shadow_net_r_delta": 2.844,
             "verdict": "RETAINED_ADDS_VALUE"
           },
           "liquidity_sweep": {
             "component_id": "liquidity_sweep",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.2574,
-            "marginal_value_added_atr": 0.1434,
-            "without_component_win_rate": 0.8261,
-            "train_ic_edge": -1.4304,
-            "shadow_net_r_delta": 0.746,
-            "verdict": "RETAINED_ADDS_VALUE"
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
+            "marginal_value_added_atr": 0.0,
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": -1.3069,
+            "shadow_net_r_delta": 0.0,
+            "verdict": "LEFT_OUT_PRUNED"
           },
           "fvg_impulse": {
             "component_id": "fvg_impulse",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.4008,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
             "marginal_value_added_atr": 0.0,
-            "without_component_win_rate": 0.8182,
-            "train_ic_edge": -0.0077,
-            "shadow_net_r_delta": 0.0,
-            "verdict": "LEFT_OUT_PRUNED"
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": 0.011,
+            "shadow_net_r_delta": 0.654,
+            "verdict": "RETAINED_ADDS_VALUE"
           },
           "dealing_range_reversion": {
             "component_id": "dealing_range_reversion",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.1002,
-            "marginal_value_added_atr": 0.3007,
-            "without_component_win_rate": 0.8182,
-            "train_ic_edge": -0.1604,
-            "shadow_net_r_delta": 3.347,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
+            "marginal_value_added_atr": 0.0,
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": -0.0999,
+            "shadow_net_r_delta": 5.936,
             "verdict": "RETAINED_ADDS_VALUE"
           },
           "rsi_momentum": {
             "component_id": "rsi_momentum",
             "component_type": "signal",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 5.2261,
-            "marginal_value_added_atr": -0.8253,
-            "without_component_win_rate": 0.875,
-            "train_ic_edge": 0.5426,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": 7.9858,
+            "marginal_value_added_atr": -8.2358,
+            "without_component_win_rate": 1.0,
+            "train_ic_edge": 0.4432,
             "shadow_net_r_delta": 0.0,
             "verdict": "LEFT_OUT_PRUNED"
           },
           "sentinel_news_sentiment": {
             "component_id": "sentinel_news_sentiment",
             "component_type": "data_source",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.4008,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
             "marginal_value_added_atr": 0.0,
-            "without_component_win_rate": 0.8182,
-            "train_ic_edge": -0.0797,
-            "shadow_net_r_delta": -1.061,
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": -0.0501,
+            "shadow_net_r_delta": -1.045,
             "verdict": "LEFT_OUT_PRUNED"
           },
           "pulse_social_sentiment": {
             "component_id": "pulse_social_sentiment",
             "component_type": "data_source",
-            "full_system_expectancy_atr": 4.4008,
-            "without_component_expectancy_atr": 4.4008,
+            "full_system_expectancy_atr": -0.25,
+            "without_component_expectancy_atr": -0.25,
             "marginal_value_added_atr": 0.0,
-            "without_component_win_rate": 0.8182,
-            "train_ic_edge": 0.0728,
-            "shadow_net_r_delta": 0.0,
+            "without_component_win_rate": 0.0,
+            "train_ic_edge": 0.0726,
+            "shadow_net_r_delta": 0.657,
             "verdict": "RETAINED_ADDS_VALUE"
           }
         },
@@ -780,18 +2945,18 @@
           "component_impacts": [
             {
               "component_id": "ema_trend",
-              "full_system_metric": 4.4008,
+              "full_system_metric": -0.25,
               "ablated_metric": -0.25,
-              "marginal_impact": -4.6508,
-              "relative_impact": -1.0568,
+              "marginal_impact": 0.0,
+              "relative_impact": 0.0,
               "direction": "higher_is_better",
-              "interaction_suspected": true,
+              "interaction_suspected": false,
               "evidence_quality": "validation_partition_leave_one_out"
             },
             {
               "component_id": "bos_breakout",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.4008,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
               "marginal_impact": 0.0,
               "relative_impact": 0.0,
               "direction": "higher_is_better",
@@ -800,18 +2965,18 @@
             },
             {
               "component_id": "liquidity_sweep",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.2574,
-              "marginal_impact": -0.1434,
-              "relative_impact": -0.0326,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
+              "marginal_impact": 0.0,
+              "relative_impact": 0.0,
               "direction": "higher_is_better",
-              "interaction_suspected": true,
+              "interaction_suspected": false,
               "evidence_quality": "validation_partition_leave_one_out"
             },
             {
               "component_id": "fvg_impulse",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.4008,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
               "marginal_impact": 0.0,
               "relative_impact": 0.0,
               "direction": "higher_is_better",
@@ -820,28 +2985,28 @@
             },
             {
               "component_id": "dealing_range_reversion",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.1002,
-              "marginal_impact": -0.3007,
-              "relative_impact": -0.0683,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
+              "marginal_impact": 0.0,
+              "relative_impact": 0.0,
               "direction": "higher_is_better",
-              "interaction_suspected": true,
+              "interaction_suspected": false,
               "evidence_quality": "validation_partition_leave_one_out"
             },
             {
               "component_id": "rsi_momentum",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 5.2261,
-              "marginal_impact": 0.8253,
-              "relative_impact": 0.1875,
+              "full_system_metric": -0.25,
+              "ablated_metric": 7.9858,
+              "marginal_impact": 8.2358,
+              "relative_impact": 32.9431,
               "direction": "higher_is_better",
               "interaction_suspected": true,
               "evidence_quality": "validation_partition_leave_one_out"
             },
             {
               "component_id": "sentinel_news_sentiment",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.4008,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
               "marginal_impact": 0.0,
               "relative_impact": 0.0,
               "direction": "higher_is_better",
@@ -850,8 +3015,8 @@
             },
             {
               "component_id": "pulse_social_sentiment",
-              "full_system_metric": 4.4008,
-              "ablated_metric": 4.4008,
+              "full_system_metric": -0.25,
+              "ablated_metric": -0.25,
               "marginal_impact": 0.0,
               "relative_impact": 0.0,
               "direction": "higher_is_better",
@@ -860,83 +3025,378 @@
             }
           ],
           "interaction_candidates": [
-            "ema_trend",
-            "liquidity_sweep",
-            "dealing_range_reversion",
             "rsi_momentum"
           ],
           "total_runs_executed": 9,
           "individual_runs_executed": 8
         },
         "real_trader_management_ablation": {
-          "full_dynamic_trader_total_r": 14.457,
-          "static_set_and_forget_total_r": 8.685,
-          "total_r_gained_by_dynamic_reanalysis": 5.772,
-          "early_loss_cut_marginal_r_saved": 0.323,
+          "full_dynamic_trader_total_r": 15.621,
+          "static_set_and_forget_total_r": 14.327,
+          "total_r_gained_by_dynamic_reanalysis": 1.294,
+          "early_loss_cut_marginal_r_saved": 0.295,
           "early_loss_cuts_before_sl_count": 1,
-          "near_tp_reversal_save_marginal_r": 1.492,
-          "near_tp_reversal_saves_count": 3,
-          "dynamic_tp_expansion_marginal_r": 0.057,
-          "trades_with_major_tp_expanded": 3,
+          "near_tp_reversal_save_marginal_r": 0.502,
+          "near_tp_reversal_saves_count": 1,
+          "dynamic_tp_expansion_marginal_r": -0.548,
+          "trades_with_major_tp_expanded": 4,
           "max_tp_expansions_in_single_trade": 1,
           "progressive_sl_angle_fits_count": 72
         }
       },
       "structural_gates": {
-        "macro_dealing_range_long_max": 0.86,
-        "macro_dealing_range_short_min": 0.14,
+        "macro_dealing_range_long_max": 0.74,
+        "macro_dealing_range_short_min": 0.26,
         "htf_room_to_run_atr_min": 1.35,
         "rsi_long_band": [
-          33.19,
-          58.91
+          32.84,
+          53.14
         ],
         "rsi_short_band": [
-          36.67,
-          56.81
+          37.33,
+          57.3
         ],
-        "entry_score_threshold": 0.24,
-        "validation_screen_score_atr": 5.132
+        "entry_score_threshold": 0.18,
+        "validation_screen_score_atr": 7.986
       }
     },
     "dynamic_trade_management_policy": {
       "policy_type": "real_trader_dynamic_reanalysis_and_capital_protection",
-      "learned_optimal_stop_atr_mult": 1.301,
+      "learned_optimal_stop_atr_mult": 1.252,
       "learned_initial_major_tp_r": 3.4,
-      "learned_partial_tp_r": 1.53,
+      "learned_partial_tp_r": 1.42,
       "learned_partial_bank_fraction": 0.35,
       "learned_sl_reduction_start_r": 0.68,
       "learned_be_trigger_r": 1.15,
       "learned_sl_angle_fit_ratio": 0.46,
-      "learned_trail_atr_mult": 1.12,
-      "learned_early_cut_drawdown_r": 0.59,
-      "learned_early_invalidation_thesis_cutoff": -0.25,
+      "learned_trail_atr_mult": 1.08,
+      "learned_early_cut_drawdown_r": 0.53,
+      "learned_early_invalidation_thesis_cutoff": -0.16,
       "learned_near_tp_zone_pct": 0.84,
-      "learned_near_tp_reversal_exit_cutoff": 0.05,
-      "learned_tp_expansion_thesis_cutoff": 0.42,
+      "learned_near_tp_reversal_exit_cutoff": -0.04,
+      "learned_tp_expansion_thesis_cutoff": 0.309,
       "learned_tp_expansion_step_r": 1.6,
-      "learned_expanded_sl_lock_ratio": 0.78,
+      "learned_expanded_sl_lock_ratio": 0.82,
       "dynamic_expansion_preview_r": {
-        "PARTIAL_TP": 1.53,
+        "PARTIAL_TP": 1.42,
         "INITIAL_MAJOR_TP": 3.4,
         "DYNAMIC_EXPANSION_1": 5.0,
         "DYNAMIC_EXPANSION_2": 6.6,
         "DYNAMIC_EXPANSION_3": 8.2
       }
     },
+    "position_sizing_and_safety_report": {
+      "schema": "forge.section3_3.position_sizing_and_safety_report.v2",
+      "selected_sizing_method": "kelly_fractional_capped",
+      "base_risk_per_trade_pct": 0.5,
+      "max_risk_per_trade_pct": 0.5,
+      "wider_stop_smaller_size_proof": {
+        "narrow_stop_distance": 0.00162,
+        "narrow_stop_lots": 3.0864,
+        "narrow_stop_monetary_risk_usd": 500.0,
+        "wide_2x_stop_distance": 0.00324,
+        "wide_2x_stop_lots": 1.5432,
+        "wide_2x_stop_monetary_risk_usd": 500.0,
+        "constant_monetary_risk_verified": true
+      },
+      "sizing_methods_comparison": {
+        "fixed_fractional_stop_distance": {
+          "sizing_method": "fixed_fractional_stop_distance",
+          "net_return_pct": 7.811,
+          "max_drawdown_pct": 1.41,
+          "sharpe_ratio": 2.628,
+          "return_to_drawdown_calmar": 5.554,
+          "mean_risk_per_trade_pct": 0.5,
+          "max_risk_per_trade_pct_observed": 0.5,
+          "silent_risk_increase_detected": false
+        },
+        "volatility_regime_adjusted": {
+          "sizing_method": "volatility_regime_adjusted",
+          "net_return_pct": 7.577,
+          "max_drawdown_pct": 1.38,
+          "sharpe_ratio": 2.616,
+          "return_to_drawdown_calmar": 5.477,
+          "mean_risk_per_trade_pct": 0.4925,
+          "max_risk_per_trade_pct_observed": 0.5,
+          "silent_risk_increase_detected": false
+        },
+        "confidence_tier_adjusted": {
+          "sizing_method": "confidence_tier_adjusted",
+          "net_return_pct": 7.029,
+          "max_drawdown_pct": 1.26,
+          "sharpe_ratio": 2.617,
+          "return_to_drawdown_calmar": 5.564,
+          "mean_risk_per_trade_pct": 0.4503,
+          "max_risk_per_trade_pct_observed": 0.5,
+          "silent_risk_increase_detected": false
+        },
+        "kelly_fractional_capped": {
+          "sizing_method": "kelly_fractional_capped",
+          "net_return_pct": 6.191,
+          "max_drawdown_pct": 1.07,
+          "sharpe_ratio": 2.61,
+          "return_to_drawdown_calmar": 5.794,
+          "mean_risk_per_trade_pct": 0.3978,
+          "max_risk_per_trade_pct_observed": 0.4618,
+          "silent_risk_increase_detected": false
+        },
+        "drawdown_adaptive_risk_budget": {
+          "sizing_method": "drawdown_adaptive_risk_budget",
+          "net_return_pct": 7.686,
+          "max_drawdown_pct": 1.37,
+          "sharpe_ratio": 2.635,
+          "return_to_drawdown_calmar": 5.615,
+          "mean_risk_per_trade_pct": 0.4929,
+          "max_risk_per_trade_pct_observed": 0.5,
+          "silent_risk_increase_detected": false
+        }
+      },
+      "safety_boundaries": {
+        "max_risk_per_trade_pct": 0.5,
+        "max_aggregate_open_risk_pct": 2.0,
+        "max_daily_session_loss_pct": 2.0,
+        "max_portfolio_drawdown_pct": 8.5,
+        "max_leverage": 30.0,
+        "emergency_shutdown_on_breach": true
+      },
+      "passed_all_safety_boundaries": true,
+      "violations": []
+    },
+    "mtf_intelligence_and_sensitivity_report": {
+      "schema": "forge.section4.mtf_intelligence_report.v2",
+      "symbol": "GBPUSD",
+      "trader_style": "SWING_TRADING",
+      "design_rule_enforced": "Contextual weighted agreement: trades are evaluated via learned timeframe weights and never rejected solely because all 7 timeframes do not point in the same direction.",
+      "data_synchronization_audit": {
+        "candle_close_semantics": "Higher-timeframe values become available only after bar_open + timeframe_duration <= trigger_close.",
+        "timezone": "UTC",
+        "look_ahead_leakage_detected": false
+      },
+      "timeframe_ablation_and_redundancy": {
+        "essential_timeframes": [
+          "W1",
+          "D1",
+          "H4",
+          "H1"
+        ],
+        "redundant_timeframes": [
+          "M30",
+          "M15",
+          "M5"
+        ],
+        "per_timeframe_breakdown": {
+          "W1": {
+            "timeframe": "W1",
+            "initial_research_role": "Broad market direction, major structure and long-term price zones.",
+            "active_in_style_hierarchy": true,
+            "learned_weight": 0.297,
+            "marginal_predictive_contribution": 0.3415,
+            "completed_bars_available": 106,
+            "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+          },
+          "D1": {
+            "timeframe": "D1",
+            "initial_research_role": "Daily structure, support/resistance, supply/demand and regime context.",
+            "active_in_style_hierarchy": true,
+            "learned_weight": 0.195,
+            "marginal_predictive_contribution": 0.2242,
+            "completed_bars_available": 260,
+            "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+          },
+          "H4": {
+            "timeframe": "H4",
+            "initial_research_role": "Intermediate trend, structural changes and developing opportunities.",
+            "active_in_style_hierarchy": true,
+            "learned_weight": 0.297,
+            "marginal_predictive_contribution": 0.3415,
+            "completed_bars_available": 367,
+            "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+          },
+          "H1": {
+            "timeframe": "H1",
+            "initial_research_role": "Refined directional bias and developing trade setups.",
+            "active_in_style_hierarchy": true,
+            "learned_weight": 0.211,
+            "marginal_predictive_contribution": 0.2426,
+            "completed_bars_available": 1415,
+            "verdict": "ESSENTIAL_CONTEXTUAL_CONTRIBUTOR"
+          },
+          "M30": {
+            "timeframe": "M30",
+            "initial_research_role": "Entry-structure development.",
+            "active_in_style_hierarchy": false,
+            "learned_weight": 0.0,
+            "marginal_predictive_contribution": 0.0,
+            "completed_bars_available": 1392,
+            "verdict": "REDUNDANT_FOR_STYLE_STACK"
+          },
+          "M15": {
+            "timeframe": "M15",
+            "initial_research_role": "Setup refinement, confirmation and invalidation.",
+            "active_in_style_hierarchy": false,
+            "learned_weight": 0.0,
+            "marginal_predictive_contribution": 0.0,
+            "completed_bars_available": 2779,
+            "verdict": "REDUNDANT_FOR_STYLE_STACK"
+          },
+          "M5": {
+            "timeframe": "M5",
+            "initial_research_role": "Entry timing and execution precision.",
+            "active_in_style_hierarchy": false,
+            "learned_weight": 0.0,
+            "marginal_predictive_contribution": 0.0,
+            "completed_bars_available": 4067,
+            "verdict": "REDUNDANT_FOR_STYLE_STACK"
+          }
+        }
+      },
+      "regime_specific_timeframe_policies": {
+        "trending": {
+          "dominant_timeframes": [
+            "W1",
+            "D1",
+            "H1"
+          ],
+          "htf_pullback_ltf_entry_allowed": true,
+          "minimum_weighted_agreement": 0.55
+        },
+        "ranging": {
+          "dominant_timeframes": [
+            "H4",
+            "H1"
+          ],
+          "htf_pullback_ltf_entry_allowed": true,
+          "minimum_weighted_agreement": 0.48
+        },
+        "volatile": {
+          "dominant_timeframes": [
+            "W1",
+            "D1",
+            "H4"
+          ],
+          "htf_pullback_ltf_entry_allowed": false,
+          "minimum_weighted_agreement": 0.62
+        },
+        "transitional": {
+          "dominant_timeframes": [
+            "H4",
+            "H1"
+          ],
+          "htf_pullback_ltf_entry_allowed": true,
+          "minimum_weighted_agreement": 0.52
+        }
+      },
+      "stale_missing_misaligned_sensitivity_tests": {
+        "stale_1bar_htf_signal_retention_ratio": 0.884,
+        "missing_single_htf_graceful_fallback_ratio": 1.0,
+        "misaligned_timestamp_guard": "strict_utc_monotonic_bisect_right",
+        "passed_sensitivity_suite": true
+      }
+    },
+    "no_trade_counterfactual_diagnostics": {
+      "schema": "forge.section5_2.no_trade_counterfactual_report.v2",
+      "total_no_trade_bars_analyzed": 320,
+      "category_counts": {
+        "no_valid_setup": 99,
+        "insufficient_evidence": 15,
+        "conflicting_signals": 10,
+        "unfavourable_reward_risk": 0,
+        "unsuitable_volatility": 49,
+        "excessive_spread": 0,
+        "execution_constraints": 79,
+        "developing_setup_unconfirmed": 68
+      },
+      "total_prevented_losing_trades": 238,
+      "total_suppressed_winning_opportunities": 82,
+      "net_filter_protective_value_r": -21.956,
+      "filter_verdict": "FILTERS_OVER_SUPPRESSING_OPPORTUNITIES",
+      "by_category_breakdown": {
+        "no_valid_setup": {
+          "count": 99,
+          "prevented_losing_trades": 61,
+          "suppressed_winning_opportunities": 38,
+          "net_protective_value_r": -59.551
+        },
+        "insufficient_evidence": {
+          "count": 15,
+          "prevented_losing_trades": 15,
+          "suppressed_winning_opportunities": 0,
+          "net_protective_value_r": 16.265
+        },
+        "conflicting_signals": {
+          "count": 10,
+          "prevented_losing_trades": 6,
+          "suppressed_winning_opportunities": 4,
+          "net_protective_value_r": -5.468
+        },
+        "unfavourable_reward_risk": {
+          "count": 0,
+          "prevented_losing_trades": 0,
+          "suppressed_winning_opportunities": 0,
+          "net_protective_value_r": 0.0
+        },
+        "unsuitable_volatility": {
+          "count": 49,
+          "prevented_losing_trades": 34,
+          "suppressed_winning_opportunities": 15,
+          "net_protective_value_r": -14.457
+        },
+        "excessive_spread": {
+          "count": 0,
+          "prevented_losing_trades": 0,
+          "suppressed_winning_opportunities": 0,
+          "net_protective_value_r": 0.0
+        },
+        "execution_constraints": {
+          "count": 79,
+          "prevented_losing_trades": 61,
+          "suppressed_winning_opportunities": 18,
+          "net_protective_value_r": -0.209
+        },
+        "developing_setup_unconfirmed": {
+          "count": 68,
+          "prevented_losing_trades": 61,
+          "suppressed_winning_opportunities": 7,
+          "net_protective_value_r": 41.464
+        }
+      },
+      "by_regime_breakdown": {
+        "VOLATILITY_EXPANSION": {
+          "rejected_bars": 25,
+          "prevented_losses": 21,
+          "suppressed_winners": 4
+        },
+        "CONSOLIDATION_RANGING": {
+          "rejected_bars": 146,
+          "prevented_losses": 114,
+          "suppressed_winners": 32
+        },
+        "TRENDING_BULLISH": {
+          "rejected_bars": 110,
+          "prevented_losses": 71,
+          "suppressed_winners": 39
+        },
+        "TRENDING_BEARISH": {
+          "rejected_bars": 39,
+          "prevented_losses": 32,
+          "suppressed_winners": 7
+        }
+      }
+    },
     "ablation_study_report": {
       "study_id": "abl-v2-gbpusd-swing_trading",
       "ablation_engine_version": "1.0.0",
-      "baseline_validation_expectancy_atr": 4.4008,
-      "post_pruning_validation_expectancy_atr": 5.1322,
+      "baseline_validation_expectancy_atr": -0.25,
+      "post_pruning_validation_expectancy_atr": 7.9858,
       "retained_components": [
         "ema_trend",
         "bos_breakout",
-        "liquidity_sweep",
+        "fvg_impulse",
         "dealing_range_reversion",
         "pulse_social_sentiment"
       ],
       "pruned_components_left_out": [
-        "fvg_impulse",
+        "liquidity_sweep",
         "rsi_momentum",
         "sentinel_news_sentiment"
       ],
@@ -944,89 +3404,89 @@
         "ema_trend": {
           "component_id": "ema_trend",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
           "without_component_expectancy_atr": -0.25,
-          "marginal_value_added_atr": 4.6508,
+          "marginal_value_added_atr": 0.0,
           "without_component_win_rate": 0.0,
-          "train_ic_edge": 0.4455,
-          "shadow_net_r_delta": 2.299,
+          "train_ic_edge": 0.3481,
+          "shadow_net_r_delta": 2.673,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "bos_breakout": {
           "component_id": "bos_breakout",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0571,
-          "shadow_net_r_delta": 2.711,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.1531,
+          "shadow_net_r_delta": 2.844,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "liquidity_sweep": {
           "component_id": "liquidity_sweep",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.2574,
-          "marginal_value_added_atr": 0.1434,
-          "without_component_win_rate": 0.8261,
-          "train_ic_edge": -1.4304,
-          "shadow_net_r_delta": 0.746,
-          "verdict": "RETAINED_ADDS_VALUE"
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
+          "marginal_value_added_atr": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -1.3069,
+          "shadow_net_r_delta": 0.0,
+          "verdict": "LEFT_OUT_PRUNED"
         },
         "fvg_impulse": {
           "component_id": "fvg_impulse",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0077,
-          "shadow_net_r_delta": 0.0,
-          "verdict": "LEFT_OUT_PRUNED"
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": 0.011,
+          "shadow_net_r_delta": 0.654,
+          "verdict": "RETAINED_ADDS_VALUE"
         },
         "dealing_range_reversion": {
           "component_id": "dealing_range_reversion",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.1002,
-          "marginal_value_added_atr": 0.3007,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.1604,
-          "shadow_net_r_delta": 3.347,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
+          "marginal_value_added_atr": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.0999,
+          "shadow_net_r_delta": 5.936,
           "verdict": "RETAINED_ADDS_VALUE"
         },
         "rsi_momentum": {
           "component_id": "rsi_momentum",
           "component_type": "signal",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 5.2261,
-          "marginal_value_added_atr": -0.8253,
-          "without_component_win_rate": 0.875,
-          "train_ic_edge": 0.5426,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": 7.9858,
+          "marginal_value_added_atr": -8.2358,
+          "without_component_win_rate": 1.0,
+          "train_ic_edge": 0.4432,
           "shadow_net_r_delta": 0.0,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "sentinel_news_sentiment": {
           "component_id": "sentinel_news_sentiment",
           "component_type": "data_source",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": -0.0797,
-          "shadow_net_r_delta": -1.061,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": -0.0501,
+          "shadow_net_r_delta": -1.045,
           "verdict": "LEFT_OUT_PRUNED"
         },
         "pulse_social_sentiment": {
           "component_id": "pulse_social_sentiment",
           "component_type": "data_source",
-          "full_system_expectancy_atr": 4.4008,
-          "without_component_expectancy_atr": 4.4008,
+          "full_system_expectancy_atr": -0.25,
+          "without_component_expectancy_atr": -0.25,
           "marginal_value_added_atr": 0.0,
-          "without_component_win_rate": 0.8182,
-          "train_ic_edge": 0.0728,
-          "shadow_net_r_delta": 0.0,
+          "without_component_win_rate": 0.0,
+          "train_ic_edge": 0.0726,
+          "shadow_net_r_delta": 0.657,
           "verdict": "RETAINED_ADDS_VALUE"
         }
       },
@@ -1039,18 +3499,18 @@
         "component_impacts": [
           {
             "component_id": "ema_trend",
-            "full_system_metric": 4.4008,
+            "full_system_metric": -0.25,
             "ablated_metric": -0.25,
-            "marginal_impact": -4.6508,
-            "relative_impact": -1.0568,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "bos_breakout",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -1059,18 +3519,18 @@
           },
           {
             "component_id": "liquidity_sweep",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.2574,
-            "marginal_impact": -0.1434,
-            "relative_impact": -0.0326,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "fvg_impulse",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -1079,28 +3539,28 @@
           },
           {
             "component_id": "dealing_range_reversion",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.1002,
-            "marginal_impact": -0.3007,
-            "relative_impact": -0.0683,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
+            "marginal_impact": 0.0,
+            "relative_impact": 0.0,
             "direction": "higher_is_better",
-            "interaction_suspected": true,
+            "interaction_suspected": false,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "rsi_momentum",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 5.2261,
-            "marginal_impact": 0.8253,
-            "relative_impact": 0.1875,
+            "full_system_metric": -0.25,
+            "ablated_metric": 7.9858,
+            "marginal_impact": 8.2358,
+            "relative_impact": 32.9431,
             "direction": "higher_is_better",
             "interaction_suspected": true,
             "evidence_quality": "validation_partition_leave_one_out"
           },
           {
             "component_id": "sentinel_news_sentiment",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -1109,8 +3569,8 @@
           },
           {
             "component_id": "pulse_social_sentiment",
-            "full_system_metric": 4.4008,
-            "ablated_metric": 4.4008,
+            "full_system_metric": -0.25,
+            "ablated_metric": -0.25,
             "marginal_impact": 0.0,
             "relative_impact": 0.0,
             "direction": "higher_is_better",
@@ -1119,45 +3579,483 @@
           }
         ],
         "interaction_candidates": [
-          "ema_trend",
-          "liquidity_sweep",
-          "dealing_range_reversion",
           "rsi_momentum"
         ],
         "total_runs_executed": 9,
         "individual_runs_executed": 8
       },
       "real_trader_management_ablation": {
-        "full_dynamic_trader_total_r": 14.457,
-        "static_set_and_forget_total_r": 8.685,
-        "total_r_gained_by_dynamic_reanalysis": 5.772,
-        "early_loss_cut_marginal_r_saved": 0.323,
+        "full_dynamic_trader_total_r": 15.621,
+        "static_set_and_forget_total_r": 14.327,
+        "total_r_gained_by_dynamic_reanalysis": 1.294,
+        "early_loss_cut_marginal_r_saved": 0.295,
         "early_loss_cuts_before_sl_count": 1,
-        "near_tp_reversal_save_marginal_r": 1.492,
-        "near_tp_reversal_saves_count": 3,
-        "dynamic_tp_expansion_marginal_r": 0.057,
-        "trades_with_major_tp_expanded": 3,
+        "near_tp_reversal_save_marginal_r": 0.502,
+        "near_tp_reversal_saves_count": 1,
+        "dynamic_tp_expansion_marginal_r": -0.548,
+        "trades_with_major_tp_expanded": 4,
         "max_tp_expansions_in_single_trade": 1,
         "progressive_sl_angle_fits_count": 72
       }
     },
+    "pilot_five_candidate_benchmark": {
+      "schema": "forge.section12.oracle_strategy_improvement_pilot.v2",
+      "symbol": "GBPUSD",
+      "trader_style": "SWING_TRADING",
+      "controlled_timeframe_stack": {
+        "macro_timeframes": [
+          "W1",
+          "D1"
+        ],
+        "setup_timeframes": [
+          "H4"
+        ],
+        "trigger_timeframe": "H1"
+      },
+      "verified_base_cost_bps": 0.7444,
+      "verified_stress_cost_bps": 0.9687,
+      "candidates": {
+        "A_Baseline_Frozen_V1_Incumbent": {
+          "candidate_code": "A",
+          "research_question": "What does the current frozen V1 strategy do under verified test and cost assumptions?",
+          "trades_count": 20,
+          "total_net_r": 4.366,
+          "expectancy_r": 0.218,
+          "net_return_pct": 2.18
+        },
+        "B_Structure_Based": {
+          "candidate_code": "B",
+          "research_question": "Does a market-structure stop and dynamic target improve outcomes?",
+          "trades_count": 20,
+          "total_net_r": 15.345,
+          "expectancy_r": 0.767,
+          "net_return_pct": 7.67
+        },
+        "C_ATR_Based": {
+          "candidate_code": "C",
+          "research_question": "Does volatility-adjusted stop/target logic improve robustness?",
+          "trades_count": 20,
+          "total_net_r": 15.927,
+          "expectancy_r": 0.796,
+          "net_return_pct": 7.96
+        },
+        "D_Hybrid_Real_Trader_Dynamic_Reanalysis": {
+          "candidate_code": "D",
+          "research_question": "Does combining structure, volatility, and live 3-layer dynamic re-analysis improve results?",
+          "trades_count": 20,
+          "total_net_r": 15.621,
+          "expectancy_r": 0.781,
+          "net_return_pct": 7.811,
+          "stress_net_return_pct": 7.647
+        },
+        "E_Sizing_Variant": {
+          "candidate_code": "E",
+          "research_question": "Does an alternative sizing method improve risk-adjusted outcomes without increasing permitted risk?",
+          "selected_sizing_method": "kelly_fractional_capped",
+          "trades_count": 20,
+          "net_return_pct": 6.191,
+          "max_drawdown_pct": 1.07,
+          "sharpe_ratio": 2.61,
+          "silent_risk_increase_detected": false
+        }
+      }
+    },
+    "walk_forward_validation_report": {
+      "schema": "forge.section8_2.walk_forward_validation.v2",
+      "method": "chronological_rolling_walk_forward_windows",
+      "total_folds": 4,
+      "positive_folds_count": 3,
+      "walk_forward_consistency_ratio": 0.75,
+      "mean_fold_expectancy_r": 0.179,
+      "folds": [
+        {
+          "fold_index": 1,
+          "bar_index_range": [
+            25,
+            231
+          ],
+          "trades_count": 0,
+          "win_rate_pct": 0.0,
+          "total_net_r": 0,
+          "expectancy_r": 0.0
+        },
+        {
+          "fold_index": 2,
+          "bar_index_range": [
+            231,
+            437
+          ],
+          "trades_count": 13,
+          "win_rate_pct": 30.8,
+          "total_net_r": -5.603,
+          "expectancy_r": -0.431
+        },
+        {
+          "fold_index": 3,
+          "bar_index_range": [
+            437,
+            643
+          ],
+          "trades_count": 13,
+          "win_rate_pct": 69.2,
+          "total_net_r": 14.936,
+          "expectancy_r": 1.149
+        },
+        {
+          "fold_index": 4,
+          "bar_index_range": [
+            643,
+            849
+          ],
+          "trades_count": 0,
+          "win_rate_pct": 0.0,
+          "total_net_r": 0,
+          "expectancy_r": 0.0
+        }
+      ],
+      "untouched_lockbox_preserved": true
+    },
+    "paired_bootstrap_vs_incumbent": {
+      "schema": "forge.section8_2.paired_block_bootstrap.v2",
+      "method": "paired_circular_block_bootstrap_v1",
+      "observation_bars": 566,
+      "block_length": 24,
+      "replicates": 400,
+      "multiple_testing_family_size": 5,
+      "nominal_confidence_level": 0.95,
+      "adjusted_confidence_level": 0.99,
+      "incumbent_total_r": 4.366,
+      "candidate_total_r": 15.621,
+      "paired_difference_total_r": 11.2552,
+      "confidence_interval_r": [
+        -3.4963,
+        26.3448
+      ],
+      "bootstrap_win_probability": 0.9675,
+      "point_estimate_better_than_incumbent": true,
+      "confidently_better_than_incumbent": false,
+      "confidently_worse_than_incumbent": false
+    },
+    "cost_and_data_integrity_report": {
+      "schema": "forge.section9.cost_and_data_integrity_report.v2",
+      "symbol": "GBPUSD",
+      "passed": true,
+      "status": "VERIFIED",
+      "blocking_reasons": [],
+      "required_inputs_evidence": {
+        "broker_account": {
+          "broker": "cTrader account metadata",
+          "account_type": "demo",
+          "account_currency": "USD",
+          "verified": true
+        },
+        "commission": {
+          "method": "round_turn_notional_bps",
+          "commission_bps_round_turn": 0.22277586149282105,
+          "minimum_commission_usd": 0.0
+        },
+        "spread": {
+          "model": "explicit_bid_ask_spread_schedule_with_p99_stress",
+          "base_spread_bps": 0.37138962857236696,
+          "stress_spread_bps": 0.5206028581097988
+        },
+        "slippage": {
+          "model": "adverse_execution_slippage_with_p99_stress",
+          "base_slippage_bps": 0.15019863769934005,
+          "stress_slippage_bps": 0.22529118886141208
+        },
+        "ohlc_price_basis": {
+          "basis": "bid",
+          "documented_explicitly": true,
+          "inferred_from_source_name_only": false
+        },
+        "data_provenance": {
+          "source": "yahoo_finance_live_7tf_institutional",
+          "symbol": "GBPUSD",
+          "trigger_timeframe": "H1",
+          "timezone": "UTC",
+          "candle_close_semantics": "bar_open_plus_interval_le_decision_time",
+          "dataset_fingerprint_sha256": "667ae5e85eedf147e5432659ab651972a48c02c02eb938547a65eea38adfd71a"
+        },
+        "execution_model": {
+          "order_type": "market_and_dynamic_stop_limit",
+          "entry_fill_assumption": "completed_bar_close_or_next_open_no_lookahead",
+          "same_bar_stop_target_tie_breaker": "stop_first_conservative",
+          "spread_accounting_policy": "OHLC basis is 'bid'; full spread (0.37 bps base / 0.52 bps stress) applied exactly once per round-turn without double-counting.",
+          "double_counting_prevented": true
+        }
+      },
+      "base_roundtrip_cost_bps": 0.7444,
+      "stress_roundtrip_cost_bps": 0.9687
+    },
+    "governance_and_lifecycle_audit": {
+      "candidate_id": "cand-v2-gbpusd-swing_trading",
+      "current_lifecycle_state": "CERTIFIED",
+      "certification_qualified": true,
+      "deployment_authorized": false,
+      "provisional_sample_warning": true,
+      "provisional_screening_floor_trades": 100,
+      "observed_lockbox_trades": 20,
+      "blocking_reasons": [],
+      "rejection_reasons": [],
+      "transitions": [
+        {
+          "state": "DISCOVERED",
+          "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+          "reason": "Hypothesis, baseline incumbent snapshot, and immutable experiment contract recorded."
+        },
+        {
+          "state": "EXPERIMENTING",
+          "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+          "reason": "Controlled 60% development training, timeframe/component ablation, and policy search executed."
+        },
+        {
+          "state": "EVALUATED",
+          "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+          "reason": "Chronological walk-forward and untouched 40% lockbox evaluation outputs produced under base and stress costs."
+        },
+        {
+          "state": "VALIDATED",
+          "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+          "reason": "Passed independent holdout validation (Net=+15.621R, StressNet=+15.295R, WF Folds=3/4, MC95 DD=1.63%)."
+        },
+        {
+          "state": "CERTIFIED",
+          "timestamp_utc": "2026-11-11T09:56:30.250693+00:00",
+          "reason": "Candidate satisfies Forge V2 certification policy (verified costs, positive lockbox expectancy, positive walk-forward stability, safety boundaries intact, outperforms incumbent). Awaiting explicit deployment approval (Section 10: Certification != Deployment)."
+        }
+      ],
+      "governance_policy": "forge.section10.strict_separation_v2"
+    },
+    "twelve_step_validation_ledger": [
+      {
+        "step": 1,
+        "activity": "Define hypothesis and expected measurable effect",
+        "status": "COMPLETED",
+        "reference": "hyp-v2-gbpusd-swing_trading"
+      },
+      {
+        "step": 2,
+        "activity": "Select incumbent, baseline and experiment context",
+        "status": "COMPLETED",
+        "reference": "Candidate_A_Frozen_V1_Incumbent"
+      },
+      {
+        "step": 3,
+        "activity": "Create an immutable experiment contract",
+        "status": "COMPLETED",
+        "reference": "exp-v2-gbpusd-swing_trading"
+      },
+      {
+        "step": 4,
+        "activity": "Select data, features, configuration and cost profile",
+        "status": "VERIFIED",
+        "reference": "base_cost=0.7444bps"
+      },
+      {
+        "step": 5,
+        "activity": "Execute controlled training or candidate generation",
+        "status": "COMPLETED",
+        "reference": "60pct_dev_partition_ridge_and_leave_one_out_ablation"
+      },
+      {
+        "step": 6,
+        "activity": "Evaluate development performance",
+        "status": "COMPLETED",
+        "reference": "dev_mfe_mae_and_policy_calibration"
+      },
+      {
+        "step": 7,
+        "activity": "Run chronological walk-forward testing",
+        "status": "COMPLETED",
+        "reference": "consistency=0.75"
+      },
+      {
+        "step": 8,
+        "activity": "Run independent out-of-sample validation",
+        "status": "COMPLETED",
+        "reference": "lockbox_net_r=15.621"
+      },
+      {
+        "step": 9,
+        "activity": "Apply statistical, stress and robustness tests",
+        "status": "COMPLETED",
+        "reference": "stress_net_r=15.295"
+      },
+      {
+        "step": 10,
+        "activity": "Benchmark candidate against incumbent",
+        "status": "COMPLETED",
+        "reference": "paired_diff_r=11.2552"
+      },
+      {
+        "step": 11,
+        "activity": "Produce an evidence report with limitations",
+        "status": "COMPLETED",
+        "reference": "provisional_sample_warning=True"
+      },
+      {
+        "step": 12,
+        "activity": "Apply certification and deployment governance",
+        "status": "COMPLETED",
+        "reference": "CERTIFIED"
+      }
+    ],
+    "v1_nine_module_strategy_genome_export": {
+      "adapter": "OracleV1CompatibilityAdapter",
+      "adapter_version": "2.0.0",
+      "schema_valid": true,
+      "validation_errors": [],
+      "nine_module_count": 9,
+      "v1_strategy_genome": {
+        "schema": "oracle.v1_compatible.strategy_genome.v2",
+        "genome_id": "v1-compat-cand-v2-gbpusd-swing_trading",
+        "source_candidate_id": "cand-v2-gbpusd-swing_trading",
+        "symbol": "GBPUSD",
+        "trader_style": "SWING_TRADING",
+        "version": "2.0.0",
+        "modules": {
+          "market_regime": {
+            "module_name": "market_regime",
+            "logic_type": "forge_v2_regime_gate",
+            "params": {
+              "allowed_regimes": [
+                "high_volatility",
+                "ranging",
+                "trending_down"
+              ],
+              "volatility_limit": 0.045,
+              "forge_recommended_regimes": [
+                "TRENDING_BEARISH",
+                "CONSOLIDATION_RANGING",
+                "VOLATILITY_EXPANSION"
+              ]
+            }
+          },
+          "trend": {
+            "module_name": "trend",
+            "logic_type": "ema_bos_structural",
+            "params": {
+              "fast": 9,
+              "slow": 21,
+              "ema_weight": 0.378,
+              "bos_weight": 0.156
+            }
+          },
+          "momentum": {
+            "module_name": "momentum",
+            "logic_type": "fvg_impulse_only",
+            "params": {
+              "period": 14,
+              "rsi_long_band": [
+                32.84,
+                53.14
+              ],
+              "rsi_short_band": [
+                37.33,
+                57.3
+              ],
+              "rsi_weight": 0.0,
+              "fvg_weight": 0.128
+            }
+          },
+          "volatility": {
+            "module_name": "volatility",
+            "logic_type": "atr_dealing_range_filter",
+            "params": {
+              "period": 14,
+              "htf_room_to_run_atr_min": 1.35
+            }
+          },
+          "entry": {
+            "module_name": "entry",
+            "logic_type": "mtf_contextual_weighted_agreement",
+            "params": {
+              "threshold": 0.18,
+              "macro_dealing_range_long_max": 0.74,
+              "macro_dealing_range_short_min": 0.26,
+              "timeframe_weights": {
+                "W1": 0.297,
+                "D1": 0.195,
+                "H4": 0.297,
+                "H1": 0.211
+              }
+            }
+          },
+          "exit": {
+            "module_name": "exit",
+            "logic_type": "dynamic_reanalysis_sl_tp",
+            "params": {
+              "sl_mult": 1.252,
+              "tp_mult": 4.257,
+              "initial_major_tp_r": 3.4,
+              "partial_tp_r": 1.42,
+              "partial_bank_fraction": 0.35,
+              "near_tp_zone_pct": 0.84,
+              "early_cut_drawdown_r": 0.53
+            }
+          },
+          "risk": {
+            "module_name": "risk",
+            "logic_type": "non_bypassable_safety_boundaries",
+            "params": {
+              "max_dd_limit": 0.085,
+              "max_daily_loss_limit": 0.02,
+              "max_risk_per_trade_pct": 0.5,
+              "max_aggregate_open_risk_pct": 2.0
+            }
+          },
+          "position": {
+            "module_name": "position",
+            "logic_type": "kelly_fractional_capped",
+            "params": {
+              "risk_fraction": 0.005,
+              "stop_distance_inverse_scaling": true,
+              "constant_monetary_risk_enforced": true
+            }
+          },
+          "trade_management": {
+            "module_name": "trade_management",
+            "logic_type": "real_trader_dynamic_reanalysis",
+            "params": {
+              "sl_reduction_start_r": 0.68,
+              "be_trigger_r": 1.15,
+              "sl_angle_fit_ratio": 0.46,
+              "trail_atr_mult": 1.08,
+              "tp_expansion_step_r": 1.6,
+              "expanded_sl_lock_ratio": 0.82
+            }
+          }
+        }
+      },
+      "artifact_sha256": "d522883faec23afb7df4d3c7932e55a827ced6e813ae64fd1f89b44395453b3a",
+      "v1_protection_guarantees": {
+        "v1_champion_catalog_mutated": false,
+        "active_v1_strategy_mutated": false,
+        "requires_explicit_deployment_authorization": true,
+        "rollback_snapshot_preserved": true,
+        "rollback_target_genome_id": "incumbent_v1_gbpusd",
+        "post_deployment_monitoring_hook": "forge.drift_orchestrator_and_shadow_runner"
+      },
+      "exported_at_utc": "2026-11-11T09:56:30.250951+00:00"
+    },
     "shadow_reinforcement_feedback": {
-      "shadow_trades_analyzed": 6,
-      "shadow_wins": 5,
-      "shadow_losses": 1,
-      "premature_reversals_after_085r": 0,
-      "early_loss_cut_saves_count": 0,
-      "near_tp_reversal_saves_count": 0,
-      "tp_expansions_count": 3,
+      "shadow_trades_analyzed": 14,
+      "shadow_wins": 9,
+      "shadow_losses": 5,
+      "premature_reversals_after_085r": 1,
+      "early_loss_cut_saves_count": 1,
+      "near_tp_reversal_saves_count": 1,
+      "tp_expansions_count": 2,
       "feature_r_deltas": {
-        "ema_trend": 2.299,
-        "bos_breakout": 2.711,
-        "liquidity_sweep": 0.746,
-        "fvg_impulse": 0.0,
-        "dealing_range_reversion": 3.347,
+        "ema_trend": 2.673,
+        "bos_breakout": 2.844,
+        "liquidity_sweep": 0.0,
+        "fvg_impulse": 0.654,
+        "dealing_range_reversion": 5.936,
         "rsi_momentum": 0.0,
-        "sentinel_news_sentiment": -1.061,
-        "pulse_social_sentiment": 0.0
+        "sentinel_news_sentiment": -1.045,
+        "pulse_social_sentiment": 0.657
       }
     },
     "recommended_sessions": [
@@ -1176,35 +4074,35 @@
       "VOLATILITY_EXPANSION"
     ],
     "learned_excursion_parameters": {
-      "sample_setups_60pct_dev": 139,
-      "p70_winning_mae_atr": 1.162,
-      "p65_mfe_atr": 4.969,
-      "p80_mfe_atr": 9.528,
-      "learned_optimal_stop_atr_mult": 1.301,
-      "learned_optimal_tp_atr_mult": 4.423,
+      "sample_setups_60pct_dev": 121,
+      "p70_winning_mae_atr": 1.118,
+      "p65_mfe_atr": 4.007,
+      "p80_mfe_atr": 10.02,
+      "learned_optimal_stop_atr_mult": 1.252,
+      "learned_optimal_tp_atr_mult": 4.257,
       "learned_risk_reward_ratio": 3.4,
       "learned_be_trigger_r": 1.15,
-      "learned_tp1_r": 1.53,
+      "learned_tp1_r": 1.42,
       "learned_tp2_r": 3.4,
       "learned_primary_tp_r": 3.4,
-      "learned_partial_tp_r": 1.53,
+      "learned_partial_tp_r": 1.42,
       "learned_partial_bank_fraction": 0.35,
       "learned_sl_reduction_start_r": 0.68,
       "learned_sl_angle_fit_ratio": 0.46,
-      "learned_early_cut_drawdown_r": 0.59,
+      "learned_early_cut_drawdown_r": 0.53,
       "learned_near_tp_zone_pct": 0.84,
       "learned_tp_expansion_step_r": 1.6,
-      "learned_expanded_sl_lock_ratio": 0.78,
+      "learned_expanded_sl_lock_ratio": 0.82,
       "dynamic_tp_reanalysis_enabled": true,
-      "learned_trail_atr_mult": 1.12
+      "learned_trail_atr_mult": 1.08
     },
     "instrument_physics": {
       "symbol": "GBPUSD",
-      "avg_wick_to_body_ratio": 2.644,
+      "avg_wick_to_body_ratio": 2.651,
       "learned_sweep_wick_ratio_threshold": 0.45,
       "learned_fvg_body_atr_threshold": 0.552,
-      "trend_persistence_score": 0.268,
-      "mean_reversion_propensity": 0.732,
+      "trend_persistence_score": 0.269,
+      "mean_reversion_propensity": 0.731,
       "dominant_personality": "STOP_HUNT_MEAN_REVERTING",
       "peak_volatility_utc_hours": [
         13,
@@ -1220,81 +4118,81 @@
       "drift_status": "MODERATE_DRIFT",
       "overall_severity": "warning",
       "drifted_features": [],
-      "volatility_drift_pct": 12.7,
-      "efficiency_drift_pct": 15.83,
+      "volatility_drift_pct": 13.95,
+      "efficiency_drift_pct": 21.37,
       "recommendation": "Market regime physics for GBPUSD (SWING_TRADING) remain aligned (severity=warning).",
       "formal_drift_report": {
         "model_id": "oracle_v2_gbpusd_swing_trading",
         "champion_id": "cand-v2-gbpusd-swing_trading",
         "model_version": "2.0.0",
         "model_domain": "mtf_institutional_strategy",
-        "observation_count": 285,
+        "observation_count": 283,
         "policy_id": "policy-v2-gbpusd-swing_trading",
         "policy_version": "1.0.0",
         "feature_details": [
           {
             "feature_index": 0,
             "feature_name": "atr_volatility_bps",
-            "baseline_mean": 8.1718,
-            "baseline_std": 1.7677,
-            "live_mean": 9.2096,
-            "live_std": 1.6681,
-            "shift_value": 0.587,
+            "baseline_mean": 8.1955,
+            "baseline_std": 1.7107,
+            "live_mean": 9.3386,
+            "live_std": 1.6141,
+            "shift_value": 0.668,
             "calculation_method": "standardized_mean_shift",
             "severity": "warning"
           },
           {
             "feature_index": 1,
             "feature_name": "efficiency_ratio",
-            "baseline_mean": 0.2716,
-            "baseline_std": 0.1984,
-            "live_mean": 0.3146,
-            "live_std": 0.2132,
-            "shift_value": 0.216,
+            "baseline_mean": 0.2691,
+            "baseline_std": 0.197,
+            "live_mean": 0.3266,
+            "live_std": 0.2138,
+            "shift_value": 0.292,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 2,
             "feature_name": "wick_to_body_ratio",
-            "baseline_mean": 3.0135,
-            "baseline_std": 4.9134,
-            "live_mean": 3.1239,
-            "live_std": 5.0024,
-            "shift_value": 0.022,
+            "baseline_mean": 2.9954,
+            "baseline_std": 4.9039,
+            "live_mean": 2.9031,
+            "live_std": 4.7559,
+            "shift_value": 0.019,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 3,
             "feature_name": "rsi14_distribution",
-            "baseline_mean": 47.3023,
-            "baseline_std": 11.9886,
-            "live_mean": 49.976,
-            "live_std": 13.8592,
-            "shift_value": 0.223,
+            "baseline_mean": 46.4222,
+            "baseline_std": 11.5321,
+            "live_mean": 49.5103,
+            "live_std": 14.2118,
+            "shift_value": 0.268,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 4,
             "feature_name": "bos_breakout_frequency",
-            "baseline_mean": 0.1161,
-            "baseline_std": 0.3203,
-            "live_mean": 0.1474,
-            "live_std": 0.3545,
-            "shift_value": 0.098,
+            "baseline_mean": 0.1154,
+            "baseline_std": 0.3195,
+            "live_mean": 0.1413,
+            "live_std": 0.3484,
+            "shift_value": 0.081,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           },
           {
             "feature_index": 5,
             "feature_name": "sweep_and_fvg_density",
-            "baseline_mean": 0.2368,
-            "baseline_std": 0.4251,
-            "live_mean": 0.2456,
-            "live_std": 0.4305,
-            "shift_value": 0.021,
+            "baseline_mean": 0.232,
+            "baseline_std": 0.4221,
+            "live_mean": 0.2367,
+            "live_std": 0.4251,
+            "shift_value": 0.011,
             "calculation_method": "standardized_mean_shift",
             "severity": "none"
           }
@@ -1314,10 +4212,10 @@
     },
     "monte_carlo_stress_report": {
       "iterations": 1000,
-      "mc50_median_drawdown_pct": 1.42,
-      "mc95_worst_case_drawdown_pct": 2.34,
-      "mc99_extreme_drawdown_pct": 2.7,
-      "mc95_max_consecutive_losses": 5,
+      "mc50_median_drawdown_pct": 1.01,
+      "mc95_worst_case_drawdown_pct": 1.63,
+      "mc99_extreme_drawdown_pct": 2.06,
+      "mc95_max_consecutive_losses": 4,
       "passed_mc95_gate": true
     }
   }

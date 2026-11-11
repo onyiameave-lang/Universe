@@ -39,6 +39,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from Chronicle.core.dedup_ledger import ChronicleDeduplicatingLedger
+from Forge.core.institutional_standard import (
+    ExplainabilityAndNoTradeEngine,
+    PositionSizingAndSafetyEngine,
+)
 from Forge.core.mtf_institutional_engine import (
     ALL_WATCHLIST_SYMBOLS,
     LIVE_PRESET_SYMBOLS,
@@ -491,11 +495,40 @@ class ForgeShadowRunner:
                     else "ema_trend"
                 )
 
+                sizing_info = PositionSizingAndSafetyEngine.compute_position_size_for_stop(
+                    symbol=upper_sym,
+                    entry_price=entry_price,
+                    stop_distance=stop_distance,
+                    account_equity_usd=100000.0,
+                    risk_budget_pct=0.50,
+                )
+                trade_thesis = ExplainabilityAndNoTradeEngine.build_structured_trade_thesis(
+                    symbol=upper_sym,
+                    trader_style=style,
+                    direction="LONG" if is_long else "SHORT",
+                    entry_bar=bar,
+                    macro_bars=macro_bars,
+                    setup_bars=setup_bars,
+                    entry_price=entry_price,
+                    stop_loss_price=initial_stop,
+                    initial_major_tp_price=float(sim["active_major_tp_price"]),
+                    partial_tp_price=float(sim["partial_tp_price"]),
+                    management_policy=management_policy,
+                    sizing_info=sizing_info,
+                    cost_report=bp.get("cost_and_data_integrity_report") or {
+                        "base_roundtrip_cost_bps": total_cost_bps,
+                        "stress_roundtrip_cost_bps": round(total_cost_bps * 1.65, 4),
+                    },
+                    sentinel_score=s_val,
+                    pulse_score=p_val,
+                )
+
                 trade_record = {
                     "shadow_trade_id": f"shd-{upper_sym.lower()}-{style.lower()}-{unix_sec}",
                     "symbol": upper_sym,
                     "trader_style": style,
                     "candidate_id": loaded["candidate_id"],
+                    "lifecycle_state": loaded.get("lifecycle_state", "CERTIFIED"),
                     "trigger_timeframe": trigger_tf,
                     "trigger_feature_key": trigger_feature_key,
                     "sentinel_signal_at_entry": round(s_val, 3),
@@ -532,6 +565,8 @@ class ForgeShadowRunner:
                     "worst_mae_r": round(worst_mae_r, 3),
                     "be_ratchet_triggered": be_active,
                     "tp1_partial_banked": tp1_filled,
+                    "position_sizing": sizing_info,
+                    "trade_thesis": trade_thesis,
                     "lifecycle_events": lifecycle_events,
                 }
 
