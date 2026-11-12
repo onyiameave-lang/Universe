@@ -485,6 +485,8 @@ class PositionSizingAndSafetyEngine:
     ) -> Dict[str, Any]:
         """
         Compute exact units and MT5-compliant lots from stop distance so monetary risk is constant.
+        Use MT5's loss tick value for account-currency conversion when available; otherwise
+        only size symbols whose quote-to-USD conversion can be established safely.
         A 2x wider stop distance yields exactly 0.5x the position size.
         Also computes broker-clamped MT5 volume (lot step rounding, volume_min, volume_max).
         """
@@ -498,18 +500,55 @@ class PositionSizingAndSafetyEngine:
             if float(mt5_symbol_specs.get("point", 0) or 0) > 0:
                 specs["pip_size"] = float(mt5_symbol_specs["point"]) * 10.0
 
-        # Convert price stop distance into USD risk per 1 unit of base asset
-        if symbol.upper().endswith("JPY") and entry_price > 0:
-            usd_risk_per_unit = safe_stop / entry_price
-        else:
-            usd_risk_per_unit = safe_stop
+        contract_size = float(specs["contract_units_per_lot"])
+        account_currency = str((mt5_symbol_specs or {}).get("account_currency", "USD")).upper()
+        tick_size = float((mt5_symbol_specs or {}).get("trade_tick_size", 0) or 0)
+        tick_value = float(
+            (mt5_symbol_specs or {}).get("trade_tick_value_loss", 0)
+            or (mt5_symbol_specs or {}).get("trade_tick_value", 0)
+            or 0
+        )
+        quote_to_usd_rate = 0.0
+        conversion_source = "unavailable"
 
-        raw_units = permitted_risk_usd / max(usd_risk_per_unit, 1e-9)
+        if account_currency == "USD" and tick_size > 0 and tick_value > 0 and contract_size > 0:
+            quote_to_usd_rate = tick_value / (tick_size * contract_size)
+            usd_risk_per_unit = (safe_stop / tick_size * tick_value) / contract_size
+            conversion_source = "mt5_loss_tick_value"
+        else:
+            explicit_rate = float((mt5_symbol_specs or {}).get("quote_to_usd_rate", 0) or 0)
+            upper_symbol = symbol.upper()
+            if account_currency != "USD":
+                quote_to_usd_rate = 0.0
+            elif explicit_rate > 0:
+                quote_to_usd_rate = explicit_rate
+                conversion_source = "provided_quote_to_usd_rate"
+            elif upper_symbol.endswith("USD"):
+                quote_to_usd_rate = 1.0
+                conversion_source = "usd_quote"
+            elif len(upper_symbol) == 6 and upper_symbol.startswith("USD") and entry_price > 0:
+                quote_to_usd_rate = 1.0 / entry_price
+                conversion_source = "usd_base"
+
+            usd_risk_per_unit = safe_stop * quote_to_usd_rate
+
+        risk_conversion_available = (
+            math.isfinite(usd_risk_per_unit)
+            and usd_risk_per_unit > 0
+            and math.isfinite(quote_to_usd_rate)
+            and quote_to_usd_rate > 0
+            and account_currency == "USD"
+        )
+
+        raw_units = (
+            permitted_risk_usd / usd_risk_per_unit
+            if risk_conversion_available
+            else 0.0
+        )
         max_notional_usd = account_equity_usd * float(cls.SAFETY_BOUNDARIES["max_leverage"])
-        notional_per_unit_usd = 1.0 if symbol.upper().endswith("JPY") else entry_price
+        notional_per_unit_usd = entry_price * quote_to_usd_rate
         max_units_by_leverage = max_notional_usd / max(notional_per_unit_usd, 1e-9)
         executable_units = min(raw_units, max_units_by_leverage)
-        contract_size = float(specs["contract_units_per_lot"])
         lots = round(executable_units / contract_size, 4)
 
         vol_step = float((mt5_symbol_specs or {}).get("volume_step", 0.01) or 0.01)
@@ -517,7 +556,7 @@ class PositionSizingAndSafetyEngine:
         vol_max = float((mt5_symbol_specs or {}).get("volume_max", 100.0) or 100.0)
         mt5_clamped_lots = math.floor((lots / vol_step) + 1e-12) * vol_step
         mt5_clamped_lots = round(min(vol_max, max(0.0, mt5_clamped_lots)), 4)
-        mt5_order_eligible = mt5_clamped_lots >= vol_min
+        mt5_order_eligible = risk_conversion_available and mt5_clamped_lots >= vol_min
         stop_pips = round(safe_stop / max(specs["pip_size"], 1e-9), 2)
 
         return {
@@ -533,6 +572,8 @@ class PositionSizingAndSafetyEngine:
             "mt5_volume_step": vol_step,
             "mt5_volume_min": vol_min,
             "mt5_order_eligible": mt5_order_eligible,
+            "risk_conversion_available": risk_conversion_available,
+            "risk_conversion_source": conversion_source,
             "contract_units_per_lot": contract_size,
             "notional_exposure_usd": round(executable_units * notional_per_unit_usd, 2),
             "effective_leverage": round((executable_units * notional_per_unit_usd) / max(account_equity_usd, 1e-9), 3),

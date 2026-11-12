@@ -132,6 +132,44 @@ class TestForgeV2InstitutionalStandard(unittest.TestCase):
         self.assertLessEqual(excessive_risk_attempt["permitted_risk_pct"], 0.50)
         self.assertLessEqual(excessive_risk_attempt["permitted_monetary_risk_usd"], 500.0)
 
+    def test_cross_currency_position_sizing_uses_account_currency_tick_value(self) -> None:
+        sizing = PositionSizingAndSafetyEngine.compute_position_size_for_stop(
+            symbol="EURGBP",
+            entry_price=0.83532,
+            stop_distance=0.00078,
+            account_equity_usd=100000.0,
+            risk_budget_pct=0.50,
+            mt5_symbol_specs={
+                "account_currency": "USD",
+                "trade_contract_size": 100000.0,
+                "trade_tick_size": 0.00001,
+                "trade_tick_value_loss": 1.3264,
+                "volume_min": 0.01,
+                "volume_max": 100.0,
+                "volume_step": 0.01,
+            },
+        )
+
+        risk_per_lot_usd = (0.00078 / 0.00001) * 1.3264
+        actual_risk_usd = sizing["mt5_broker_lots"] * risk_per_lot_usd
+        self.assertTrue(sizing["risk_conversion_available"])
+        self.assertEqual(sizing["risk_conversion_source"], "mt5_loss_tick_value")
+        self.assertLessEqual(actual_risk_usd, 500.0)
+        self.assertAlmostEqual(sizing["mt5_broker_lots"], 4.83, places=2)
+
+    def test_cross_currency_position_sizing_fails_closed_without_conversion(self) -> None:
+        sizing = PositionSizingAndSafetyEngine.compute_position_size_for_stop(
+            symbol="EURGBP",
+            entry_price=0.83532,
+            stop_distance=0.00078,
+            account_equity_usd=100000.0,
+            risk_budget_pct=0.50,
+        )
+
+        self.assertFalse(sizing["risk_conversion_available"])
+        self.assertFalse(sizing["mt5_order_eligible"])
+        self.assertEqual(sizing["position_units"], 0.0)
+
     def test_04_candidate_lifecycle_governance_separation_of_certified_and_deployed(self) -> None:
         """Section 10: Prove autonomous training caps at CERTIFIED and requires explicit approval for DEPLOYED."""
         base_wf = {"positive_folds_count": 3, "total_folds": 4}

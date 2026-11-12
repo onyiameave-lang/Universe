@@ -3,11 +3,59 @@ from types import SimpleNamespace
 from Forge.core.shadow_runner import MT5ShadowExecutionBridge
 
 
+class FakeMT5:
+    ORDER_TYPE_BUY = 0
+    ORDER_TYPE_SELL = 1
+    DEAL_TYPE_BUY = 0
+    DEAL_TYPE_SELL = 1
+
+    def __init__(self):
+        self.open_positions = []
+        self.deals = []
+
+    def account_info(self):
+        return SimpleNamespace(equity=100000.0, currency="USD")
+
+    def positions_get(self):
+        return self.open_positions
+
+    def history_deals_get(self, date_from, date_to):
+        return self.deals
+
+    def symbol_select(self, symbol, enabled):
+        return True
+
+    def symbol_info(self, symbol):
+        return SimpleNamespace(
+            trade_contract_size=100000.0,
+            point=0.00001,
+            volume_min=0.01,
+            volume_max=100.0,
+            volume_step=0.01,
+            trade_stops_level=10,
+            trade_tick_size=0.00001,
+            trade_tick_value_loss=1.3264,
+            trade_tick_value=1.3264,
+        )
+
+    def symbol_info_tick(self, symbol):
+        return SimpleNamespace(ask=1.2501, bid=1.2500)
+
+    def order_calc_profit(self, order_type, symbol, volume, price_open, price_close):
+        if order_type == self.ORDER_TYPE_BUY:
+            return (price_close - price_open) * volume * 100000.0
+        return (price_open - price_close) * volume * 100000.0
+
+
 class FakeBroker:
     def __init__(self, account_type="demo"):
         self.status = SimpleNamespace(connected=True, account_type=account_type)
         self.paper = False
         self.orders = []
+        self._mt5 = FakeMT5()
+
+    def _clamp_volume(self, symbol, units):
+        return units / 100000.0
 
     def place_order(self, plan, human_confirm=False):
         self.orders.append(plan)
@@ -24,14 +72,25 @@ def _bridge(tmp_path, account_type="demo"):
     return bridge
 
 
-def _execute(bridge, *, current_signal, latest_signal, signal_id="GBPUSD:123"):
+def _execute(
+    bridge,
+    *,
+    current_signal,
+    latest_signal,
+    signal_id="GBPUSD:123",
+    risk_conversion_available=True,
+):
     return bridge.execute_or_log_mt5_demo_trade(
         cycle=1,
         symbol="GBPUSD",
         direction="LONG",
         confidence=0.68,
         regime="TRENDING_BULLISH",
-        sizing_info={"mt5_broker_lots": 0.01, "position_units": 1000},
+        sizing_info={
+            "mt5_broker_lots": 0.01,
+            "position_units": 1000,
+            "risk_conversion_available": risk_conversion_available,
+        },
         entry_price=1.25,
         stop_price=1.24,
         target_price=1.27,
@@ -80,6 +139,105 @@ def test_current_signal_is_blocked_on_non_demo_account(tmp_path):
     result = _execute(bridge, current_signal=True, latest_signal=True)
 
     assert result["execution_status"] == "blocked_non_demo_account"
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_when_currency_conversion_is_unavailable(tmp_path):
+    bridge = _bridge(tmp_path)
+
+    result = _execute(
+        bridge,
+        current_signal=True,
+        latest_signal=True,
+        risk_conversion_available=False,
+    )
+
+    assert result["execution_status"] == "risk_conversion_unavailable"
+    assert bridge.broker.orders == []
+
+
+def test_mt5_symbol_specs_include_loss_tick_value_and_account_currency(tmp_path):
+    bridge = _bridge(tmp_path)
+
+    specs = bridge.get_mt5_symbol_specs("EURGBP", 0.83532)
+
+    assert specs["trade_tick_size"] == 0.00001
+    assert specs["trade_tick_value_loss"] == 1.3264
+    assert specs["account_currency"] == "USD"
+
+
+def test_current_signal_is_blocked_when_daily_loss_limit_is_reached(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.broker._mt5.deals = [
+        SimpleNamespace(type=0, profit=-2001.0, commission=0.0, swap=0.0, fee=0.0)
+    ]
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "risk_limit_blocked"
+    assert "daily limit" in result["reason"]
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_when_floating_loss_breaches_daily_limit(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.broker._mt5.open_positions = [
+        SimpleNamespace(
+            symbol="EURUSD",
+            volume=0.1,
+            type=0,
+            price_open=1.25,
+            sl=1.24,
+            profit=-2001.0,
+            swap=0.0,
+            ticket=458,
+        )
+    ]
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "risk_limit_blocked"
+    assert "daily limit" in result["reason"]
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_when_aggregate_stop_risk_would_exceed_limit(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.broker._mt5.open_positions = [
+        SimpleNamespace(
+            symbol="EURUSD",
+            volume=1.0,
+            type=0,
+            price_open=1.25,
+            sl=1.23,
+            ticket=456,
+        )
+    ]
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "risk_limit_blocked"
+    assert "aggregate limit" in result["reason"]
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_when_open_position_has_no_stop(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.broker._mt5.open_positions = [
+        SimpleNamespace(
+            symbol="EURUSD",
+            volume=0.1,
+            type=0,
+            price_open=1.25,
+            sl=0.0,
+            ticket=457,
+        )
+    ]
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "risk_limit_blocked"
+    assert "no stop loss" in result["reason"]
     assert bridge.broker.orders == []
 
 

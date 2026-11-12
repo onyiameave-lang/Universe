@@ -17,9 +17,10 @@ Features:
   2. Direct Oracle MetaTrader 5 (`MT5Broker` + `TradeManager` + `MT5Logger`) Wiring:
      - Connects to `Oracle/execution/mt5_broker.py` (`MT5Broker`), `SymbolMapper`,
        `TradeManager` (configured via `TradeManagerConfig.from_learned_policy`), and `MT5Logger`.
-     - Reads real MT5 account equity, balance, server, and symbol contract specs
-       (`trade_contract_size`, `volume_min`, `volume_step`, `point`), computes broker-clamped
-       MT5 lot sizes (`0.01` lot step), logs trades to `Oracle/logs/mt5_demo_trades.csv`,
+     - Reads real MT5 account equity, balance, server, and symbol risk specs
+       (`trade_contract_size`, `trade_tick_size`, `trade_tick_value_loss`), computes broker-clamped
+       MT5 lot sizes (`0.01` lot step), applies per-trade, aggregate, and daily loss limits,
+       and logs trades to `Oracle/logs/mt5_demo_trades.csv`,
        and supports demo order execution via `--mt5-demo`. Historical replay signals are
        evaluation-only; only a fresh latest signal can submit an order, once per signal.
 
@@ -32,6 +33,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -102,6 +104,159 @@ class MT5ShadowExecutionBridge:
                 (signal_id, time.time()),
             )
             return cursor.rowcount == 1
+
+    def _live_risk_limit_reason(
+        self,
+        *,
+        symbol: str,
+        direction: str,
+        units: float,
+        entry_price: float,
+        stop_price: float,
+    ) -> Optional[str]:
+        mt5 = getattr(self.broker, "_mt5", None)
+        if mt5 is None:
+            return "cannot verify live risk limits because MT5 is unavailable"
+
+        account = mt5.account_info()
+        if account is None:
+            return "cannot verify live risk limits because MT5 account data is unavailable"
+        account_currency = str(getattr(account, "currency", "") or "").upper()
+        if account_currency != "USD":
+            return f"risk limits require a USD account; MT5 account currency is {account_currency or 'unknown'}"
+        equity = float(getattr(account, "equity", 0.0) or 0.0)
+        if not math.isfinite(equity) or equity <= 0:
+            return "cannot verify live risk limits because account equity is invalid"
+
+        positions = mt5.positions_get()
+        if positions is None:
+            return "cannot verify aggregate risk because MT5 positions are unavailable"
+        order_calc_profit = getattr(mt5, "order_calc_profit", None)
+        if not callable(order_calc_profit):
+            return "cannot verify risk because MT5 order_calc_profit is unavailable"
+
+        open_risk = 0.0
+        for position in positions:
+            pos_symbol = str(getattr(position, "symbol", "") or "")
+            pos_volume = float(getattr(position, "volume", 0.0) or 0.0)
+            pos_entry = float(getattr(position, "price_open", 0.0) or 0.0)
+            pos_stop = float(getattr(position, "sl", 0.0) or 0.0)
+            if (
+                not pos_symbol
+                or not all(math.isfinite(value) for value in (pos_volume, pos_entry, pos_stop))
+                or pos_volume <= 0
+                or pos_entry <= 0
+            ):
+                return "cannot verify aggregate risk because an open position has invalid data"
+            if pos_stop <= 0:
+                return f"cannot add risk while open position {getattr(position, 'ticket', '')} has no stop loss"
+            pos_type = int(getattr(position, "type", -1))
+            if pos_type not in (0, 1):
+                return f"cannot verify aggregate risk for open position {getattr(position, 'ticket', '')}"
+            stop_pnl = order_calc_profit(
+                pos_type, pos_symbol, pos_volume, pos_entry, pos_stop
+            )
+            if stop_pnl is None or not math.isfinite(float(stop_pnl)):
+                return f"cannot calculate stop risk for open position {getattr(position, 'ticket', '')}"
+            open_risk += max(0.0, -float(stop_pnl))
+
+        now = datetime.now(timezone.utc)
+        utc_day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        history_deals_get = getattr(mt5, "history_deals_get", None)
+        if not callable(history_deals_get):
+            return "cannot verify daily loss because MT5 deal history is unavailable"
+        deals = history_deals_get(utc_day_start, now)
+        if deals is None:
+            return "cannot verify daily loss because MT5 deal history is unavailable"
+
+        deal_types = {
+            int(getattr(mt5, "DEAL_TYPE_BUY", 0)),
+            int(getattr(mt5, "DEAL_TYPE_SELL", 1)),
+        }
+        daily_realized_pnl = 0.0
+        for deal in deals:
+            if int(getattr(deal, "type", -1)) not in deal_types:
+                continue
+            deal_pnl = tuple(
+                float(getattr(deal, field, 0.0) or 0.0)
+                for field in ("profit", "commission", "swap", "fee")
+            )
+            if not all(math.isfinite(value) for value in deal_pnl):
+                return "cannot verify daily loss because MT5 deal history contains invalid values"
+            daily_realized_pnl += sum(deal_pnl)
+
+        floating_pnl_values = tuple(
+            float(getattr(position, "profit", 0.0) or 0.0)
+            + float(getattr(position, "swap", 0.0) or 0.0)
+            for position in positions
+        )
+        if not all(math.isfinite(value) for value in floating_pnl_values):
+            return "cannot verify daily loss because open-position PnL is invalid"
+        daily_floating_pnl = sum(floating_pnl_values)
+        daily_loss = max(0.0, -daily_realized_pnl) + max(0.0, -daily_floating_pnl)
+
+        if not callable(getattr(self.broker, "_clamp_volume", None)):
+            return "cannot verify proposed order risk because broker volume conversion is unavailable"
+        volume_lots = self.broker._clamp_volume(symbol, units)
+        if volume_lots is None or not math.isfinite(float(volume_lots)) or volume_lots <= 0:
+            return "cannot verify proposed order risk because broker volume is invalid"
+
+        is_buy = direction.upper() in ("LONG", "BUY")
+        if not mt5.symbol_select(symbol, True):
+            return f"cannot verify proposed order risk because MT5 symbol {symbol} is unavailable"
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return f"cannot verify proposed order risk because MT5 has no current quote for {symbol}"
+        market_price = float(tick.ask if is_buy else tick.bid)
+        if not math.isfinite(market_price) or market_price <= 0:
+            return f"cannot verify proposed order risk because the {symbol} quote is invalid"
+
+        max_entry_deviation = abs(entry_price - stop_price) * 0.5
+        if max_entry_deviation <= 0 or abs(market_price - entry_price) > max_entry_deviation:
+            return "current MT5 price moved beyond the signal entry tolerance"
+        stop_distance = abs(entry_price - stop_price)
+        rebased_stop = (
+            market_price - stop_distance if is_buy else market_price + stop_distance
+        )
+        order_type = (
+            int(getattr(mt5, "ORDER_TYPE_BUY", 0))
+            if is_buy
+            else int(getattr(mt5, "ORDER_TYPE_SELL", 1))
+        )
+        proposed_pnl = order_calc_profit(
+            order_type, symbol, volume_lots, market_price, rebased_stop
+        )
+        if proposed_pnl is None or not math.isfinite(float(proposed_pnl)):
+            return "cannot calculate proposed order risk in account currency"
+        proposed_risk = max(0.0, -float(proposed_pnl))
+
+        boundaries = PositionSizingAndSafetyEngine.SAFETY_BOUNDARIES
+        per_trade_limit = equity * float(boundaries["max_risk_per_trade_pct"]) / 100.0
+        aggregate_limit = equity * float(boundaries["max_aggregate_open_risk_pct"]) / 100.0
+        daily_limit = equity * float(boundaries["max_daily_session_loss_pct"]) / 100.0
+
+        if proposed_risk > per_trade_limit:
+            return (
+                f"proposed risk ${proposed_risk:.2f} exceeds the "
+                f"{boundaries['max_risk_per_trade_pct']:.2f}% per-trade limit"
+            )
+        if open_risk + proposed_risk > aggregate_limit:
+            return (
+                f"open plus proposed stop risk ${open_risk + proposed_risk:.2f} "
+                f"exceeds the {boundaries['max_aggregate_open_risk_pct']:.2f}% aggregate limit"
+            )
+        if daily_loss + open_risk + proposed_risk > daily_limit:
+            return (
+                f"today's realized loss plus open and proposed risk "
+                f"${daily_loss + open_risk + proposed_risk:.2f} exceeds the "
+                f"{boundaries['max_daily_session_loss_pct']:.2f}% daily limit"
+            )
+        if daily_loss >= daily_limit:
+            return (
+                f"today's realized loss ${daily_loss:.2f} has reached the "
+                f"{boundaries['max_daily_session_loss_pct']:.2f}% daily limit"
+            )
+        return None
 
     def _claim_reconciled_deal(self, position_id: int) -> bool:
         self.order_ledger_path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,6 +435,10 @@ class MT5ShadowExecutionBridge:
             "broker_symbol": broker_sym,
             "trade_contract_size": float(base_specs["contract_units_per_lot"]),
             "point": float(base_specs["pip_size"]) / 10.0,
+            "trade_tick_size": 0.0,
+            "trade_tick_value_loss": 0.0,
+            "trade_tick_value": 0.0,
+            "account_currency": "USD",
             "volume_min": 0.01,
             "volume_max": 100.0,
             "volume_step": 0.01,
@@ -297,6 +456,16 @@ class MT5ShadowExecutionBridge:
                     specs["volume_max"] = float(getattr(info, "volume_max", 100.0) or 100.0)
                     specs["volume_step"] = float(getattr(info, "volume_step", 0.01) or 0.01)
                     specs["stops_level_points"] = int(getattr(info, "trade_stops_level", 10) or 10)
+                    specs["trade_tick_size"] = float(getattr(info, "trade_tick_size", 0.0) or 0.0)
+                    specs["trade_tick_value_loss"] = float(
+                        getattr(info, "trade_tick_value_loss", 0.0) or 0.0
+                    )
+                    specs["trade_tick_value"] = float(getattr(info, "trade_tick_value", 0.0) or 0.0)
+                account_info = mt5.account_info()
+                if account_info is not None:
+                    specs["account_currency"] = str(
+                        getattr(account_info, "currency", "") or ""
+                    ).upper()
             except Exception:
                 pass
         return specs
@@ -780,29 +949,46 @@ class MT5ShadowExecutionBridge:
                 elif same_pos is not None:
                     order_result["execution_status"] = "existing_same_direction_position_open"
                     order_result["existing_ticket"] = int(same_pos.get("ticket", 0) or 0)
-                elif not signal_id or not self._claim_demo_signal(signal_id):
-                    order_result["execution_status"] = "duplicate_signal_skipped"
                 else:
-                    plan = {
-                        "approved": True,
-                        "symbol": symbol.upper(),
-                        "broker_symbol": broker_sym,
-                        "direction": "long" if direction.upper() == "LONG" else "short",
-                        "size": units,
-                        "entry": entry_price,
-                        "stop": stop_price,
-                        "target": target_price,
-                        "rebase_stops_to_market": True,
-                        "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
-                    }
-                    res = self.broker.place_order(plan, human_confirm=False)
-                    order_result["execution_status"] = res.get("status", "filled")
-                    order_result["ticket"] = res.get("order") or res.get("ticket")
-                    order_result["retcode"] = res.get("retcode", "")
-                    order_result["price"] = res.get("price", entry_price)
-                    order_result["volume_lots"] = res.get("volume_lots", lots)
-                    order_result["stop"] = res.get("sl", stop_price)
-                    order_result["target"] = res.get("tp", target_price)
+                    if not sizing_info.get("risk_conversion_available", False):
+                        order_result["execution_status"] = "risk_conversion_unavailable"
+                        order_result["reason"] = (
+                            "account-currency loss conversion is unavailable for this symbol"
+                        )
+                    else:
+                        risk_reason = self._live_risk_limit_reason(
+                            symbol=broker_sym,
+                            direction=direction,
+                            units=units,
+                            entry_price=entry_price,
+                            stop_price=stop_price,
+                        )
+                        if risk_reason:
+                            order_result["execution_status"] = "risk_limit_blocked"
+                            order_result["reason"] = risk_reason
+                        elif not signal_id or not self._claim_demo_signal(signal_id):
+                            order_result["execution_status"] = "duplicate_signal_skipped"
+                        else:
+                            plan = {
+                                "approved": True,
+                                "symbol": symbol.upper(),
+                                "broker_symbol": broker_sym,
+                                "direction": "long" if direction.upper() == "LONG" else "short",
+                                "size": units,
+                                "entry": entry_price,
+                                "stop": stop_price,
+                                "target": target_price,
+                                "rebase_stops_to_market": True,
+                                "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
+                            }
+                            res = self.broker.place_order(plan, human_confirm=False)
+                            order_result["execution_status"] = res.get("status", "filled")
+                            order_result["ticket"] = res.get("order") or res.get("ticket")
+                            order_result["retcode"] = res.get("retcode", "")
+                            order_result["price"] = res.get("price", entry_price)
+                            order_result["volume_lots"] = res.get("volume_lots", lots)
+                            order_result["stop"] = res.get("sl", stop_price)
+                            order_result["target"] = res.get("tp", target_price)
         elif self.execute_mt5_demo_orders:
             order_result["execution_status"] = "mt5_not_connected"
 
@@ -834,7 +1020,12 @@ class MT5ShadowExecutionBridge:
                         else str(penalty_audit.get("outcome_class", shadow_status))
                     ),
                     retcode=order_result.get("retcode", ""),
-                    reason=f"signal_id={signal_id} | realized_r={realized_r:+.3f}R | penalty={penalty_audit.get('applied_penalty_r', 0.0):.3f}R ({penalty_audit.get('penalty_tier')})",
+                    reason=(
+                        f"signal_id={signal_id} | realized_r={realized_r:+.3f}R | "
+                        f"penalty={penalty_audit.get('applied_penalty_r', 0.0):.3f}R "
+                        f"({penalty_audit.get('penalty_tier')}) | "
+                        f"risk_guard={order_result.get('reason', 'passed')}"
+                    ),
                     account_type=(
                         self.broker.status.account_type
                         if self.broker is not None
