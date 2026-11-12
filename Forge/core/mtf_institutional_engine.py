@@ -427,34 +427,97 @@ class MultiTimeframeInstitutionalEngine:
         raw_h4 = [buckets[k] for k in sorted(buckets.keys())]
         return self.annotate_bar_series(raw_h4)
 
+    def _try_fetch_mt5_7tf_bars(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempt to pull 7-timeframe OHLCV bars and live bid/ask spread directly from
+        the connected MetaTrader 5 terminal via Oracle's MT5Broker.fetch_7tf_rates().
+        Returns None gracefully if MetaTrader5 is not installed or not connected.
+        """
+        broker = getattr(self, "_mt5_broker_override", None)
+        if broker is None:
+            import sys
+            oracle_str = str(self.workspace_root / "Oracle")
+            if oracle_str not in sys.path:
+                sys.path.insert(0, oracle_str)
+            for subpkg in ("core", "intelligence", "shared", "execution", "tools", "memory"):
+                mod = sys.modules.get(subpkg)
+                sub_dir = str(self.workspace_root / "Oracle" / subpkg)
+                if mod is not None and hasattr(mod, "__path__") and sub_dir not in mod.__path__:
+                    mod.__path__.insert(0, sub_dir)
+            try:
+                from execution.mt5_broker import MT5Broker  # type: ignore
+
+                broker = MT5Broker(paper=True, allow_live=False)
+                if not broker.available:
+                    return None
+                broker.connect()
+                if not broker.status.connected:
+                    return None
+            except Exception:
+                return None
+
+        try:
+            return broker.fetch_7tf_rates(symbol.upper())
+        except Exception:
+            return None
+
     def fetch_live_7tf_dataset(
         self, symbol: str, max_age_sec: int = 90, force_refresh: bool = False
     ) -> Optional[Dict[str, Any]]:
         """
-        Pulls fresh live 7-timeframe candles (W1, D1, H4, H1, M30, M15, M5) for `symbol`
-        if the cached dataset is older than `max_age_sec`, annotates institutional
-        microstructure and adaptive sessions with zero look-ahead, and persists to Chronicle.
-        Falls back to the cached dataset only if the live feed is temporarily unreachable.
+        Pulls fresh live 7-timeframe candles (W1, D1, H4, H1, M30, M15, M5) for `symbol`:
+          1. Prioritizes direct MetaTrader 5 broker rates (`copy_rates_from_pos`) whenever MT5
+             is connected on the machine—eliminating Yahoo Finance (`GC=F` futures / mid-price)
+             basis mismatches against MT5 Spot (`XAUUSD`, `EURUSD`, etc.).
+          2. Upgrades any cached Yahoo dataset immediately when MT5 becomes available.
+          3. Falls back to Yahoo Finance (`query1.finance.yahoo.com`) only when MT5 is offline.
         """
         upper_sym = symbol.upper()
         cached = self.load_cached_dataset(upper_sym)
         now_unix = time.time()
+
+        # First check if MT5 is connected so we always prefer real MT5 broker bars over Yahoo Finance
+        mt5_feed = self._try_fetch_mt5_7tf_bars(upper_sym)
         if (
             not force_refresh
             and cached
             and isinstance(cached.get("fetched_at_unix"), (int, float))
             and (now_unix - float(cached["fetched_at_unix"])) <= max_age_sec
         ):
-            return cached
+            cached_src = str(cached.get("source", ""))
+            # Only return cached immediately if MT5 isn't offering a live upgrade over Yahoo
+            if mt5_feed is None or cached_src.startswith("mt5_broker_live"):
+                return cached
 
         ticker = self.resolve_yahoo_ticker(upper_sym)
         try:
-            w1_raw = self._fetch_yahoo_interval(ticker, "1wk", "2y")
-            d1_raw = self._fetch_yahoo_interval(ticker, "1d", "1y")
-            h1_raw = self._fetch_yahoo_interval(ticker, "1h", "60d")
-            m30_raw = self._fetch_yahoo_interval(ticker, "30m", "30d")
-            m15_raw = self._fetch_yahoo_interval(ticker, "15m", "30d")
-            m5_raw = self._fetch_yahoo_interval(ticker, "5m", "15d")
+            if mt5_feed is not None:
+                raw_s = mt5_feed["raw_series"]
+                w1_raw = raw_s.get("W1", [])
+                d1_raw = raw_s.get("D1", [])
+                h4_raw = raw_s.get("H4", [])
+                h1_raw = raw_s.get("H1", [])
+                m30_raw = raw_s.get("M30", [])
+                m15_raw = raw_s.get("M15", [])
+                m5_raw = raw_s.get("M5", [])
+                data_source = str(mt5_feed.get("source", f"mt5_broker_live:{upper_sym}"))
+                broker_symbol = str(mt5_feed.get("broker_symbol", upper_sym))
+                live_spread_bps = mt5_feed.get("live_spread_bps")
+                live_bid = mt5_feed.get("live_bid")
+                live_ask = mt5_feed.get("live_ask")
+            else:
+                w1_raw = self._fetch_yahoo_interval(ticker, "1wk", "2y")
+                d1_raw = self._fetch_yahoo_interval(ticker, "1d", "1y")
+                h4_raw = []
+                h1_raw = self._fetch_yahoo_interval(ticker, "1h", "60d")
+                m30_raw = self._fetch_yahoo_interval(ticker, "30m", "30d")
+                m15_raw = self._fetch_yahoo_interval(ticker, "15m", "30d")
+                m5_raw = self._fetch_yahoo_interval(ticker, "5m", "15d")
+                data_source = "yahoo_finance_live_7tf_institutional"
+                broker_symbol = upper_sym
+                live_spread_bps = None
+                live_bid = None
+                live_ask = None
 
             if len(m15_raw) < 40 or len(h1_raw) < 20:
                 return cached
@@ -462,7 +525,7 @@ class MultiTimeframeInstitutionalEngine:
             w1 = self.annotate_bar_series(w1_raw)
             d1 = self.annotate_bar_series(d1_raw)
             h1 = self.annotate_bar_series(h1_raw)
-            h4 = self._aggregate_h1_to_h4(h1)
+            h4 = self.annotate_bar_series(h4_raw) if len(h4_raw) >= 20 else self._aggregate_h1_to_h4(h1)
             m30 = self.annotate_bar_series(m30_raw)
             m15 = self.annotate_bar_series(m15_raw)
             m5 = self.annotate_bar_series(m5_raw)
@@ -508,6 +571,7 @@ class MultiTimeframeInstitutionalEngine:
             fp = sha256_hex(
                 {
                     "symbol": upper_sym,
+                    "source": data_source,
                     "counts": counts,
                     "last_m5_ts": m5[-1]["ts"] if m5 else None,
                     "last_h1_ts": h1[-1]["ts"] if h1 else None,
@@ -516,8 +580,13 @@ class MultiTimeframeInstitutionalEngine:
             dataset: Dict[str, Any] = {
                 "schema": "forge.mtf_market_dataset.v2",
                 "symbol": upper_sym,
+                "broker_symbol": broker_symbol,
                 "yahoo_ticker": ticker,
-                "source": "yahoo_finance_live_7tf_institutional",
+                "source": data_source,
+                "price_basis": "bid",
+                "live_bid": live_bid,
+                "live_ask": live_ask,
+                "live_spread_bps": live_spread_bps,
                 "fetched_at_unix": now_unix,
                 "dataset_fingerprint": fp,
                 "timeframe_counts": counts,

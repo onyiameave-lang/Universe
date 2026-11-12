@@ -81,3 +81,193 @@ def test_current_signal_is_blocked_on_non_demo_account(tmp_path):
 
     assert result["execution_status"] == "blocked_non_demo_account"
     assert bridge.broker.orders == []
+
+
+def test_dynamic_equity_updates_after_wins_and_losses(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.equity_state_path = tmp_path / "equity_state.json"
+    bridge._tracked_equity_usd = 100000.0
+    # Simulate offline/paper fallback so tracked equity is used and persisted
+    bridge.broker.paper = True
+
+    initial_eq = bridge.get_account_equity_usd()
+    assert initial_eq == 100000.0
+
+    # Simulate a -1.25% loss trade -> equity must drop below $100,000
+    after_loss = bridge.update_tracked_equity_after_trade(-1.25, realized_pnl_usd=None)
+    assert abs(after_loss - 98750.0) < 1e-2
+    assert abs(bridge.get_account_equity_usd() - 98750.0) < 1e-2
+
+    # Simulate live MT5 broker connected with real-time equity $97,420.50
+    bridge.broker.paper = False
+    bridge.broker.account = lambda: {"equity": 97420.50, "balance": 98000.0}
+    live_eq = bridge.get_account_equity_usd()
+    assert abs(live_eq - 97420.50) < 1e-2
+
+
+def test_position_conflict_guard_blocks_same_and_opposing_open_positions(tmp_path):
+    bridge = _bridge(tmp_path)
+
+    # 1. Existing LONG position open (type=0) -> new LONG signal is blocked from stacking
+    bridge.broker.get_positions_by_symbol = lambda sym: [
+        {"ticket": 555, "symbol": sym, "type": 0, "volume": 0.1, "price_open": 1.25}
+    ]
+    same_dir = _execute(bridge, current_signal=True, latest_signal=True, signal_id="GBPUSD:201")
+    assert same_dir["execution_status"] == "existing_same_direction_position_open"
+    assert same_dir["existing_ticket"] == 555
+    assert bridge.broker.orders == []
+
+    # 2. Existing SHORT position open (type=1) -> new LONG signal is blocked by conflict guard
+    bridge.broker.get_positions_by_symbol = lambda sym: [
+        {"ticket": 556, "symbol": sym, "type": 1, "volume": 0.1, "price_open": 1.26}
+    ]
+    opp_dir = _execute(bridge, current_signal=True, latest_signal=True, signal_id="GBPUSD:202")
+    assert opp_dir["execution_status"] == "existing_opposing_position_open"
+    assert opp_dir["existing_ticket"] == 556
+    assert bridge.broker.orders == []
+
+
+def test_manage_open_mt5_positions_modifies_and_closes_live_tickets(tmp_path):
+    from Forge.core.mtf_institutional_engine import MultiTimeframeInstitutionalEngine
+
+    bridge = _bridge(tmp_path)
+    modified = []
+    closed = []
+
+    bridge.broker.get_positions_by_symbol = lambda sym: [
+        {
+            "ticket": 701,
+            "symbol": sym,
+            "type": "buy",
+            "volume": 0.10,
+            "price_open": 1.2500,
+            "price_current": 1.2590,
+            "sl": 1.2450,
+            "tp": 1.2650,
+            "profit": 90.0,
+        },
+    ]
+    bridge.broker.modify_position = lambda ticket, stop_loss=None, take_profit=None: (
+        modified.append((ticket, stop_loss, take_profit)) or {"status": "modified", "ticket": ticket}
+    )
+    bridge.broker.close_position = lambda ticket: (
+        closed.append(ticket) or {"status": "closed", "ticket": ticket}
+    )
+
+    mtf_engine = MultiTimeframeInstitutionalEngine()
+    latest_bar = {
+        "open": 1.2585,
+        "close": 1.2610,
+        "high": 1.2620,
+        "low": 1.2580,
+        "atr14": 0.0020,
+        "regime": "TRENDING_BULLISH",
+        "ema9": 1.2605,
+        "ema21": 1.2575,
+        "ema50": 1.2530,
+        "rsi14": 64.0,
+    }
+    htf_bars = [
+        {"high": 1.2750, "low": 1.2400, "close": 1.2610, "atr14": 0.0040}
+        for _ in range(30)
+    ]
+    management_policy = {
+        "learned_optimal_stop_atr_mult": 1.2,
+        "learned_initial_major_tp_r": 2.0,
+        "learned_trail_activation_r": 0.8,
+        "learned_trail_distance_r": 0.5,
+        "learned_necessity_exit_threshold": 0.55,
+    }
+
+    summary = bridge.manage_open_mt5_positions(
+        symbol="GBPUSD",
+        latest_bar=latest_bar,
+        macro_bars=htf_bars,
+        setup_bars=htf_bars,
+        htf_bars=htf_bars,
+        learned_genome={"ema_fast_weight": 0.5, "ema_mid_weight": 0.5},
+        management_policy=management_policy,
+        sentinel_signal=0.45,
+        pulse_signal=0.35,
+        mtf_engine=mtf_engine,
+    )
+
+    assert summary["mt5_connected"] is True
+    assert summary["open_positions_count"] == 1
+    assert len(summary["actions_taken"]) == 1
+    assert summary["actions_taken"][0]["ticket"] == 701
+
+
+def test_reconcile_mt5_closed_deals_grades_real_losses_and_emits_feedback(tmp_path):
+    import json
+
+    bridge = _bridge(tmp_path)
+    bridge.equity_state_path = tmp_path / "equity_state.json"
+    bridge._tracked_equity_usd = 98450.0
+    bridge.broker.account = lambda: {"equity": 98450.0, "balance": 98450.0}
+    bridge.broker.get_closed_deals = lambda symbol=None, lookback_days=7: [
+        {
+            "position_id": 9001,
+            "deal_ticket": 19001,
+            "symbol": "GBPUSD",
+            "direction": "LONG",
+            "volume_lots": 0.20,
+            "entry_price": 1.2550,
+            "exit_price": 1.2490,
+            "gross_profit_usd": -120.0,
+            "commission_usd": -1.4,
+            "swap_usd": 0.0,
+            "net_profit_usd": -121.4,
+            "exit_reason": "STOP_LOSS",
+            "closed_at_unix": 1710000500,
+        },
+        {
+            "position_id": 9002,
+            "deal_ticket": 19002,
+            "symbol": "GBPUSD",
+            "direction": "SHORT",
+            "volume_lots": 0.20,
+            "entry_price": 1.2550,
+            "exit_price": 1.2450,
+            "gross_profit_usd": 1200.0,
+            "commission_usd": -1.4,
+            "swap_usd": 0.0,
+            "net_profit_usd": 1198.6,
+            "exit_reason": "TAKE_PROFIT",
+            "closed_at_unix": 1710000900,
+        },
+    ]
+
+    feedback_outbox = tmp_path / "forge_strategy_feedback_outbox.jsonl"
+    management_policy = {
+        "learned_initial_major_tp_r": 2.0,
+        "learned_major_sl_penalty_r": 0.85,
+        "learned_minor_early_exit_penalty_r": 0.25,
+    }
+
+    rec1 = bridge.reconcile_mt5_closed_deals(
+        symbol="GBPUSD",
+        management_policy=management_policy,
+        feedback_outbox_path=feedback_outbox,
+    )
+
+    assert rec1["mt5_connected"] is True
+    assert rec1["closed_deals_count"] == 2
+    assert rec1["mt5_real_wins"] == 1
+    assert rec1["mt5_real_losses"] == 1
+
+    lines = [json.loads(line) for line in feedback_outbox.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert lines[0]["source"] == "mt5_real_broker_deal_reconciliation"
+    assert lines[0]["penalty_tier"] == "MAJOR_PENALTY"
+
+    # Second call should deduplicate already-reconciled deals so no new feedback lines are written
+    rec2 = bridge.reconcile_mt5_closed_deals(
+        symbol="GBPUSD",
+        management_policy=management_policy,
+        feedback_outbox_path=feedback_outbox,
+    )
+    lines_after = [json.loads(line) for line in feedback_outbox.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines_after) == 1
+
+

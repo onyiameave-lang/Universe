@@ -867,9 +867,235 @@ class MT5Broker:
         return {"status": "complete", "closed": closed, "errors": errors}
 
     def account(self) -> Dict[str, Any]:
-        if self.status.connected and self._mt5:
+        if self._mt5 is None and self.available:
+            self.connect()
+        if self._mt5 is not None:
             info = self._mt5.account_info()
-            if info:
-                self.status.balance = getattr(info, "balance", self.status.balance)
-                self.status.equity = getattr(info, "equity", self.status.equity)
+            if info is None:
+                self.connect()
+                info = self._mt5.account_info() if self._mt5 is not None else None
+            if info is not None:
+                self.status.connected = True
+                self.status.balance = float(getattr(info, "balance", self.status.balance) or 0.0)
+                self.status.equity = float(getattr(info, "equity", self.status.equity) or 0.0)
+                d = self.status.to_dict()
+                d["profit"] = float(getattr(info, "profit", 0.0) or 0.0)
+                d["margin"] = float(getattr(info, "margin", 0.0) or 0.0)
+                d["margin_free"] = float(getattr(info, "margin_free", d["equity"]) or 0.0)
+                return d
         return self.status.to_dict()
+
+    def fetch_7tf_rates(
+        self, symbol: str, broker_symbol: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Pull 7-timeframe OHLCV bars (W1, D1, H4, H1, M30, M15, M5) and live bid/ask
+        spread directly from the connected MetaTrader 5 terminal via copy_rates_from_pos.
+        Returns None if MT5 is not connected or rates are unavailable.
+        """
+        if self._mt5 is None and self.available:
+            self.connect()
+        if not self.status.connected or self._mt5 is None:
+            return None
+
+        mt5 = self._mt5
+        bsym = broker_symbol or self.symbol_map.get(symbol.upper(), symbol.upper())
+        try:
+            if not mt5.symbol_select(bsym, True):
+                # Try prefix match across broker symbols if exact symbol name differs (e.g. XAUUSDm)
+                prefix = symbol.upper()[:6]
+                for s in (mt5.symbols_get() or []):
+                    sname = getattr(s, "name", "")
+                    if sname.upper().startswith(prefix):
+                        bsym = sname
+                        mt5.symbol_select(bsym, True)
+                        break
+
+            tf_specs = {
+                "W1": (getattr(mt5, "TIMEFRAME_W1", 32769), 110),
+                "D1": (getattr(mt5, "TIMEFRAME_D1", 16408), 365),
+                "H4": (getattr(mt5, "TIMEFRAME_H4", 16388), 360),
+                "H1": (getattr(mt5, "TIMEFRAME_H1", 16385), 720),
+                "M30": (getattr(mt5, "TIMEFRAME_M30", 30), 720),
+                "M15": (getattr(mt5, "TIMEFRAME_M15", 15), 960),
+                "M5": (getattr(mt5, "TIMEFRAME_M5", 5), 1200),
+            }
+            raw_series: Dict[str, List[Dict[str, Any]]] = {}
+            import datetime as _dt
+
+            for tf_name, (tf_code, bar_count) in tf_specs.items():
+                rates = mt5.copy_rates_from_pos(bsym, tf_code, 0, bar_count)
+                if rates is None or len(rates) == 0:
+                    continue
+                bars: List[Dict[str, Any]] = []
+                for r in rates:
+                    # Support both numpy structured row (r['time']) and object attribute (r.time)
+                    try:
+                        u_sec = int(r["time"])
+                        o = float(r["open"])
+                        h = float(r["high"])
+                        l = float(r["low"])
+                        c = float(r["close"])
+                        v = float(r["tick_volume"]) if "tick_volume" in r.dtype.names else float(r["real_volume"])
+                    except Exception:
+                        u_sec = int(getattr(r, "time", 0))
+                        o = float(getattr(r, "open", 0.0))
+                        h = float(getattr(r, "high", 0.0))
+                        l = float(getattr(r, "low", 0.0))
+                        c = float(getattr(r, "close", 0.0))
+                        v = float(getattr(r, "tick_volume", getattr(r, "real_volume", 0.0)) or 0.0)
+                    if u_sec > 0 and c > 0 and h >= max(o, c) and l <= min(o, c):
+                        ts_iso = (
+                            _dt.datetime.fromtimestamp(u_sec, tz=_dt.timezone.utc)
+                            .isoformat()
+                            .replace("+00:00", "Z")
+                        )
+                        bars.append(
+                            {
+                                "ts": ts_iso,
+                                "unix_sec": u_sec,
+                                "open": o,
+                                "high": h,
+                                "low": l,
+                                "close": c,
+                                "volume": v,
+                            }
+                        )
+                raw_series[tf_name] = bars
+
+            if len(raw_series.get("M15", [])) < 40 or len(raw_series.get("H1", [])) < 20:
+                return None
+
+            tick = mt5.symbol_info_tick(bsym)
+            info = mt5.symbol_info(bsym)
+            bid = float(getattr(tick, "bid", 0.0) or 0.0) if tick is not None else 0.0
+            ask = float(getattr(tick, "ask", 0.0) or 0.0) if tick is not None else 0.0
+            mid = (bid + ask) / 2.0 if (bid > 0 and ask > 0) else float(raw_series["M15"][-1]["close"])
+            spread_price = max(0.0, ask - bid) if (bid > 0 and ask > 0) else 0.0
+            if spread_price <= 0 and info is not None:
+                pt = float(getattr(info, "point", 0.0) or 0.0)
+                sp_pts = float(getattr(info, "spread", 0.0) or 0.0)
+                spread_price = pt * sp_pts
+            live_spread_bps = round((spread_price / max(mid, 1e-9)) * 10000.0, 4) if spread_price > 0 else None
+
+            return {
+                "symbol": symbol.upper(),
+                "broker_symbol": bsym,
+                "source": f"mt5_broker_live:{bsym}",
+                "price_basis": "bid",
+                "live_bid": bid,
+                "live_ask": ask,
+                "live_spread_bps": live_spread_bps,
+                "raw_series": raw_series,
+            }
+        except Exception as exc:
+            log.warning("fetch_7tf_rates(%s): %s", symbol, exc)
+            return None
+
+    def get_closed_deals(
+        self, symbol: Optional[str] = None, lookback_days: int = 7
+    ) -> List[Dict[str, Any]]:
+        """
+        Query MT5 history_deals_get() over the past `lookback_days` and pair entry/exit
+        deals by position_id so the runner can reconcile terminal win/loss reports
+        against actual closed MT5 broker positions.
+        """
+        if self._mt5 is None and self.available:
+            self.connect()
+        if not self.status.connected or self._mt5 is None:
+            return []
+
+        mt5 = self._mt5
+        try:
+            now_ts = time.time()
+            from_ts = now_ts - max(1, int(lookback_days)) * 86400.0
+            deals = mt5.history_deals_get(from_ts, now_ts + 3600.0)
+            if not deals:
+                return []
+
+            by_pos: Dict[int, Dict[str, Any]] = {}
+            prefix = symbol.upper()[:6] if symbol else None
+
+            for d in deals:
+                d_sym = str(getattr(d, "symbol", "") or "")
+                if not d_sym:
+                    continue
+                if prefix and not d_sym.upper().startswith(prefix):
+                    continue
+                pos_id = int(getattr(d, "position_id", 0) or getattr(d, "order", 0) or getattr(d, "ticket", 0))
+                if pos_id <= 0:
+                    continue
+                entry_flag = int(getattr(d, "entry", -1))
+                d_type = int(getattr(d, "type", -1))
+                # Only buy (0) and sell (1) market deals
+                if d_type not in (0, 1):
+                    continue
+
+                rec = by_pos.setdefault(
+                    pos_id,
+                    {
+                        "position_id": pos_id,
+                        "broker_symbol": d_sym,
+                        "direction": None,
+                        "volume_lots": 0.0,
+                        "entry_price": 0.0,
+                        "exit_price": 0.0,
+                        "entry_time_unix": 0,
+                        "exit_time_unix": 0,
+                        "gross_profit_usd": 0.0,
+                        "commission_usd": 0.0,
+                        "swap_usd": 0.0,
+                        "net_profit_usd": 0.0,
+                        "has_exit_deal": False,
+                        "exit_reason_code": int(getattr(d, "reason", 0) or 0),
+                        "comment": str(getattr(d, "comment", "") or ""),
+                    },
+                )
+                rec["commission_usd"] += float(getattr(d, "commission", 0.0) or 0.0)
+                rec["swap_usd"] += float(getattr(d, "swap", 0.0) or 0.0)
+                rec["gross_profit_usd"] += float(getattr(d, "profit", 0.0) or 0.0)
+
+                if entry_flag == 0:  # DEAL_ENTRY_IN
+                    rec["direction"] = "LONG" if d_type == 0 else "SHORT"
+                    rec["volume_lots"] = float(getattr(d, "volume", rec["volume_lots"]) or 0.0)
+                    rec["entry_price"] = float(getattr(d, "price", 0.0) or 0.0)
+                    rec["entry_time_unix"] = int(getattr(d, "time", 0) or 0)
+                elif entry_flag in (1, 2, 3):  # DEAL_ENTRY_OUT / INOUT / OUT_BY
+                    rec["has_exit_deal"] = True
+                    if rec["direction"] is None:
+                        # Opposite of closing deal type
+                        rec["direction"] = "LONG" if d_type == 1 else "SHORT"
+                    if rec["volume_lots"] <= 0:
+                        rec["volume_lots"] = float(getattr(d, "volume", 0.0) or 0.0)
+                    rec["exit_price"] = float(getattr(d, "price", 0.0) or 0.0)
+                    rec["exit_time_unix"] = int(getattr(d, "time", 0) or 0)
+                    rec["exit_reason_code"] = int(getattr(d, "reason", 0) or 0)
+                    if getattr(d, "comment", ""):
+                        rec["comment"] = str(getattr(d, "comment", ""))
+
+            closed_list: List[Dict[str, Any]] = []
+            for pos_id, rec in sorted(by_pos.items(), key=lambda kv: kv[1]["exit_time_unix"]):
+                if not rec["has_exit_deal"]:
+                    continue
+                net_pnl = round(
+                    rec["gross_profit_usd"] + rec["commission_usd"] + rec["swap_usd"], 2
+                )
+                rec["gross_profit_usd"] = round(rec["gross_profit_usd"], 2)
+                rec["commission_usd"] = round(rec["commission_usd"], 2)
+                rec["swap_usd"] = round(rec["swap_usd"], 2)
+                rec["net_profit_usd"] = net_pnl
+                comment_low = rec["comment"].lower()
+                r_code = rec["exit_reason_code"]
+                # MT5 DEAL_REASON_SL == 4, DEAL_REASON_TP == 5
+                if r_code == 4 or "[sl" in comment_low:
+                    rec["exit_reason"] = "STOP_LOSS"
+                elif r_code == 5 or "[tp" in comment_low:
+                    rec["exit_reason"] = "TAKE_PROFIT"
+                else:
+                    rec["exit_reason"] = "CLIENT_OR_EXPERT_CLOSE"
+                closed_list.append(rec)
+            return closed_list
+        except Exception as exc:
+            log.warning("get_closed_deals(%s): %s", symbol, exc)
+            return []
+

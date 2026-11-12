@@ -78,6 +78,10 @@ class MT5ShadowExecutionBridge:
         self.order_ledger_path = (
             self.oracle_root / "memory" / "forge_mt5_signal_orders.sqlite3"
         )
+        self.equity_state_path = (
+            self.oracle_root / "memory" / "forge_mt5_equity_state.json"
+        )
+        self._tracked_equity_usd: Optional[float] = None
         self._init_oracle_mt5_components()
 
     def _claim_demo_signal(self, signal_id: str) -> bool:
@@ -97,10 +101,32 @@ class MT5ShadowExecutionBridge:
             )
             return cursor.rowcount == 1
 
+    def _claim_reconciled_deal(self, position_id: int) -> bool:
+        self.order_ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.order_ledger_path, timeout=10) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS reconciled_mt5_deals (
+                    position_id INTEGER PRIMARY KEY,
+                    reconciled_at_unix REAL NOT NULL
+                )
+                """
+            )
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO reconciled_mt5_deals (position_id, reconciled_at_unix) VALUES (?, ?)",
+                (int(position_id), time.time()),
+            )
+            return cursor.rowcount == 1
+
     def _init_oracle_mt5_components(self) -> None:
         oracle_str = str(self.oracle_root)
         if oracle_str not in sys.path:
             sys.path.insert(0, oracle_str)
+        for subpkg in ("core", "intelligence", "shared", "execution", "tools", "memory"):
+            mod = sys.modules.get(subpkg)
+            sub_dir = str(self.oracle_root / subpkg)
+            if mod is not None and hasattr(mod, "__path__") and sub_dir not in mod.__path__:
+                mod.__path__.insert(0, sub_dir)
         try:
             from execution.mt5_broker import MT5Broker  # type: ignore
             from execution.mt5_demo_trader import SymbolMapper  # type: ignore
@@ -139,16 +165,102 @@ class MT5ShadowExecutionBridge:
                 "reason": f"Oracle MT5 module load fallback: {exc}",
             }
 
-    def get_account_equity_usd(self) -> float:
-        if self.broker is not None:
+    def _load_persisted_equity(self) -> Optional[float]:
+        equity_path = getattr(self, "equity_state_path", None)
+        if equity_path and equity_path.exists():
             try:
-                acct = self.broker.account()
-                eq = float(acct.get("equity") or acct.get("balance") or 0.0)
+                data = json.loads(equity_path.read_text(encoding="utf-8"))
+                eq = float(data.get("equity_usd", 0.0) or 0.0)
                 if eq > 0:
                     return eq
             except Exception:
                 pass
+        return None
+
+    def _save_persisted_equity(self, equity_usd: float, source: str, balance_usd: Optional[float] = None) -> None:
+        equity_path = getattr(self, "equity_state_path", None)
+        if not equity_path:
+            return
+        try:
+            equity_path.parent.mkdir(parents=True, exist_ok=True)
+            equity_path.write_text(
+                json.dumps(
+                    {
+                        "equity_usd": round(float(equity_usd), 2),
+                        "balance_usd": round(float(balance_usd if balance_usd is not None else equity_usd), 2),
+                        "source": source,
+                        "updated_at_unix": time.time(),
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    def get_account_equity_usd(self) -> float:
+        """
+        Always reads live MT5 account equity (`mt5.account_info().equity`) when MT5 is connected.
+        When MT5 is offline, returns the compounding tracked shadow equity rather than resetting
+        to a static $100,000 on every trade.
+        """
+        if (
+            self.broker is not None
+            and not getattr(self.broker, "paper", False)
+            and hasattr(self.broker, "account")
+        ):
+            try:
+                acct = self.broker.account()
+                if isinstance(acct, dict) and str(acct.get("status", "")).lower() != "paper":
+                    self.connection_status = acct
+                    eq = float(acct.get("equity") or acct.get("balance") or 0.0)
+                    bal = float(acct.get("balance") or eq)
+                    if eq > 0:
+                        self._tracked_equity_usd = round(eq, 2)
+                        self._save_persisted_equity(eq, "mt5_live_account", bal)
+                        return self._tracked_equity_usd
+            except Exception:
+                pass
+
+        tracked = getattr(self, "_tracked_equity_usd", None)
+        if tracked is not None and tracked > 0:
+            return round(float(tracked), 2)
+
+        persisted = self._load_persisted_equity()
+        if persisted is not None and persisted > 0:
+            self._tracked_equity_usd = round(persisted, 2)
+            return self._tracked_equity_usd
+
+        self._tracked_equity_usd = 100000.0
         return 100000.0
+
+    def update_tracked_equity_after_trade(
+        self,
+        net_return_pct: float,
+        realized_pnl_usd: Optional[float] = None,
+    ) -> float:
+        """
+        Updates the tracked equity after a trade outcome:
+          - If MT5 is live & connected (and not in paper fallback), re-queries live `mt5.account_info().equity`.
+          - If offline/shadow mode, updates `_tracked_equity_usd` by `realized_pnl_usd` (if provided)
+            or compounds by `net_return_pct` so position sizing dynamically reflects gains and drawdowns.
+        """
+        if (
+            self.broker is not None
+            and getattr(self.broker, "status", None)
+            and self.broker.status.connected
+            and not getattr(self.broker, "paper", False)
+            and hasattr(self.broker, "account")
+        ):
+            return self.get_account_equity_usd()
+        current_eq = self.get_account_equity_usd()
+        if realized_pnl_usd is not None:
+            updated_eq = round(max(100.0, current_eq + float(realized_pnl_usd)), 2)
+        else:
+            updated_eq = round(max(100.0, current_eq * (1.0 + (float(net_return_pct) / 100.0))), 2)
+        self._tracked_equity_usd = updated_eq
+        self._save_persisted_equity(updated_eq, "shadow_compounded_equity")
+        return updated_eq
 
     def resolve_broker_symbol(self, symbol: str) -> str:
         if self.sym_mapper is not None:
@@ -203,13 +315,19 @@ class MT5ShadowExecutionBridge:
         management_policy: Dict[str, Any],
         sentinel_signal: float,
         pulse_signal: float,
+        current_stop: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Runs Oracle's `TradeManager.evaluate()` initialized with `TradeManagerConfig.from_learned_policy(management_policy)`
         so we can inspect the exact MT5 Demo Trader stop/exit decision alongside the shadow trade.
         """
-        if not (self.trade_manager_cls and self.trade_manager_cfg_cls and self.position_cls and self.snapshot_cls):
-            return {"action": "hold", "reason": "trade_manager_unavailable"}
+        if not (
+            getattr(self, "trade_manager_cls", None)
+            and getattr(self, "trade_manager_cfg_cls", None)
+            and getattr(self, "position_cls", None)
+            and getattr(self, "snapshot_cls", None)
+        ):
+            return {"mt5_trade_manager_action": "hold", "mt5_trade_manager_reason": "trade_manager_unavailable"}
 
         cfg = self.trade_manager_cfg_cls.from_learned_policy(management_policy)
         mgr = self.trade_manager_cls(config=cfg)
@@ -227,6 +345,8 @@ class MT5ShadowExecutionBridge:
             entry_atr=entry_atr,
             execution_environment="demo",
         )
+        if current_stop is not None:
+            pos.current_stop = float(current_stop)
         close_p = float(exit_bar["close"])
         cur_atr = float(exit_bar.get("atr14", entry_atr))
         cur_regime = str(exit_bar.get("regime", entry_regime))
@@ -257,6 +377,346 @@ class MT5ShadowExecutionBridge:
             },
         }
 
+    def manage_open_mt5_positions(
+        self,
+        *,
+        symbol: str,
+        latest_bar: Dict[str, Any],
+        macro_bars: List[Dict[str, Any]],
+        setup_bars: List[Dict[str, Any]],
+        htf_bars: List[Dict[str, Any]],
+        learned_genome: Dict[str, Any],
+        management_policy: Dict[str, Any],
+        sentinel_signal: float,
+        pulse_signal: float,
+        mtf_engine: Any,
+    ) -> Dict[str, Any]:
+        """
+        Actively manages all currently open MT5 positions for `symbol`:
+          - Queries open MT5 positions via `get_positions_by_symbol` / `observed_positions_by_symbol`.
+          - Runs both Oracle's `TradeManager.evaluate()` and Forge's learned necessity & dynamic
+            re-analysis engine (`evaluate_live_position_reanalysis`) on each open ticket.
+          - Executes `close_position(ticket)` on MT5 when a learned necessity condition demands
+            an early exit or near-TP reversal save.
+          - Executes `modify_position(ticket, stop_loss=..., take_profit=...)` on MT5 when
+            stop-tightening or dynamic HTF Major TP expansion triggers.
+        """
+        broker_sym = self.resolve_broker_symbol(symbol)
+        if self.broker is None or not getattr(self.broker, "status", None) or not self.broker.status.connected:
+            return {
+                "mt5_connected": False,
+                "open_positions_count": 0,
+                "positions": [],
+                "actions_taken": [],
+            }
+
+        open_positions: List[Dict[str, Any]] = []
+        if hasattr(self.broker, "observed_positions_by_symbol"):
+            open_positions = self.broker.observed_positions_by_symbol(broker_sym) or []
+        elif hasattr(self.broker, "get_positions_by_symbol"):
+            open_positions = self.broker.get_positions_by_symbol(broker_sym) or []
+
+        actions_taken: List[Dict[str, Any]] = []
+        close_p = float(latest_bar.get("close", 0.0) or 0.0)
+        cur_atr = max(float(latest_bar.get("atr14", 0.0005) or 0.0005), close_p * 1e-4)
+        mt5_specs = self.get_mt5_symbol_specs(symbol, close_p if close_p > 0 else 1.0)
+        min_broker_stop = float(mt5_specs["point"]) * max(float(mt5_specs["stops_level_points"]), 10.0)
+
+        for pos in open_positions:
+            ticket = int(pos.get("ticket", 0) or 0)
+            if ticket <= 0:
+                continue
+            is_long = str(pos.get("type", "buy")).lower() == "buy"
+            entry_price = float(pos.get("price_open", close_p) or close_p)
+            cur_sl = float(pos.get("sl", 0.0) or 0.0)
+            cur_tp = float(pos.get("tp", 0.0) or 0.0)
+            sl_atr_mult = float(management_policy.get("learned_optimal_stop_atr_mult", 1.2))
+            inferred_stop_dist = (
+                abs(entry_price - cur_sl)
+                if cur_sl > 0 and ((is_long and cur_sl < entry_price) or (not is_long and cur_sl > entry_price))
+                else max(cur_atr * sl_atr_mult, min_broker_stop)
+            )
+            initial_stop = (
+                entry_price - inferred_stop_dist if is_long else entry_price + inferred_stop_dist
+            )
+            learned_tp_r = float(management_policy.get("learned_initial_major_tp_r", 2.0))
+            active_tp = (
+                cur_tp
+                if cur_tp > 0
+                else (entry_price + inferred_stop_dist * learned_tp_r if is_long else entry_price - inferred_stop_dist * learned_tp_r)
+            )
+            current_tp_r = max(0.5, abs(active_tp - entry_price) / max(inferred_stop_dist, 1e-9))
+            unrealized_r = (
+                (close_p - entry_price) / max(inferred_stop_dist, 1e-9)
+                if is_long
+                else (entry_price - close_p) / max(inferred_stop_dist, 1e-9)
+            )
+
+            tm_eval = self.evaluate_with_oracle_trade_manager(
+                symbol=symbol,
+                is_long=is_long,
+                entry_price=entry_price,
+                initial_stop=initial_stop,
+                target_price=active_tp,
+                entry_regime=str(latest_bar.get("regime", "CONSOLIDATION_RANGING")),
+                entry_atr=cur_atr,
+                exit_bar=latest_bar,
+                management_policy=management_policy,
+                sentinel_signal=sentinel_signal,
+                pulse_signal=pulse_signal,
+                current_stop=cur_sl if cur_sl > 0 else initial_stop,
+            )
+
+            fav_r = max(0.0, unrealized_r)
+            adv_r = max(0.0, -unrealized_r)
+            reanalysis = mtf_engine.evaluate_live_position_reanalysis(
+                bar=latest_bar,
+                macro_bars=macro_bars,
+                setup_bars=setup_bars,
+                is_long=is_long,
+                entry_price=entry_price,
+                stop_distance=inferred_stop_dist,
+                current_stop=cur_sl if cur_sl > 0 else initial_stop,
+                current_major_tp_r=current_tp_r,
+                fav_r=fav_r,
+                adv_r=adv_r,
+                peak_mfe_r=fav_r,
+                learned_genome=learned_genome,
+                sentinel_signal=sentinel_signal,
+                pulse_signal=pulse_signal,
+                policy=management_policy,
+                entry_confidence=float(
+                    (management_policy.get("empirical_probabilities") or {}).get(
+                        "empirical_major_tp_hit_probability", 0.55
+                    )
+                ),
+                entry_regime=str(latest_bar.get("regime", "CONSOLIDATION_RANGING")),
+                entry_atr=cur_atr,
+            )
+
+            tm_action = str(tm_eval.get("mt5_trade_manager_action", "hold"))
+            necessity_demanded = bool(reanalysis.get("necessity_demanded", False))
+            early_cut_needed = necessity_demanded and bool(reanalysis.get("thesis_broken_in_drawdown", False))
+            near_tp_save_needed = necessity_demanded and bool(reanalysis.get("near_tp_reversal_detected", False))
+
+            decision = "hold"
+            reason = str(tm_eval.get("mt5_trade_manager_reason", "Thesis intact"))
+            broker_res: Dict[str, Any] = {"status": "held", "ticket": ticket}
+
+            if tm_action == "close" or early_cut_needed or near_tp_save_needed:
+                decision = "close_position"
+                if early_cut_needed:
+                    reason = "Necessity-gated early loss cut: thesis broken in drawdown"
+                elif near_tp_save_needed:
+                    reason = "Necessity-gated near-TP reversal save"
+                if (
+                    self.execute_mt5_demo_orders
+                    and self.broker.status.account_type == "demo"
+                    and hasattr(self.broker, "close_position")
+                ):
+                    broker_res = self.broker.close_position(ticket)
+                else:
+                    broker_res = {"status": "close_recommended_paper_mode", "ticket": ticket}
+            else:
+                candidate_sl: Optional[float] = None
+                candidate_tp: Optional[float] = None
+
+                tm_sl = tm_eval.get("mt5_trade_manager_new_stop")
+                re_sl = reanalysis.get("fitted_stop_price")
+                for prop_sl in (tm_sl, re_sl):
+                    if prop_sl is not None:
+                        psl = float(prop_sl)
+                        if is_long and psl < close_p - min_broker_stop:
+                            if cur_sl <= 0 or psl > cur_sl + min_broker_stop * 0.25:
+                                candidate_sl = max(candidate_sl or psl, psl)
+                        elif not is_long and psl > close_p + min_broker_stop:
+                            if cur_sl <= 0 or psl < cur_sl - min_broker_stop * 0.25:
+                                candidate_sl = min(candidate_sl or psl, psl)
+
+                if bool(reanalysis.get("can_expand_major_tp")) and reanalysis.get("next_major_tp_r") is not None:
+                    next_tp_r = float(reanalysis["next_major_tp_r"])
+                    new_tp_val = (
+                        entry_price + inferred_stop_dist * next_tp_r
+                        if is_long
+                        else entry_price - inferred_stop_dist * next_tp_r
+                    )
+                    if (is_long and new_tp_val > max(cur_tp, close_p + min_broker_stop)) or (
+                        not is_long and (cur_tp <= 0 or new_tp_val < min(cur_tp, close_p - min_broker_stop))
+                    ):
+                        candidate_tp = round(new_tp_val, 5)
+
+                if candidate_sl is not None or candidate_tp is not None:
+                    decision = "modify_position"
+                    reason = str(tm_eval.get("mt5_trade_manager_reason") or "Necessity-gated stop/target update")
+                    if (
+                        self.execute_mt5_demo_orders
+                        and self.broker.status.account_type == "demo"
+                        and hasattr(self.broker, "modify_position")
+                    ):
+                        broker_res = self.broker.modify_position(
+                            ticket,
+                            stop_loss=round(candidate_sl, 5) if candidate_sl is not None else None,
+                            take_profit=round(candidate_tp, 5) if candidate_tp is not None else None,
+                        )
+                    else:
+                        broker_res = {
+                            "status": "modify_recommended_paper_mode",
+                            "ticket": ticket,
+                            "proposed_sl": round(candidate_sl, 5) if candidate_sl is not None else cur_sl,
+                            "proposed_tp": round(candidate_tp, 5) if candidate_tp is not None else cur_tp,
+                        }
+
+            actions_taken.append(
+                {
+                    "ticket": ticket,
+                    "symbol": broker_sym,
+                    "direction": "LONG" if is_long else "SHORT",
+                    "volume_lots": float(pos.get("volume", 0.0) or 0.0),
+                    "entry_price": entry_price,
+                    "current_price": close_p,
+                    "current_sl": cur_sl,
+                    "current_tp": cur_tp,
+                    "floating_profit_usd": float(pos.get("profit", 0.0) or 0.0),
+                    "unrealized_r": round(unrealized_r, 3),
+                    "decision": decision,
+                    "reason": reason,
+                    "broker_result": broker_res,
+                }
+            )
+
+        return {
+            "mt5_connected": True,
+            "open_positions_count": len(open_positions),
+            "positions": open_positions,
+            "actions_taken": actions_taken,
+        }
+
+    def reconcile_mt5_closed_deals(
+        self,
+        *,
+        symbol: str,
+        management_policy: Dict[str, Any],
+        feedback_outbox_path: Optional[Path] = None,
+        lookback_days: int = 7,
+    ) -> Dict[str, Any]:
+        """
+        Reconciles terminal win/loss reporting against real closed MT5 broker deals
+        (`mt5.history_deals_get`), grades each closed MT5 position under the Two-Tier
+        Penalty Standard, and feeds real MT5 losses/penalties into the Mistake Clinic.
+        """
+        broker_sym = self.resolve_broker_symbol(symbol)
+        if (
+            self.broker is None
+            or not getattr(self.broker, "status", None)
+            or not self.broker.status.connected
+            or not hasattr(self.broker, "get_closed_deals")
+        ):
+            return {
+                "mt5_connected": False,
+                "closed_deals_count": 0,
+                "mt5_real_wins": 0,
+                "mt5_real_losses": 0,
+                "mt5_real_scratches": 0,
+                "mt5_real_win_rate_pct": 0.0,
+                "mt5_real_net_profit_usd": 0.0,
+                "reconciled_deals": [],
+            }
+
+        deals = self.broker.get_closed_deals(symbol=broker_sym, lookback_days=lookback_days) or []
+        equity_now = max(self.get_account_equity_usd(), 100.0)
+        unit_risk_usd = max(equity_now * 0.005, 10.0)
+        target_r = float(management_policy.get("learned_initial_major_tp_r", 2.0))
+
+        reconciled: List[Dict[str, Any]] = []
+        wins = 0
+        losses = 0
+        scratches = 0
+        net_profit_total = 0.0
+
+        for d in deals:
+            pos_id = int(d.get("position_id", 0) or 0)
+            net_usd = float(d.get("net_profit_usd", 0.0) or 0.0)
+            net_profit_total += net_usd
+            est_r = round(net_usd / unit_risk_usd, 4)
+            exit_reason = str(d.get("exit_reason", "CLIENT_OR_EXPERT_CLOSE"))
+
+            if exit_reason == "TAKE_PROFIT" or est_r >= target_r:
+                status_tag = "CLOSED_AT_MAJOR_TP"
+            elif exit_reason == "STOP_LOSS" and net_usd < 0:
+                status_tag = "CLOSED_INITIAL_STOP_LOSS"
+            elif net_usd < 0:
+                status_tag = "CLOSED_EARLY_LOSS_CUT_BEFORE_SL"
+            else:
+                status_tag = "CLOSED_BREAKEVEN_STOP_MINOR_PENALTY"
+
+            audit = LearnedPenaltyAndNecessityEngine.grade_closed_trade_with_penalties(
+                realized_r=est_r,
+                initial_major_tp_r=target_r,
+                final_major_tp_r=target_r,
+                shadow_status=status_tag,
+                policy=management_policy,
+            )
+            if audit["is_true_tp_win"]:
+                wins += 1
+            elif net_usd < 0:
+                losses += 1
+            else:
+                scratches += 1
+
+            deal_entry = {
+                **d,
+                "estimated_realized_r": est_r,
+                "penalty_audit": audit,
+            }
+            reconciled.append(deal_entry)
+
+            if (
+                feedback_outbox_path is not None
+                and pos_id > 0
+                and audit["penalty_tier"] != "NONE"
+                and self._claim_reconciled_deal(pos_id)
+            ):
+                fb_event = {
+                    "event_id": f"mt5-deal-fb-{pos_id}-{symbol.upper()}",
+                    "event_type": (
+                        "forge.mt5_live_deal.major_sl_penalty"
+                        if audit["penalty_tier"] == "MAJOR_PENALTY"
+                        else "forge.mt5_live_deal.minor_early_exit_penalty"
+                    ),
+                    "source": "mt5_real_broker_deal_reconciliation",
+                    "symbol": symbol.upper(),
+                    "broker_symbol": broker_sym,
+                    "position_id": pos_id,
+                    "direction": d.get("direction"),
+                    "volume_lots": d.get("volume_lots"),
+                    "entry_price": d.get("entry_price"),
+                    "exit_price": d.get("exit_price"),
+                    "net_profit_usd": net_usd,
+                    "realized_r": est_r,
+                    "applied_penalty_r": audit["applied_penalty_r"],
+                    "penalty_adjusted_r": audit["penalty_adjusted_r"],
+                    "penalty_tier": audit["penalty_tier"],
+                    "exit_reason": exit_reason,
+                    "timestamp_unix": time.time(),
+                }
+                try:
+                    with feedback_outbox_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(fb_event) + "\n")
+                except Exception:
+                    pass
+
+        total_cnt = len(reconciled)
+        return {
+            "mt5_connected": True,
+            "closed_deals_count": total_cnt,
+            "mt5_real_wins": wins,
+            "mt5_real_losses": losses,
+            "mt5_real_scratches": scratches,
+            "mt5_real_win_rate_pct": round((wins / max(1, total_cnt)) * 100.0, 1) if total_cnt > 0 else 0.0,
+            "mt5_real_net_profit_usd": round(net_profit_total, 2),
+            "reconciled_deals": reconciled[-25:],
+        }
+
     def execute_or_log_mt5_demo_trade(
         self,
         *,
@@ -276,16 +736,18 @@ class MT5ShadowExecutionBridge:
         current_signal: bool = False,
         latest_signal: bool = False,
         signal_id: str = "",
+        equity_override_usd: Optional[float] = None,
     ) -> Dict[str, Any]:
         broker_sym = self.resolve_broker_symbol(symbol)
         lots = float(sizing_info.get("mt5_broker_lots", sizing_info.get("position_lots", 0.01)))
         units = float(sizing_info.get("position_units", 1000.0))
-        equity_now = self.get_account_equity_usd()
+        equity_now = float(equity_override_usd) if equity_override_usd is not None else self.get_account_equity_usd()
         order_result: Dict[str, Any] = {
             "broker_symbol": broker_sym,
             "mt5_broker_lots": lots,
             "mt5_connected": bool(self.broker and self.broker.status.connected),
             "paper_mode": bool(self.broker.paper) if self.broker else True,
+            "account_equity_usd": round(equity_now, 2),
             "execution_status": "shadow_logged_to_mt5_csv",
         }
         if self.execute_mt5_demo_orders and not latest_signal:
@@ -295,29 +757,50 @@ class MT5ShadowExecutionBridge:
         elif self.execute_mt5_demo_orders and self.broker is not None and self.broker.status.connected:
             if self.broker.status.account_type != "demo":
                 order_result["execution_status"] = "blocked_non_demo_account"
-            elif not signal_id or not self._claim_demo_signal(signal_id):
-                order_result["execution_status"] = "duplicate_signal_skipped"
             else:
-                plan = {
-                    "approved": True,
-                    "symbol": symbol.upper(),
-                    "broker_symbol": broker_sym,
-                    "direction": "long" if direction.upper() == "LONG" else "short",
-                    "size": units,
-                    "entry": entry_price,
-                    "stop": stop_price,
-                    "target": target_price,
-                    "rebase_stops_to_market": True,
-                    "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
-                }
-                res = self.broker.place_order(plan, human_confirm=False)
-                order_result["execution_status"] = res.get("status", "filled")
-                order_result["ticket"] = res.get("order") or res.get("ticket")
-                order_result["retcode"] = res.get("retcode", "")
-                order_result["price"] = res.get("price", entry_price)
-                order_result["volume_lots"] = res.get("volume_lots", lots)
-                order_result["stop"] = res.get("sl", stop_price)
-                order_result["target"] = res.get("tp", target_price)
+                # Check if an open MT5 position already exists on this symbol to prevent duplicate/opposing stacking
+                existing_positions: List[Dict[str, Any]] = []
+                if hasattr(self.broker, "get_positions_by_symbol"):
+                    existing_positions = self.broker.get_positions_by_symbol(broker_sym) or []
+                desired_side = "buy" if direction.upper() == "LONG" else "sell"
+
+                def _norm_side(raw_t: Any) -> str:
+                    if raw_t in (0, "0", "buy", "BUY", "long", "LONG"):
+                        return "buy"
+                    return "sell"
+
+                opposing_pos = next((p for p in existing_positions if _norm_side(p.get("type")) != desired_side), None)
+                same_pos = next((p for p in existing_positions if _norm_side(p.get("type")) == desired_side), None)
+
+                if opposing_pos is not None:
+                    order_result["execution_status"] = "existing_opposing_position_open"
+                    order_result["existing_ticket"] = int(opposing_pos.get("ticket", 0) or 0)
+                elif same_pos is not None:
+                    order_result["execution_status"] = "existing_same_direction_position_open"
+                    order_result["existing_ticket"] = int(same_pos.get("ticket", 0) or 0)
+                elif not signal_id or not self._claim_demo_signal(signal_id):
+                    order_result["execution_status"] = "duplicate_signal_skipped"
+                else:
+                    plan = {
+                        "approved": True,
+                        "symbol": symbol.upper(),
+                        "broker_symbol": broker_sym,
+                        "direction": "long" if direction.upper() == "LONG" else "short",
+                        "size": units,
+                        "entry": entry_price,
+                        "stop": stop_price,
+                        "target": target_price,
+                        "rebase_stops_to_market": True,
+                        "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
+                    }
+                    res = self.broker.place_order(plan, human_confirm=False)
+                    order_result["execution_status"] = res.get("status", "filled")
+                    order_result["ticket"] = res.get("order") or res.get("ticket")
+                    order_result["retcode"] = res.get("retcode", "")
+                    order_result["price"] = res.get("price", entry_price)
+                    order_result["volume_lots"] = res.get("volume_lots", lots)
+                    order_result["stop"] = res.get("sl", stop_price)
+                    order_result["target"] = res.get("tp", target_price)
         elif self.execute_mt5_demo_orders:
             order_result["execution_status"] = "mt5_not_connected"
 
@@ -584,11 +1067,21 @@ class ForgeShadowRunner:
         v1_timestamps = self.load_v1_demo_trade_timestamps(upper_sym)
         v1_api_bridge = self.load_v1_api_bridge_state(upper_sym)
         total_cost_bps = self.load_verified_cost_bps(upper_sym)
-        account_equity_usd = self.mt5_bridge.get_account_equity_usd()
+        if isinstance(dataset.get("live_spread_bps"), (int, float)) and float(dataset["live_spread_bps"]) > 0:
+            cp_raw = self._read_json(self.cost_profile_dir / upper_sym / "latest.json", {})
+            p_inner = cp_raw.get("profile") or cp_raw
+            comm_bps = float(p_inner.get("commission_bps", 0.35))
+            slip_bps = float(p_inner.get("slippage_bps", 0.30))
+            total_cost_bps = round(float(dataset["live_spread_bps"]) + comm_bps + slip_bps, 4)
+
+        starting_equity_usd = self.mt5_bridge.get_account_equity_usd()
+        account_equity_usd = starting_equity_usd
 
         shadow_trades: List[Dict[str, Any]] = []
         style_summaries: Dict[str, Any] = {}
         trade_cycle_counter = 0
+        latest_management_policy: Dict[str, Any] = {}
+        latest_learned_genome: Dict[str, Any] = {}
 
         for style in styles:
             loaded = self.load_v2_candidate_blueprint(upper_sym, style)
@@ -608,6 +1101,9 @@ class ForgeShadowRunner:
                 loaded = self.load_v2_candidate_blueprint(upper_sym, style) or loaded
                 bp = loaded["blueprint"]
                 management_policy = bp.get("dynamic_trade_management_policy") or {}
+
+            latest_management_policy = management_policy
+            latest_learned_genome = bp.get("learned_strategy_genome") or {}
 
             stack = bp.get("top_down_stack", {})
             trigger_tf = stack.get("trigger_timeframe", "M15")
@@ -816,11 +1312,13 @@ class ForgeShadowRunner:
                     else "ema_trend"
                 )
 
+                # Refresh account equity before sizing this trade (live MT5 equity or compounding shadow equity)
+                trade_entry_equity_usd = self.mt5_bridge.get_account_equity_usd()
                 sizing_info = PositionSizingAndSafetyEngine.compute_position_size_for_stop(
                     symbol=upper_sym,
                     entry_price=entry_price,
                     stop_distance=stop_distance,
-                    account_equity_usd=account_equity_usd,
+                    account_equity_usd=trade_entry_equity_usd,
                     risk_budget_pct=0.50,
                     mt5_symbol_specs=mt5_specs,
                 )
@@ -877,7 +1375,12 @@ class ForgeShadowRunner:
                     current_signal=current_signal,
                     latest_signal=latest_signal,
                     signal_id=f"{upper_sym}:{unix_sec}",
+                    equity_override_usd=trade_entry_equity_usd,
                 )
+
+                # Update tracked equity after closed trade so subsequent trades reflect gains/losses
+                if not shadow_status.startswith("OPEN"):
+                    account_equity_usd = self.mt5_bridge.update_tracked_equity_after_trade(net_return_pct)
 
                 trade_record = {
                     "shadow_trade_id": f"shd-{upper_sym.lower()}-{style.lower()}-{unix_sec}",
@@ -923,6 +1426,8 @@ class ForgeShadowRunner:
                     "penalty_adjusted_r": penalty_audit["penalty_adjusted_r"],
                     "penalty_audit": penalty_audit,
                     "net_return_pct": net_return_pct,
+                    "account_equity_before_trade_usd": round(trade_entry_equity_usd, 2),
+                    "account_equity_after_trade_usd": round(account_equity_usd, 2),
                     "peak_mfe_r": round(peak_mfe_r, 3),
                     "worst_mae_r": round(worst_mae_r, 3),
                     "be_ratchet_triggered": be_active,
@@ -1049,6 +1554,36 @@ class ForgeShadowRunner:
 
         m5_series = dataset.get("series", {}).get("M5", [])
         m15_series = dataset.get("series", {}).get("M15", [])
+        h1_series = dataset.get("series", {}).get("H1", [])
+        h4_series = dataset.get("series", {}).get("H4", [])
+        d1_series = dataset.get("series", {}).get("D1", [])
+        w1_series = dataset.get("series", {}).get("W1", [])
+        latest_live_bar = m5_series[-1] if m5_series else (m15_series[-1] if m15_series else {})
+        htf_target_bars = [b for b in (h4_series[-1:] + d1_series[-1:] + w1_series[-1:]) if b]
+
+        # 5. Live Lifecycle Management of Open MT5 Positions (modify_position / close_position)
+        open_mt5_management = self.mt5_bridge.manage_open_mt5_positions(
+            symbol=upper_sym,
+            latest_bar=latest_live_bar,
+            macro_bars=[b for b in (d1_series[-1:] + h4_series[-1:]) if b],
+            setup_bars=[b for b in (h1_series[-1:] + m15_series[-1:]) if b],
+            htf_bars=htf_target_bars,
+            learned_genome=latest_learned_genome,
+            management_policy=latest_management_policy,
+            sentinel_signal=0.0,
+            pulse_signal=0.0,
+            mtf_engine=self.mtf_engine,
+        )
+
+        # 6. Reconcile Real Closed MT5 Deals (`mt5.history_deals_get`) & Feed Real Losses to Mistake Clinic
+        mt5_deal_reconciliation = self.mt5_bridge.reconcile_mt5_closed_deals(
+            symbol=upper_sym,
+            management_policy=latest_management_policy,
+            feedback_outbox_path=self.feedback_outbox_path,
+            lookback_days=7,
+        )
+
+        final_equity_usd = self.mt5_bridge.get_account_equity_usd()
         report = {
             "schema": "forge.shadow_runner.report.v2",
             "mode": (
@@ -1061,7 +1596,9 @@ class ForgeShadowRunner:
             "evaluated_at_unix": time.time(),
             "mt5_demo_bridge_status": {
                 **self.mt5_bridge.connection_status,
-                "account_equity_usd": account_equity_usd,
+                "starting_session_equity_usd": round(starting_equity_usd, 2),
+                "account_equity_usd": round(final_equity_usd, 2),
+                "session_equity_change_usd": round(final_equity_usd - starting_equity_usd, 2),
                 "broker_symbol": self.mt5_bridge.resolve_broker_symbol(upper_sym),
                 "mt5_symbol_specs": self.mt5_bridge.get_mt5_symbol_specs(
                     upper_sym,
@@ -1069,12 +1606,15 @@ class ForgeShadowRunner:
                 ),
                 "mt5_csv_logs": self.mt5_bridge.mt5_logger.paths() if self.mt5_bridge.mt5_logger else {},
             },
+            "mt5_open_position_management": open_mt5_management,
+            "mt5_live_account_reconciliation": mt5_deal_reconciliation,
             "live_data_feed": {
                 "source": dataset.get("source", "yahoo_finance_live_7tf_institutional"),
                 "fetched_at_unix": dataset.get("fetched_at_unix"),
                 "latest_m5_bar_ts": m5_series[-1]["ts"] if m5_series else None,
                 "latest_m15_bar_ts": m15_series[-1]["ts"] if m15_series else None,
                 "latest_live_price": m5_series[-1]["close"] if m5_series else (m15_series[-1]["close"] if m15_series else None),
+                "live_spread_bps": dataset.get("live_spread_bps"),
             },
             "oracle_v1_api_bridge_monitor": v1_api_bridge,
             "oracle_v1_demo_trades_in_history": len(v1_timestamps),
@@ -1102,8 +1642,8 @@ class ForgeShadowRunner:
             json.dumps(existing_ledger, indent=2), encoding="utf-8"
         )
 
-        # Closed-Loop Reinforcement: feed the penalty-adjusted outcomes back into Forge's genome learner
-        if shadow_trades:
+        # Closed-Loop Reinforcement: feed the penalty-adjusted outcomes (including real MT5 deal losses) back into Forge
+        if shadow_trades or mt5_deal_reconciliation.get("closed_deals_count", 0) > 0:
             try:
                 self.mtf_engine.train_and_certify_symbol_strategies(
                     upper_sym, styles=styles, force_refresh_data=False
@@ -1186,17 +1726,22 @@ def main() -> None:
                         "mode": report.get("mode"),
                         "symbol": report.get("symbol"),
                         "broker_symbol": report.get("broker_symbol"),
+                        "live_data_feed_source": (report.get("live_data_feed") or {}).get("source"),
                         "mt5_demo_bridge_status": report.get("mt5_demo_bridge_status"),
-                        "v1_missed_opportunities_captured_by_v2": report.get(
-                            "v1_missed_opportunities_captured_by_v2"
-                        ),
-                        "overall_true_tp_win_rate_pct": report.get(
-                            "overall_shadow_win_rate_pct"
-                        ),
-                        "overall_true_tp_wins_count": report.get("overall_true_tp_wins_count"),
-                        "overall_breakeven_scratches_count": report.get("overall_breakeven_scratches_count"),
-                        "overall_shadow_total_r": report.get("overall_shadow_total_r"),
-                        "overall_penalty_adjusted_total_r": report.get("overall_penalty_adjusted_total_r"),
+                        "mt5_open_position_management": report.get("mt5_open_position_management"),
+                        "mt5_live_account_reconciliation": report.get("mt5_live_account_reconciliation"),
+                        "historical_shadow_replay_summary": {
+                            "v1_missed_opportunities_captured_by_v2": report.get(
+                                "v1_missed_opportunities_captured_by_v2"
+                            ),
+                            "overall_true_tp_win_rate_pct": report.get(
+                                "overall_shadow_win_rate_pct"
+                            ),
+                            "overall_true_tp_wins_count": report.get("overall_true_tp_wins_count"),
+                            "overall_breakeven_scratches_count": report.get("overall_breakeven_scratches_count"),
+                            "overall_shadow_total_r": report.get("overall_shadow_total_r"),
+                            "overall_penalty_adjusted_total_r": report.get("overall_penalty_adjusted_total_r"),
+                        },
                         "style_summaries": report.get("style_summaries"),
                         "sample_shadow_trade": (
                             report.get("recent_shadow_trades") or [None]
@@ -1213,3 +1758,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
