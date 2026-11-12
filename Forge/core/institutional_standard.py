@@ -1438,17 +1438,32 @@ class LearnedPenaltyAndNecessityEngine:
         else:
             learned_major_tp_r = round(cls._empirical_mean(all_mfes_atr) + cls._empirical_std(all_mfes_atr), 3)
 
-        # 3. Partition observed trajectories into Main-TP winners vs. SL losers
+        # 3. Partition observed trajectories into Main-TP winners vs. SL losers,
+        #    and Bayesian-update with real MT5 & Shadow win/loss outcomes from `shadow_feedback`
         sl_trajectories = [t for t in trajectories if bool(t.get("hit_full_sl"))]
         tp_trajectories = [t for t in trajectories if bool(t.get("hit_major_tp"))]
-        n_total = float(max(1, len(trajectories)))
-        p_sl_emp = max(1.0 / n_total, len(sl_trajectories) / n_total)
-        p_tp_emp = max(1.0 / n_total, len(tp_trajectories) / n_total)
+        fb_losses = float(fb.get("shadow_losses", 0) or 0) + float(fb.get("major_sl_penalties_count", 0) or 0) * 0.5
+        fb_wins = float(fb.get("shadow_true_tp_wins", 0) or 0)
+        eff_sl_count = float(len(sl_trajectories)) + fb_losses
+        eff_tp_count = float(len(tp_trajectories)) + fb_wins
+        n_total = max(1.0, float(len(trajectories)) + fb_losses + fb_wins)
+        p_sl_emp = max(1.0 / n_total, eff_sl_count / n_total)
+        p_tp_emp = max(1.0 / n_total, eff_tp_count / n_total)
+
+        # If live MT5 / Shadow losses exceed True TP Wins, adaptively widen `learned_sl_atr_mult`
+        # within the empirical volatility distribution so tight stops stop getting hunted
+        if (fb_losses + fb_wins) > 0 and fb_losses > fb_wins:
+            loss_excess_ratio = (fb_losses - fb_wins) / (fb_losses + fb_wins)
+            learned_sl_atr_mult = round(
+                learned_sl_atr_mult * (1.0 + loss_excess_ratio * (p_sl_emp / (p_sl_emp + p_tp_emp))),
+                4,
+            )
 
         # 4. Derive Major SL Penalty vs. Minor Early-Exit/Breakeven Penalty from empirical probabilities
         # Major Penalty: full SL loss (1.0R) + empirical opportunity cost of blown setup
         learned_major_sl_penalty_r = round(
-            1.0 + (learned_major_tp_r * (p_tp_emp / (p_sl_emp + p_tp_emp))), 4
+            1.0 + (learned_major_tp_r * (p_tp_emp / (p_sl_emp + p_tp_emp))) + (p_sl_emp / (p_sl_emp + p_tp_emp)),
+            4,
         )
         # Base Minor Penalty scale: empirical unconditional failure propensity (strictly < Major Penalty)
         learned_minor_penalty_base_r = round(

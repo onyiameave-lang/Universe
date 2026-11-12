@@ -673,16 +673,17 @@ class MT5ShadowExecutionBridge:
             if (
                 feedback_outbox_path is not None
                 and pos_id > 0
-                and audit["penalty_tier"] != "NONE"
                 and self._claim_reconciled_deal(pos_id)
             ):
+                if audit["is_true_tp_win"]:
+                    ev_type = "forge.mt5_live_deal.true_tp_win_reinforcement"
+                elif audit["penalty_tier"] == "MAJOR_PENALTY":
+                    ev_type = "forge.mt5_live_deal.major_sl_penalty"
+                else:
+                    ev_type = "forge.mt5_live_deal.minor_early_exit_penalty"
                 fb_event = {
                     "event_id": f"mt5-deal-fb-{pos_id}-{symbol.upper()}",
-                    "event_type": (
-                        "forge.mt5_live_deal.major_sl_penalty"
-                        if audit["penalty_tier"] == "MAJOR_PENALTY"
-                        else "forge.mt5_live_deal.minor_early_exit_penalty"
-                    ),
+                    "event_type": ev_type,
                     "source": "mt5_real_broker_deal_reconciliation",
                     "symbol": symbol.upper(),
                     "broker_symbol": broker_sym,
@@ -693,6 +694,7 @@ class MT5ShadowExecutionBridge:
                     "exit_price": d.get("exit_price"),
                     "net_profit_usd": net_usd,
                     "realized_r": est_r,
+                    "is_true_tp_win": bool(audit["is_true_tp_win"]),
                     "applied_penalty_r": audit["applied_penalty_r"],
                     "penalty_adjusted_r": audit["penalty_adjusted_r"],
                     "penalty_tier": audit["penalty_tier"],

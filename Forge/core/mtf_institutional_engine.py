@@ -1773,7 +1773,9 @@ class MultiTimeframeInstitutionalEngine:
         upper_sym = symbol.upper()
         style_up = trader_style.upper()
         ledger_path = self.workspace_root / "Forge" / "memory" / "shadow_trades_ledger.json"
+        outbox_path = self.workspace_root / "Oracle" / "memory" / "forge_strategy_feedback_outbox.jsonl"
         trades: List[Dict[str, Any]] = []
+        mt5_reconciled_deals: List[Dict[str, Any]] = []
         if ledger_path.exists():
             try:
                 raw = safe_read_json_file(ledger_path, fallback={})
@@ -1781,6 +1783,51 @@ class MultiTimeframeInstitutionalEngine:
                 for t in sym_block.get("recent_shadow_trades") or []:
                     if str(t.get("trader_style", "")).upper() == style_up:
                         trades.append(t)
+                mt5_rec_block = sym_block.get("mt5_live_account_reconciliation") or {}
+                for d in mt5_rec_block.get("reconciled_deals") or []:
+                    if isinstance(d, dict):
+                        mt5_reconciled_deals.append(d)
+            except Exception:
+                pass
+
+        # Also ingest Mistake-Clinic & MT5 Live Deal events from forge_strategy_feedback_outbox.jsonl
+        seen_mt5_pos_ids = {int(d.get("position_id", 0) or 0) for d in mt5_reconciled_deals if d.get("position_id")}
+        outbox_events_for_sym: List[Dict[str, Any]] = []
+        if outbox_path.exists():
+            try:
+                for line in outbox_path.read_text(encoding="utf-8").splitlines():
+                    line_s = line.strip()
+                    if not line_s:
+                        continue
+                    try:
+                        ev = json.loads(line_s)
+                    except Exception:
+                        continue
+                    if not isinstance(ev, dict):
+                        continue
+                    if str(ev.get("symbol", "")).upper() != upper_sym:
+                        continue
+                    ev_style = str(ev.get("trader_style", "")).upper()
+                    if ev_style and ev_style != style_up:
+                        continue
+                    outbox_events_for_sym.append(ev)
+                    if str(ev.get("source", "")) == "mt5_real_broker_deal_reconciliation":
+                        pid = int(ev.get("position_id", 0) or 0)
+                        if pid > 0 and pid not in seen_mt5_pos_ids:
+                            seen_mt5_pos_ids.add(pid)
+                            mt5_reconciled_deals.append(
+                                {
+                                    "position_id": pid,
+                                    "estimated_realized_r": float(ev.get("realized_r", 0.0) or 0.0),
+                                    "net_profit_usd": float(ev.get("net_profit_usd", 0.0) or 0.0),
+                                    "penalty_audit": {
+                                        "is_true_tp_win": bool(ev.get("is_true_tp_win", False)),
+                                        "penalty_adjusted_r": float(ev.get("penalty_adjusted_r", ev.get("realized_r", 0.0)) or 0.0),
+                                        "penalty_tier": str(ev.get("penalty_tier", "NONE")),
+                                        "applied_penalty_r": float(ev.get("applied_penalty_r", 0.0) or 0.0),
+                                    },
+                                }
+                            )
             except Exception:
                 pass
 
@@ -1893,8 +1940,40 @@ class MultiTimeframeInstitutionalEngine:
                 rt["wins"] += 1.0 if is_true_win else 0.0
                 rt["r_sum"] += pen_adj_r
 
+        # Incorporate Ground-Truth Reconciled MT5 Broker Deals (weighted 2.5x over simulated bars)
+        mt5_real_wins_cnt = 0
+        mt5_real_losses_cnt = 0
+        mt5_real_scratches_cnt = 0
+        mt5_real_pen_adj_r_sum = 0.0
+        for d in mt5_reconciled_deals:
+            d_audit = d.get("penalty_audit") or {}
+            d_r = float(d.get("estimated_realized_r", 0.0) or 0.0)
+            d_pen_adj_r = float(d_audit.get("penalty_adjusted_r", d_r) or 0.0)
+            d_tier = str(d_audit.get("penalty_tier", "NONE"))
+            d_is_win = bool(d_audit.get("is_true_tp_win", False))
+            d_net_usd = float(d.get("net_profit_usd", 0.0) or 0.0)
+            mt5_real_pen_adj_r_sum += d_pen_adj_r
+            if d_is_win:
+                mt5_real_wins_cnt += 1
+                wins += 2
+                true_tp_wins += 2
+            elif d_net_usd < 0 or "MAJOR" in d_tier:
+                mt5_real_losses_cnt += 1
+                losses += 2
+                major_sl_penalties_cnt += 2
+            else:
+                mt5_real_scratches_cnt += 1
+                scratches += 1
+                minor_early_penalties_cnt += 1
+
         return {
             "shadow_trades_analyzed": len(trades),
+            "mt5_real_deals_analyzed": len(mt5_reconciled_deals),
+            "mt5_real_wins": mt5_real_wins_cnt,
+            "mt5_real_losses": mt5_real_losses_cnt,
+            "mt5_real_scratches": mt5_real_scratches_cnt,
+            "mt5_real_penalty_adjusted_r_sum": round(mt5_real_pen_adj_r_sum, 3),
+            "outbox_feedback_events_count": len(outbox_events_for_sym),
             "shadow_wins": wins,
             "shadow_true_tp_wins": true_tp_wins,
             "shadow_breakeven_scratches": scratches,

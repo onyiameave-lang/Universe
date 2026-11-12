@@ -257,9 +257,11 @@ def test_reconcile_mt5_closed_deals_grades_real_losses_and_emits_feedback(tmp_pa
     assert rec1["mt5_real_losses"] == 1
 
     lines = [json.loads(line) for line in feedback_outbox.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(lines) == 1
+    assert len(lines) == 2
     assert lines[0]["source"] == "mt5_real_broker_deal_reconciliation"
     assert lines[0]["penalty_tier"] == "MAJOR_PENALTY"
+    assert lines[1]["event_type"] == "forge.mt5_live_deal.true_tp_win_reinforcement"
+    assert lines[1]["is_true_tp_win"] is True
 
     # Second call should deduplicate already-reconciled deals so no new feedback lines are written
     rec2 = bridge.reconcile_mt5_closed_deals(
@@ -268,7 +270,7 @@ def test_reconcile_mt5_closed_deals_grades_real_losses_and_emits_feedback(tmp_pa
         feedback_outbox_path=feedback_outbox,
     )
     lines_after = [json.loads(line) for line in feedback_outbox.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(lines_after) == 1
+    assert len(lines_after) == 2
 
 
 def test_load_cached_dataset_self_heals_trailing_extra_json_data(tmp_path):
