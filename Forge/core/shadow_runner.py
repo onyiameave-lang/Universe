@@ -20,7 +20,8 @@ Features:
      - Reads real MT5 account equity, balance, server, and symbol contract specs
        (`trade_contract_size`, `volume_min`, `volume_step`, `point`), computes broker-clamped
        MT5 lot sizes (`0.01` lot step), logs trades to `Oracle/logs/mt5_demo_trades.csv`,
-       and supports live MT5 Demo order execution via `--mt5-demo`.
+       and supports demo order execution via `--mt5-demo`. Historical replay signals are
+       evaluation-only; only a fresh latest signal can submit an order, once per signal.
 
 CLI Usage (from repository root):
   python3 -m Forge.core.shadow_runner --symbol GBPUSD --style ALL --mt5-demo
@@ -32,6 +33,7 @@ import argparse
 import bisect
 import json
 import os
+import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
@@ -73,7 +75,27 @@ class MT5ShadowExecutionBridge:
         self.snapshot_cls: Any = None
         self.direction_enum: Any = None
         self.connection_status: Dict[str, Any] = {}
+        self.order_ledger_path = (
+            self.oracle_root / "memory" / "forge_mt5_signal_orders.sqlite3"
+        )
         self._init_oracle_mt5_components()
+
+    def _claim_demo_signal(self, signal_id: str) -> bool:
+        self.order_ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.order_ledger_path, timeout=10) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS submitted_signals (
+                    signal_id TEXT PRIMARY KEY,
+                    claimed_at_unix REAL NOT NULL
+                )
+                """
+            )
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO submitted_signals (signal_id, claimed_at_unix) VALUES (?, ?)",
+                (signal_id, time.time()),
+            )
+            return cursor.rowcount == 1
 
     def _init_oracle_mt5_components(self) -> None:
         oracle_str = str(self.oracle_root)
@@ -251,6 +273,9 @@ class MT5ShadowExecutionBridge:
         shadow_status: str,
         realized_r: float,
         penalty_audit: Dict[str, Any],
+        current_signal: bool = False,
+        latest_signal: bool = False,
+        signal_id: str = "",
     ) -> Dict[str, Any]:
         broker_sym = self.resolve_broker_symbol(symbol)
         lots = float(sizing_info.get("mt5_broker_lots", sizing_info.get("position_lots", 0.01)))
@@ -263,23 +288,43 @@ class MT5ShadowExecutionBridge:
             "paper_mode": bool(self.broker.paper) if self.broker else True,
             "execution_status": "shadow_logged_to_mt5_csv",
         }
-        if self.execute_mt5_demo_orders and self.broker is not None and self.broker.status.connected:
-            plan = {
-                "approved": True,
-                "symbol": symbol.upper(),
-                "broker_symbol": broker_sym,
-                "direction": "long" if direction.upper() == "LONG" else "short",
-                "size": units,
-                "entry": entry_price,
-                "stop": stop_price,
-                "target": target_price,
-            }
-            res = self.broker.place_order(plan, human_confirm=False)
-            order_result["execution_status"] = res.get("status", "filled")
-            order_result["ticket"] = res.get("order") or res.get("ticket")
-            order_result["retcode"] = res.get("retcode", "")
+        if self.execute_mt5_demo_orders and not latest_signal:
+            order_result["execution_status"] = "historical_replay_not_executed"
+        elif self.execute_mt5_demo_orders and not current_signal:
+            order_result["execution_status"] = "stale_signal_not_executed"
+        elif self.execute_mt5_demo_orders and self.broker is not None and self.broker.status.connected:
+            if self.broker.status.account_type != "demo":
+                order_result["execution_status"] = "blocked_non_demo_account"
+            elif not signal_id or not self._claim_demo_signal(signal_id):
+                order_result["execution_status"] = "duplicate_signal_skipped"
+            else:
+                plan = {
+                    "approved": True,
+                    "symbol": symbol.upper(),
+                    "broker_symbol": broker_sym,
+                    "direction": "long" if direction.upper() == "LONG" else "short",
+                    "size": units,
+                    "entry": entry_price,
+                    "stop": stop_price,
+                    "target": target_price,
+                    "rebase_stops_to_market": True,
+                    "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
+                }
+                res = self.broker.place_order(plan, human_confirm=False)
+                order_result["execution_status"] = res.get("status", "filled")
+                order_result["ticket"] = res.get("order") or res.get("ticket")
+                order_result["retcode"] = res.get("retcode", "")
+                order_result["price"] = res.get("price", entry_price)
+                order_result["volume_lots"] = res.get("volume_lots", lots)
+                order_result["stop"] = res.get("sl", stop_price)
+                order_result["target"] = res.get("tp", target_price)
+        elif self.execute_mt5_demo_orders:
+            order_result["execution_status"] = "mt5_not_connected"
 
-        if self.mt5_logger is not None:
+        should_log_demo_trade = (
+            not self.execute_mt5_demo_orders or current_signal
+        )
+        if self.mt5_logger is not None and should_log_demo_trade:
             try:
                 if not getattr(self.mt5_logger, "_session_id", ""):
                     self.mt5_logger.start_session(
@@ -293,15 +338,23 @@ class MT5ShadowExecutionBridge:
                     direction=direction.lower(),
                     confidence=confidence,
                     regime=regime,
-                    size=lots,
-                    price=entry_price,
-                    stop=stop_price,
-                    target=target_price,
+                    size=float(order_result.get("volume_lots", lots)),
+                    price=float(order_result.get("price", entry_price)),
+                    stop=float(order_result.get("stop", stop_price)),
+                    target=float(order_result.get("target", target_price)),
                     reward_risk=reward_risk,
-                    outcome=str(penalty_audit.get("outcome_class", shadow_status)),
+                    outcome=(
+                        order_result["execution_status"]
+                        if self.execute_mt5_demo_orders
+                        else str(penalty_audit.get("outcome_class", shadow_status))
+                    ),
                     retcode=order_result.get("retcode", ""),
-                    reason=f"realized_r={realized_r:+.3f}R | penalty={penalty_audit.get('applied_penalty_r', 0.0):.3f}R ({penalty_audit.get('penalty_tier')})",
-                    account_type="demo",
+                    reason=f"signal_id={signal_id} | realized_r={realized_r:+.3f}R | penalty={penalty_audit.get('applied_penalty_r', 0.0):.3f}R ({penalty_audit.get('penalty_tier')})",
+                    account_type=(
+                        self.broker.status.account_type
+                        if self.broker is not None
+                        else "unknown"
+                    ),
                     equity_before=equity_now,
                     note=f"cf={penalty_audit.get('counterfactual_audit')}",
                 )
@@ -588,12 +641,24 @@ class ForgeShadowRunner:
             )
             start_idx = max(30, len(trigger_series) - lookback_bars)
             end_idx = len(trigger_series)
+            trigger_interval_sec = {
+                "M5": 5 * 60,
+                "M15": 15 * 60,
+                "M30": 30 * 60,
+                "H1": 60 * 60,
+            }.get(trigger_tf, 60 * 60)
 
             style_trades: List[Dict[str, Any]] = []
             i = start_idx
             while i < end_idx - 1:
                 bar = trigger_series[i]
                 unix_sec = int(bar["unix_sec"])
+                latest_signal = i == end_idx - 2
+                signal_age_sec = time.time() - unix_sec
+                current_signal = (
+                    latest_signal
+                    and -60 <= signal_age_sec <= 2 * trigger_interval_sec
+                )
 
                 # 1. Check Adaptive Session & Regime filters
                 if bar.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
@@ -809,6 +874,9 @@ class ForgeShadowRunner:
                     shadow_status=shadow_status,
                     realized_r=realized_r,
                     penalty_audit=penalty_audit,
+                    current_signal=current_signal,
+                    latest_signal=latest_signal,
+                    signal_id=f"{upper_sym}:{unix_sec}",
                 )
 
                 trade_record = {
@@ -1078,7 +1146,7 @@ def main() -> None:
     parser.add_argument(
         "--mt5-demo",
         action="store_true",
-        help="Enable live order execution on connected MetaTrader 5 Demo account via Oracle MT5Broker",
+        help="Submit fresh current signals to a connected MT5 demo account; historical replay is never executed",
     )
     parser.add_argument(
         "--daemon",
