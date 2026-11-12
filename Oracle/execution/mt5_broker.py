@@ -120,12 +120,18 @@ class BrokerStatus:
                 "equity": self.equity, "currency": self.currency, "reason": self.reason}
 
 class MT5Broker:
-    def __init__(self, symbol_map: Optional[Dict[str, str]] = None):
+    def __init__(
+        self,
+        symbol_map: Optional[Dict[str, str]] = None,
+        *,
+        paper: Optional[bool] = None,
+        allow_live: Optional[bool] = None,
+    ):
         self._mt5 = None
         self.status = BrokerStatus()
         self.symbol_map = symbol_map or DEFAULT_SYMBOL_MAP
-        self.allow_live = _cfg.oracle_allow_live
-        self.paper = _cfg.oracle_paper_trading
+        self.allow_live = _cfg.oracle_allow_live if allow_live is None else allow_live
+        self.paper = _cfg.oracle_paper_trading if paper is None else paper
         self._paper_positions = {}  # for paper trading mode: {ticket: position_dict}
         self._next_ticket = 1000000  # paper trading ticket counter
 
@@ -351,6 +357,27 @@ class MT5Broker:
         is_buy = plan["direction"] in ("long", "buy")
         price = tick.ask if is_buy else tick.bid
         order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        stop = float(plan["stop"])
+        target = float(plan["target"])
+        if plan.get("rebase_stops_to_market"):
+            reference_entry = float(plan.get("entry", 0.0))
+            max_entry_deviation = float(plan.get("max_entry_deviation", 0.0))
+            if reference_entry <= 0 or max_entry_deviation <= 0:
+                return {
+                    "status": "rejected",
+                    "reason": "invalid market-entry rebase limits",
+                    "symbol": symbol,
+                }
+            if abs(price - reference_entry) > max_entry_deviation:
+                return {
+                    "status": "rejected",
+                    "reason": "current MT5 price moved beyond the signal entry tolerance",
+                    "symbol": symbol,
+                }
+            stop_distance = abs(reference_entry - stop)
+            target_distance = abs(target - reference_entry)
+            stop = price - stop_distance if is_buy else price + stop_distance
+            target = price + target_distance if is_buy else price - target_distance
 
         # FIX-1: auto-detect filling mode
         filling = self._filling_mode(symbol)
@@ -369,7 +396,7 @@ class MT5Broker:
 
         request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol,
                   "volume": volume, "type": order_type, "price": price,
-                  "sl": float(plan["stop"]), "tp": float(plan["target"]),
+                  "sl": stop, "tp": target,
                   "deviation": 20, "magic": 770077, "comment": "OracleAI",
                   "type_time": mt5.ORDER_TIME_GTC, "type_filling": filling}
         result = mt5.order_send(request)
@@ -392,7 +419,7 @@ class MT5Broker:
                "reason": reason,
                "account_type": self.status.account_type, "symbol": symbol,
                "volume": volume, "price": getattr(result, "price", price),
-               "order": getattr(result, "order", None), "sl": plan["stop"], "tp": plan["target"],
+               "order": getattr(result, "order", None), "sl": stop, "tp": target,
                "comment": comment,
                "filling_mode": filling, "volume_raw": raw_units,
                "volume_units_raw": raw_units, "volume_lots": volume}
