@@ -131,6 +131,61 @@ def sha256_hex(payload: Any) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def atomic_write_json_file(path: Path, payload: Any, indent: Optional[int] = None) -> None:
+    """
+    Atomically serializes `payload` to `path` via a sibling temporary file + `os.replace`,
+    preventing torn writes or trailing 'Extra data' bytes when multiple processes or
+    interrupted writes occur on Windows/Linux.
+    """
+    import os
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, indent=indent)
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.{int(time.time() * 1000)}.tmp")
+    try:
+        tmp_path.write_text(serialized, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+        path.write_text(serialized, encoding="utf-8")
+
+
+def safe_read_json_file(path: Path, fallback: Any = None) -> Any:
+    """
+    Reads and parses a JSON file safely:
+      - If the file has trailing garbage bytes (`JSONDecodeError: Extra data`), recovers the
+        first complete JSON value via `json.JSONDecoder().raw_decode()` and immediately
+        self-heals the file on disk via `atomic_write_json_file`.
+      - If the file is missing, empty, or truncated, returns `fallback` without crashing.
+    """
+    if not path.exists():
+        return fallback
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception:
+        return fallback
+    stripped = raw.lstrip()
+    if not stripped:
+        return fallback
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(stripped)
+            try:
+                atomic_write_json_file(path, obj, indent=2 if "\n" in stripped[:200] else None)
+            except Exception:
+                pass
+            return obj
+        except Exception:
+            return fallback
+
+
+
 def classify_utc_session(unix_sec: float) -> str:
     dt = datetime.fromtimestamp(unix_sec, tz=timezone.utc)
     hour = dt.hour
@@ -349,9 +404,8 @@ class MultiTimeframeInstitutionalEngine:
 
     def load_cached_dataset(self, symbol: str) -> Optional[Dict[str, Any]]:
         path = self.mtf_chronicle_dir / symbol.upper() / "latest.json"
-        if not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        loaded = safe_read_json_file(path, fallback=None)
+        return loaded if isinstance(loaded, dict) and isinstance(loaded.get("series"), dict) else None
 
     def _fetch_yahoo_interval(
         self, ticker: str, interval: str, range_str: str
@@ -604,10 +658,7 @@ class MultiTimeframeInstitutionalEngine:
                 },
             }
             target_dir = self.mtf_chronicle_dir / upper_sym
-            target_dir.mkdir(parents=True, exist_ok=True)
-            (target_dir / "latest.json").write_text(
-                json.dumps(dataset), encoding="utf-8"
-            )
+            atomic_write_json_file(target_dir / "latest.json", dataset)
             return dataset
         except Exception:
             return cached
@@ -644,7 +695,7 @@ class MultiTimeframeInstitutionalEngine:
         mem_path = self.workspace_root / "Chronicle" / "memory" / "store" / "memories.json"
         if mem_path.exists():
             try:
-                memories = json.loads(mem_path.read_text(encoding="utf-8"))
+                memories = safe_read_json_file(mem_path, fallback=[])
                 if isinstance(memories, list):
                     for m in reversed(memories[-120:]):
                         if not isinstance(m, dict):
@@ -675,10 +726,10 @@ class MultiTimeframeInstitutionalEngine:
         tr_path = self.workspace_root / "Sentinel" / "memory" / "term_reliability.json"
         if tr_path.exists():
             try:
-                tr_data = json.loads(tr_path.read_text(encoding="utf-8"))
+                tr_data = safe_read_json_file(tr_path, fallback={})
                 rels = [
                     float(v.get("reliability", 0.5))
-                    for k, v in tr_data.items()
+                    for k, v in (tr_data or {}).items()
                     if not k.startswith("_") and isinstance(v, dict)
                 ]
                 if rels:
@@ -1725,8 +1776,8 @@ class MultiTimeframeInstitutionalEngine:
         trades: List[Dict[str, Any]] = []
         if ledger_path.exists():
             try:
-                raw = json.loads(ledger_path.read_text(encoding="utf-8"))
-                sym_block = (raw.get("symbols") or {}).get(upper_sym) or {}
+                raw = safe_read_json_file(ledger_path, fallback={})
+                sym_block = ((raw or {}).get("symbols") or {}).get(upper_sym) or {}
                 for t in sym_block.get("recent_shadow_trades") or []:
                     if str(t.get("trader_style", "")).upper() == style_up:
                         trades.append(t)
@@ -2932,7 +2983,7 @@ class MultiTimeframeInstitutionalEngine:
 
         if cp_path.exists():
             try:
-                existing = json.loads(cp_path.read_text(encoding="utf-8"))
+                existing = safe_read_json_file(cp_path, fallback=None)
                 if isinstance(existing, dict) and existing.get("verified") is False:
                     return existing
                 p_in = existing.get("profile") if isinstance(existing, dict) else None
@@ -2964,7 +3015,7 @@ class MultiTimeframeInstitutionalEngine:
                 "stress_roundtrip_cost_bps": round(stress_spread_bps + comm_bps + stress_slip_bps, 4),
             },
         }
-        cp_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+        atomic_write_json_file(cp_path, profile, indent=2)
         return profile
 
     def authorize_and_deploy_certified_candidate(
@@ -2989,7 +3040,9 @@ class MultiTimeframeInstitutionalEngine:
         )
         if not cand_path.exists():
             return {"status": "error", "message": f"Candidate {candidate_id} not found."}
-        record = json.loads(cand_path.read_text(encoding="utf-8"))
+        record = safe_read_json_file(cand_path, fallback=None)
+        if not isinstance(record, dict):
+            return {"status": "error", "message": f"Candidate {candidate_id} JSON invalid."}
         cur_state = record.get("lifecycle_state")
         if cur_state not in ("CERTIFIED", "APPROVED FOR DEPLOYMENT"):
             return {
@@ -3032,7 +3085,7 @@ class MultiTimeframeInstitutionalEngine:
         record["lifecycle_state"] = new_state
         record["governance_and_lifecycle_audit"] = gov
         record["updated_at_unix"] = time.time()
-        cand_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        atomic_write_json_file(cand_path, record, indent=2)
         return {
             "status": "complete",
             "candidate_id": candidate_id,
@@ -3102,12 +3155,9 @@ class MultiTimeframeInstitutionalEngine:
         kv_path = (
             self.workspace_root / "Chronicle" / "memory" / "store" / "kv_state.json"
         )
-        kv_store: Dict[str, Any] = {}
-        if kv_path.exists():
-            try:
-                kv_store = json.loads(kv_path.read_text(encoding="utf-8"))
-            except Exception:
-                kv_store = {}
+        kv_store: Dict[str, Any] = safe_read_json_file(kv_path, fallback={})
+        if not isinstance(kv_store, dict):
+            kv_store = {}
 
         cand_dir = (
             self.workspace_root
@@ -3127,12 +3177,9 @@ class MultiTimeframeInstitutionalEngine:
             / "latest.json"
         )
         cat_path.parent.mkdir(parents=True, exist_ok=True)
-        catalog: Dict[str, Any] = {}
-        if cat_path.exists():
-            try:
-                catalog = json.loads(cat_path.read_text(encoding="utf-8"))
-            except Exception:
-                catalog = {}
+        catalog: Dict[str, Any] = safe_read_json_file(cat_path, fallback={})
+        if not isinstance(catalog, dict):
+            catalog = {}
         if not isinstance(catalog.get("symbols"), dict):
             catalog["symbols"] = {}
         if not isinstance(catalog.get("oracle_v2_strategies"), dict):
@@ -4182,9 +4229,7 @@ class MultiTimeframeInstitutionalEngine:
                 "revision": prev_rev + 1,
                 "updated_at_unix": time.time(),
             }
-            (cand_dir / f"{cand_id}.json").write_text(
-                json.dumps(candidate_record, indent=2), encoding="utf-8"
-            )
+            atomic_write_json_file(cand_dir / f"{cand_id}.json", candidate_record, indent=2)
             catalog["oracle_v2_strategies"][upper_sym][style_up] = blueprint
             trained_results[style_up] = {
                 "candidate_id": cand_id,
@@ -4221,9 +4266,8 @@ class MultiTimeframeInstitutionalEngine:
                 "mc95_drawdown_pct": mc_report["mc95_worst_case_drawdown_pct"],
             }
 
-        kv_path.parent.mkdir(parents=True, exist_ok=True)
-        kv_path.write_text(json.dumps(kv_store, indent=2), encoding="utf-8")
-        cat_path.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+        atomic_write_json_file(kv_path, kv_store, indent=2)
+        atomic_write_json_file(cat_path, catalog, indent=2)
 
         return {
             "status": "complete",

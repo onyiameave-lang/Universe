@@ -46,11 +46,39 @@ class ChronicleDeduplicatingLedger:
             self.workspace_root / "Chronicle" / "memory" / "store" / "memories.json"
         )
 
+    def _atomic_write(self, memories: List[Dict[str, Any]]) -> None:
+        import os
+
+        self.store_path.parent.mkdir(parents=True, exist_ok=True)
+        serialized = json.dumps(memories, indent=2)
+        tmp_path = self.store_path.with_name(f"{self.store_path.name}.{os.getpid()}.{int(time.time() * 1000)}.tmp")
+        try:
+            tmp_path.write_text(serialized, encoding="utf-8")
+            os.replace(tmp_path, self.store_path)
+        except Exception:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
+            self.store_path.write_text(serialized, encoding="utf-8")
+
     def load_store(self) -> List[Dict[str, Any]]:
         if not self.store_path.exists():
             return []
-        data = json.loads(self.store_path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else data.get("memories", [])
+        try:
+            raw = self.store_path.read_text(encoding="utf-8").lstrip()
+            if not raw:
+                return []
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                data, _ = json.JSONDecoder().raw_decode(raw)
+                if isinstance(data, list):
+                    self._atomic_write(data)
+            return data if isinstance(data, list) else data.get("memories", [])
+        except Exception:
+            return []
 
     def record_lesson(
         self,
@@ -83,8 +111,7 @@ class ChronicleDeduplicatingLedger:
                     "note": f"Happened again on {stamp}: {content}",
                     "source_repository": source_repository,
                 })
-                self.store_path.parent.mkdir(parents=True, exist_ok=True)
-                self.store_path.write_text(json.dumps(memories, indent=2), encoding="utf-8")
+                self._atomic_write(memories)
                 return {"deduplicated": True, "record": mem}
 
         new_record = {
@@ -110,6 +137,5 @@ class ChronicleDeduplicatingLedger:
             "updated_at_unix": now_unix,
         }
         memories.append(new_record)
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        self.store_path.write_text(json.dumps(memories, indent=2), encoding="utf-8")
+        self._atomic_write(memories)
         return {"deduplicated": False, "record": new_record}

@@ -271,3 +271,23 @@ def test_reconcile_mt5_closed_deals_grades_real_losses_and_emits_feedback(tmp_pa
     assert len(lines_after) == 1
 
 
+def test_load_cached_dataset_self_heals_trailing_extra_json_data(tmp_path):
+    import json
+    from Forge.core.mtf_institutional_engine import MultiTimeframeInstitutionalEngine
+
+    engine = MultiTimeframeInstitutionalEngine(workspace_root=tmp_path)
+    target = engine.mtf_chronicle_dir / "NZDUSD" / "latest.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    valid_payload = {"schema": "forge.mtf_market_dataset.v2", "symbol": "NZDUSD", "series": {"M15": []}}
+    # Simulate corrupted Windows file with trailing 'Extra data' bytes after the root JSON object
+    corrupted = json.dumps(valid_payload) + '}}trailing_garbage{"extra": 123}'
+    target.write_text(corrupted, encoding="utf-8")
+
+    recovered = engine.load_cached_dataset("NZDUSD")
+    assert recovered is not None
+    assert recovered["symbol"] == "NZDUSD"
+    # Verify the file on disk was self-healed into clean, valid JSON
+    re_parsed = json.loads(target.read_text(encoding="utf-8"))
+    assert re_parsed["symbol"] == "NZDUSD"
+
+

@@ -50,6 +50,8 @@ from Forge.core.mtf_institutional_engine import (
     ALL_WATCHLIST_SYMBOLS,
     LIVE_PRESET_SYMBOLS,
     MultiTimeframeInstitutionalEngine,
+    atomic_write_json_file,
+    safe_read_json_file,
 )
 
 
@@ -169,10 +171,11 @@ class MT5ShadowExecutionBridge:
         equity_path = getattr(self, "equity_state_path", None)
         if equity_path and equity_path.exists():
             try:
-                data = json.loads(equity_path.read_text(encoding="utf-8"))
-                eq = float(data.get("equity_usd", 0.0) or 0.0)
-                if eq > 0:
-                    return eq
+                data = safe_read_json_file(equity_path, fallback={})
+                if isinstance(data, dict):
+                    eq = float(data.get("equity_usd", 0.0) or 0.0)
+                    if eq > 0:
+                        return eq
             except Exception:
                 pass
         return None
@@ -182,18 +185,15 @@ class MT5ShadowExecutionBridge:
         if not equity_path:
             return
         try:
-            equity_path.parent.mkdir(parents=True, exist_ok=True)
-            equity_path.write_text(
-                json.dumps(
-                    {
-                        "equity_usd": round(float(equity_usd), 2),
-                        "balance_usd": round(float(balance_usd if balance_usd is not None else equity_usd), 2),
-                        "source": source,
-                        "updated_at_unix": time.time(),
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
+            atomic_write_json_file(
+                equity_path,
+                {
+                    "equity_usd": round(float(equity_usd), 2),
+                    "balance_usd": round(float(balance_usd if balance_usd is not None else equity_usd), 2),
+                    "source": source,
+                    "updated_at_unix": time.time(),
+                },
+                indent=2,
             )
         except Exception:
             pass
@@ -884,12 +884,7 @@ class ForgeShadowRunner:
         )
 
     def _read_json(self, path: Path, fallback: Any) -> Any:
-        try:
-            if path.exists():
-                return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-        return fallback
+        return safe_read_json_file(path, fallback=fallback)
 
     def load_v1_demo_trade_timestamps(self, symbol: str) -> List[int]:
         """Loads timestamps where Oracle V1 placed demo trades so we know when V1 was silent."""
@@ -1638,9 +1633,7 @@ class ForgeShadowRunner:
             existing_ledger["symbols"] = {}
         existing_ledger["symbols"][upper_sym] = report
         existing_ledger["updated_at_unix"] = time.time()
-        self.shadow_ledger_path.write_text(
-            json.dumps(existing_ledger, indent=2), encoding="utf-8"
-        )
+        atomic_write_json_file(self.shadow_ledger_path, existing_ledger, indent=2)
 
         # Closed-Loop Reinforcement: feed the penalty-adjusted outcomes (including real MT5 deal losses) back into Forge
         if shadow_trades or mt5_deal_reconciliation.get("closed_deals_count", 0) > 0:
