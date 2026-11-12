@@ -925,9 +925,26 @@ class MT5ShadowExecutionBridge:
             order_result["execution_status"] = "historical_replay_not_executed"
         elif self.execute_mt5_demo_orders and not current_signal:
             order_result["execution_status"] = "stale_signal_not_executed"
-        elif self.execute_mt5_demo_orders and self.broker is not None and self.broker.status.connected:
-            if self.broker.status.account_type != "demo":
-                order_result["execution_status"] = "blocked_non_demo_account"
+        elif self.execute_mt5_demo_orders and self.broker is not None:
+            self.broker.account()
+            if not self.broker.status.connected:
+                order_result["execution_status"] = "mt5_not_connected"
+                order_result["reason"] = self.broker.status.reason or (
+                    "MT5 account status could not be refreshed"
+                )
+            elif self.broker.status.account_type != "demo":
+                account_type = self.broker.status.account_type
+                trade_mode = getattr(self.broker.status, "trade_mode", None)
+                if account_type == "unknown":
+                    order_result["execution_status"] = "blocked_unverified_account_type"
+                    order_result["reason"] = (
+                        f"MT5 trade mode {trade_mode!r} is not recognized as a demo account"
+                    )
+                else:
+                    order_result["execution_status"] = "blocked_non_demo_account"
+                    order_result["reason"] = (
+                        f"MT5 account type is {account_type!r}, not demo"
+                    )
             else:
                 # Check if an open MT5 position already exists on this symbol to prevent duplicate/opposing stacking
                 existing_positions: List[Dict[str, Any]] = []

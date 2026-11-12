@@ -86,8 +86,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from shared.startup import load_dotenv_early
+
+load_dotenv_early(__file__)
+
 from shared.config import get_config
-_cfg = get_config()
+
+_cfg = get_config(reload=True)
 log = logging.getLogger("oracle.mt5")
 
 DEFAULT_SYMBOL_MAP = {
@@ -108,6 +113,7 @@ DEFAULT_SYMBOL_MAP = {
 class BrokerStatus:
     connected: bool = False
     account_type: str = "unknown"
+    trade_mode: Optional[int] = None
     login: Optional[int] = None
     server: str = ""
     balance: float = 0.0
@@ -116,8 +122,34 @@ class BrokerStatus:
     reason: str = ""
     def to_dict(self) -> Dict[str, Any]:
         return {"connected": self.connected, "account_type": self.account_type,
+                "trade_mode": self.trade_mode,
                 "login": self.login, "server": self.server, "balance": self.balance,
                 "equity": self.equity, "currency": self.currency, "reason": self.reason}
+
+
+def _classify_account_type(mt5: Any, info: Any) -> tuple[str, Optional[int]]:
+    raw_trade_mode = getattr(info, "trade_mode", None)
+    try:
+        trade_mode = int(raw_trade_mode)
+    except (TypeError, ValueError, OverflowError):
+        return "unknown", None
+    if trade_mode != raw_trade_mode:
+        return "unknown", None
+
+    account_modes = (
+        ("ACCOUNT_TRADE_MODE_DEMO", 0, "demo"),
+        ("ACCOUNT_TRADE_MODE_CONTEST", 1, "contest"),
+        ("ACCOUNT_TRADE_MODE_REAL", 2, "real"),
+    )
+    for constant_name, fallback_value, account_type in account_modes:
+        mode_value = getattr(mt5, constant_name, fallback_value)
+        try:
+            if trade_mode == int(mode_value):
+                return account_type, trade_mode
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return "unknown", trade_mode
+
 
 class MT5Broker:
     def __init__(
@@ -164,14 +196,31 @@ class MT5Broker:
         if info is None:
             self.status = BrokerStatus(connected=False, reason="connected but no account_info")
             return self.status.to_dict()
-        acct_type = {0: "demo", 1: "contest", 2: "real"}.get(getattr(info, "trade_mode", 0), "unknown")
-        self.status = BrokerStatus(connected=True, account_type=acct_type,
-                                 login=getattr(info, "login", login), server=getattr(info, "server", server or ""),
-                                 balance=getattr(info, "balance", 0.0), equity=getattr(info, "equity", 0.0),
-                                 currency=getattr(info, "currency", ""), reason="ok")
+        self._update_status_from_account_info(info, login=login, server=server)
+        acct_type = self.status.account_type
         log.info("MT5 connected: %s account on %s (balance %.2f %s)", acct_type, self.status.server,
                  self.status.balance, self.status.currency)
         return self.status.to_dict()
+
+    def _update_status_from_account_info(self, info: Any, login=None, server=None) -> None:
+        account_type, trade_mode = _classify_account_type(self._mt5, info)
+        self.status = BrokerStatus(
+            connected=True,
+            account_type=account_type,
+            trade_mode=trade_mode,
+            login=getattr(info, "login", login if login is not None else self.status.login),
+            server=getattr(info, "server", server or self.status.server),
+            balance=float(getattr(info, "balance", 0.0) or 0.0),
+            equity=float(getattr(info, "equity", 0.0) or 0.0),
+            currency=str(getattr(info, "currency", "") or ""),
+            reason="ok",
+        )
+        if account_type == "unknown":
+            log.warning(
+                "MT5 account type is unrecognized (trade_mode=%r, server=%s)",
+                trade_mode,
+                self.status.server,
+            )
 
     def disconnect(self) -> None:
         if self._mt5:
@@ -875,14 +924,14 @@ class MT5Broker:
                 self.connect()
                 info = self._mt5.account_info() if self._mt5 is not None else None
             if info is not None:
-                self.status.connected = True
-                self.status.balance = float(getattr(info, "balance", self.status.balance) or 0.0)
-                self.status.equity = float(getattr(info, "equity", self.status.equity) or 0.0)
+                self._update_status_from_account_info(info)
                 d = self.status.to_dict()
                 d["profit"] = float(getattr(info, "profit", 0.0) or 0.0)
                 d["margin"] = float(getattr(info, "margin", 0.0) or 0.0)
                 d["margin_free"] = float(getattr(info, "margin_free", d["equity"]) or 0.0)
                 return d
+            self.status.connected = False
+            self.status.reason = "MT5 account_info unavailable"
         return self.status.to_dict()
 
     def fetch_7tf_rates(

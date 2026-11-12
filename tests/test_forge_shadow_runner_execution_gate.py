@@ -14,7 +14,7 @@ class FakeMT5:
         self.deals = []
 
     def account_info(self):
-        return SimpleNamespace(equity=100000.0, currency="USD")
+        return SimpleNamespace(equity=100000.0, currency="USD", trade_mode=0)
 
     def positions_get(self):
         return self.open_positions
@@ -49,10 +49,20 @@ class FakeMT5:
 
 class FakeBroker:
     def __init__(self, account_type="demo"):
-        self.status = SimpleNamespace(connected=True, account_type=account_type)
+        self.status = SimpleNamespace(
+            connected=True, account_type=account_type, trade_mode=None, reason="ok"
+        )
         self.paper = False
         self.orders = []
         self._mt5 = FakeMT5()
+
+    def account(self):
+        return {
+            "connected": self.status.connected,
+            "account_type": self.status.account_type,
+            "trade_mode": self.status.trade_mode,
+            "reason": self.status.reason,
+        }
 
     def _clamp_volume(self, symbol, units):
         return units / 100000.0
@@ -139,6 +149,29 @@ def test_current_signal_is_blocked_on_non_demo_account(tmp_path):
     result = _execute(bridge, current_signal=True, latest_signal=True)
 
     assert result["execution_status"] == "blocked_non_demo_account"
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_with_clear_reason_when_account_type_is_unknown(tmp_path):
+    bridge = _bridge(tmp_path, account_type="unknown")
+    bridge.broker.status.trade_mode = 7
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "blocked_unverified_account_type"
+    assert "trade mode 7" in result["reason"]
+    assert bridge.broker.orders == []
+
+
+def test_current_signal_is_blocked_when_mt5_account_status_cannot_refresh(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.broker.status.connected = False
+    bridge.broker.status.reason = "MT5 account_info unavailable"
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "mt5_not_connected"
+    assert result["reason"] == "MT5 account_info unavailable"
     assert bridge.broker.orders == []
 
 
