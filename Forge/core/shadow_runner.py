@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import json
+import logging
 import math
 import os
 import sqlite3
@@ -56,6 +57,8 @@ from Forge.core.mtf_institutional_engine import (
     safe_read_json_file,
 )
 
+log = logging.getLogger("forge.shadow_runner")
+
 
 class MT5ShadowExecutionBridge:
     """
@@ -66,10 +69,16 @@ class MT5ShadowExecutionBridge:
       - `Oracle/execution/mt5_logger.py` (`MT5Logger`)
     """
 
-    def __init__(self, workspace_root: Path, execute_mt5_demo_orders: bool = False) -> None:
+    def __init__(
+        self,
+        workspace_root: Path,
+        execute_mt5_demo_orders: bool = False,
+        output_namespace: str = "",
+    ) -> None:
         self.workspace_root = workspace_root
         self.oracle_root = self.workspace_root / "Oracle"
         self.execute_mt5_demo_orders = execute_mt5_demo_orders
+        self.output_namespace = output_namespace
         self.broker: Any = None
         self.sym_mapper: Any = None
         self.mt5_logger: Any = None
@@ -79,11 +88,12 @@ class MT5ShadowExecutionBridge:
         self.snapshot_cls: Any = None
         self.direction_enum: Any = None
         self.connection_status: Dict[str, Any] = {}
-        self.order_ledger_path = (
-            self.oracle_root / "memory" / "forge_mt5_signal_orders.sqlite3"
+        suffix = f"_{output_namespace}" if output_namespace else ""
+        self.order_ledger_path = self.oracle_root / "memory" / (
+            f"forge_mt5_signal_orders{suffix}.sqlite3"
         )
-        self.equity_state_path = (
-            self.oracle_root / "memory" / "forge_mt5_equity_state.json"
+        self.equity_state_path = self.oracle_root / "memory" / (
+            f"forge_mt5_equity_state{suffix}.json"
         )
         self._tracked_equity_usd: Optional[float] = None
         self._init_oracle_mt5_components()
@@ -300,11 +310,20 @@ class MT5ShadowExecutionBridge:
             self.broker = MT5Broker(paper=paper_mode, allow_live=False)
             self.connection_status = self.broker.connect()
             self.sym_mapper = SymbolMapper()
+            server = str(
+                getattr(getattr(self.broker, "status", None), "server", "") or ""
+            )
+            self.sym_mapper.configure_for_server(server)
             broker_syms = self.broker.symbols() if self.broker.status.connected else []
-            self.sym_mapper.build(broker_syms or list(ALL_WATCHLIST_SYMBOLS), list(ALL_WATCHLIST_SYMBOLS))
+            if not broker_syms:
+                broker_syms = self.sym_mapper.fallback_broker_symbols(
+                    list(ALL_WATCHLIST_SYMBOLS)
+                )
+            self.sym_mapper.build(broker_syms, list(ALL_WATCHLIST_SYMBOLS))
+            log_prefix = f"{self.output_namespace}_" if self.output_namespace else ""
             self.mt5_logger = MT5Logger(
-                trade_log="logs/mt5_demo_trades.csv",
-                session_log="logs/mt5_demo_sessions.csv",
+                trade_log=f"logs/{log_prefix}mt5_demo_trades.csv",
+                session_log=f"logs/{log_prefix}mt5_demo_sessions.csv",
                 oracle_root=self.oracle_root,
             )
             self.trade_manager_cls = TradeManager
@@ -919,7 +938,15 @@ class MT5ShadowExecutionBridge:
             "mt5_connected": bool(self.broker and self.broker.status.connected),
             "paper_mode": bool(self.broker.paper) if self.broker else True,
             "account_equity_usd": round(equity_now, 2),
-            "execution_status": "shadow_logged_to_mt5_csv",
+            "execution_status": (
+                "live_execution_pending"
+                if self.execute_mt5_demo_orders
+                else "paper_mode_no_order"
+            ),
+            "order_send_attempted": False,
+            "signal_id": signal_id,
+            "current_signal": current_signal,
+            "latest_signal": latest_signal,
         }
         if self.execute_mt5_demo_orders and not latest_signal:
             order_result["execution_status"] = "historical_replay_not_executed"
@@ -998,6 +1025,7 @@ class MT5ShadowExecutionBridge:
                                 "rebase_stops_to_market": True,
                                 "max_entry_deviation": abs(entry_price - stop_price) * 0.5,
                             }
+                            order_result["order_send_attempted"] = True
                             res = self.broker.place_order(plan, human_confirm=False)
                             order_result["execution_status"] = res.get("status", "filled")
                             order_result["ticket"] = res.get("order") or res.get("ticket")
@@ -1008,6 +1036,16 @@ class MT5ShadowExecutionBridge:
                             order_result["target"] = res.get("tp", target_price)
         elif self.execute_mt5_demo_orders:
             order_result["execution_status"] = "mt5_not_connected"
+
+        if self.execute_mt5_demo_orders and current_signal and latest_signal:
+            log.info(
+                "MT5 demo decision symbol=%s signal_id=%s status=%s send_attempted=%s reason=%s",
+                broker_sym,
+                signal_id or "missing",
+                order_result["execution_status"],
+                order_result["order_send_attempted"],
+                order_result.get("reason", "none"),
+            )
 
         should_log_demo_trade = (
             not self.execute_mt5_demo_orders or current_signal
@@ -1069,18 +1107,28 @@ class ForgeShadowRunner:
         self,
         workspace_root: Optional[Path] = None,
         execute_mt5_demo_orders: bool = False,
+        *,
+        paper_only: bool = False,
+        output_namespace: str = "",
     ) -> None:
         self.workspace_root = workspace_root or Path(__file__).resolve().parents[2]
         self.mtf_engine = MultiTimeframeInstitutionalEngine(self.workspace_root)
         self.chronicle_ledger = ChronicleDeduplicatingLedger(self.workspace_root)
         env_mt5 = os.getenv("FORGE_MT5_DEMO_EXECUTION", "false").lower() in ("true", "1", "yes")
-        self.execute_mt5_demo_orders = execute_mt5_demo_orders or env_mt5
+        self.execute_mt5_demo_orders = (
+            False if paper_only else execute_mt5_demo_orders or env_mt5
+        )
         self.mt5_bridge = MT5ShadowExecutionBridge(
-            self.workspace_root, execute_mt5_demo_orders=self.execute_mt5_demo_orders
+            self.workspace_root,
+            execute_mt5_demo_orders=self.execute_mt5_demo_orders,
+            output_namespace=output_namespace,
         )
         self.forge_mem_dir = self.workspace_root / "Forge" / "memory"
         self.forge_mem_dir.mkdir(parents=True, exist_ok=True)
-        self.shadow_ledger_path = self.forge_mem_dir / "shadow_trades_ledger.json"
+        ledger_suffix = f"_{output_namespace}" if output_namespace else ""
+        self.shadow_ledger_path = self.forge_mem_dir / (
+            f"shadow_trades_ledger{ledger_suffix}.json"
+        )
         self.candidates_dir = (
             self.workspace_root / "Chronicle" / "memory" / "research" / "forge_candidates"
         )
@@ -1089,8 +1137,9 @@ class ForgeShadowRunner:
         )
         self.oracle_mem_dir = self.workspace_root / "Oracle" / "memory"
         self.oracle_mem_dir.mkdir(parents=True, exist_ok=True)
+        feedback_suffix = f"_{output_namespace}" if output_namespace else ""
         self.feedback_outbox_path = (
-            self.oracle_mem_dir / "forge_strategy_feedback_outbox.jsonl"
+            self.oracle_mem_dir / f"forge_strategy_feedback_outbox{feedback_suffix}.jsonl"
         )
 
     def _read_json(self, path: Path, fallback: Any) -> Any:
@@ -1788,6 +1837,35 @@ class ForgeShadowRunner:
             lookback_days=7,
         )
 
+        current_execution_decisions = [
+            trade["mt5_demo_execution"]
+            for trade in shadow_trades
+            if trade.get("mt5_demo_execution", {}).get("current_signal")
+            and trade.get("mt5_demo_execution", {}).get("latest_signal")
+        ]
+        execution_status_counts: Dict[str, int] = {}
+        for decision in current_execution_decisions:
+            status = str(decision.get("execution_status", "unknown"))
+            execution_status_counts[status] = execution_status_counts.get(status, 0) + 1
+        execution_summary = {
+            "execution_enabled": self.execute_mt5_demo_orders,
+            "current_signal_decisions": len(current_execution_decisions),
+            "order_send_attempts": sum(
+                bool(decision.get("order_send_attempted"))
+                for decision in current_execution_decisions
+            ),
+            "filled_orders": sum(
+                decision.get("execution_status") == "filled"
+                for decision in current_execution_decisions
+            ),
+            "status_counts": execution_status_counts,
+            "message": (
+                "no fresh current signal reached execution"
+                if not current_execution_decisions
+                else ""
+            ),
+        }
+
         final_equity_usd = self.mt5_bridge.get_account_equity_usd()
         report = {
             "schema": "forge.shadow_runner.report.v2",
@@ -1813,6 +1891,7 @@ class ForgeShadowRunner:
             },
             "mt5_open_position_management": open_mt5_management,
             "mt5_live_account_reconciliation": mt5_deal_reconciliation,
+            "mt5_execution_summary": execution_summary,
             "live_data_feed": {
                 "source": dataset.get("source", "yahoo_finance_live_7tf_institutional"),
                 "fetched_at_unix": dataset.get("fetched_at_unix"),
@@ -1931,6 +2010,7 @@ def main() -> None:
                         "broker_symbol": report.get("broker_symbol"),
                         "live_data_feed_source": (report.get("live_data_feed") or {}).get("source"),
                         "mt5_demo_bridge_status": report.get("mt5_demo_bridge_status"),
+                        "mt5_execution_summary": report.get("mt5_execution_summary"),
                         "mt5_open_position_management": report.get("mt5_open_position_management"),
                         "mt5_live_account_reconciliation": report.get("mt5_live_account_reconciliation"),
                         "historical_shadow_replay_summary": {

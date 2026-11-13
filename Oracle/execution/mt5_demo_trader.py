@@ -262,13 +262,33 @@ class SymbolMapper:
         self._map: Dict[str, str] = {}
         self._broker_symbols: List[str] = []
         self._env_overrides: Dict[str, str] = self._parse_env_overrides()
-        # MetaQuotes aliases are only enabled by DemoTrader when its connected
-        # server is MetaQuotes-Demo.
+        # Connected callers should configure aliases for their verified server
+        # before building the map.
         self._demo_overrides: Dict[str, str] = {
             k.upper(): v for k, v in (
                 _DEMO_BROKER_MAP if demo_overrides is None else demo_overrides
             ).items()
         }
+
+    def configure_for_server(self, server: str) -> None:
+        self._demo_overrides = (
+            {k.upper(): v for k, v in _DEMO_BROKER_MAP.items()}
+            if server.strip().casefold() == "metaquotes-demo"
+            else {}
+        )
+
+    def fallback_broker_symbols(self, oracle_symbols: List[str]) -> List[str]:
+        configured_overrides = dict(self._demo_overrides)
+        configured_overrides.update(self._env_overrides)
+        canonical_symbols = [symbol.upper() for symbol in oracle_symbols]
+        return [
+            symbol for symbol in canonical_symbols
+            if symbol not in configured_overrides
+        ] + [
+            configured_overrides[symbol]
+            for symbol in canonical_symbols
+            if symbol in configured_overrides
+        ]
 
     @staticmethod
     def _parse_env_overrides() -> Dict[str, str]:
@@ -307,16 +327,17 @@ class SymbolMapper:
             if candidate in broker_set:
                 return broker_orig[candidate]
 
-        # 2. Exact match
-        if canon in broker_set:
-            return broker_orig[canon]
-
-        # 3. MetaQuotes-Demo pre-loaded overrides
+        # 2. MetaQuotes-Demo pre-loaded overrides
         if canon in self._demo_overrides:
             candidate = self._demo_overrides[canon].upper()
             if candidate in broker_set:
                 return broker_orig[candidate]
-            # Demo override not in broker list — fall through to fuzzy
+            # A configured demo product takes precedence over a same-named
+            # canonical symbol so risk specs come from the broker instrument.
+
+        # 3. Exact match
+        if canon in broker_set:
+            return broker_orig[canon]
 
         # 4. Hardcoded fallback aliases
         for alias in _FALLBACK_ALIASES.get(canon, []):
@@ -462,11 +483,8 @@ class DemoTrader:
 
     def _build_symbol_map(self, broker_symbols: Optional[List[str]] = None) -> None:
         server = str(getattr(self.broker.status, "server", "") or "").strip()
+        self._sym_mapper.configure_for_server(server)
         is_metaquotes_demo = server.casefold() == "metaquotes-demo"
-        self._sym_mapper._demo_overrides = (
-            {k.upper(): v for k, v in _DEMO_BROKER_MAP.items()}
-            if is_metaquotes_demo else {}
-        )
 
         if broker_symbols is None:
             try:
@@ -483,17 +501,7 @@ class DemoTrader:
             )
             # Do not fabricate unrelated broker symbols for other MT5 servers.
             # This keeps a missing catalogue from turning USOIL into XTIUSD.
-            configured_overrides = dict(self._sym_mapper._demo_overrides)
-            configured_overrides.update(self._sym_mapper._env_overrides)
-            broker_symbols = [
-                symbol for symbol in self.symbols
-                if symbol.upper() not in configured_overrides
-            ]
-            broker_symbols += [
-                configured_overrides[symbol.upper()]
-                for symbol in self.symbols
-                if symbol.upper() in configured_overrides
-            ]
+            broker_symbols = self._sym_mapper.fallback_broker_symbols(self.symbols)
 
         self._sym_mapper.build(broker_symbols, self.symbols)
         self._sym_mapper.log_map(self.symbols)

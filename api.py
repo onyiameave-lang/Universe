@@ -735,7 +735,11 @@ async def forge_bridge_act(request: Request):
         if obs_symbol and obs_outcome and obs_outcome != "trade_opened":
             try:
                 from Forge.core.shadow_runner import ForgeShadowRunner
-                runner = ForgeShadowRunner(ROOT)
+                runner = ForgeShadowRunner(
+                    ROOT,
+                    paper_only=True,
+                    output_namespace="api_paper",
+                )
                 shadow_res = await run_in_threadpool(
                     runner.run_shadow_session, obs_symbol, "ALL", 260, True
                 )
@@ -1129,13 +1133,9 @@ async def forge_v2_pilot_status(symbol: str = "GBPUSD", regime: str = "trending_
     mtf_engine = MultiTimeframeInstitutionalEngine(ROOT)
     mtf_ds = mtf_engine.load_cached_dataset(upper_sym)
 
-    shadow_runner = ForgeShadowRunner(ROOT)
+    shadow_runner = ForgeShadowRunner(ROOT, paper_only=True)
     shadow_ledger = shadow_runner._read_json(shadow_runner.shadow_ledger_path, {"symbols": {}})
     shadow_report = (shadow_ledger.get("symbols") or {}).get(upper_sym)
-    if not shadow_report:
-        shadow_report = await run_in_threadpool(
-            shadow_runner.run_shadow_session, upper_sym, "ALL", 260
-        )
 
     symbols_map = catalog.get("symbols") or {"GBPUSD": ["trending_up"], "EURUSD": ["trending_up"]}
     symbols_readiness = []
@@ -1209,13 +1209,15 @@ async def forge_v2_pilot_status(symbol: str = "GBPUSD", regime: str = "trending_
 @app.get("/api/forge/v2/shadow/status")
 async def forge_v2_shadow_status(symbol: str = "GBPUSD"):
     from Forge.core.shadow_runner import ForgeShadowRunner
-    runner = ForgeShadowRunner(ROOT)
+    runner = ForgeShadowRunner(ROOT, paper_only=True)
     upper_sym = (symbol or "GBPUSD").strip().upper()
     ledger = runner._read_json(runner.shadow_ledger_path, {"symbols": {}})
     report = (ledger.get("symbols") or {}).get(upper_sym)
-    if not report:
-        report = await run_in_threadpool(runner.run_shadow_session, upper_sym, "ALL", 260)
-    return {"status": "ok", "symbol": upper_sym, "shadow_runner_report": report}
+    return {
+        "status": "ok" if report else "not_run",
+        "symbol": upper_sym,
+        "shadow_runner_report": report,
+    }
 
 
 @app.post("/api/forge/v2/shadow/run")
@@ -1225,7 +1227,11 @@ async def forge_v2_shadow_run(request: Request):
     symbol = str(body.get("symbol", "GBPUSD")).strip().upper()
     style = str(body.get("trader_style", "ALL")).strip().upper()
     lookback = int(body.get("lookback_bars", 260))
-    runner = ForgeShadowRunner(ROOT)
+    runner = ForgeShadowRunner(
+        ROOT,
+        paper_only=True,
+        output_namespace="api_paper",
+    )
     report = await run_in_threadpool(runner.run_shadow_session, symbol, style, lookback)
     return {
         "status": "complete",

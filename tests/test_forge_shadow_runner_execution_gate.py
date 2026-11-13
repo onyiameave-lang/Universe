@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
-from Forge.core.shadow_runner import MT5ShadowExecutionBridge
+import Forge.core.shadow_runner as shadow_runner_module
+from Forge.core.shadow_runner import ForgeShadowRunner, MT5ShadowExecutionBridge
 
 
 class FakeMT5:
@@ -12,6 +13,7 @@ class FakeMT5:
     def __init__(self):
         self.open_positions = []
         self.deals = []
+        self.symbol_info_calls = []
 
     def account_info(self):
         return SimpleNamespace(equity=100000.0, currency="USD", trade_mode=0)
@@ -26,6 +28,7 @@ class FakeMT5:
         return True
 
     def symbol_info(self, symbol):
+        self.symbol_info_calls.append(symbol)
         return SimpleNamespace(
             trade_contract_size=100000.0,
             point=0.00001,
@@ -72,10 +75,11 @@ class FakeBroker:
         return {"status": "filled", "order": 123}
 
 
-def _bridge(tmp_path, account_type="demo"):
+def _bridge(tmp_path, account_type="demo", execute=True):
     bridge = MT5ShadowExecutionBridge.__new__(MT5ShadowExecutionBridge)
-    bridge.execute_mt5_demo_orders = True
+    bridge.execute_mt5_demo_orders = execute
     bridge.broker = FakeBroker(account_type)
+    bridge.broker.paper = not execute
     bridge.mt5_logger = None
     bridge.sym_mapper = None
     bridge.order_ledger_path = tmp_path / "signal_orders.sqlite3"
@@ -139,8 +143,20 @@ def test_current_demo_signal_is_submitted_at_most_once(tmp_path):
     second = _execute(bridge, current_signal=True, latest_signal=True)
 
     assert first["execution_status"] == "filled"
+    assert first["order_send_attempted"] is True
     assert second["execution_status"] == "duplicate_signal_skipped"
+    assert second["order_send_attempted"] is False
     assert len(bridge.broker.orders) == 1
+
+
+def test_current_paper_signal_is_explicitly_not_sent_to_mt5(tmp_path):
+    bridge = _bridge(tmp_path, execute=False)
+
+    result = _execute(bridge, current_signal=True, latest_signal=True)
+
+    assert result["execution_status"] == "paper_mode_no_order"
+    assert result["order_send_attempted"] is False
+    assert bridge.broker.orders == []
 
 
 def test_current_signal_is_blocked_on_non_demo_account(tmp_path):
@@ -149,6 +165,7 @@ def test_current_signal_is_blocked_on_non_demo_account(tmp_path):
     result = _execute(bridge, current_signal=True, latest_signal=True)
 
     assert result["execution_status"] == "blocked_non_demo_account"
+    assert result["order_send_attempted"] is False
     assert bridge.broker.orders == []
 
 
@@ -197,6 +214,47 @@ def test_mt5_symbol_specs_include_loss_tick_value_and_account_currency(tmp_path)
     assert specs["trade_tick_size"] == 0.00001
     assert specs["trade_tick_value_loss"] == 1.3264
     assert specs["account_currency"] == "USD"
+
+
+def test_mt5_symbol_specs_use_resolved_broker_symbol(tmp_path):
+    bridge = _bridge(tmp_path)
+    bridge.sym_mapper = SimpleNamespace(translate=lambda symbol: "XBRUSD")
+
+    specs = bridge.get_mt5_symbol_specs("UKOIL", 88.0)
+
+    assert specs["broker_symbol"] == "XBRUSD"
+    assert bridge.broker._mt5.symbol_info_calls == ["XBRUSD"]
+
+
+def test_api_runner_is_forced_to_paper_and_uses_isolated_outputs(tmp_path, monkeypatch):
+    captured_bridge = {}
+
+    class FakeBridge:
+        def __init__(
+            self, workspace_root, execute_mt5_demo_orders, output_namespace
+        ):
+            captured_bridge["execute"] = execute_mt5_demo_orders
+            captured_bridge["namespace"] = output_namespace
+
+    monkeypatch.setenv("FORGE_MT5_DEMO_EXECUTION", "true")
+    monkeypatch.setattr(
+        shadow_runner_module, "MultiTimeframeInstitutionalEngine", lambda root: object()
+    )
+    monkeypatch.setattr(
+        shadow_runner_module, "ChronicleDeduplicatingLedger", lambda root: object()
+    )
+    monkeypatch.setattr(shadow_runner_module, "MT5ShadowExecutionBridge", FakeBridge)
+
+    runner = ForgeShadowRunner(
+        tmp_path,
+        paper_only=True,
+        output_namespace="api_paper",
+    )
+
+    assert runner.execute_mt5_demo_orders is False
+    assert captured_bridge == {"execute": False, "namespace": "api_paper"}
+    assert runner.shadow_ledger_path.name == "shadow_trades_ledger_api_paper.json"
+    assert runner.feedback_outbox_path.name == "forge_strategy_feedback_outbox_api_paper.jsonl"
 
 
 def test_current_signal_is_blocked_when_daily_loss_limit_is_reached(tmp_path):

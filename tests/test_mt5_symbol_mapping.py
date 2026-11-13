@@ -46,3 +46,31 @@ def test_metaquotes_demo_keeps_its_built_in_oil_alias():
     trader._build_symbol_map(broker_symbols=[])
 
     assert trader._sym_mapper.translate("USOIL") == "XTIUSD"
+
+
+def test_metaquotes_demo_prefers_oil_alias_when_canonical_name_is_also_listed():
+    mapper = SymbolMapper()
+    mapper.configure_for_server("MetaQuotes-Demo")
+
+    mapper.build(["UKOIL", "XBRUSD"], ["UKOIL"])
+
+    assert mapper.translate("UKOIL") == "XBRUSD"
+
+
+def test_non_demo_server_keeps_canonical_oil_symbol():
+    mapper = SymbolMapper()
+    mapper.configure_for_server("Broker-Demo")
+
+    mapper.build(["UKOIL", "XBRUSD"], ["UKOIL"])
+
+    assert mapper.translate("UKOIL") == "UKOIL"
+
+
+def test_demo_fallback_symbol_list_uses_server_aliases():
+    mapper = SymbolMapper()
+    mapper.configure_for_server("MetaQuotes-Demo")
+
+    assert mapper.fallback_broker_symbols(["UKOIL", "EURUSD"]) == [
+        "EURUSD",
+        "XBRUSD",
+    ]
