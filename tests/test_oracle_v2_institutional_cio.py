@@ -524,8 +524,31 @@ class OracleV2InstitutionalCIOTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             test_trade_learning_delegates_reevolution_to_forge_and_updates_cio(Path(td))
 
+    def test_5_modular_subagent_folders_and_file_size_discipline(self):
+        from Oracle.scout_agent import OracleScoutSubAgent as ScoutDirect
+        from Oracle.portfolio_agent import OraclePortfolioSubAgent as PortfolioDirect
+        from Oracle.risk_agent import OracleRiskSubAgent as RiskDirect
+        from Oracle.cio import OracleCIOEngine as CIODirect, OracleV2LearningStore as StoreDirect
+
+        assert ScoutDirect is OracleScoutSubAgent
+        assert PortfolioDirect is OraclePortfolioSubAgent
+        assert RiskDirect is OracleRiskSubAgent
+        assert CIODirect is OracleCIOEngine
+        assert StoreDirect is OracleV2LearningStore
+
+        oracle_dir = Path(__file__).resolve().parents[1] / "Oracle"
+        for pkg in ("scout_agent", "portfolio_agent", "risk_agent", "cio"):
+            pkg_dir = oracle_dir / pkg
+            assert pkg_dir.is_dir(), f"Missing sub-agent package folder: {pkg_dir}"
+            py_files = list(pkg_dir.glob("*.py"))
+            assert len(py_files) >= 4, f"Expected modular files inside {pkg_dir}"
+            for py_file in py_files:
+                line_count = len(py_file.read_text(encoding="utf-8").splitlines())
+                assert line_count < 450, f"{py_file} has {line_count} lines (must be modular < 450 lines)"
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
