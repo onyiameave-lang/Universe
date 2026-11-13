@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 
 from Sentinel.core.intelligence_engine import IntelligenceEngine
+from Sentinel.intelligence.analysis import extract_symbols
 
 
 def _article(symbol):
@@ -26,6 +27,32 @@ def test_symbol_match_rejects_unrelated_or_undated_articles():
 
     assert len(matched) == 1
     assert matched[0]["symbols"] == ["EURUSD"]
+
+
+def test_index_aliases_match_fresh_news_for_oracle_symbols():
+    now = datetime.now(timezone.utc).isoformat()
+    articles = [
+        {**_article("JPN225"), "title": "Nikkei 225 rises", "symbols": extract_symbols("Nikkei 225 rises", ""),
+         "published_at": now},
+        {**_article("AUS200"), "title": "ASX 200 gains", "symbols": extract_symbols("ASX 200 gains", ""),
+         "published_at": now},
+    ]
+
+    assert len(IntelligenceEngine._matching_fresh_articles(articles, "JPN225")) == 1
+    assert len(IntelligenceEngine._matching_fresh_articles(articles, "AUS200")) == 1
+
+
+def test_usdcad_aliases_match_fresh_news_for_oracle_symbol():
+    title = "Canadian dollar strengthens against US dollar"
+    article = {
+        **_article("USDCAD"),
+        "title": title,
+        "symbols": extract_symbols(title, ""),
+    }
+
+    matched = IntelligenceEngine._matching_fresh_articles([article], "USDCAD")
+
+    assert len(matched) == 1
 
 
 def test_sentiment_for_reuses_one_broad_snapshot_across_symbols():

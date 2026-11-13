@@ -122,6 +122,10 @@ _SYMBOL_ALIASES: Dict[str, str] = {
     # Indices
     "SPY":    "SPX",
     "QQQ":    "NDX",
+    "NIKKEI": "JPN225",
+    "JP225":  "JPN225",
+    "ASX200": "AUS200",
+    "AU200":  "AUS200",
 }
 
 

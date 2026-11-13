@@ -223,7 +223,10 @@ _TOPIC_TO_CATEGORY: Dict[str, str] = {
     "stock": "Finance", "stocks": "Finance", "market": "Finance",
     "forex": "Finance", "invest": "Finance", "trading": "Finance",
     "etf": "Finance", "bond": "Finance", "inflation": "Finance",
+    "usdcad": "Finance",
     "fed": "Finance", "sp500": "Finance", "nasdaq": "Finance",
+    "jpn225": "Finance", "nikkei": "Finance", "jp225": "Finance",
+    "aus200": "Finance", "asx200": "Finance",
     # FIX O-5a: commodity keywords → Commodity category
     "gold": "Commodity", "xauusd": "Commodity", "xau": "Commodity",
     "silver": "Commodity", "xagusd": "Commodity", "xag": "Commodity",

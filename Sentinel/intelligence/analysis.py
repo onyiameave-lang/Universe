@@ -59,6 +59,7 @@ SYMBOL_TERMS: Dict[str, List[str]] = {
     "EURUSD": ["eurusd", "euro", "ecb", "eurozone", "eur/usd", "european central bank"],
     "GBPUSD": ["gbpusd", "pound", "sterling", "boe", "gbp/usd", "bank of england"],
     "USDJPY": ["usdjpy", "yen", "boj", "japan", "usd/jpy", "bank of japan"],
+    "USDCAD": ["usdcad", "usd/cad", "canadian dollar", "loonie", "bank of canada"],
     "XAUUSD": [
         "gold", "xauusd", "bullion", "precious metal", "xau", "xau/usd",
         "silver", "mining stock", "gold price", "gold market", "safe haven",
@@ -72,6 +73,8 @@ SYMBOL_TERMS: Dict[str, List[str]] = {
                "dow jones", "dow", "djia", "us stocks", "us equities"],
     "NASDAQ": ["nasdaq", "tech stocks", "nasdaq 100", "nasdaq composite",
                "tech index", "faang", "magnificent seven"],
+    "JPN225": ["nikkei 225", "nikkei", "jp225", "jpn225"],
+    "AUS200": ["asx 200", "asx200", "australia 200", "aus200"],
     "DXY":    ["dollar index", "dxy", "greenback", "us dollar", "usd index",
                "dollar strength", "dollar weakness"],
     "USOIL":  ["oil", "crude", "wti", "brent", "opec", "petroleum",

@@ -84,6 +84,21 @@ class Series:
                 "last_ts": self.bars[-1].ts if self.bars else None}
 
 
+def _bar_validation_error(bar: Bar) -> Optional[str]:
+    values = (bar.open, bar.high, bar.low, bar.close, bar.volume)
+    if any(not math.isfinite(value) for value in values):
+        return "non-finite OHLCV value"
+    if bar.low <= 0:
+        return "non-positive low"
+    if bar.volume < 0:
+        return "negative volume"
+    if bar.high < max(bar.open, bar.close):
+        return "high below open or close"
+    if bar.low > min(bar.open, bar.close):
+        return "low above open or close"
+    return None
+
+
 def _get(url: str) -> Optional[str]:
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
     try:
@@ -113,10 +128,24 @@ class YFinanceSource:
             if df is None or df.empty:
                 return None
             bars = []
+            invalid_bars = []
             for ts, row in df.iterrows():
-                bars.append(Bar(str(ts.date()), float(row["Open"]), float(row["High"]),
-                              float(row["Low"]), float(row["Close"]),
-                              float(row.get("Volume", 0) or 0)))
+                bar = Bar(str(ts.date()), float(row["Open"]), float(row["High"]),
+                          float(row["Low"]), float(row["Close"]),
+                          float(row.get("Volume", 0) or 0))
+                reason = _bar_validation_error(bar)
+                if reason:
+                    invalid_bars.append((bar.ts, reason))
+                    continue
+                bars.append(bar)
+            if invalid_bars:
+                logging.getLogger("oracle.market_data").warning(
+                    "discarding %d/%d invalid yfinance bars for %s "
+                    "(first invalid bar %s: %s); retaining %d valid bars",
+                    len(invalid_bars), len(df), symbol,
+                    invalid_bars[0][0], invalid_bars[0][1], len(bars))
+            if not bars:
+                return None
             return Series(symbol, bars, "yfinance")
         except Exception as exc:
             logging.getLogger("oracle.market_data").warning(
@@ -430,11 +459,7 @@ class MarketData:
         invalid_count = 0
         first_invalid = None
         for index, bar in enumerate(series.bars):
-            values = (bar.open, bar.high, bar.low, bar.close, bar.volume)
-            if (any(not math.isfinite(value) for value in values)
-                    or bar.low <= 0 or bar.volume < 0
-                    or bar.high < max(bar.open, bar.close)
-                    or bar.low > min(bar.open, bar.close)):
+            if _bar_validation_error(bar):
                 invalid_count += 1
                 if first_invalid is None:
                     first_invalid = index

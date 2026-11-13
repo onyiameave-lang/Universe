@@ -169,8 +169,11 @@ _SYMBOL_FEED_TERMS: Dict[str, List[str]] = {
     "EURUSD": ["euro", "eurusd", "ecb", "eurozone", "eur/usd"],
     "GBPUSD": ["pound", "sterling", "gbpusd", "boe", "gbp/usd"],
     "USDJPY": ["yen", "usdjpy", "boj", "japan", "usd/jpy"],
+    "USDCAD": ["usdcad", "usd/cad", "canadian dollar", "loonie", "bank of canada"],
     "SPX":    ["s&p", "sp500", "spx", "wall street", "s&p 500"],
     "NASDAQ": ["nasdaq", "tech stocks", "nasdaq 100"],
+    "JPN225": ["nikkei 225", "nikkei", "jp225", "jpn225"],
+    "AUS200": ["asx 200", "asx200", "australia 200", "aus200"],
     "DXY":    ["dollar index", "dxy", "greenback", "us dollar"],
 }
 
