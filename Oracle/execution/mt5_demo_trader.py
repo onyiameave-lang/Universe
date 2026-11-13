@@ -848,6 +848,7 @@ class DemoTrader:
         summary = dict(scanned=0, trades=0, signals=0, holds=0, rejects=0,
                        errors=0, timeouts=0, unmapped=0, managed=0,
                        kill_switch=False)
+        approved_candidates: List[Tuple[str, str, Dict[str, Any]]] = []
 
         for symbol in self.symbols:
             if self._kill_switch_check():

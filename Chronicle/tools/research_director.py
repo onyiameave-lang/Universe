@@ -195,6 +195,58 @@ def _collect_learning_failures() -> Dict[str, Any]:
     return {"available": True, "failure_signatures": counts, "lessons": lessons}
 
 
+def _collect_decision_ledger_summary() -> Dict[str, Any]:
+    """Read Oracle V2's comprehensive Decision & Counterfactual Ledger summary."""
+    try:
+        oracle_root = _ECO_ROOT / "Oracle"
+        if str(oracle_root) not in sys.path:
+            sys.path.insert(0, str(oracle_root))
+        try:
+            from Oracle.intelligence.decision_ledger import OracleDecisionLedger
+        except ImportError:
+            from intelligence.decision_ledger import OracleDecisionLedger  # type: ignore
+        ledger = OracleDecisionLedger(storage_dir=oracle_root / "memory")
+        return ledger.summary()
+    except Exception as exc:
+        log.warning("could not read Oracle V2 decision ledger: %s", exc)
+        return {"status": "unavailable", "error": str(exc)}
+
+
+def _run_counterfactual_no_trade_research(
+    chronicle=None,
+    forge=None,
+    atlas=None,
+    invoke_shadow_runner: bool = False,
+) -> Dict[str, Any]:
+    """
+    During Chronicle Night Research (or weekend deep audits), replay trades that
+    Oracle V2 chose NOT to enter (logged in OracleDecisionLedger) against
+    subsequent market history and/or on-demand ForgeShadowRunner to learn
+    whether each skipped trade was an AVOIDED_LOSS or MISSED_WINNER.
+    """
+    try:
+        oracle_root = _ECO_ROOT / "Oracle"
+        if str(oracle_root) not in sys.path:
+            sys.path.insert(0, str(oracle_root))
+        try:
+            from Oracle.agents.oracle_agent import OracleAgent
+        except ImportError:
+            from agents.oracle_agent import OracleAgent  # type: ignore
+        oracle = OracleAgent(
+            chronicle_client=chronicle,
+            atlas_client=atlas,
+            forge_client=forge,
+        )
+        replay = oracle.cio.replay_pending_counterfactuals(
+            max_records=25,
+            invoke_shadow_runner_on_demand=invoke_shadow_runner,
+        )
+        return replay
+    except Exception as exc:
+        log.warning("counterfactual no-trade research failed: %s", exc)
+        return {"status": "error", "message": str(exc), "replayed_count": 0}
+
+
 def _filter_trades_since(
     trades: List[Dict[str, Any]], last_run: Optional[float], run_at: float
 ) -> List[Dict[str, Any]]:
@@ -419,6 +471,39 @@ def run():
                     log.warning("Forge stream analysis failed for %s: %s", stream, exc)
                     report_lines.extend([
                         f"[{stream}] analysis failed: {_redact_failure_text(exc)}", ""])
+
+        # Oracle V2 Decision & Counterfactual No-Trade Research
+        report_lines.extend(["COUNTERFACTUAL NO-TRADE REPLAY & DECISION LEDGER", ""])
+        cf_result = _run_counterfactual_no_trade_research(
+            chronicle=chronicle,
+            forge=forge,
+            atlas=atlas,
+            invoke_shadow_runner=False,
+        )
+        ledger_summary = _collect_decision_ledger_summary()
+        if isinstance(ledger_summary, dict) and "trades_not_entered" in ledger_summary:
+            report_lines.append(
+                f"Decision Ledger totals: entered={ledger_summary.get('trades_entered', 0)} | "
+                f"closed={ledger_summary.get('trades_closed', 0)} "
+                f"({ledger_summary.get('wins', 0)}W/{ledger_summary.get('losses', 0)}L) | "
+                f"not_entered={ledger_summary.get('trades_not_entered', 0)} | "
+                f"exposed_failures={ledger_summary.get('exposed_system_failures', 0)}"
+            )
+            cf_info = ledger_summary.get("counterfactual_replays") or {}
+            report_lines.append(
+                f"Counterfactual replays: replayed_this_run={cf_result.get('replayed_count', 0)} | "
+                f"avoided_losses={cf_info.get('avoided_losses', 0)} | "
+                f"missed_winners={cf_info.get('missed_winners', 0)} | "
+                f"pending={cf_info.get('pending_unreplayed', 0)} | "
+                f"updated_conviction_floor={cf_result.get('updated_conviction_floor', 'n/a')}"
+            )
+            no_trade_reasons = ledger_summary.get("no_trade_reasons") or {}
+            if no_trade_reasons:
+                top_reasons = ", ".join(f"{k}={v}" for k, v in list(no_trade_reasons.items())[:5])
+                report_lines.append(f"Top reasons for not entering trades: {top_reasons}")
+            report_lines.append("")
+        else:
+            report_lines.extend(["Decision Ledger summary unavailable.", ""])
 
         report_lines.extend(["RECURRING ORACLE FAILURES", ""])
         if not learning.get("available"):

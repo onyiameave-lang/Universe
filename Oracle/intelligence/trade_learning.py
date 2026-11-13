@@ -283,21 +283,40 @@ class ChampionConfidenceTracker:
         self._save()
 
         log.warning("[%s::%s] champion RETIRED (live_confidence=%.0f%%, %d demo trades) "
-                    "— auto-triggering strategy.evolve", symbol, regime,
+                    "— dispatching retraining mandate to Forge (or fallback evolution)",
+                    symbol, regime,
                     rec.get("live_confidence", 0.0) * 100, rec.get("demo_trades", 0))
 
         def _run_evolution():
             try:
-                result = oracle_agent.act("strategy.evolve", {
-                    "symbol": symbol, "generations": REEVOLVE_GENERATIONS,
-                    "_sender": "trade_learning_auto_reevolve",
-                })
-                log.info("[%s] auto re-evolution finished: status=%s",
-                         symbol, (result or {}).get("status"))
+                if getattr(oracle_agent, "forge", None) is not None:
+                    result = oracle_agent.act("strategy.improvement.request", {
+                        "symbol": symbol,
+                        "regime": regime,
+                        "reason": (
+                            f"Champion retired on live outcomes "
+                            f"(live_confidence={rec.get('live_confidence', 0.0):.2f}, "
+                            f"demo_trades={rec.get('demo_trades', 0)})"
+                        ),
+                        "research_data_owner": "forge",
+                        "_sender": "trade_learning_auto_reevolve",
+                    })
+                    if (result or {}).get("status") == "blocked" and getattr(oracle_agent, "cio", None) is not None:
+                        oracle_agent.cio.conduct_atlas_forge_research_review(focus_symbol=symbol)
+                    log.info("[%s] Forge retraining request finished: status=%s",
+                             symbol, (result or {}).get("status"))
+                else:
+                    result = oracle_agent.act("strategy.evolve", {
+                        "symbol": symbol, "generations": REEVOLVE_GENERATIONS,
+                        "_sender": "trade_learning_auto_reevolve",
+                    })
+                    log.info("[%s] auto re-evolution finished: status=%s",
+                             symbol, (result or {}).get("status"))
             except Exception as exc:
                 log.warning("[%s] auto re-evolution failed: %s", symbol, exc)
 
-        threading.Thread(target=_run_evolution, name=f"auto-reevolve-{symbol}", daemon=True).start()
+        t = threading.Thread(target=_run_evolution, name=f"auto-reevolve-{symbol}", daemon=True)
+        t.start()
         return True
 
 
@@ -504,5 +523,36 @@ class TradeLearningEngine:
                 })
             except Exception as exc:
                 log.warning("[%s] Forge demo strategy feedback failed: %s", pos.symbol, exc)
+
+        # 9. Feed Oracle V2 CIO Engine (Scout + Portfolio + Risk Sub-Agents + Decision Ledger)
+        #    so dimension weights, conviction floor, session slot budget, daily trade budget,
+        #    empirical Kelly parameters, news/social multipliers, and cooldowns all learn
+        #    continuously from every realized win and loss.
+        cio = getattr(oracle_agent, "cio", None)
+        if cio is not None:
+            try:
+                cio.record_realized_outcome(
+                    symbol=str(pos.symbol),
+                    direction=str(pos.direction.value),
+                    entry_price=float(pos.entry_price),
+                    exit_price=float(exit_price),
+                    initial_stop=float(pos.initial_stop),
+                    initial_target=float(pos.initial_target),
+                    won=bool(won),
+                    pnl_r=float(outcome.pnl_r),
+                    exit_reason=str(exit_reason),
+                    duration_sec=float(outcome.duration_sec),
+                    entry_confidence=float(pos.entry_confidence),
+                    exit_confidence=float(exit_confidence),
+                    entry_regime=str(pos.entry_regime),
+                    exit_regime=str(exit_regime),
+                    entry_streams=dict(getattr(pos, "entry_streams", {}) or {}),
+                    strategy_id=getattr(pos, "strategy_id", None),
+                    journal_id=getattr(pos, "journal_id", None),
+                    close_event_id=close_event_id,
+                    lesson=lesson,
+                )
+            except Exception as exc:
+                log.warning("[%s] Oracle V2 CIO outcome learning failed: %s", pos.symbol, exc)
 
         return outcome

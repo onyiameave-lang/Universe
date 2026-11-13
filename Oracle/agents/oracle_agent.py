@@ -147,6 +147,17 @@ try:
 except ImportError:
     from Oracle.intelligence.trade_journal import TradeJournal  # type: ignore
 
+# Oracle V2: Wall Street CIO Engine (Scout + Portfolio + Risk Sub-Agents)
+# and Comprehensive Decision & Counterfactual Ledger (Zero Hardcoded Variables)
+try:
+    from core.v2_cio_engine import OracleCIOEngine  # type: ignore
+except ImportError:
+    from Oracle.core.v2_cio_engine import OracleCIOEngine  # type: ignore
+try:
+    from intelligence.decision_ledger import OracleDecisionLedger  # type: ignore
+except ImportError:
+    from Oracle.intelligence.decision_ledger import OracleDecisionLedger  # type: ignore
+
 try:
     from shared.agent import BaseAgent
     _HAS_SHARED = True
@@ -191,8 +202,13 @@ class OracleAgent(BaseAgent):
     name = "oracle"
     repository = "Oracle"
     domain = "prediction"
-    description = "Scientific validator of trading intelligence and regime-aware champions."
+    description = (
+        "Wall Street CIO & Institutional Portfolio/Risk/Opportunity Manager "
+        "(Scout Sub-Agent + Portfolio Sub-Agent + Risk Sub-Agent)."
+    )
     capabilities = ["market.analyze", "trade.signal", "trade.propose", "trade.execute",
+                    "cio.scout_cycle", "cio.status", "cio.counterfactual_replay",
+                    "cio.atlas_forge_review", "decision.ledger.summary",
                     "strategy.evolve", "strategy.champion", "strategy.backtest",
                     "strategy.research", "research.cycle", "strategy.improvement.request",
                     "strategy.catalog.snapshot",
@@ -204,14 +220,22 @@ class OracleAgent(BaseAgent):
     channels = ["ecosystem.trading", "ecosystem.prediction", "ecosystem.broadcast"]
     memory_namespace = "oracle_memory"
     security_level = "critical"
-    mission = {"purpose": "Form, validate, reject, improve, and preserve trading hypotheses."}
+    mission = {
+        "purpose": (
+            "Decide WHY, WHEN, and HOW MUCH to trade by scouting cross-symbol setups, "
+            "managing institutional portfolio allocation and empirical risk correlation, "
+            "learning continuously from every win, loss, and unentered trade, and "
+            "directing Atlas and Forge on strategy deficiencies."
+        )
+    }
 
     def __init__(self, chronicle_client=None, sentinel_client=None, pulse_client=None,
                  atlas_client=None, forge_client=None, equity: float = 10000.0,
                  strategy_promotion_verifier=None, **kw):
-        strategy_promotion_verifier = (
+        self._strategy_promotion_verifier = (
             strategy_promotion_verifier or _strategy_promotion_verifier()
         )
+        self._initial_equity = equity
         super().__init__(chronicle_client=chronicle_client, atlas_client=atlas_client,
                          storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.data = MarketData()
@@ -219,40 +243,139 @@ class OracleAgent(BaseAgent):
         self._forge_ctrader_history_lock = threading.Lock()
         self._research_bundle_cache: Dict[str, Any] = {}
         self.risk = RiskManager(equity=equity)
-        self.backtester = Backtester(risk_per_trade=self.risk.risk_per_trade, starting_equity=equity)
-        self.evolution = EvolutionLab(chronicle=chronicle_client, atlas=atlas_client,
-                                     storage_dir=str(_REPO_ROOT / "memory"))
-        self.lab = ScientificResearchLab(chronicle=chronicle_client, atlas=atlas_client,
-                                        storage_dir=str(_REPO_ROOT / "memory"),
-                                        promotion_verifier=strategy_promotion_verifier)
+        # Lazy-loaded legacy V1 strategy-training/lab engines:
+        # In Oracle V2, strategy training belongs to Forge. These objects are
+        # instantiated only on demand so Oracle's RAM footprint stays minimal.
+        self._backtester: Optional[Backtester] = None
+        self._evolution: Optional[EvolutionLab] = None
+        self._lab: Optional[ScientificResearchLab] = None
         self.fusion = AdaptiveFusion(storage_dir=str(_REPO_ROOT / "memory"), chronicle_client=chronicle_client)
         self.sentinel = sentinel_client
         self.pulse = pulse_client
         self.chronicle = chronicle_client
+        self.atlas = atlas_client
         self.forge = forge_client
         self.trade_journal = TradeJournal(chronicle_client=chronicle_client)
+        self.decision_ledger = OracleDecisionLedger(
+            storage_dir=str(_REPO_ROOT / "memory"),
+            chronicle_client=chronicle_client,
+        )
         # FIX O-3: instantiate SignalFusion with the same sub-agent clients.
-        # SignalFusion builds rich stream dicts; AdaptiveFusion fuses them with
-        # learned weights. They are complementary, not duplicates.
         self._signal_fusion = SignalFusion(
             sentinel=sentinel_client,
             pulse=pulse_client,
             chronicle=chronicle_client,
         )
-        # Champion Confidence (roadmap Phase 1 item 4): reads the same
-        # champion_confidence.json the Continuous Trade Manager's Demo Trade
-        # Learning loop writes to (default path resolves to the same
-        # Oracle/memory/ dir used above). Read-mostly here — this instance
-        # only writes if something calls record_outcome() directly on it,
-        # which nothing in oracle_agent.py currently does.
         self._champion_confidence = ChampionConfidenceTracker(chronicle_client=chronicle_client)
+        # Oracle V2 CIO Engine (Boss + Scout, Portfolio, and Risk Sub-Agents)
+        self.cio = OracleCIOEngine(
+            oracle_agent=self,
+            storage_dir=str(_REPO_ROOT / "memory"),
+            chronicle_client=chronicle_client,
+            decision_ledger=self.decision_ledger,
+        )
+
+    @property
+    def backtester(self) -> Backtester:
+        if getattr(self, "_backtester", None) is None:
+            self._backtester = Backtester(
+                risk_per_trade=getattr(getattr(self, "risk", None), "risk_per_trade", 0.01),
+                starting_equity=getattr(self, "_initial_equity", 10000.0),
+            )
+        return self._backtester
+
+    @backtester.setter
+    def backtester(self, value: Backtester) -> None:
+        self._backtester = value
+
+    @property
+    def evolution(self) -> EvolutionLab:
+        if getattr(self, "_evolution", None) is None:
+            self._evolution = EvolutionLab(
+                chronicle=getattr(self, "chronicle", None),
+                atlas=getattr(self, "atlas", None),
+                storage_dir=str(_REPO_ROOT / "memory"),
+            )
+        return self._evolution
+
+    @evolution.setter
+    def evolution(self, value: EvolutionLab) -> None:
+        self._evolution = value
+
+    @property
+    def lab(self) -> ScientificResearchLab:
+        if getattr(self, "_lab", None) is None:
+            self._lab = ScientificResearchLab(
+                chronicle=getattr(self, "chronicle", None),
+                atlas=getattr(self, "atlas", None),
+                storage_dir=str(_REPO_ROOT / "memory"),
+                promotion_verifier=getattr(self, "_strategy_promotion_verifier", None),
+            )
+        return self._lab
+
+    @lab.setter
+    def lab(self, value: ScientificResearchLab) -> None:
+        self._lab = value
 
     def on_start(self) -> None:
-        log.info("Oracle scientific research lab online. Paper: %s | champions: %s | Sentinel:%s Pulse:%s",
-                 self.risk.paper, self.evolution.stats()["champion_keys"],
-                 self.sentinel is not None, self.pulse is not None)
+        log.info(
+            "Oracle V2 Institutional CIO online. Paper: %s | Sentinel:%s Pulse:%s | "
+            "Learned session slots=%d daily cap=%d conviction floor=%.3f",
+            self.risk.paper,
+            self.sentinel is not None,
+            self.pulse is not None,
+            self.cio.portfolio.learned_session_slot_budget(),
+            self.cio.portfolio.learned_daily_trade_budget(),
+            self.cio.scout.learned_conviction_floor(),
+        )
 
     # ---- evidence streams (SignalFusion builds; AdaptiveFusion weights) ----
+
+    def _lightweight_champion_lookup(self, symbol: str, regime: str) -> tuple[Optional[StrategyGenome], str]:
+        """
+        Look up active champion genome for (symbol, regime) without instantiating
+        legacy V1 EvolutionLab or ScientificResearchLab in RAM unless already loaded.
+        """
+        sym = symbol.upper()
+        key = f"{sym}::{regime}"
+
+        # 1. Check EvolutionLab if already instantiated, else read champions.json
+        champ: Optional[StrategyGenome] = None
+        if getattr(self, "_evolution", None) is not None:
+            champ = self._evolution.champion(sym, regime)
+        else:
+            champ_path = _REPO_ROOT / "memory" / "champions.json"
+            if champ_path.exists():
+                try:
+                    raw = json.loads(champ_path.read_text(encoding="utf-8"))
+                    rec = (raw.get(key) or raw.get(sym)) if isinstance(raw, dict) else None
+                    genome_dict = rec.get("genome") if isinstance(rec, dict) else None
+                    if isinstance(genome_dict, dict):
+                        champ = StrategyGenome.from_dict(genome_dict)
+                except Exception:
+                    champ = None
+        if champ is not None:
+            return champ, "evolution_library"
+
+        # 2. Check ScientificResearchLab if already instantiated, else read scientific_champions.json
+        lab_champion: Optional[Dict[str, Any]] = None
+        if getattr(self, "_lab", None) is not None:
+            lab_champion = self._lab.champion_info(sym, regime)
+        else:
+            sci_path = _REPO_ROOT / "memory" / "scientific_champions.json"
+            if sci_path.exists():
+                try:
+                    raw = json.loads(sci_path.read_text(encoding="utf-8"))
+                    if isinstance(raw, dict):
+                        lab_champion = raw.get(key) or raw.get(sym)
+                except Exception:
+                    lab_champion = None
+        if isinstance(lab_champion, dict) and isinstance(lab_champion.get("genome"), dict):
+            try:
+                return StrategyGenome.from_dict(lab_champion["genome"]), "scientific_library"
+            except Exception:
+                pass
+        return None, "evolution_library"
 
     def _streams(self, symbol: str, technicals: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """Build evidence streams for fusion.
@@ -262,16 +385,11 @@ class OracleAgent(BaseAgent):
         methods — it includes 'reasons', 'cross_source', 'articles' fields that
         AdaptiveFusion can use for better confidence calibration.
 
-        Technical stream: still uses evolved champion if available (Oracle's
-        own domain), then falls back to SignalFusion._technical_signal().
+        Technical stream: uses active champion genome if available, then falls
+        back to SignalFusion._technical_signal().
         """
         regime = (technicals.get("regime") or {}).get("regime", "ranging")
-        champ = self.evolution.champion(symbol, regime)
-        champion_source = "evolution_library"
-        if not champ:
-            lab_champion = self.lab.champion_info(symbol, regime)
-            champ = StrategyGenome.from_dict(lab_champion["genome"]) if lab_champion and lab_champion.get("genome") else None
-            champion_source = "scientific_library" if lab_champion else "evolution_library"
+        champ, champion_source = self._lightweight_champion_lookup(symbol, regime)
 
         if champ:
             md = self.data.get(symbol)
@@ -1060,18 +1178,19 @@ class OracleAgent(BaseAgent):
                 return {"status": "blocked", "message": "Oracle five-year daily context is empty"}
 
         if not regime and forge_owns_data:
-            incumbent_record = self.evolution.champion_info(symbol) or self.lab.champion_info(symbol)
-            regime = str(incumbent_record.get("regime", "")).strip() if isinstance(incumbent_record, dict) else ""
+            champ_obj, _ = self._lightweight_champion_lookup(symbol, "ranging")
+            if champ_obj is None:
+                champ_obj, _ = self._lightweight_champion_lookup(symbol, "trending_up")
+            regime = "ranging" if champ_obj is not None else ""
+            if not regime and getattr(self, "_evolution", None) is not None:
+                incumbent_record = self._evolution.champion_info(symbol)
+                regime = str(incumbent_record.get("regime", "")).strip() if isinstance(incumbent_record, dict) else ""
             if not regime:
                 return {"status": "blocked", "message": "Oracle has no saved incumbent regime for Forge to review"}
         elif not regime:
             regime = (analyze(series).get("regime") or {}).get("regime", "unknown")
-        champion = self.evolution.champion(symbol, regime)
-        if champion is None:
-            lab_record = self.lab.champion_info(symbol, regime)
-            genome_payload = lab_record.get("genome") if isinstance(lab_record, dict) else None
-        else:
-            genome_payload = champion.to_dict()
+        champion, _ = self._lightweight_champion_lookup(symbol, regime)
+        genome_payload = champion.to_dict() if champion is not None else None
         if not isinstance(genome_payload, dict):
             return {"status": "blocked", "message": "Oracle has no active champion genome to challenge"}
 
@@ -1286,6 +1405,35 @@ class OracleAgent(BaseAgent):
                 decide = lambda c, h, l, **kwargs: {"call": self._indicator_call(c, h, l)}
             return {"status": "complete", "backtest": self.backtester.run(series, decide),
                     "used_champion": champ is not None}
+        if task == "cio.scout_cycle":
+            symbols = ctx.get("symbols") or ([symbol] if symbol else [])
+            if not isinstance(symbols, list) or not symbols:
+                return {"status": "error", "message": "cio.scout_cycle requires a non-empty symbols list"}
+            return self.cio.run_cio_tournament_cycle(
+                symbols=[str(item).upper() for item in symbols if str(item).strip()],
+                max_session_slots_override=ctx.get("max_session_slots"),
+            )
+        if task == "cio.status":
+            return {"status": "complete", "cio": self.cio.status()}
+        if task == "cio.counterfactual_replay":
+            return self.cio.replay_pending_counterfactuals(
+                max_records=int(ctx.get("max_records", 25)),
+                invoke_shadow_runner_on_demand=bool(ctx.get("invoke_shadow_runner_on_demand", False)),
+            )
+        if task == "cio.atlas_forge_review":
+            symbols = ctx.get("symbols")
+            if isinstance(symbols, list):
+                symbols = [str(item).upper() for item in symbols if str(item).strip()]
+            elif symbol:
+                symbols = [symbol.upper()]
+            else:
+                symbols = None
+            return self.cio.run_atlas_forge_research_review(symbols=symbols)
+        if task == "decision.ledger.summary":
+            return {
+                "status": "complete",
+                "summary": self.decision_ledger.summary(window_sec=ctx.get("window_sec")),
+            }
         if task == "trade.propose":
             propose_started = time.monotonic()
             sig = self.signal(symbol)
@@ -1293,29 +1441,88 @@ class OracleAgent(BaseAgent):
             if signal_elapsed >= 5.0:
                 log.warning("[%s] trade.propose signal phase took %.1fs", symbol, signal_elapsed)
             if sig["status"] != "complete":
+                if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
+                    self.decision_ledger.expose_failure(
+                        component="OracleAgent",
+                        operation="trade.propose.signal",
+                        error_type="MarketSignalError",
+                        error_message=str(sig.get("message") or "signal incomplete"),
+                        symbol=symbol,
+                    )
                 return sig
             s = sig["signal"]
-            if s["call"] == "hold":
-                return {"status": "error", "message": "signal is hold", "signal": s}
-
-            # News Intelligence (Phase 1 roadmap item 2): never ignore major
-            # news. A high-impact event drives confidence to 0, which makes
-            # risk.evaluate() below reject the trade outright — reusing the
-            # existing confidence floor instead of a parallel "paused" path.
-            # A medium-impact event dampens confidence/size but doesn't halt.
+            regime = str(sig.get("regime") or "ranging")
             streams = s.get("streams", {})
             news_stream = streams.get("news", {})
             social_stream = streams.get("social", {})
-            news = NewsImpactClassifier().assess(
-                news_stream.get("_risk_articles", []), symbol)
-            # Social Risk: Pulse-detected coordinated pump/dump-style activity.
-            # Compounds with news multiplicatively — each is an independent
-            # reason to distrust the signal, so both firing should be more
-            # conservative than either alone, not just take the worse of the two.
-            social = SocialRiskClassifier().assess(
-                social_stream.get("_manipulation_flags", []), symbol)
-            # These are private decision inputs. Do not expose full provider
-            # payloads in the public trade.propose response.
+            if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
+                if news_stream.get("evidence_state") == "degraded":
+                    self.decision_ledger.expose_failure(
+                        component="Sentinel",
+                        operation="news_signal",
+                        error_type="DegradedNewsStream",
+                        error_message=str(news_stream.get("note") or "Sentinel news stream degraded"),
+                        symbol=symbol,
+                        severity="WARNING",
+                    )
+                if social_stream.get("evidence_state") == "degraded":
+                    self.decision_ledger.expose_failure(
+                        component="Pulse",
+                        operation="social_signal",
+                        error_type="DegradedSocialStream",
+                        error_message=str(social_stream.get("note") or "Pulse social stream degraded"),
+                        symbol=symbol,
+                        severity="WARNING",
+                    )
+            if s["call"] == "hold":
+                if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
+                    self.decision_ledger.record_trade_not_entered(
+                        symbol=symbol,
+                        direction="hold",
+                        rejection_stage="signal_hold",
+                        primary_reason="signal is hold",
+                        reasons=["signal is hold"],
+                        entry_confidence=float(s.get("confidence") or 0.0),
+                        regime=regime,
+                        hypothetical_entry_price=float(sig.get("last") or 0.0),
+                        atr=float(sig.get("atr") or 0.0),
+                    )
+                return {"status": "error", "message": "signal is hold", "signal": s}
+
+            # News Intelligence (Sentinel) + Social Risk (Pulse):
+            # Both are first-class decision inputs in Oracle V2.
+            risk_articles = list(news_stream.get("_risk_articles") or [])
+            manip_flags = list(social_stream.get("_manipulation_flags") or [])
+            news = NewsImpactClassifier().assess(risk_articles, symbol)
+            social = SocialRiskClassifier().assess(manip_flags, symbol)
+
+            atr = sig["_technicals"].get("atr_14") or (sig["last"] * 0.01)
+            direction = "long" if s["call"] == "buy" else "short"
+            sign = 1 if direction == "long" else -1
+            hypothetical_stop = float(sig["last"] - sign * 2.0 * atr)
+            hypothetical_target = float(sig["last"] + sign * 3.0 * atr)
+
+            # Evaluate candidate through Oracle V2 Scout Sub-Agent
+            scout_eval = None
+            if hasattr(self, "cio") and self.cio is not None:
+                try:
+                    scout_eval = self.cio.scout.evaluate_candidate(
+                        symbol=symbol,
+                        last_price=float(sig["last"]),
+                        atr=float(atr),
+                        technicals=sig.get("_technicals") or {},
+                        fused_signal=s,
+                        streams=streams,
+                        stop_price=hypothetical_stop,
+                        target_price=hypothetical_target,
+                        using_evolved_champion=bool(sig.get("using_evolved_champion")),
+                        learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
+                        learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
+                    )
+                except Exception as exc:
+                    log.warning("[%s] Scout evaluation error: %s", symbol, exc)
+
+            # Strip private provider payloads before returning public trade.propose output
             news_stream.pop("_risk_articles", None)
             social_stream.pop("_manipulation_flags", None)
             effective_confidence = s["confidence"] * news.confidence_multiplier * social.confidence_multiplier
@@ -1325,8 +1532,6 @@ class OracleAgent(BaseAgent):
             if social.level != "none":
                 log.info("[%s] social risk=%s: %s", symbol, social.level, social.reason)
 
-            atr = sig["_technicals"].get("atr_14") or (sig["last"] * 0.01)
-            direction = "long" if s["call"] == "buy" else "short"
             plan = self.risk.evaluate(symbol, direction, sig["last"], atr, effective_confidence)
             preserve_started = time.monotonic()
             self._preserve(symbol, sig)
@@ -1334,13 +1539,45 @@ class OracleAgent(BaseAgent):
             if preserve_elapsed >= 3.0:
                 log.warning("[%s] trade.propose Chronicle preserve took %.1fs", symbol, preserve_elapsed)
             if not plan["approved"]:
+                reasons = list(plan.get("reasons", []))
                 self.trade_journal.log_rejection(
-                    symbol, direction, effective_confidence, plan.get("reasons", []))
+                    symbol, direction, effective_confidence, reasons)
+                if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
+                    self.decision_ledger.record_trade_not_entered(
+                        symbol=symbol,
+                        direction=direction,
+                        rejection_stage="risk_gate_rejected",
+                        primary_reason=reasons[0] if reasons else "risk gate rejected",
+                        reasons=reasons,
+                        scout_score=scout_eval.scout_score if scout_eval else effective_confidence,
+                        entry_confidence=effective_confidence,
+                        learned_conviction_floor=(
+                            scout_eval.learned_conviction_floor
+                            if scout_eval else float(self.risk.min_confidence)
+                        ),
+                        regime=regime,
+                        news_impact=news.level,
+                        news_reason=news.reason,
+                        social_risk=social.level,
+                        social_reason=social.reason,
+                        hypothetical_entry_price=float(sig["last"]),
+                        hypothetical_stop=float(plan.get("stop") or hypothetical_stop),
+                        hypothetical_target=float(plan.get("target") or hypothetical_target),
+                        atr=float(atr),
+                        entry_streams=dict(s.get("streams") or {}),
+                    )
                 return {"status": "error", "message": "risk gate rejected", "risk": plan,
                         "news_impact": news.level, "news_reason": news.reason,
-                        "social_risk": social.level, "social_reason": social.reason}
+                        "social_risk": social.level, "social_reason": social.reason,
+                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence}
             return {"status": "complete", "plan": plan, "signal": s,
                     "effective_confidence": effective_confidence,
+                    "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                    "learned_conviction_floor": (
+                        scout_eval.learned_conviction_floor
+                        if scout_eval else float(self.risk.min_confidence)
+                    ),
+                    "scout_evaluation": scout_eval.to_dict() if scout_eval else None,
                     "using_evolved_champion": sig["using_evolved_champion"],
                     "news_impact": news.level, "news_reason": news.reason,
                     "social_risk": social.level, "social_reason": social.reason,
@@ -1363,7 +1600,11 @@ class OracleAgent(BaseAgent):
                 symbol, ctx.get("direction", "long"), ctx.get("entry", 0),
                 ctx.get("atr", 0), ctx.get("confidence", 0))}
         if task == "portfolio.status":
-            return {"status": "complete", "portfolio": self.risk.status()}
+            return {
+                "status": "complete",
+                "portfolio": self.risk.status(),
+                "cio_portfolio": self.cio.portfolio.status(self.risk.portfolio) if hasattr(self, "cio") else {},
+            }
         return {"status": "error", "message": f"Unknown task: {task}"}
 
     def _indicator_call(self, closes, highs, lows):
@@ -1406,12 +1647,13 @@ class OracleAgent(BaseAgent):
         base["evolution"] = self.evolution.stats()
         base["scientific_lab"] = self.lab.stats()
         base["adaptive_fusion"] = self.fusion.stats()
-        # FIX O-3: expose SignalFusion weights for observability
         base["signal_fusion"] = {
             "sentinel_wired": self.sentinel is not None,
             "pulse_wired":    self.pulse is not None,
             "chronicle_wired": self.chronicle is not None,
         }
+        if hasattr(self, "cio") and self.cio is not None:
+            base["cio_v2"] = self.cio.status()
         return base
 
     def sentiment_for(self, symbol: str):

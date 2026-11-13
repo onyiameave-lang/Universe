@@ -924,6 +924,7 @@ class LiveTrader:
         summary = dict(scanned=0, trades=0, signals=0, holds=0, rejects=0,
                        errors=0, timeouts=0, unmapped=0, managed=0,
                        kill_switch=False)
+        approved_candidates: List[Tuple[str, str, Dict[str, Any]]] = []
 
         for symbol in self.symbols:
             # kill-switch check before each symbol (uses cached equity)
@@ -1065,88 +1066,219 @@ class LiveTrader:
 
                 continue   # always move to next symbol — never freeze here
 
-            # ── 3. We have an approved plan — execute ─────────────────────────
-            plan = sig["plan"]
-            s    = sig["signal"]
-            self._open_context[symbol] = sig.get("_streams", {})
+            # ── 3. Approved candidate — collect for CIO Cross-Sectional Tournament ─
+            approved_candidates.append((symbol, broker_sym, sig))
 
-            conf_str = f"conf={sig.get('effective_confidence', s.get('confidence', 0)):.3f}"
+        # ── Phase 2: CIO Cross-Sectional Tournament & Portfolio Selection ──────
+        if approved_candidates:
+            approved_candidates.sort(
+                key=lambda item: (
+                    float(item[2].get("scout_score", item[2].get("effective_confidence", 0.0))),
+                    float(item[2].get("effective_confidence", 0.0)),
+                ),
+                reverse=True,
+            )
+            cio = getattr(self.oracle, "cio", None)
+            ledger = getattr(self.oracle, "decision_ledger", None)
+            learned_slots = (
+                cio.portfolio.learned_session_slot_budget()
+                if cio is not None else self.max_trades
+            )
+            session_slot_cap = min(self.max_trades, learned_slots) if self.max_trades else learned_slots
 
-            if self.signal_only:
-                alert = format_entry_alert(symbol, sig)
-                delivered = self.telegram.send(alert, f"entry:{symbol}:{plan.get('direction', '')}")
-                if delivered:
-                    self._recent_signals.remember(symbol, {
-                        "direction": plan.get("direction", ""),
-                        "plan": dict(plan),
-                        "effective_confidence": sig.get("effective_confidence", s.get("confidence", 0.5)),
-                        "streams": sig.get("_streams", {}),
-                    })
-                summary["signals"] += 1
-                log.info("[%s→%s] SIGNAL ONLY direction=%s %s Telegram=%s",
-                         symbol, broker_sym, plan["direction"], conf_str,
-                         "sent" if delivered else ("configured; delivery skipped/failed" if self.telegram.enabled else "not configured"))
-                print(f"[{symbol}→{broker_sym}] SIGNAL ONLY  direction={plan['direction']}  "
-                      f"{conf_str}  Telegram={'sent' if delivered else 'not sent'}")
-                if not self.telegram.enabled:
-                    print(alert)
-                continue
+            if len(approved_candidates) > 1:
+                ranking_preview = ", ".join(
+                    f"#{idx} {sym} (scout={cand.get('scout_score', cand.get('effective_confidence', 0.0)):.3f})"
+                    for idx, (sym, _, cand) in enumerate(approved_candidates, start=1)
+                )
+                log.info("CIO Scout Tournament ranked %d setups (session slot budget=%d): %s",
+                         len(approved_candidates), session_slot_cap, ranking_preview)
+                print(f"  [CIO Scout Tournament] Ranked {len(approved_candidates)} setups "
+                      f"(slot cap={session_slot_cap}): {ranking_preview}")
 
-            # FIX-9/11: build broker_plan with BOTH keys:
-            #   "symbol"        = Oracle canonical name  (kept for learning loop + logging)
-            #   "broker_symbol" = translated broker name (used by MT5Broker.place_order v2)
-            broker_plan = dict(plan)
-            broker_plan["broker_symbol"] = broker_sym   # FIX-11: separate key, not overwrite
+            for rank, (symbol, broker_sym, sig) in enumerate(approved_candidates, start=1):
+                plan = dict(sig["plan"])
+                s = sig["signal"]
+                scout_score = float(sig.get("scout_score", sig.get("effective_confidence", s.get("confidence", 0.0))))
+                eff_conf = float(sig.get("effective_confidence", s.get("confidence", 0.0)))
+                conf_str = f"scout={scout_score:.3f} conf={eff_conf:.3f} rank=#{rank}/{len(approved_candidates)}"
 
-            if self.broker.status.connected:
-                result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
-                res_status = result.get("status", "unknown")
-                res_reason = result.get("reason", "")
-                log.info("[%s→%s] TRADE  direction=%s %s -> %s %s",
-                         symbol, broker_sym, plan["direction"], conf_str, res_status, res_reason)
-                print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
-                      f"  -> {res_status}  {res_reason}")
-                if res_status == "filled":
-                    self._trades_this_session += 1
-                    summary["trades"] += 1
-                    # FIX-DEDUP: log opened event to Chronicle so other script sees it
-                    ticket = result.get("order") or result.get("ticket") or 0
-                    self._pos_log.log_opened(
-                        symbol, broker_sym, ticket,
-                        direction=plan["direction"],
-                        volume=result.get("volume", plan.get("size", 0)),
-                        price=result.get("price", 0.0),
-                        sl=plan.get("stop", 0.0),
-                        tp=plan.get("target", 0.0),
+                # Check if session slot budget is now full after higher-ranked fills
+                if len(self._managed_positions) >= session_slot_cap:
+                    reason = (
+                        f"Outranked for session slots (rank #{rank}/{len(approved_candidates)}, "
+                        f"active_positions={len(self._managed_positions)} >= slot_cap={session_slot_cap})"
                     )
-                    # Continuous Trade Manager: register so the background
-                    # poll thread starts trailing/monitoring immediately.
-                    self._register_position(
-                        symbol, plan["direction"],
-                        entry_price=result.get("price") or plan.get("entry", 0.0),
-                        stop=plan.get("stop", 0.0),
-                        target=plan.get("target", 0.0),
-                        confidence=s.get("confidence", 0.0),
-                        size=result.get("volume", plan.get("size", 0.0)),
-                        news_level=sig.get("news_impact", "none"),
-                        news_reason=sig.get("news_reason", ""),
-                        social_level=sig.get("social_risk", "none"),
-                        social_reason=sig.get("social_reason", ""),
-                    )
-                    # Reduce Overtrading (roadmap Phase 2 item 6): only count
-                    # genuinely NEW fills toward the daily cap — not
-                    # backfilled/orphaned positions discovered elsewhere.
-                    self.oracle.risk.portfolio.record_trade_opened(symbol)
-                else:
-                    # broker rejected (e.g. market closed, insufficient margin)
+                    log.info("[%s] OUTRANKED %s — %s", symbol, conf_str, reason)
+                    print(f"[{symbol}] OUTRANKED {conf_str}  ({reason})")
+                    if ledger is not None:
+                        ledger.record_trade_not_entered(
+                            symbol=symbol,
+                            direction=plan.get("direction", "hold"),
+                            rejection_stage="outranked_for_session_slots",
+                            primary_reason=reason,
+                            reasons=[reason],
+                            scout_score=scout_score,
+                            entry_confidence=eff_conf,
+                            learned_conviction_floor=float(sig.get("learned_conviction_floor", 0.5)),
+                            tournament_rank=rank,
+                            total_candidates=len(approved_candidates),
+                            regime=str((sig.get("scout_evaluation") or {}).get("regime") or "ranging"),
+                            news_impact=str(sig.get("news_impact", "none")),
+                            news_reason=str(sig.get("news_reason", "")),
+                            social_risk=str(sig.get("social_risk", "none")),
+                            social_reason=str(sig.get("social_reason", "")),
+                            hypothetical_entry_price=float(plan.get("entry") or 0.0),
+                            hypothetical_stop=float(plan.get("stop") or 0.0),
+                            hypothetical_target=float(plan.get("target") or 0.0),
+                            atr=float(sig.get("atr") or 0.0),
+                            entry_streams=dict(sig.get("_streams") or {}),
+                        )
                     summary["rejects"] += 1
-            else:
-                log.info("[%s→%s] TRADE  direction=%s %s (execution disabled: MT5 not connected)",
-                         symbol, broker_sym, plan["direction"], conf_str)
-                print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
-                      f"  (execution disabled: MT5 not connected)")
-                # count as a "trade signal" even though we couldn't execute
-                summary["trades"] += 1
+                    continue
+
+                # Re-verify dynamic correlation & portfolio gate against positions opened earlier in this cycle
+                if cio is not None and self.oracle.risk.portfolio.positions:
+                    open_tuples = [
+                        (p.symbol, p.direction) for p in self.oracle.risk.portfolio.positions
+                    ]
+                    corr_ok, corr_reasons, max_corr = cio.risk.evaluate_correlation_and_cooldown(
+                        symbol=symbol,
+                        direction=plan.get("direction", "long"),
+                        open_positions=open_tuples,
+                        market_data=self.oracle.data,
+                        portfolio_state=self.oracle.risk.portfolio,
+                    )
+                    if not corr_ok:
+                        reason = "; ".join(corr_reasons)
+                        log.info("[%s] REJECT (intra-cycle correlation/cooldown) %s: %s",
+                                 symbol, conf_str, reason)
+                        print(f"[{symbol}] REJECT (correlation/cooldown) {conf_str}  reasons={corr_reasons}")
+                        if ledger is not None:
+                            ledger.record_trade_not_entered(
+                                symbol=symbol,
+                                direction=plan.get("direction", "hold"),
+                                rejection_stage="correlation_or_cooldown_rejected",
+                                primary_reason=corr_reasons[0] if corr_reasons else "correlation rejected",
+                                reasons=corr_reasons,
+                                scout_score=scout_score,
+                                entry_confidence=eff_conf,
+                                learned_conviction_floor=float(sig.get("learned_conviction_floor", 0.5)),
+                                tournament_rank=rank,
+                                total_candidates=len(approved_candidates),
+                                regime=str((sig.get("scout_evaluation") or {}).get("regime") or "ranging"),
+                                news_impact=str(sig.get("news_impact", "none")),
+                                news_reason=str(sig.get("news_reason", "")),
+                                social_risk=str(sig.get("social_risk", "none")),
+                                social_reason=str(sig.get("social_reason", "")),
+                                hypothetical_entry_price=float(plan.get("entry") or 0.0),
+                                hypothetical_stop=float(plan.get("stop") or 0.0),
+                                hypothetical_target=float(plan.get("target") or 0.0),
+                                atr=float(sig.get("atr") or 0.0),
+                                entry_streams=dict(sig.get("_streams") or {}),
+                                correlation_snapshot={"max_signed_correlation": max_corr},
+                            )
+                        summary["rejects"] += 1
+                        continue
+
+                self._open_context[symbol] = sig.get("_streams", {})
+
+                if self.signal_only:
+                    alert = format_entry_alert(symbol, sig)
+                    delivered = self.telegram.send(alert, f"entry:{symbol}:{plan.get('direction', '')}")
+                    if delivered:
+                        self._recent_signals.remember(symbol, {
+                            "direction": plan.get("direction", ""),
+                            "plan": dict(plan),
+                            "effective_confidence": eff_conf,
+                            "streams": sig.get("_streams", {}),
+                        })
+                    summary["signals"] += 1
+                    log.info("[%s→%s] SIGNAL ONLY direction=%s %s Telegram=%s",
+                             symbol, broker_sym, plan["direction"], conf_str,
+                             "sent" if delivered else ("configured; delivery skipped/failed" if self.telegram.enabled else "not configured"))
+                    print(f"[{symbol}→{broker_sym}] SIGNAL ONLY  direction={plan['direction']}  "
+                          f"{conf_str}  Telegram={'sent' if delivered else 'not sent'}")
+                    if not self.telegram.enabled:
+                        print(alert)
+                    continue
+
+                broker_plan = dict(plan)
+                broker_plan["broker_symbol"] = broker_sym
+
+                if self.broker.status.connected:
+                    result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
+                    res_status = result.get("status", "unknown")
+                    res_reason = result.get("reason", "")
+                    log.info("[%s→%s] TRADE  direction=%s %s -> %s %s",
+                             symbol, broker_sym, plan["direction"], conf_str, res_status, res_reason)
+                    print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
+                          f"  -> {res_status}  {res_reason}")
+                    if res_status == "filled":
+                        self._trades_this_session += 1
+                        summary["trades"] += 1
+                        ticket = result.get("order") or result.get("ticket") or 0
+                        fill_price = float(result.get("price") or plan.get("entry", 0.0))
+                        fill_vol = float(result.get("volume", plan.get("size", 0.0)))
+                        self._pos_log.log_opened(
+                            symbol, broker_sym, ticket,
+                            direction=plan["direction"],
+                            volume=fill_vol,
+                            price=fill_price,
+                            sl=plan.get("stop", 0.0),
+                            tp=plan.get("target", 0.0),
+                        )
+                        self._register_position(
+                            symbol, plan["direction"],
+                            entry_price=fill_price,
+                            stop=plan.get("stop", 0.0),
+                            target=plan.get("target", 0.0),
+                            confidence=s.get("confidence", 0.0),
+                            size=fill_vol,
+                            news_level=sig.get("news_impact", "none"),
+                            news_reason=sig.get("news_reason", ""),
+                            social_level=sig.get("social_risk", "none"),
+                            social_reason=sig.get("social_reason", ""),
+                        )
+                        self.oracle.risk.portfolio.record_trade_opened(symbol)
+                        if ledger is not None:
+                            pos_obj = self._managed_positions.get(symbol)
+                            ledger.record_trade_entered(
+                                symbol=symbol,
+                                direction=plan["direction"],
+                                entry_price=fill_price,
+                                stop_price=float(plan.get("stop", 0.0)),
+                                target_price=float(plan.get("target", 0.0)),
+                                size=fill_vol,
+                                scout_score=scout_score,
+                                entry_confidence=eff_conf,
+                                learned_conviction_floor=float(sig.get("learned_conviction_floor", 0.5)),
+                                tournament_rank=rank,
+                                total_candidates=len(approved_candidates),
+                                regime=str(getattr(pos_obj, "entry_regime", "ranging")),
+                                news_impact=str(sig.get("news_impact", "none")),
+                                news_reason=str(sig.get("news_reason", "")),
+                                social_risk=str(sig.get("social_risk", "none")),
+                                social_reason=str(sig.get("social_reason", "")),
+                                entry_streams=dict(sig.get("_streams") or {}),
+                                journal_id=getattr(pos_obj, "journal_id", None),
+                            )
+                    else:
+                        summary["rejects"] += 1
+                        if ledger is not None:
+                            ledger.expose_failure(
+                                component="MT5Broker",
+                                operation="place_order",
+                                error_type=str(res_status),
+                                error_message=str(res_reason or "broker rejected order"),
+                                symbol=symbol,
+                            )
+                else:
+                    log.info("[%s→%s] TRADE  direction=%s %s (execution disabled: MT5 not connected)",
+                             symbol, broker_sym, plan["direction"], conf_str)
+                    print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
+                          f"  (execution disabled: MT5 not connected)")
+                    summary["trades"] += 1
 
         return summary
 

@@ -29,7 +29,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+try:
+    from pydantic import BaseModel, ConfigDict, Field
+except ImportError:
+    def ConfigDict(**kwargs):  # type: ignore
+        return kwargs
+
+    def Field(default=None, default_factory=None, **kwargs):  # type: ignore
+        return default_factory() if callable(default_factory) else default
+
+    class BaseModel:  # type: ignore
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+        @classmethod
+        def model_validate(cls, data: Dict[str, Any]):
+            if isinstance(data, cls):
+                return data
+            if not isinstance(data, dict):
+                raise ValueError("Authorization payload must be a dict")
+            return cls(**data)
+
+        def model_dump(self, mode: Optional[str] = None) -> Dict[str, Any]:
+            return dict(self.__dict__)
 
 try:
     from intelligence.technicals import analyze  # type: ignore
