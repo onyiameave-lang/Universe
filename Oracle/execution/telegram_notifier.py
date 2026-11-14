@@ -155,8 +155,89 @@ def format_entry_alert(symbol: str, result: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def format_position_alert(symbol: str, ticket: Any, action: str,
-                          decision: Any, stop: Any, target: Any) -> str:
+def format_execution_alert(
+    symbol: str,
+    broker_sym: str,
+    result: Dict[str, Any],
+    order_result: Dict[str, Any],
+) -> str:
+    """Format a Telegram notification when ORACLE_SIGNAL_ONLY=false and Oracle submits an MT5 order."""
+    plan = result.get("plan") or {}
+    signal = result.get("signal") or {}
+    direction = str(plan.get("direction", "unknown")).upper()
+    raw_conf = signal.get("confidence", 0.0)
+    effective_conf = result.get("effective_confidence", raw_conf)
+    floor = plan.get("confidence_floor", "n/a")
+    status = str(order_result.get("status", "unknown")).lower()
+    sym_label = (
+        f"{symbol.upper()} ({broker_sym})"
+        if broker_sym and broker_sym.upper() != symbol.upper()
+        else symbol.upper()
+    )
+
+    if status == "filled":
+        ticket = order_result.get("order") or order_result.get("ticket") or "n/a"
+        fill_price = order_result.get("price", plan.get("entry"))
+        fill_vol = order_result.get("volume", plan.get("size", "n/a"))
+        fill_sl = order_result.get("sl", plan.get("stop"))
+        fill_tp = order_result.get("tp", plan.get("target"))
+        lines = [
+            "ORACLE MT5 TRADE EXECUTED",
+            f"{sym_label} | {direction} | Ticket #{ticket}",
+            f"Fill price: {_price(fill_price)} | Volume: {fill_vol} lots",
+            f"Stop loss: {_price(fill_sl)} | Take profit: {_price(fill_tp)}",
+            f"Confidence: {float(effective_conf):.1%} effective ({float(raw_conf):.1%} raw; floor {floor})",
+            f"Risk budget: {plan.get('risk_amount', 'n/a')} | Reward/risk: {plan.get('reward_risk', 'n/a')}",
+        ]
+        streams = signal.get("streams") or {}
+        technical = streams.get("technical") or {}
+        reasons = technical.get("reasons") or []
+        if reasons:
+            lines.append("Signal evidence: " + "; ".join(str(reason) for reason in reasons[:4]))
+        if result.get("news_impact") not in (None, "none"):
+            lines.append(f"News: {result.get('news_impact')} — {result.get('news_reason', '')}".rstrip())
+        if result.get("social_risk") not in (None, "none"):
+            lines.append(f"Social risk: {result.get('social_risk')} — {result.get('social_reason', '')}".rstrip())
+        lines.append("Oracle Continuous Trade Manager is actively monitoring this MT5 position.")
+        return "\n".join(lines)
+
+    reason = order_result.get("reason") or order_result.get("retcode_description") or "unknown reason"
+    lines = [
+        f"ORACLE MT5 ORDER NOT PLACED ({status.upper()})",
+        f"{sym_label} | {direction}",
+        f"Reason: {reason}",
+        f"Entry reference: {_price(plan.get('entry'))} | SL: {_price(plan.get('stop'))} | TP: {_price(plan.get('target'))}",
+        f"Confidence: {float(effective_conf):.1%} effective ({float(raw_conf):.1%} raw; floor {floor})",
+    ]
+    return "\n".join(lines)
+
+
+def format_position_alert(
+    symbol: str,
+    ticket: Any,
+    action: str,
+    decision: Any,
+    stop: Any,
+    target: Any,
+    *,
+    executed: bool = False,
+    execution_status: str = "",
+) -> str:
+    if executed:
+        action_text = "POSITION CLOSED ON MT5" if action == "close" else "STOP TIGHTENED ON MT5"
+        lines = [
+            f"ORACLE MT5 POSITION UPDATE — {action_text}",
+            f"{symbol.upper()} | ticket {ticket}",
+            f"Reason: {decision.reason}",
+            f"Current confidence: {decision.current_confidence:.1%} | P/L: {decision.unrealized_r:.2f}R",
+            f"Oracle stop baseline: {_price(stop)} | Target baseline: {_price(target)}",
+        ]
+        if action != "close":
+            lines.append(f"New stop applied: {_price(decision.new_stop)}")
+        if execution_status:
+            lines.append(f"Broker status: {execution_status}")
+        return "\n".join(lines)
+
     action_text = "CLOSE manually" if action == "close" else "TIGHTEN STOP manually"
     lines = [
         f"ORACLE POSITION ALERT — {action_text}",
@@ -169,3 +250,27 @@ def format_position_alert(symbol: str, ticket: Any, action: str,
         lines.append(f"Suggested new stop: {_price(decision.new_stop)}")
     lines.append("Recommendation only; Oracle has not modified or closed the position.")
     return "\n".join(lines)
+
+
+def format_native_close_alert(
+    symbol: str,
+    broker_sym: str,
+    ticket: Any,
+    exit_price: Any,
+    exit_reason: str,
+    won: Optional[bool] = None,
+) -> str:
+    sym_label = (
+        f"{symbol.upper()} ({broker_sym})"
+        if broker_sym and broker_sym.upper() != symbol.upper()
+        else symbol.upper()
+    )
+    outcome_str = "WIN" if won is True else ("LOSS" if won is False else "CLOSED")
+    lines = [
+        f"ORACLE MT5 POSITION CLOSED ({outcome_str})",
+        f"{sym_label} | ticket {ticket}",
+        f"Exit price: {_price(exit_price)}",
+        f"Reason: {exit_reason}",
+    ]
+    return "\n".join(lines)
+

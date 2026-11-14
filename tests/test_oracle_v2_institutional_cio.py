@@ -546,9 +546,178 @@ class OracleV2InstitutionalCIOTests(unittest.TestCase):
                 line_count = len(py_file.read_text(encoding="utf-8").splitlines())
                 assert line_count < 450, f"{py_file} has {line_count} lines (must be modular < 450 lines)"
 
+    def test_6_broker_native_live_market_data_and_mt5_ctrader_parity(self):
+        from Oracle.core import market_data
+        from Oracle.execution.mt5_broker import BrokerStatus, MT5Broker
+
+        # 1. MT5Broker historical_bars + live_quote + market_state parity with CTraderBroker
+        rates = [
+            {
+                "time": 1767225600 + idx * 86400,
+                "open": 1.1000 + idx * 0.0005,
+                "high": 1.1030 + idx * 0.0005,
+                "low": 1.0980 + idx * 0.0005,
+                "close": 1.1010 + idx * 0.0005,
+                "tick_volume": 1200 + idx,
+                "real_volume": 0,
+            }
+            for idx in range(40)
+        ]
+
+        class FakeMT5:
+            TIMEFRAME_D1 = 16408
+            ACCOUNT_TRADE_MODE_DEMO = 0
+
+            def symbol_select(self, symbol, enable):
+                return True
+
+            def symbol_info(self, symbol):
+                return SimpleNamespace(name=symbol, digits=5, point=0.00001, trade_mode=4)
+
+            def symbol_info_tick(self, symbol):
+                return SimpleNamespace(bid=1.12456, ask=1.12468, time_msc=1770000000000)
+
+            def copy_rates_from_pos(self, symbol, timeframe, start_pos, count):
+                return rates
+
+        broker = MT5Broker.__new__(MT5Broker)
+        broker.symbol_map = {}
+        broker._mt5 = FakeMT5()
+        broker.status = BrokerStatus(connected=True, account_type="demo")
+
+        quote = broker.live_quote("EURUSD")
+        self.assertEqual(quote["status"], "complete")
+        self.assertEqual(quote["bid"], 1.12456)
+        self.assertEqual(quote["ask"], 1.12468)
+
+        hist = broker.historical_bars("EURUSD", period="D1", count=40, include_live_tick=True)
+        self.assertEqual(hist["status"], "complete")
+        self.assertEqual(hist["source"], "mt5_broker_live:EURUSD")
+        self.assertEqual(len(hist["bars"]), 40)
+        self.assertEqual(hist["bars"][-1]["close"], 1.12456)
+
+        # 2. BrokerMarketDataSource is Priority #1 in MarketData when broker is attached
+        md = market_data.MarketData()
+        md.attach_broker(broker)
+        res = md.get("EURUSD")
+        self.assertEqual(res["status"], "complete")
+        self.assertEqual(res["source"], "mt5_broker_live:EURUSD")
+        self.assertEqual(res["series"].last, 1.12456)
+
+        # 3. Series completeness check rejects corrupted latest bar or >10% corruption
+        valid_bars = [
+            market_data.Bar(
+                ts=f"2026-01-{idx:02d}",
+                open=1.10,
+                high=1.12,
+                low=1.09,
+                close=1.11,
+                volume=100.0,
+            )
+            for idx in range(1, 35)
+        ]
+        corrupted_latest = market_data.Series(
+            symbol="EURUSD",
+            bars=valid_bars,
+            source="yfinance:EURUSD=X",
+            discarded_bars=1,
+            total_raw_bars=35,
+            latest_bar_discarded=True,
+        )
+        self.assertIsNotNone(market_data.MarketData._series_completeness_error(corrupted_latest))
+
+    def test_7_telegram_and_signal_only_vs_execution_mode(self):
+        import os
+        from Oracle.execution.telegram_notifier import (
+            format_entry_alert,
+            format_execution_alert,
+            format_native_close_alert,
+            format_position_alert,
+            signal_only_enabled,
+        )
+
+        old_sig = os.environ.get("ORACLE_SIGNAL_ONLY")
+        try:
+            os.environ["ORACLE_SIGNAL_ONLY"] = "true"
+            self.assertTrue(signal_only_enabled())
+            os.environ["ORACLE_SIGNAL_ONLY"] = "false"
+            self.assertFalse(signal_only_enabled())
+        finally:
+            if old_sig is None:
+                os.environ.pop("ORACLE_SIGNAL_ONLY", None)
+            else:
+                os.environ["ORACLE_SIGNAL_ONLY"] = old_sig
+
+        sample_sig = {
+            "plan": {
+                "direction": "long",
+                "entry": 1.1050,
+                "stop": 1.1000,
+                "target": 1.1150,
+                "confidence_floor": 0.55,
+                "risk_amount": 100.0,
+                "reward_risk": 2.0,
+                "size": 10000,
+            },
+            "signal": {
+                "confidence": 0.68,
+                "streams": {"technical": {"reasons": ["EMA trend aligned", "RSI breakout"]}},
+            },
+            "effective_confidence": 0.65,
+            "news_impact": "supportive",
+            "news_reason": "Macro tailwind",
+        }
+        sig_only_msg = format_entry_alert("EURUSD", sample_sig)
+        self.assertIn("ORACLE APPROVED SIGNAL — MANUAL ACTION ONLY", sig_only_msg)
+
+        filled_msg = format_execution_alert(
+            "EURUSD",
+            "EURUSD.i",
+            sample_sig,
+            {"status": "filled", "order": 998877, "price": 1.1052, "volume": 0.1, "sl": 1.1002, "tp": 1.1152},
+        )
+        self.assertIn("ORACLE MT5 TRADE EXECUTED", filled_msg)
+        self.assertIn("Ticket #998877", filled_msg)
+        self.assertIn("EURUSD (EURUSD.i)", filled_msg)
+
+        blocked_msg = format_execution_alert(
+            "EURUSD",
+            "EURUSD",
+            sample_sig,
+            {"status": "blocked", "reason": "paper trading is ON"},
+        )
+        self.assertIn("ORACLE MT5 ORDER NOT PLACED (BLOCKED)", blocked_msg)
+        self.assertIn("Reason: paper trading is ON", blocked_msg)
+
+        fake_decision = SimpleNamespace(
+            reason="Profit lock at 1.5R",
+            current_confidence=0.64,
+            unrealized_r=1.52,
+            new_stop=1.1060,
+        )
+        pos_exec_msg = format_position_alert(
+            "EURUSD",
+            998877,
+            "tighten_stop",
+            fake_decision,
+            1.1000,
+            1.1150,
+            executed=True,
+            execution_status="modified",
+        )
+        self.assertIn("ORACLE MT5 POSITION UPDATE — STOP TIGHTENED ON MT5", pos_exec_msg)
+        self.assertIn("New stop applied: 1.106", pos_exec_msg)
+        self.assertIn("Broker status: modified", pos_exec_msg)
+
+        native_close_msg = format_native_close_alert(
+            "EURUSD", "EURUSD", 998877, 1.1150, "closed at broker (TP hit)", won=True
+        )
+        self.assertIn("ORACLE MT5 POSITION CLOSED (WIN)", native_close_msg)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

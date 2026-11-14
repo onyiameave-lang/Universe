@@ -880,6 +880,31 @@ class CTraderBroker:
         """Return exact symbol names exposed by the connected cTrader account."""
         return sorted(self._symbol_id_by_name)
 
+    def symbols(self) -> List[str]:
+        """Alias for symbol_catalog() matching MT5Broker.symbols()."""
+        return self.symbol_catalog()
+
+    def live_quote(self, symbol: str, timeout: float = 5.0) -> Optional[Dict[str, Any]]:
+        """Return a live bid/ask/mid quote dict for symbol, or None if unavailable."""
+        obs = self.execution_cost_observation(symbol, timeout=timeout)
+        if not isinstance(obs, dict) or obs.get("status") != "complete":
+            return None
+        quote = obs.get("quote") or {}
+        bid = float(quote.get("bid") or 0.0)
+        ask = float(quote.get("ask") or 0.0)
+        if bid <= 0 or ask < bid:
+            return None
+        mid = (bid + ask) / 2.0
+        spread_info = obs.get("spread") or {}
+        return {
+            "symbol": str(symbol).strip().upper(),
+            "bid": bid,
+            "ask": ask,
+            "mid": mid,
+            "spread_bps": spread_info.get("bps_of_mid"),
+            "observed_at": quote.get("observed_at"),
+        }
+
     def _clamp_volume(self, raw_volume: float, symbol_id: int, symbol_name: str) -> int:
         cents = self._volume_to_cents(raw_volume)
         if cents <= 0:

@@ -377,7 +377,12 @@ class OracleAgent(BaseAgent):
                 pass
         return None, "evolution_library"
 
-    def _streams(self, symbol: str, technicals: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def _streams(
+        self,
+        symbol: str,
+        technicals: Dict[str, Any],
+        series: Optional[Series] = None,
+    ) -> Dict[str, Dict[str, Any]]:
         """Build evidence streams for fusion.
 
         FIX O-3: Use SignalFusion to build the stream dicts. SignalFusion
@@ -392,9 +397,11 @@ class OracleAgent(BaseAgent):
         champ, champion_source = self._lightweight_champion_lookup(symbol, regime)
 
         if champ:
-            md = self.data.get(symbol)
-            if md["status"] == "complete":
-                s = md["series"]
+            s = series
+            if s is None:
+                md = self.data.get(symbol)
+                s = md["series"] if md.get("status") == "complete" else None
+            if s is not None:
                 vote = champ.vote(s)
                 tech = {"direction": vote, "confidence": 0.75, "source": "evolved_champion",
                         "champion_source": champion_source, "regime": regime, "genome": champ.genome_id}
@@ -438,7 +445,8 @@ class OracleAgent(BaseAgent):
         if md["status"] != "complete":
             return {"status": "error", "message": md.get("message"), "symbol": symbol}
         return {"status": "complete", "symbol": symbol, "source": md["source"],
-                "last": md["series"].last, "technicals": analyze(md["series"])}
+                "last": md["series"].last, "technicals": analyze(md["series"]),
+                "_series": md["series"]}
 
     def signal(self, symbol):
         started = time.monotonic()
@@ -449,7 +457,7 @@ class OracleAgent(BaseAgent):
         if market["status"] != "complete":
             return market
         streams_started = time.monotonic()
-        streams = self._streams(symbol, market["technicals"])
+        streams = self._streams(symbol, market["technicals"], series=market.get("_series"))
         streams_elapsed = time.monotonic() - streams_started
         if streams_elapsed >= 5.0:
             log.warning("[%s] proposal stage evidence_streams took %.1fs", symbol, streams_elapsed)
@@ -462,7 +470,8 @@ class OracleAgent(BaseAgent):
         if total_elapsed >= 10.0:
             log.warning("[%s] proposal signal complete after %.1fs", symbol, total_elapsed)
         atr = market["technicals"].get("atr_14") or (market["last"] * 0.01)
-        return {"status": "complete", "symbol": symbol, "signal": fused,
+        return {"status": "complete", "symbol": symbol, "source": market.get("source"),
+                "signal": fused,
                 "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
                 "using_evolved_champion": streams["technical"].get("source") == "evolved_champion",
                 "atr": atr,

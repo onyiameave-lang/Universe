@@ -506,6 +506,8 @@ class CTraderDemoTrader:
             chronicle_client=self.chronicle, sentinel_client=self.sentinel,
             pulse_client=self.pulse, atlas_client=self.atlas)
         self.oracle.start()
+        if hasattr(self.oracle, "data") and hasattr(self.oracle.data, "attach_broker"):
+            self.oracle.data.attach_broker(self.broker, self._sym_mapper)
         self._trade_learning.confidence = self.oracle._champion_confidence
 
         self._pos_log = ChroniclePositionLog(
@@ -540,6 +542,8 @@ class CTraderDemoTrader:
         else:
             log.warning("cTrader not connected: %s", status.get("reason"))
             self._build_symbol_map(broker_symbols=[])
+        if hasattr(self.oracle, "data") and hasattr(self.oracle.data, "attach_broker"):
+            self.oracle.data.attach_broker(self.broker, self._sym_mapper)
         return status
 
     def _get_broker_symbols(self):
@@ -1063,6 +1067,7 @@ class CTraderDemoTrader:
             realized = 1 if sum(p["profit"] for p in poss) >= 0 else -1
             self.oracle.act("fusion.learn", {"symbol": canon_sym, "streams": streams,
                                              "realized_direction": realized,
+                                             "trade_won": realized > 0,
                                              "_sender": "ctrader_demo"})
 
     def _record_shadow_proposal(self, symbol, broker_symbol, response, market_state):

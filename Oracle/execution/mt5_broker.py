@@ -82,9 +82,17 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
+
+try:
+    from execution.market_clock import MarketClock  # type: ignore
+except ImportError:
+    from Oracle.execution.market_clock import MarketClock  # type: ignore
 
 from shared.startup import load_dotenv_early
 
@@ -94,6 +102,17 @@ from shared.config import get_config
 
 _cfg = get_config(reload=True)
 log = logging.getLogger("oracle.mt5")
+
+
+def _normalize_order_direction(value: Any) -> Optional[str]:
+    direction = str(value or "").strip().lower()
+    return direction if direction in ("long", "buy", "short", "sell") else None
+
+
+def _round_price_to_digits(price: float, digits: int) -> float:
+    quantum = Decimal(1).scaleb(-digits)
+    return float(Decimal(str(price)).quantize(quantum, rounding=ROUND_HALF_UP))
+
 
 DEFAULT_SYMBOL_MAP = {
     "EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "USDJPY": "USDJPY", "AUDUSD": "AUDUSD",
@@ -109,6 +128,7 @@ DEFAULT_SYMBOL_MAP = {
     "META": "META", "TSLA": "TSLA", "BRKB": "BRKB", "LLY": "LLY", "V": "V", "JPM": "JPM",
 }
 
+
 @dataclass
 class BrokerStatus:
     connected: bool = False
@@ -120,11 +140,14 @@ class BrokerStatus:
     equity: float = 0.0
     currency: str = ""
     reason: str = ""
+    account_info_available: bool = False
+
     def to_dict(self) -> Dict[str, Any]:
         return {"connected": self.connected, "account_type": self.account_type,
                 "trade_mode": self.trade_mode,
                 "login": self.login, "server": self.server, "balance": self.balance,
-                "equity": self.equity, "currency": self.currency, "reason": self.reason}
+                "equity": self.equity, "currency": self.currency, "reason": self.reason,
+                "account_info_available": self.account_info_available}
 
 
 def _classify_account_type(mt5: Any, info: Any) -> tuple[str, Optional[int]]:
@@ -162,10 +185,30 @@ class MT5Broker:
         self._mt5 = None
         self.status = BrokerStatus()
         self.symbol_map = symbol_map or DEFAULT_SYMBOL_MAP
-        self.allow_live = _cfg.oracle_allow_live if allow_live is None else allow_live
-        self.paper = _cfg.oracle_paper_trading if paper is None else paper
+        if allow_live is None:
+            raw_allow = os.getenv("ORACLE_ALLOW_LIVE")
+            self.allow_live = (
+                raw_allow.strip().lower() in ("1", "true", "yes", "on")
+                if raw_allow is not None and raw_allow.strip() != ""
+                else _cfg.oracle_allow_live
+            )
+        else:
+            self.allow_live = allow_live
+        if paper is None:
+            raw_paper = os.getenv("ORACLE_PAPER_TRADING")
+            self.paper = (
+                raw_paper.strip().lower() not in ("0", "false", "no", "off")
+                if raw_paper is not None and raw_paper.strip() != ""
+                else _cfg.oracle_paper_trading
+            )
+        else:
+            self.paper = paper
         self._paper_positions = {}  # for paper trading mode: {ticket: position_dict}
         self._next_ticket = 1000000  # paper trading ticket counter
+        self._positions_last_refresh_ok: bool = True
+        self._symbol_schedule_by_name: Dict[str, Dict[str, Any]] = {}
+        self._symbol_constraints: Dict[str, Dict[str, Any]] = {}
+        self._constraints_lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -204,16 +247,20 @@ class MT5Broker:
 
     def _update_status_from_account_info(self, info: Any, login=None, server=None) -> None:
         account_type, trade_mode = _classify_account_type(self._mt5, info)
+        balance = float(getattr(info, "balance", 0.0) or 0.0)
+        equity = float(getattr(info, "equity", 0.0) or 0.0)
+        info_ok = math.isfinite(balance) and math.isfinite(equity) and (balance > 0 or equity > 0)
         self.status = BrokerStatus(
             connected=True,
             account_type=account_type,
             trade_mode=trade_mode,
             login=getattr(info, "login", login if login is not None else self.status.login),
             server=getattr(info, "server", server or self.status.server),
-            balance=float(getattr(info, "balance", 0.0) or 0.0),
-            equity=float(getattr(info, "equity", 0.0) or 0.0),
+            balance=balance,
+            equity=equity,
             currency=str(getattr(info, "currency", "") or ""),
             reason="ok",
+            account_info_available=info_ok,
         )
         if account_type == "unknown":
             log.warning(
@@ -229,7 +276,7 @@ class MT5Broker:
             except Exception as exc:
                 log.debug("MT5 shutdown call failed (likely already disconnected): %s", exc)
 
-    # ── FIX-A: symbols() ──────────────────────────────────────────────────────────────────────────────────────────
+    # ── FIX-A: symbols() & cTrader-parity catalog/metadata/schedules ──────────────
     def symbols(self) -> List[str]:
         """
         Return a list of all symbol name strings available at the connected MT5 broker.
@@ -257,6 +304,162 @@ class MT5Broker:
         except Exception as exc:
             log.warning("symbols(): mt5.symbols_get() raised %s — returning empty list", exc)
             return []
+
+    def symbol_catalog(self) -> List[str]:
+        """Alias for symbols() matching CTraderBroker.symbol_catalog()."""
+        return sorted(self.symbols())
+
+    def symbol_metadata(self, symbol: str) -> Dict[str, Any]:
+        """Return broker-reported metadata for a listed MT5 symbol (matching CTraderBroker)."""
+        sym = str(symbol or "").strip()
+        if not sym:
+            raise ValueError("symbol name is required")
+        lock = getattr(self, "_constraints_lock", None)
+        cache = getattr(self, "_symbol_constraints", None)
+        if lock is not None and isinstance(cache, dict):
+            with lock:
+                if sym.upper() in cache:
+                    return dict(cache[sym.upper()])
+
+        mt5 = getattr(self, "_mt5", None)
+        symbol_info_fn = getattr(mt5, "symbol_info", None)
+        if not callable(symbol_info_fn):
+            return {"digits": None, "volume_min": 0.01, "volume_max": 100.0, "volume_step": 0.01}
+        try:
+            if callable(getattr(mt5, "symbol_select", None)):
+                mt5.symbol_select(sym, True)
+            info = symbol_info_fn(sym)
+        except Exception:
+            info = None
+        if info is None:
+            return {"digits": None, "volume_min": 0.01, "volume_max": 100.0, "volume_step": 0.01}
+
+        digits = getattr(info, "digits", None)
+        digits = int(digits) if isinstance(digits, int) and not isinstance(digits, bool) and digits >= 0 else None
+        metadata = {
+            "symbol": getattr(info, "name", sym),
+            "digits": digits,
+            "point": float(getattr(info, "point", 0.0) or 0.0),
+            "trade_stops_level": int(getattr(info, "trade_stops_level", 0) or 0),
+            "trade_contract_size": float(getattr(info, "trade_contract_size", 100000.0) or 100000.0),
+            "volume_min": float(getattr(info, "volume_min", 0.01) or 0.01),
+            "volume_max": float(getattr(info, "volume_max", 100.0) or 100.0),
+            "volume_step": float(getattr(info, "volume_step", 0.01) or 0.01),
+            "trade_mode": int(getattr(info, "trade_mode", 4) if getattr(info, "trade_mode", None) is not None else 4),
+            "currency_base": str(getattr(info, "currency_base", "") or ""),
+            "currency_profit": str(getattr(info, "currency_profit", "") or ""),
+            "spread": int(getattr(info, "spread", 0) or 0),
+        }
+        if lock is not None and isinstance(cache, dict):
+            with lock:
+                cache[sym.upper()] = metadata
+        return dict(metadata)
+
+    def load_market_schedules(self, symbol_names: List[str]) -> None:
+        """Load MT5 trading schedules & trade modes for configured symbols (cTrader parity)."""
+        if not getattr(self.status, "connected", False) or self._mt5 is None:
+            return
+        schedules = getattr(self, "_symbol_schedule_by_name", None)
+        if not isinstance(schedules, dict):
+            self._symbol_schedule_by_name = {}
+            schedules = self._symbol_schedule_by_name
+
+        # Standard 24/5 FX/CFD weekly schedule (Sun 22:00 UTC -> Fri 22:00 UTC) and 24/7 Crypto schedule
+        fx_cfd_schedule = [{"startSecond": 22 * 3600, "endSecond": 5 * 86400 + 22 * 3600}]
+        crypto_schedule = [{"startSecond": 0, "endSecond": 7 * 86400}]
+
+        for name in symbol_names:
+            if not name:
+                continue
+            sym_up = str(name).strip().upper()
+            meta = self.symbol_metadata(str(name).strip())
+            mt5_mode = int(meta.get("trade_mode", 4))
+            # Map MT5 trade_mode (0=Disabled, 1=LongOnly, 2=ShortOnly, 3=CloseOnly, 4=Full)
+            # to MarketClock trading_mode (0=Full, 1=Disabled, 3=CloseOnly)
+            if mt5_mode == 0:
+                clock_mode = 1
+            elif mt5_mode == 3:
+                clock_mode = 3
+            else:
+                clock_mode = 0
+            is_crypto = any(sym_up.startswith(p) for p in ("BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "LTC", "DOGE"))
+            schedules[sym_up] = {
+                "schedule": crypto_schedule if is_crypto else fx_cfd_schedule,
+                "timezone": "Etc/UTC",
+                "trading_mode": clock_mode,
+                "holidays": [],
+            }
+        log.info("MT5: loaded market schedules for %d configured symbols", len(schedules))
+
+    def market_state(self, symbol: str, now=None) -> Dict[str, Any]:
+        """Evaluate whether a symbol is currently open for trading (cTrader parity)."""
+        sym_up = str(symbol or "").strip().upper()
+        schedules = getattr(self, "_symbol_schedule_by_name", None) or {}
+        details = schedules.get(sym_up)
+        if details is None:
+            is_crypto = any(sym_up.startswith(p) for p in ("BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "LTC", "DOGE"))
+            default_sched = (
+                [{"startSecond": 0, "endSecond": 7 * 86400}]
+                if is_crypto
+                else [{"startSecond": 22 * 3600, "endSecond": 5 * 86400 + 22 * 3600}]
+            )
+            return MarketClock.evaluate(
+                sym_up, default_sched, "Etc/UTC",
+                trading_mode=0, holidays=[], now=now or datetime.now(timezone.utc),
+            )
+        return MarketClock.evaluate(
+            sym_up, details["schedule"], details["timezone"],
+            trading_mode=details["trading_mode"], holidays=details["holidays"], now=now,
+        )
+
+    def live_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Return a live bid/ask/mid quote dict from MT5 for symbol, or None if unavailable."""
+        if not getattr(self.status, "connected", False) or self._mt5 is None:
+            return None
+        mt5 = self._mt5
+        bsym = self._map(symbol)
+        try:
+            if callable(getattr(mt5, "symbol_select", None)):
+                mt5.symbol_select(bsym, True)
+            tick = mt5.symbol_info_tick(bsym) if callable(getattr(mt5, "symbol_info_tick", None)) else None
+            if tick is None:
+                return None
+            bid = float(getattr(tick, "bid", 0.0) or 0.0)
+            ask = float(getattr(tick, "ask", 0.0) or 0.0)
+            if bid <= 0 or ask <= 0 or ask < bid:
+                return None
+            mid = (bid + ask) / 2.0
+            spread_bps = round(((ask - bid) / mid) * 10000.0, 4) if mid > 0 else None
+            return {
+                "status": "complete",
+                "symbol": bsym,
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "spread_bps": spread_bps,
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception:
+            return None
+
+    def _resolve_broker_symbol_name(self, symbol: str) -> str:
+        """Resolve an Oracle or broker symbol name against the connected MT5 terminal."""
+        smap = getattr(self, "symbol_map", None) or {}
+        bsym = smap.get(str(symbol).upper(), str(symbol).strip())
+        mt5 = getattr(self, "_mt5", None)
+        if mt5 is None:
+            return bsym
+        try:
+            if callable(getattr(mt5, "symbol_select", None)) and mt5.symbol_select(bsym, True):
+                return bsym
+            prefix = str(symbol).strip().upper()[:6]
+            for s in (mt5.symbols_get() or []) if callable(getattr(mt5, "symbols_get", None)) else []:
+                sname = getattr(s, "name", "")
+                if sname.upper().startswith(prefix):
+                    return sname
+        except Exception:
+            pass
+        return bsym
 
     # ── FIX-1: filling mode auto-detection ────────────────────────────────────────────────────────────────────────
     def _filling_mode(self, symbol: str):
@@ -403,8 +606,11 @@ class MT5Broker:
             return {"status": "error", "reason": f"symbol {symbol} not available at broker"}
         tick = mt5.symbol_info_tick(symbol)
         if tick is None: return {"status": "error", "reason": f"no tick for {symbol}"}
-        is_buy = plan["direction"] in ("long", "buy")
-        price = tick.ask if is_buy else tick.bid
+        direction = _normalize_order_direction(plan.get("direction"))
+        if direction is None:
+            return {"status": "rejected", "reason": "direction must be buy/long or sell/short"}
+        is_buy = direction in ("long", "buy")
+        price = float(tick.ask if is_buy else tick.bid)
         order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
         stop = float(plan["stop"])
         target = float(plan["target"])
@@ -427,6 +633,36 @@ class MT5Broker:
             target_distance = abs(target - reference_entry)
             stop = price - stop_distance if is_buy else price + stop_distance
             target = price + target_distance if is_buy else price - target_distance
+
+        # Precision rounding & broker stops_level enforcement when symbol_info is available
+        sym_info_fn = getattr(mt5, "symbol_info", None)
+        if callable(sym_info_fn):
+            try:
+                sinfo = sym_info_fn(symbol)
+            except Exception:
+                sinfo = None
+            if sinfo is not None:
+                digits = getattr(sinfo, "digits", None)
+                point = float(getattr(sinfo, "point", 0.0) or 0.0)
+                stops_level = int(getattr(sinfo, "trade_stops_level", 0) or 0)
+                if point > 0 and stops_level > 0:
+                    min_stop_dist = stops_level * point * 1.05
+                    if stop > 0:
+                        if is_buy and (price - stop) < min_stop_dist:
+                            stop = price - min_stop_dist
+                        elif (not is_buy) and (stop - price) < min_stop_dist:
+                            stop = price + min_stop_dist
+                    if target > 0:
+                        if is_buy and (target - price) < min_stop_dist:
+                            target = price + min_stop_dist
+                        elif (not is_buy) and (price - target) < min_stop_dist:
+                            target = price - min_stop_dist
+                if isinstance(digits, int) and digits >= 0:
+                    price = _round_price_to_digits(price, digits) or price
+                    if stop > 0:
+                        stop = _round_price_to_digits(stop, digits) or stop
+                    if target > 0:
+                        target = _round_price_to_digits(target, digits) or target
 
         # FIX-1: auto-detect filling mode
         filling = self._filling_mode(symbol)
@@ -496,6 +732,7 @@ class MT5Broker:
         In live mode, queries MT5 via positions_get().
         """
         if self.paper:
+            self._positions_last_refresh_ok = True
             # Paper trading mode: return from internal state
             result = list(self._paper_positions.values())
             if symbol:
@@ -503,10 +740,17 @@ class MT5Broker:
             return result
         
         if not self.status.connected:
+            self._positions_last_refresh_ok = False
             return []
         
         try:
-            poss = self._mt5.positions_get() or []
+            raw_poss = self._mt5.positions_get()
+            if raw_poss is None:
+                self._positions_last_refresh_ok = False
+                poss = []
+            else:
+                self._positions_last_refresh_ok = True
+                poss = list(raw_poss)
             result = []
             for p in poss:
                 pos_dict = {
@@ -517,7 +761,7 @@ class MT5Broker:
                     "sl": p.sl,
                     "tp": p.tp,
                     "profit": p.profit,
-                    "ticket": p.ticket
+                    "ticket": int(p.ticket),
                 }
                 result.append(pos_dict)
             
@@ -526,6 +770,7 @@ class MT5Broker:
             
             return result
         except Exception as exc:
+            self._positions_last_refresh_ok = False
             log.warning("positions(): %s", exc)
             return []
 
@@ -663,6 +908,19 @@ class MT5Broker:
             # Use current SL/TP if not provided
             new_sl = stop_loss  if stop_loss  is not None else pos.sl
             new_tp = take_profit if take_profit is not None else pos.tp
+
+            sym_info_fn = getattr(mt5, "symbol_info", None)
+            if callable(sym_info_fn):
+                try:
+                    sinfo = sym_info_fn(pos.symbol)
+                    digits = getattr(sinfo, "digits", None) if sinfo is not None else None
+                    if isinstance(digits, int) and digits >= 0:
+                        if new_sl is not None and float(new_sl) > 0:
+                            new_sl = _round_price_to_digits(float(new_sl), digits) or new_sl
+                        if new_tp is not None and float(new_tp) > 0:
+                            new_tp = _round_price_to_digits(float(new_tp), digits) or new_tp
+                except Exception:
+                    pass
 
             # Send modify order
             request = {
@@ -931,8 +1189,152 @@ class MT5Broker:
                 d["margin_free"] = float(getattr(info, "margin_free", d["equity"]) or 0.0)
                 return d
             self.status.connected = False
+            self.status.account_info_available = False
             self.status.reason = "MT5 account_info unavailable"
         return self.status.to_dict()
+
+    def historical_bars(
+        self,
+        symbol: str,
+        from_timestamp_ms: Optional[int] = None,
+        to_timestamp_ms: Optional[int] = None,
+        period: str = "D1",
+        count: int = 200,
+        include_live_tick: bool = True,
+        timeout: float = 15.0,
+    ) -> Dict[str, Any]:
+        """Fetch historical OHLCV bars directly from the connected MT5 terminal.
+
+        Provides an identical return contract to ``CTraderBroker.historical_bars``
+        so ``BrokerMarketDataSource`` in ``Oracle/core/market_data.py`` can query
+        either broker seamlessly as Priority #1 live market data.
+        """
+        if self._mt5 is None and self.available:
+            self.connect()
+        if not self.status.connected or self._mt5 is None:
+            return {"status": "error", "reason": "not connected to MT5", "bars": []}
+
+        mt5 = self._mt5
+        bsym = self._resolve_broker_symbol_name(symbol)
+        try:
+            if not mt5.symbol_select(bsym, True):
+                return {"status": "error", "reason": f"symbol {bsym} not available at MT5 broker", "bars": []}
+
+            period_key = str(period or "D1").strip().upper()
+            tf_map = {
+                "M1": getattr(mt5, "TIMEFRAME_M1", 1),
+                "M5": getattr(mt5, "TIMEFRAME_M5", 5),
+                "M15": getattr(mt5, "TIMEFRAME_M15", 15),
+                "M30": getattr(mt5, "TIMEFRAME_M30", 30),
+                "H1": getattr(mt5, "TIMEFRAME_H1", 16385),
+                "H4": getattr(mt5, "TIMEFRAME_H4", 16388),
+                "D1": getattr(mt5, "TIMEFRAME_D1", 16408),
+                "W1": getattr(mt5, "TIMEFRAME_W1", 32769),
+            }
+            if period_key not in tf_map:
+                return {"status": "error", "reason": f"unsupported trendbar period {period!r}", "bars": []}
+            tf_code = tf_map[period_key]
+
+            bar_count = max(30, int(count or 200))
+            if from_timestamp_ms is not None and to_timestamp_ms is not None and period_key == "D1":
+                span_days = max(30, int((int(to_timestamp_ms) - int(from_timestamp_ms)) // (86400 * 1000)) + 5)
+                bar_count = max(bar_count, min(span_days, 1000))
+
+            rates = None
+            copy_pos_fn = getattr(mt5, "copy_rates_from_pos", None)
+            if callable(copy_pos_fn):
+                rates = copy_pos_fn(bsym, tf_code, 0, bar_count)
+
+            if (rates is None or len(rates) == 0) and from_timestamp_ms is not None and to_timestamp_ms is not None:
+                copy_range_fn = getattr(mt5, "copy_rates_range", None)
+                if callable(copy_range_fn):
+                    dt_from = datetime.fromtimestamp(int(from_timestamp_ms) / 1000.0, tz=timezone.utc)
+                    dt_to = datetime.fromtimestamp(int(to_timestamp_ms) / 1000.0, tz=timezone.utc)
+                    rates = copy_range_fn(bsym, tf_code, dt_from, dt_to)
+
+            if rates is None or len(rates) == 0:
+                return {"status": "error", "reason": f"MT5 returned 0 bars for {bsym} ({period_key})", "bars": []}
+
+            sinfo = None
+            sym_info_fn = getattr(mt5, "symbol_info", None)
+            if callable(sym_info_fn):
+                try:
+                    sinfo = sym_info_fn(bsym)
+                except Exception:
+                    sinfo = None
+            digits = getattr(sinfo, "digits", None) if sinfo is not None else None
+            round_digits = digits if (isinstance(digits, int) and digits >= 0) else 6
+
+            bars: List[Dict[str, Any]] = []
+            for r in rates:
+                try:
+                    u_sec = int(r["time"])
+                    o_val = float(r["open"])
+                    h_val = float(r["high"])
+                    l_val = float(r["low"])
+                    c_val = float(r["close"])
+                    try:
+                        v_val = float(r["real_volume"])
+                        if v_val <= 0:
+                            v_val = float(r["tick_volume"])
+                    except Exception:
+                        v_val = float(r["tick_volume"])
+                except Exception:
+                    u_sec = int(getattr(r, "time", 0))
+                    o_val = float(getattr(r, "open", 0.0))
+                    h_val = float(getattr(r, "high", 0.0))
+                    l_val = float(getattr(r, "low", 0.0))
+                    c_val = float(getattr(r, "close", 0.0))
+                    v_val = float(getattr(r, "real_volume", 0.0) or getattr(r, "tick_volume", 0.0) or 0.0)
+
+                if not all(math.isfinite(x) and x > 0 for x in (o_val, h_val, l_val, c_val)):
+                    continue
+                if h_val < max(o_val, c_val, l_val) or l_val > min(o_val, c_val, h_val):
+                    continue
+                dt_utc = datetime.fromtimestamp(u_sec, tz=timezone.utc)
+                ts_iso = dt_utc.strftime("%Y-%m-%d") if period_key in ("D1", "W1") else dt_utc.isoformat()
+                bars.append({
+                    "timestamp": ts_iso,
+                    "timestamp_ms": u_sec * 1000,
+                    "open": round(o_val, round_digits),
+                    "high": round(h_val, round_digits),
+                    "low": round(l_val, round_digits),
+                    "close": round(c_val, round_digits),
+                    "volume": max(0.0, float(v_val)),
+                })
+
+            if not bars:
+                return {"status": "error", "reason": f"all MT5 bars invalid for {bsym}", "bars": []}
+
+            bars.sort(key=lambda item: int(item.get("timestamp_ms", 0)))
+
+            # Anchor forming latest bar to live bid tick if available
+            if include_live_tick:
+                try:
+                    tick = mt5.symbol_info_tick(bsym)
+                    bid = float(getattr(tick, "bid", 0.0) or 0.0) if tick is not None else 0.0
+                    if math.isfinite(bid) and bid > 0:
+                        last_bar = bars[-1]
+                        last_bar["close"] = round(bid, round_digits)
+                        if bid > float(last_bar["high"]):
+                            last_bar["high"] = round(bid, round_digits)
+                        if bid < float(last_bar["low"]):
+                            last_bar["low"] = round(bid, round_digits)
+                except Exception:
+                    pass
+
+            return {
+                "status": "complete",
+                "symbol": bsym,
+                "source": f"mt5_broker_live:{bsym}",
+                "price_basis": "bid",
+                "period": period_key,
+                "bars": bars,
+                "has_more": False,
+            }
+        except Exception as exc:
+            log.warning("historical_bars(%s/%s): %s", symbol, bsym, exc)
+            return {"status": "error", "reason": str(exc), "bars": []}
 
     def fetch_7tf_rates(
         self, symbol: str, broker_symbol: Optional[str] = None

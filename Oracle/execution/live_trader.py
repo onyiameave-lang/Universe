@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import sys
 import time
@@ -108,7 +109,8 @@ from execution.trade_manager import (  # type: ignore  # Continuous Trade Manage
 )
 from execution.telegram_notifier import (  # type: ignore
     TelegramNotifier, RecentSignalCache, signal_only_enabled,
-    format_entry_alert, format_position_alert,
+    format_entry_alert, format_execution_alert, format_position_alert,
+    format_native_close_alert,
 )
 from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
 from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
@@ -195,12 +197,42 @@ def _load(folder, rel, cls, **kw):
             sys.path.pop(0)
 
 
-def _call_with_timeout(fn, timeout_sec: float) -> Tuple[Any, bool]:
+_MAX_INFLIGHT_TIMEOUT_CALLS = max(
+    1,
+    int(os.getenv("ORACLE_MAX_INFLIGHT_SYMBOL_EVALS", "1") or 1),
+)
+_TIMEOUT_CALL_SLOTS = threading.BoundedSemaphore(_MAX_INFLIGHT_TIMEOUT_CALLS)
+_ACTIVE_TIMEOUT_KEYS_LOCK = threading.Lock()
+_ACTIVE_TIMEOUT_KEYS: set[Any] = set()
+
+
+def _call_with_timeout(
+    fn,
+    timeout_sec: float,
+    *,
+    work_key: Any = None,
+    reason_out: Optional[List[str]] = None,
+) -> Tuple[Any, bool]:
     """
-    Call fn() in a daemon thread.  Returns (result, timed_out).
-    If the thread doesn't finish within timeout_sec, returns (None, True).
-    The thread is left to die on its own (daemon=True) — we never block on it.
+    Call fn() in a daemon thread with bounded single-flight concurrency.
+    Returns (result, timed_out).
     """
+    if work_key is not None:
+        with _ACTIVE_TIMEOUT_KEYS_LOCK:
+            if work_key in _ACTIVE_TIMEOUT_KEYS:
+                if reason_out is not None:
+                    reason_out[:] = ["previous evaluation still running"]
+                return None, True
+            _ACTIVE_TIMEOUT_KEYS.add(work_key)
+
+    if not _TIMEOUT_CALL_SLOTS.acquire(timeout=0.05):
+        if work_key is not None:
+            with _ACTIVE_TIMEOUT_KEYS_LOCK:
+                _ACTIVE_TIMEOUT_KEYS.discard(work_key)
+        if reason_out is not None:
+            reason_out[:] = ["previous symbol evaluation still running"]
+        return None, True
+
     result_box: List[Any] = [None]
     exc_box:    List[Optional[BaseException]] = [None]
 
@@ -209,15 +241,67 @@ def _call_with_timeout(fn, timeout_sec: float) -> Tuple[Any, bool]:
             result_box[0] = fn()
         except Exception as e:
             exc_box[0] = e
+        finally:
+            if work_key is not None:
+                with _ACTIVE_TIMEOUT_KEYS_LOCK:
+                    _ACTIVE_TIMEOUT_KEYS.discard(work_key)
+            _TIMEOUT_CALL_SLOTS.release()
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    try:
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+    except Exception:
+        if work_key is not None:
+            with _ACTIVE_TIMEOUT_KEYS_LOCK:
+                _ACTIVE_TIMEOUT_KEYS.discard(work_key)
+        _TIMEOUT_CALL_SLOTS.release()
+        raise
+
     t.join(timeout_sec)
     if t.is_alive():
+        if reason_out is not None:
+            reason_out[:] = [f"after {timeout_sec:.0f}s"]
         return None, True          # timed out
     if exc_box[0] is not None:
         raise exc_box[0]           # re-raise so caller can log it
     return result_box[0], False
+
+
+def _duplicate_broker_symbol_mappings(
+    symbols: List[str],
+    mapper: "SymbolMapper",
+) -> Dict[str, str]:
+    first_owner: Dict[str, str] = {}
+    duplicates: Dict[str, str] = {}
+    for raw_symbol in symbols:
+        symbol = raw_symbol.upper()
+        broker_sym = mapper.translate(symbol)
+        if not broker_sym:
+            continue
+        key = broker_sym.strip().upper()
+        owner = first_owner.get(key)
+        if owner is None:
+            first_owner[key] = symbol
+        elif owner != symbol:
+            duplicates[symbol] = owner
+    return duplicates
+
+
+def _is_trading_disabled_rejection(result: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(result, dict):
+        return False
+    retcode = result.get("retcode")
+    reason = str(result.get("reason") or "").upper()
+    comment = str(result.get("comment") or "").upper()
+    if retcode == 10017:
+        return True
+    return (
+        "TRADING_DISABLED" in reason
+        or "TRADE_DISABLED" in reason
+        or "TRADING IS DISABLED" in reason
+        or "TRADING DISABLED" in comment
+        or "TRADE DISABLED" in comment
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -429,14 +513,22 @@ class LiveTrader:
         self.session_max_loss_pct = session_max_loss_pct
         self.max_trades   = max_trades if max_trades is not None else _env_int(
             "ORACLE_MAX_TRADES_PER_SESSION", 10)
-        self.confirm_live = confirm_live
+        self.confirm_live = bool(
+            confirm_live
+            or os.getenv("ORACLE_CONFIRM_LIVE", "").strip().lower() in ("1", "true", "yes", "on")
+            or os.getenv("ORACLE_ALLOW_LIVE", "").strip().lower() in ("1", "true", "yes", "on")
+        )
         self.signal_only = signal_only_enabled()
         self.telegram = TelegramNotifier()
         self._recent_signals = RecentSignalCache()
         if self.signal_only and not self.telegram.enabled:
             log.warning("Signal-only mode is ON, but Telegram credentials are missing; "
                         "approved signals will be printed locally only")
+        elif not self.signal_only and self.telegram.enabled:
+            log.info("ORACLE_SIGNAL_ONLY=false with Telegram configured: Oracle will execute MT5 trades AND send Telegram notifications")
         self.broker = MT5Broker()
+        if not self.signal_only and os.getenv("ORACLE_PAPER_TRADING", "").strip().lower() in ("0", "false", "no", "off"):
+            self.broker.paper = False
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
         self._open_context: Dict[str, Dict] = {}   # canonical symbol -> streams at entry
@@ -453,6 +545,8 @@ class LiveTrader:
         self._ks_equity_ts:    float = 0.0
         # FIX-6: latch so double-check in run() always sees the fired state
         self._ks_fired: bool = False
+        self._ks_check_unavailable: bool = False
+        self._trading_disabled_symbols: set[str] = set()
 
         # FIX-8: symbol mapper (populated in connect())
         self._sym_mapper = SymbolMapper()
@@ -489,6 +583,8 @@ class LiveTrader:
         self.oracle = OracleAgent(chronicle_client=self.chronicle, sentinel_client=self.sentinel,
                                  pulse_client=self.pulse, atlas_client=self.atlas)
         self.oracle.start()
+        if hasattr(self.oracle, "data") and hasattr(self.oracle.data, "attach_broker"):
+            self.oracle.data.attach_broker(self.broker, self._sym_mapper)
         # Use the ONE Chronicle-wired champion confidence tracker OracleAgent
         # already built, instead of TradeLearningEngine's own separate,
         # non-Chronicle-wired duplicate constructed above — a real bug found
@@ -508,15 +604,42 @@ class LiveTrader:
         status = self.broker.connect()
         if status.get("connected"):
             self._start_equity = status.get("equity") or status.get("balance")
+            acct_type = str(status.get("account_type") or "unknown").lower()
             log.info("Connected: %s account, equity %.2f %s", status["account_type"],
                      self._start_equity or 0, status.get("currency", ""))
+            if not self.signal_only:
+                if acct_type in ("demo", "contest") and self.broker.paper:
+                    log.info(
+                        "ORACLE_SIGNAL_ONLY=false on MT5 %s account — disabling paper-mode block so MT5 orders execute",
+                        acct_type,
+                    )
+                    self.broker.paper = False
+                elif acct_type == "real" and (self.broker.paper or not self.broker.allow_live):
+                    log.warning(
+                        "Connected to REAL MT5 account with ORACLE_SIGNAL_ONLY=false, "
+                        "but execution is gated (paper=%s, allow_live=%s). "
+                        "Set ORACLE_PAPER_TRADING=false and ORACLE_ALLOW_LIVE=true in .env to place real-money orders.",
+                        self.broker.paper,
+                        self.broker.allow_live,
+                    )
 
             # FIX-8: build symbol map now that MT5 is live
             self._build_symbol_map()
+            try:
+                mapped_syms = [
+                    self._sym_mapper.translate(s) or s for s in self.symbols
+                ]
+                load_sched = getattr(self.broker, "load_market_schedules", None)
+                if callable(load_sched):
+                    load_sched(mapped_syms)
+            except Exception as exc:
+                log.debug("Could not pre-load MT5 market schedules: %s", exc)
         else:
             log.warning("MT5 not connected: %s", status.get("reason"))
             # Still build map with empty broker list so unmapped warnings show
             self._build_symbol_map(broker_symbols=[])
+        if hasattr(self.oracle, "data") and hasattr(self.oracle.data, "attach_broker"):
+            self.oracle.data.attach_broker(self.broker, self._sym_mapper)
         return status
 
     def _build_symbol_map(self, broker_symbols: Optional[List[str]] = None) -> None:
@@ -670,6 +793,12 @@ class LiveTrader:
 
             broker_sym = self._sym_mapper.translate(symbol) or symbol
             live_pos = self._get_open_position(broker_sym)
+            if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                log.warning(
+                    "[%s] broker position refresh failed — keeping CTM state until MT5 responds",
+                    symbol,
+                )
+                return
             if live_pos is None:
                 # Position closed elsewhere (SL/TP hit at the broker, manual
                 # close, another script) — stop tracking it. This is the
@@ -680,6 +809,7 @@ class LiveTrader:
                 # fine for a learning signal, not for exact accounting).
                 log.info("[%s] no longer open at broker — deregistering from "
                          "Continuous Trade Manager", symbol)
+                won_flag: Optional[bool] = None
                 try:
                     outcome = self._trade_learning.record_close_once(
                         f"{symbol}:{pos.entry_time}:broker-close",
@@ -687,16 +817,37 @@ class LiveTrader:
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual close)")
                     if outcome is not None:
+                        won_flag = bool(outcome.won)
                         if outcome.won:
                             self.oracle.risk.portfolio.record_win(symbol)
                         else:
                             self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Demo Trade Learning failed on native close: %s", symbol, exc)
+                if self.telegram.enabled:
+                    self.telegram.send(
+                        format_native_close_alert(
+                            symbol, broker_sym, "broker", pos.last_price,
+                            "closed at broker (SL/TP hit or manual close)", won=won_flag,
+                        ),
+                        f"position:{symbol}:{pos.entry_time}:native-close",
+                    )
                 self.oracle.risk.portfolio.remove_by_symbol(symbol)
                 with self._manage_lock:
                     self._managed_positions.pop(symbol, None)
                 continue
+
+            if self.broker.status.connected and callable(getattr(self.broker, "market_state", None)):
+                try:
+                    market_state = self.broker.market_state(broker_sym)
+                    if market_state.get("state") in {"CLOSED", "DAILY_BREAK", "HOLIDAY", "PRE_OPEN"}:
+                        log.debug(
+                            "[%s→%s] CTM skipped while market is %s (%s)",
+                            symbol, broker_sym, market_state.get("state"), market_state.get("reason", ""),
+                        )
+                        continue
+                except Exception as exc:
+                    log.debug("[%s] market_state check failed in CTM: %s", symbol, exc)
 
             try:
                 sig = self.oracle.act("trade.signal", {"symbol": symbol, "_sender": "live_trader"})
@@ -777,10 +928,21 @@ class LiveTrader:
                       f"stop->{decision.new_stop:.5f}  {decision.reason}")
                 try:
                     mod = self.broker.modify_position(pos_id, stop_loss=decision.new_stop)
-                    if mod.get("status") == "modified":
+                    mod_status = str(mod.get("status", "unknown"))
+                    if mod_status == "modified":
                         self._pos_log.log_modified(symbol, broker_sym, pos_id,
                                                     sl=decision.new_stop or 0.0,
                                                     tp=pos.initial_target)
+                    if self.telegram.enabled:
+                        stop_key = f"{float(decision.new_stop or 0.0):.5f}"
+                        self.telegram.send(
+                            format_position_alert(
+                                symbol, pos_id, "tighten_stop", decision,
+                                pos.initial_stop, pos.initial_target,
+                                executed=True, execution_status=mod_status,
+                            ),
+                            f"position:{pos_id}:exec-tighten:{stop_key}",
+                        )
                 except Exception as exc:
                     log.warning("[%s] CTM: failed to modify stop for #%s: %s",
                                 symbol, pos_id, exc)
@@ -790,7 +952,8 @@ class LiveTrader:
                 print(f"[{symbol}→{broker_sym}] CTM CLOSE #{pos_id}  {decision.reason}")
                 try:
                     close_result = self.broker.close_position(pos_id)
-                    if close_result.get("status") == "closed":
+                    close_status = str(close_result.get("status", "unknown"))
+                    if close_status == "closed":
                         self._pos_log.log_closed(symbol, broker_sym, pos_id,
                                                   reason=decision.reason)
                         try:
@@ -810,6 +973,15 @@ class LiveTrader:
                         self.oracle.risk.portfolio.remove_by_symbol(symbol)
                         with self._manage_lock:
                             self._managed_positions.pop(symbol, None)
+                    if self.telegram.enabled:
+                        self.telegram.send(
+                            format_position_alert(
+                                symbol, pos_id, "close", decision,
+                                pos.initial_stop, pos.initial_target,
+                                executed=True, execution_status=close_status,
+                            ),
+                            f"position:{pos_id}:exec-close",
+                        )
                 except Exception as exc:
                     log.warning("[%s] CTM: failed to close #%s: %s", symbol, pos_id, exc)
 
@@ -888,7 +1060,14 @@ class LiveTrader:
                         )
                     else:
                         print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
-                        print(self.broker.close_all())
+                        close_all_res = self.broker.close_all()
+                        print(close_all_res)
+                        if self.telegram.enabled:
+                            self.telegram.send(
+                                "Oracle risk kill switch reached the session loss limit. "
+                                "All open MT5 positions have been flattened and scans are stopping.",
+                                "risk:session-kill-switch-exec",
+                            )
                     break
 
                 if cycles is None or cycle < cycles:
@@ -925,6 +1104,7 @@ class LiveTrader:
                        errors=0, timeouts=0, unmapped=0, managed=0,
                        kill_switch=False)
         approved_candidates: List[Tuple[str, str, Dict[str, Any]]] = []
+        duplicate_mappings = _duplicate_broker_symbol_mappings(self.symbols, self._sym_mapper)
 
         for symbol in self.symbols:
             # kill-switch check before each symbol (uses cached equity)
@@ -942,6 +1122,19 @@ class LiveTrader:
                 summary["unmapped"] += 1
                 continue
 
+            duplicate_owner = duplicate_mappings.get(symbol)
+            if duplicate_owner is not None:
+                log.warning(
+                    "[%s→%s] DUPLICATE MAP — broker symbol already assigned to %s; skipping",
+                    symbol, broker_sym, duplicate_owner,
+                )
+                print(
+                    f"[{symbol}→{broker_sym}] DUPLICATE MAP  already assigned to {duplicate_owner} "
+                    f"(override with BROKER_SYMBOL_MAP={symbol}:<broker_name>)"
+                )
+                summary["unmapped"] += 1
+                continue
+
             summary["scanned"] += 1
 
             # ── FIX-POS: check for existing position FIRST ────────────────────
@@ -950,6 +1143,14 @@ class LiveTrader:
             # for any position it has registered. The slow full-symbol scan
             # just needs to avoid opening a second position on top of it.
             existing_pos = self._get_open_position(broker_sym)
+            if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                log.warning(
+                    "[%s→%s] SKIP (position query failed) — avoiding new entry while MT5 position state is unknown",
+                    symbol, broker_sym,
+                )
+                print(f"[{symbol}→{broker_sym}] ERROR  position query failed; skipping new entry")
+                summary["errors"] += 1
+                continue
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
@@ -1001,6 +1202,26 @@ class LiveTrader:
                          "existing positions remain monitored", symbol)
                 continue
 
+            if broker_sym.upper() in self._trading_disabled_symbols:
+                reason = "broker rejected symbol with TRADING_DISABLED earlier in this session"
+                log.info("[%s→%s] HOLD (trading disabled: %s)", symbol, broker_sym, reason)
+                print(f"[{symbol}→{broker_sym}] HOLD   (trading disabled: {reason})")
+                summary["holds"] += 1
+                continue
+
+            if self.broker.status.connected and callable(getattr(self.broker, "market_state", None)):
+                try:
+                    market_state = self.broker.market_state(broker_sym)
+                    if not market_state.get("can_open", True):
+                        reason = market_state.get("reason") or str(market_state.get("state", "closed")).lower()
+                        log.info("[%s→%s] HOLD (market %s: %s)",
+                                 symbol, broker_sym, market_state.get("state"), reason)
+                        print(f"[{symbol}→{broker_sym}] HOLD   (market {market_state.get('state')}: {reason})")
+                        summary["holds"] += 1
+                        continue
+                except Exception as exc:
+                    log.debug("[%s] market_state pre-check failed: %s", symbol, exc)
+
             # ── FIX-DEDUP: check Chronicle for cross-script open positions ────
             if self._pos_log.has_open_position(symbol, broker_sym):
                 log.info("[%s] DEDUP: Chronicle shows another script has an open "
@@ -1014,12 +1235,15 @@ class LiveTrader:
             # ── 1. SIGNAL (with timeout) ──────────────────────────────────────
             log.info("[%s] no open position — evaluating entry…", symbol)
             print(f"[{symbol}→{broker_sym}] no open position — evaluating entry…")
+            timeout_reason: List[str] = []
             try:
                 sig, timed_out = _call_with_timeout(
                     lambda sym=symbol: self.oracle.act(
                         "trade.propose", {"symbol": sym, "_sender": "live_trader"}
                     ),
                     self._symbol_timeout,
+                    work_key=(id(self), symbol),
+                    reason_out=timeout_reason,
                 )
             except Exception as exc:
                 # oracle.act raised — log and move on
@@ -1030,8 +1254,9 @@ class LiveTrader:
 
             # FIX-2: timeout path
             if timed_out:
-                log.warning("[%s] TIMEOUT after %.0fs — skipping", symbol, self._symbol_timeout)
-                print(f"[{symbol}] TIMEOUT after {self._symbol_timeout:.0f}s — skipping")
+                detail = timeout_reason[0] if timeout_reason else f"after {self._symbol_timeout:.0f}s"
+                log.warning("[%s] TIMEOUT %s — skipping", symbol, detail)
+                print(f"[{symbol}] TIMEOUT {detail} — skipping")
                 summary["timeouts"] += 1
                 continue
 
@@ -1081,7 +1306,7 @@ class LiveTrader:
             cio = getattr(self.oracle, "cio", None)
             ledger = getattr(self.oracle, "decision_ledger", None)
             learned_slots = (
-                cio.portfolio.learned_session_slot_budget()
+                cio.portfolio.learned_session_slot_budget(candidate_universe_size=len(self.symbols))
                 if cio is not None else self.max_trades
             )
             session_slot_cap = min(self.max_trades, learned_slots) if self.max_trades else learned_slots
@@ -1205,11 +1430,25 @@ class LiveTrader:
 
                 broker_plan = dict(plan)
                 broker_plan["broker_symbol"] = broker_sym
+                entry_ref = float(plan.get("entry") or 0.0)
+                atr_ref = float(sig.get("atr") or 0.0)
+                if entry_ref > 0 and not getattr(self.broker, "paper", False):
+                    broker_plan.setdefault("rebase_stops_to_market", True)
+                    broker_plan.setdefault(
+                        "max_entry_deviation",
+                        max(atr_ref * 1.5, entry_ref * 0.005),
+                    )
 
                 if self.broker.status.connected:
                     result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
                     res_status = result.get("status", "unknown")
                     res_reason = result.get("reason", "")
+                    if _is_trading_disabled_rejection(result):
+                        self._trading_disabled_symbols.add(broker_sym.upper())
+                        log.warning(
+                            "[%s→%s] broker reported TRADING_DISABLED — suppressing further entry attempts this session",
+                            symbol, broker_sym,
+                        )
                     log.info("[%s→%s] TRADE  direction=%s %s -> %s %s",
                              symbol, broker_sym, plan["direction"], conf_str, res_status, res_reason)
                     print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
@@ -1220,19 +1459,21 @@ class LiveTrader:
                         ticket = result.get("order") or result.get("ticket") or 0
                         fill_price = float(result.get("price") or plan.get("entry", 0.0))
                         fill_vol = float(result.get("volume", plan.get("size", 0.0)))
+                        fill_sl = float(result.get("sl") or plan.get("stop", 0.0))
+                        fill_tp = float(result.get("tp") or plan.get("target", 0.0))
                         self._pos_log.log_opened(
                             symbol, broker_sym, ticket,
                             direction=plan["direction"],
                             volume=fill_vol,
                             price=fill_price,
-                            sl=plan.get("stop", 0.0),
-                            tp=plan.get("target", 0.0),
+                            sl=fill_sl,
+                            tp=fill_tp,
                         )
                         self._register_position(
                             symbol, plan["direction"],
                             entry_price=fill_price,
-                            stop=plan.get("stop", 0.0),
-                            target=plan.get("target", 0.0),
+                            stop=fill_sl,
+                            target=fill_tp,
                             confidence=s.get("confidence", 0.0),
                             size=fill_vol,
                             news_level=sig.get("news_impact", "none"),
@@ -1241,14 +1482,22 @@ class LiveTrader:
                             social_reason=sig.get("social_reason", ""),
                         )
                         self.oracle.risk.portfolio.record_trade_opened(symbol)
+                        if self.telegram.enabled:
+                            exec_alert = format_execution_alert(symbol, broker_sym, sig, result)
+                            delivered = self.telegram.send(
+                                exec_alert,
+                                f"exec:filled:{symbol}:{ticket or plan.get('direction', '')}",
+                            )
+                            log.info("[%s→%s] Telegram execution alert=%s",
+                                     symbol, broker_sym, "sent" if delivered else "skipped/failed")
                         if ledger is not None:
                             pos_obj = self._managed_positions.get(symbol)
                             ledger.record_trade_entered(
                                 symbol=symbol,
                                 direction=plan["direction"],
                                 entry_price=fill_price,
-                                stop_price=float(plan.get("stop", 0.0)),
-                                target_price=float(plan.get("target", 0.0)),
+                                stop_price=fill_sl,
+                                target_price=fill_tp,
                                 size=fill_vol,
                                 scout_score=scout_score,
                                 entry_confidence=eff_conf,
@@ -1265,6 +1514,12 @@ class LiveTrader:
                             )
                     else:
                         summary["rejects"] += 1
+                        if self.telegram.enabled:
+                            exec_alert = format_execution_alert(symbol, broker_sym, sig, result)
+                            self.telegram.send(
+                                exec_alert,
+                                f"exec:{res_status}:{symbol}:{plan.get('direction', '')}:{str(res_reason)[:40]}",
+                            )
                         if ledger is not None:
                             ledger.expose_failure(
                                 component="MT5Broker",
@@ -1279,6 +1534,15 @@ class LiveTrader:
                     print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                           f"  (execution disabled: MT5 not connected)")
                     summary["trades"] += 1
+                    if self.telegram.enabled:
+                        exec_alert = format_execution_alert(
+                            symbol, broker_sym, sig,
+                            {"status": "blocked", "reason": "MT5 not connected"},
+                        )
+                        self.telegram.send(
+                            exec_alert,
+                            f"exec:disconnected:{symbol}:{plan.get('direction', '')}",
+                        )
 
         return summary
 
@@ -1288,14 +1552,37 @@ class LiveTrader:
         # FIX-6: once fired, stay fired
         if self._ks_fired:
             return True
-        if self._start_equity is None or not self.broker.status.connected:
+        if self._start_equity is None or self._start_equity <= 0 or not self.broker.status.connected:
             return False
         _now = time.time()
         if self._ks_equity_cache is None or (_now - self._ks_equity_ts) >= self._ks_equity_ttl:
             acct = self.broker.account()
-            self._ks_equity_cache = acct.get("equity", self._start_equity)
+            raw_equity = acct.get("equity")
+            account_ok = acct.get("account_info_available")
+            try:
+                equity_val = float(raw_equity) if raw_equity is not None else None
+            except (TypeError, ValueError):
+                equity_val = None
+            if (
+                not acct.get("connected", True)
+                or account_ok is False
+                or equity_val is None
+                or not math.isfinite(equity_val)
+                or equity_val <= 0
+            ):
+                if not self._ks_check_unavailable:
+                    log.warning(
+                        "Kill switch check skipped: MT5 account equity unavailable (%s)",
+                        acct.get("reason") or "account_info_available=False",
+                    )
+                    self._ks_check_unavailable = True
+                return False
+            self._ks_check_unavailable = False
+            self._ks_equity_cache = equity_val
             self._ks_equity_ts = _now
         equity = self._ks_equity_cache
+        if equity is None or equity <= 0:
+            return False
         loss = (self._start_equity - equity) / self._start_equity if self._start_equity else 0
         if loss >= self.session_max_loss_pct:
             self._ks_fired = True
@@ -1316,6 +1603,7 @@ class LiveTrader:
             realized = 1 if sum(p["profit"] for p in poss) >= 0 else -1
             self.oracle.act("fusion.learn", {"symbol": canon_sym, "streams": streams,
                                             "realized_direction": realized,
+                                            "trade_won": realized > 0,
                                             "_sender": "live_trader"})
 
     # ── external controls ─────────────────────────────────────────────────────
