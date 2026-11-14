@@ -1455,27 +1455,28 @@ class OracleAgent(BaseAgent):
             streams = s.get("streams", {})
             news_stream = streams.get("news", {})
             social_stream = streams.get("social", {})
-            if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
-                if news_stream.get("evidence_state") == "degraded":
-                    self.decision_ledger.expose_failure(
-                        component="Sentinel",
-                        operation="news_signal",
-                        error_type="DegradedNewsStream",
-                        error_message=str(news_stream.get("note") or "Sentinel news stream degraded"),
-                        symbol=symbol,
-                        severity="WARNING",
-                    )
-                if social_stream.get("evidence_state") == "degraded":
-                    self.decision_ledger.expose_failure(
-                        component="Pulse",
-                        operation="social_signal",
-                        error_type="DegradedSocialStream",
-                        error_message=str(social_stream.get("note") or "Pulse social stream degraded"),
-                        symbol=symbol,
-                        severity="WARNING",
-                    )
             if s["call"] == "hold":
                 if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
+                    news_note = str(news_stream.get("note") or "")
+                    if news_stream.get("evidence_state") == "degraded" and "no fresh, symbol-matched" not in news_note.lower():
+                        self.decision_ledger.expose_failure(
+                            component="Sentinel",
+                            operation="news_signal",
+                            error_type="DegradedNewsStream",
+                            error_message=news_note or "Sentinel news stream degraded",
+                            symbol=symbol,
+                            severity="WARNING",
+                        )
+                    social_note = str(social_stream.get("note") or "")
+                    if social_stream.get("evidence_state") == "degraded" and "no fresh, symbol-matched" not in social_note.lower():
+                        self.decision_ledger.expose_failure(
+                            component="Pulse",
+                            operation="social_signal",
+                            error_type="DegradedSocialStream",
+                            error_message=social_note or "Pulse social stream degraded",
+                            symbol=symbol,
+                            severity="WARNING",
+                        )
                     self.decision_ledger.record_trade_not_entered(
                         symbol=symbol,
                         direction="hold",
@@ -1502,10 +1503,11 @@ class OracleAgent(BaseAgent):
             hypothetical_stop = float(sig["last"] - sign * 2.0 * atr)
             hypothetical_target = float(sig["last"] + sign * 3.0 * atr)
 
-            # Evaluate candidate through Oracle V2 Scout Sub-Agent
+            # Evaluate candidate through Oracle V2 Scout Sub-Agent & sync learned limits
             scout_eval = None
             if hasattr(self, "cio") and self.cio is not None:
                 try:
+                    self.cio.sync_learned_limits_to_risk_manager()
                     scout_eval = self.cio.scout.evaluate_candidate(
                         symbol=symbol,
                         last_price=float(sig["last"]),
@@ -1519,13 +1521,18 @@ class OracleAgent(BaseAgent):
                         learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
                         learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
                     )
+                    self.risk.confidence_floor = scout_eval.learned_conviction_floor
                 except Exception as exc:
                     log.warning("[%s] Scout evaluation error: %s", symbol, exc)
 
             # Strip private provider payloads before returning public trade.propose output
             news_stream.pop("_risk_articles", None)
             social_stream.pop("_manipulation_flags", None)
-            effective_confidence = s["confidence"] * news.confidence_multiplier * social.confidence_multiplier
+            effective_confidence = (
+                scout_eval.effective_confidence
+                if scout_eval is not None
+                else (s["confidence"] * news.confidence_multiplier * social.confidence_multiplier)
+            )
             if news.level != "none":
                 log.info("[%s] news impact=%s conf %.3f -> %.3f: %s",
                          symbol, news.level, s["confidence"], effective_confidence, news.reason)

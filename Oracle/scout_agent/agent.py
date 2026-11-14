@@ -173,22 +173,24 @@ class OracleScoutSubAgent:
         if learned_social_multipliers and social_obj.level in learned_social_multipliers:
             social_mult = learned_social_multipliers[social_obj.level]
 
-        # Surface degraded intelligence streams explicitly (Zero Silent Failures)
-        if news_stream.get("evidence_state") == "degraded":
+        # Surface genuinely degraded intelligence streams explicitly (Zero Silent Failures)
+        news_note = str(news_stream.get("note") or "")
+        if news_stream.get("evidence_state") == "degraded" and "no fresh, symbol-matched" not in news_note.lower():
             self.ledger.expose_failure(
                 component="Sentinel",
                 operation="news_signal",
                 error_type="DegradedNewsStream",
-                error_message=str(news_stream.get("note") or "Sentinel news stream degraded"),
+                error_message=news_note or "Sentinel news stream degraded",
                 symbol=sym,
                 severity="WARNING",
             )
-        if social_stream.get("evidence_state") == "degraded":
+        social_note = str(social_stream.get("note") or "")
+        if social_stream.get("evidence_state") == "degraded" and "no fresh, symbol-matched" not in social_note.lower():
             self.ledger.expose_failure(
                 component="Pulse",
                 operation="social_signal",
                 error_type="DegradedSocialStream",
-                error_message=str(social_stream.get("note") or "Pulse social stream degraded"),
+                error_message=social_note or "Pulse social stream degraded",
                 symbol=sym,
                 severity="WARNING",
             )

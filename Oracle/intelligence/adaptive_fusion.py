@@ -85,19 +85,26 @@ class AdaptiveFusion:
         """Confidence-weighted fusion using this symbol's LEARNED weights."""
         s = self._sym(symbol)
         w = s["weights"]
-        num, denom = 0.0, 0.0
+        num, denom, active_w = 0.0, 0.0, 0.0
         for name, sig in streams.items():
-            weight = w.get(name, 0.1) * sig.get("confidence", 0.0)
-            num += weight * sig.get("direction", 0.0)
+            sig_conf = float(sig.get("confidence", 0.0) or 0.0)
+            stream_w = float(w.get(name, 0.1))
+            weight = stream_w * sig_conf
+            num += weight * float(sig.get("direction", 0.0) or 0.0)
             denom += weight
+            if sig_conf > 0.0:
+                active_w += stream_w
         direction = num / denom if denom else 0.0
         dirs = [sig["direction"] for sig in streams.values()
                if sig.get("confidence", 0) > 0.1 and abs(sig["direction"]) > 0.05]
-        agreement = 0.5
+        agreement = 1.0
         if len(dirs) >= 2:
             pos = sum(1 for d in dirs if d > 0); neg = sum(1 for d in dirs if d < 0)
             agreement = max(pos, neg) / len(dirs)
-        base_conf = denom / sum(w.values()) if w else 0.0
+        total_w = sum(w.values()) if w else 1.0
+        active_conf = (denom / active_w) if active_w > 0 else 0.0
+        coverage_ratio = (active_w / total_w) if total_w > 0 else 0.0
+        base_conf = active_conf * (0.75 + 0.25 * coverage_ratio)
         confidence = round(min(base_conf * (0.5 + 0.5 * agreement), 0.95), 3)
         thr = s["entry_threshold"]
         call = "buy" if direction > thr else "sell" if direction < -thr else "hold"
