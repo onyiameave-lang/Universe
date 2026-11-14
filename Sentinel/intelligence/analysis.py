@@ -59,7 +59,13 @@ SYMBOL_TERMS: Dict[str, List[str]] = {
     "EURUSD": ["eurusd", "euro", "ecb", "eurozone", "eur/usd", "european central bank"],
     "GBPUSD": ["gbpusd", "pound", "sterling", "boe", "gbp/usd", "bank of england"],
     "USDJPY": ["usdjpy", "yen", "boj", "japan", "usd/jpy", "bank of japan"],
+    "AUDUSD": ["audusd", "aud/usd", "australian dollar", "aussie", "rba", "reserve bank of australia"],
     "USDCAD": ["usdcad", "usd/cad", "canadian dollar", "loonie", "bank of canada"],
+    "USDCHF": ["usdchf", "usd/chf", "swiss franc", "snb", "swiss national bank"],
+    "NZDUSD": ["nzdusd", "nzd/usd", "new zealand dollar", "kiwi", "rbnz"],
+    "EURGBP": ["eurgbp", "eur/gbp"],
+    "EURJPY": ["eurjpy", "eur/jpy"],
+    "GBPJPY": ["gbpjpy", "gbp/jpy"],
     "XAUUSD": [
         "gold", "xauusd", "bullion", "precious metal", "xau", "xau/usd",
         "silver", "mining stock", "gold price", "gold market", "safe haven",

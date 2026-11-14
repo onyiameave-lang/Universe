@@ -73,6 +73,7 @@ class SignalFusion:
             return {"direction": s.get("sentiment", 0.0),
                    "confidence": s.get("confidence", 0.0),
                    "evidence_state": s.get("evidence_state", "unknown"),
+                   "note": s.get("note", ""),
                    "source_status": s.get("source_status", {}),
                    "cross_source": s.get("cross_source", False),
                    "articles": s.get("article_count", 0),
@@ -94,6 +95,7 @@ class SignalFusion:
                 conf *= 0.3
             return {"direction": s.get("sentiment", 0.0), "confidence": conf,
                      "evidence_state": s.get("evidence_state", "unknown"),
+                     "note": s.get("note", ""),
                    "posts": s.get("post_count", 0),
                    "manipulation_warning": s.get("manipulation_warning", False),
                    "_manipulation_flags": s.get("manipulation_flags", [])}
