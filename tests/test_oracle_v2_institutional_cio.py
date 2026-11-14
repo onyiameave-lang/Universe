@@ -714,9 +714,79 @@ class OracleV2InstitutionalCIOTests(unittest.TestCase):
         )
         self.assertIn("ORACLE MT5 POSITION CLOSED (WIN)", native_close_msg)
 
+    def test_mt5_broker_os_import_and_22_crypto_mapping_across_brokers_and_training(self) -> None:
+        from Forge.core.institutional_standard import PositionSizingAndSafetyEngine
+        from Forge.core.mtf_institutional_engine import ALL_WATCHLIST_SYMBOLS, YAHOO_TICKER_MAP
+        from Oracle.core.market_data import StooqSource, YFinanceSource
+        from Oracle.core.risk import Portfolio
+        from Oracle.execution.ctrader_demo_trader import (
+            CRYPTO_SYMBOLS as CTRADER_CRYPTO_SYMBOLS,
+            DEFAULT_SYMBOLS as CTRADER_DEFAULT_SYMBOLS,
+            SymbolMapper as CTraderSymbolMapper,
+        )
+        from Oracle.execution.live_trader import (
+            CRYPTO_SYMBOLS as LIVE_CRYPTO_SYMBOLS,
+            DEFAULT_SYMBOLS as LIVE_DEFAULT_SYMBOLS,
+        )
+        from Oracle.execution.mt5_broker import DEFAULT_SYMBOL_MAP, MT5Broker
+        from Oracle.execution.mt5_config import ALL_41_SYMBOLS, SYMBOL_PRESETS
+        from Oracle.execution.mt5_demo_trader import (
+            CRYPTO_SYMBOLS as MT5_CRYPTO_SYMBOLS,
+            DEFAULT_SYMBOLS as MT5_DEFAULT_SYMBOLS,
+            SymbolMapper as MT5SymbolMapper,
+        )
+        from Oracle.tools.evolution_soak import DEFAULT_SYMBOLS as SOAK_DEFAULT_SYMBOLS
+
+        # 1. Verify MT5Broker instantiates cleanly without NameError for `os`
+        broker = MT5Broker(paper=True)
+        self.assertTrue(broker.paper)
+
+        expected_22_crypto = [
+            "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+            "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+            "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+            "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+        ]
+        self.assertEqual(MT5_CRYPTO_SYMBOLS, expected_22_crypto)
+        self.assertEqual(CTRADER_CRYPTO_SYMBOLS, expected_22_crypto)
+        self.assertEqual(LIVE_CRYPTO_SYMBOLS, expected_22_crypto)
+        self.assertEqual(SYMBOL_PRESETS["crypto"], expected_22_crypto)
+
+        for sym in expected_22_crypto:
+            self.assertIn(sym, DEFAULT_SYMBOL_MAP)
+            self.assertIn(sym, MT5_DEFAULT_SYMBOLS)
+            self.assertIn(sym, CTRADER_DEFAULT_SYMBOLS)
+            self.assertIn(sym, LIVE_DEFAULT_SYMBOLS)
+            self.assertIn(sym, ALL_41_SYMBOLS)
+            self.assertIn(sym, YFinanceSource._YFINANCE_MAP)
+            self.assertIn(sym, StooqSource._STOOQ_MAP)
+            self.assertIn(sym, SOAK_DEFAULT_SYMBOLS)
+            self.assertIn(sym, ALL_WATCHLIST_SYMBOLS)
+            self.assertIn(sym, YAHOO_TICKER_MAP)
+
+            # Verify MT5 & cTrader fallback alias resolution works for broker variants
+            mt5_mapper = MT5SymbolMapper(demo_overrides={})
+            mt5_mapper.build([f"{sym}m"], [sym])
+            self.assertEqual(mt5_mapper.translate(sym), f"{sym}m")
+
+            expected_slash = f"{sym[:-3]}/USD"
+            ctrader_mapper = CTraderSymbolMapper()
+            ctrader_mapper.build([expected_slash], [sym])
+            self.assertEqual(ctrader_mapper.translate(sym), expected_slash)
+
+            # Verify risk leg decomposition for 6, 7, and 8-char USD crypto pairs
+            legs = Portfolio._currency_legs(sym)
+            self.assertEqual(legs, (sym[:-3], "USD"))
+
+            # Verify institutional contract specs in Forge
+            specs = PositionSizingAndSafetyEngine.contract_specs_for_symbol(sym, 100.0)
+            self.assertEqual(specs["contract_units_per_lot"], 1.0)
+            self.assertGreater(specs["pip_size"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

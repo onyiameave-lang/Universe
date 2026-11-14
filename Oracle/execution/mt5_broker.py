@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -120,7 +121,11 @@ DEFAULT_SYMBOL_MAP = {
     "EURJPY": "EURJPY", "GBPJPY": "GBPJPY",
     "XAUUSD": "XAUUSD", "USOIL": "USOIL",
     "BTCUSD": "BTCUSD", "ETHUSD": "ETHUSD", "SOLUSD": "SOLUSD", "XRPUSD": "XRPUSD",
-    "BNBUSD": "BNBUSD", "ADAUSD": "ADAUSD",
+    "BNBUSD": "BNBUSD", "ADAUSD": "ADAUSD", "LTCUSD": "LTCUSD", "DOGEUSD": "DOGEUSD",
+    "DOTUSD": "DOTUSD", "LINKUSD": "LINKUSD", "AVAXUSD": "AVAXUSD", "MATICUSD": "MATICUSD",
+    "BCHUSD": "BCHUSD", "UNIUSD": "UNIUSD", "XLMUSD": "XLMUSD", "ATOMUSD": "ATOMUSD",
+    "NEARUSD": "NEARUSD", "SHIBUSD": "SHIBUSD", "TRXUSD": "TRXUSD", "TONUSD": "TONUSD",
+    "SUIUSD": "SUIUSD", "PEPEUSD": "PEPEUSD",
     "SPX": "US500", "NASDAQ": "USTEC", "DJI": "US30", "RUT": "US2000", "VIX": "VIX",
     "FTSE": "UK100", "DAX": "DE40", "CAC40": "FRA40", "NIKKEI": "JPN225",
     "HSI": "HK50", "SENSEX": "IN50", "ASX200": "AUS200",

@@ -46,8 +46,11 @@ DEFAULT_SYMBOLS = [
     "AUDCAD", "AUDCHF", "AUDNZD",
     # metals / commodities
     "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
-    # crypto
+    # crypto (22 pairs)
     "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+    "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+    "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
     # indices
     "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
     "NIKKEI", "HSI", "SENSEX", "ASX200",

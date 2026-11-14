@@ -457,9 +457,14 @@ class PositionSizingAndSafetyEngine:
         elif upper.endswith("JPY"):
             contract_units = 100000.0
             pip_size = 0.01
-        elif upper in ("BTCUSD", "ETHUSD", "SOLUSD"):
+        elif upper in (
+            "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+            "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+            "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+            "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+        ):
             contract_units = 1.0
-            pip_size = max(entry_price * 0.0001, 0.01)
+            pip_size = max(entry_price * 0.0001, 0.00001)
         elif upper in ("US30", "US500", "NAS100", "GER40", "UK100", "JPN225"):
             contract_units = 1.0
             pip_size = 0.1

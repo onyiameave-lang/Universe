@@ -140,10 +140,17 @@ _DEFAULT_MANAGE_INTERVAL = 15   # seconds; override with ORACLE_MANAGE_INTERVAL_
 _TRADER_ID: str = os.getenv("TRADER_ID", "live_trader")
 
 # ── FIX-1: expanded default watchlist ────────────────────────────────────────
+CRYPTO_SYMBOLS: List[str] = [
+    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+    "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+    "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+]
+
 DEFAULT_SYMBOLS: List[str] = [
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",   # major forex pairs
     "XAUUSD", "USOIL",                          # commodities
-    "BTCUSD", "ETHUSD",                         # crypto
+    *CRYPTO_SYMBOLS,                            # crypto (22 pairs)
 ]
 
 # ── ONE position per symbol cap ───────────────────────────────────────────────
@@ -322,10 +329,28 @@ _FALLBACK_ALIASES: Dict[str, List[str]] = {
     "XPTUSD":  ["XPTUSDm", "PLATINUM"],
     "NATGAS":  ["XNGUSD", "NATGAS.", "NG", "NGas"],
     # Crypto
-    "BTCUSD":  ["BTCUSDm", "BTCUSD.", "BTC/USD", "BTCUSDT", "BTCUSDx"],
-    "ETHUSD":  ["ETHUSDm", "ETHUSD.", "ETH/USD", "ETHUSDT", "ETHUSDx"],
-    "LTCUSD":  ["LTCUSDm", "LTCUSD.", "LTC/USD"],
-    "XRPUSD":  ["XRPUSDm", "XRPUSD.", "XRP/USD"],
+    "BTCUSD":   ["BTCUSDm", "BTCUSD.", "BTC/USD", "BTCUSDT", "BTCUSDx", "BTCUSD#", "BTCUSD.i", "BTCUSD.a", "BTCUSD.pro"],
+    "ETHUSD":   ["ETHUSDm", "ETHUSD.", "ETH/USD", "ETHUSDT", "ETHUSDx", "ETHUSD#", "ETHUSD.i", "ETHUSD.a", "ETHUSD.pro"],
+    "SOLUSD":   ["SOLUSDm", "SOLUSD.", "SOL/USD", "SOLUSDT", "SOLUSDx", "SOLUSD#", "SOLUSD.i", "SOLUSD.a"],
+    "XRPUSD":   ["XRPUSDm", "XRPUSD.", "XRP/USD", "XRPUSDT", "XRPUSDx", "XRPUSD#", "XRPUSD.i", "XRPUSD.a"],
+    "BNBUSD":   ["BNBUSDm", "BNBUSD.", "BNB/USD", "BNBUSDT", "BNBUSDx", "BNBUSD#", "BNBUSD.i", "BNBUSD.a"],
+    "ADAUSD":   ["ADAUSDm", "ADAUSD.", "ADA/USD", "ADAUSDT", "ADAUSDx", "ADAUSD#", "ADAUSD.i", "ADAUSD.a"],
+    "LTCUSD":   ["LTCUSDm", "LTCUSD.", "LTC/USD", "LTCUSDT", "LTCUSDx", "LTCUSD#", "LTCUSD.i", "LTCUSD.a"],
+    "DOGEUSD":  ["DOGEUSDm", "DOGEUSD.", "DOGE/USD", "DOGEUSDT", "DOGEUSDx", "DOGEUSD#", "DOGEUSD.i", "DOGEUSD.a"],
+    "DOTUSD":   ["DOTUSDm", "DOTUSD.", "DOT/USD", "DOTUSDT", "DOTUSDx", "DOTUSD#", "DOTUSD.i", "DOTUSD.a"],
+    "LINKUSD":  ["LINKUSDm", "LINKUSD.", "LINK/USD", "LINKUSDT", "LINKUSDx", "LINKUSD#", "LINKUSD.i", "LINKUSD.a"],
+    "AVAXUSD":  ["AVAXUSDm", "AVAXUSD.", "AVAX/USD", "AVAXUSDT", "AVAXUSDx", "AVAXUSD#", "AVAXUSD.i", "AVAXUSD.a"],
+    "MATICUSD": ["MATICUSDm", "MATICUSD.", "MATIC/USD", "MATICUSDT", "POLUSD", "POLUSDm", "POLUSDT", "MATICUSDx"],
+    "BCHUSD":   ["BCHUSDm", "BCHUSD.", "BCH/USD", "BCHUSDT", "BCHUSDx", "BCHUSD#", "BCHUSD.i", "BCHUSD.a"],
+    "UNIUSD":   ["UNIUSDm", "UNIUSD.", "UNI/USD", "UNIUSDT", "UNIUSDx", "UNIUSD#", "UNIUSD.i", "UNIUSD.a"],
+    "XLMUSD":   ["XLMUSDm", "XLMUSD.", "XLM/USD", "XLMUSDT", "XLMUSDx", "XLMUSD#", "XLMUSD.i", "XLMUSD.a"],
+    "ATOMUSD":  ["ATOMUSDm", "ATOMUSD.", "ATOM/USD", "ATOMUSDT", "ATOMUSDx", "ATOMUSD#", "ATOMUSD.i", "ATOMUSD.a"],
+    "NEARUSD":  ["NEARUSDm", "NEARUSD.", "NEAR/USD", "NEARUSDT", "NEARUSDx", "NEARUSD#", "NEARUSD.i", "NEARUSD.a"],
+    "SHIBUSD":  ["SHIBUSDm", "SHIBUSD.", "SHIB/USD", "SHIBUSDT", "1000SHIBUSD", "SHIBUSDx", "SHIBUSD#"],
+    "TRXUSD":   ["TRXUSDm", "TRXUSD.", "TRX/USD", "TRXUSDT", "TRXUSDx", "TRXUSD#", "TRXUSD.i", "TRXUSD.a"],
+    "TONUSD":   ["TONUSDm", "TONUSD.", "TON/USD", "TONUSDT", "TONUSDx", "TONUSD#", "TONUSD.i", "TONUSD.a"],
+    "SUIUSD":   ["SUIUSDm", "SUIUSD.", "SUI/USD", "SUIUSDT", "SUIUSDx", "SUIUSD#", "SUIUSD.i", "SUIUSD.a"],
+    "PEPEUSD":  ["PEPEUSDm", "PEPEUSD.", "PEPE/USD", "PEPEUSDT", "1000PEPEUSD", "PEPEUSDx", "PEPEUSD#"],
     # Forex — brokers sometimes add suffix letters
     "EURUSD":  ["EURUSDm", "EURUSD.", "EUR/USD"],
     "GBPUSD":  ["GBPUSDm", "GBPUSD.", "GBP/USD"],

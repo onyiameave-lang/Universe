@@ -105,6 +105,13 @@ _TRADER_ID: str = os.getenv("TRADER_ID", "ctrader_demo")
 _DEFAULT_SYMBOL_TIMEOUT = 60
 
 # ── Shared evolution + execution watchlist ────────────────────────────────────
+CRYPTO_SYMBOLS: List[str] = [
+    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+    "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+    "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+]
+
 DEFAULT_SYMBOLS: List[str] = [
     # Major forex
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
@@ -114,8 +121,8 @@ DEFAULT_SYMBOLS: List[str] = [
     "AUDCAD", "AUDCHF", "AUDNZD",
     # Commodities
     "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
-    # Crypto
-    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    # Crypto (22 pairs)
+    *CRYPTO_SYMBOLS,
     # Indices
     "US30", "US500", "NAS100", "GER40", "UK100", "JPN225", "AUS200",
     "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
@@ -159,9 +166,28 @@ _FALLBACK_ALIASES: Dict[str, List[str]] = {
     "USOIL":   ["USOIL.cash", "WTI.cash", "WTI", "XTIUSD"],
     "UKOIL":   ["UKOIL.cash", "BRENT.cash", "XBRUSD"],
     "NATGAS":  ["NATGAS.cash", "NGAS.cash", "XNGUSD"],
-    "BTCUSD":  ["BTCUSD", "BTC/USD"],
-    "ETHUSD":  ["ETHUSD", "ETH/USD"],
-    "SOLUSD":  ["SOLUSD", "SOL/USD"],
+    "BTCUSD":   ["BTCUSD", "BTC/USD", "BTCUSDT", "BTC-USD"],
+    "ETHUSD":   ["ETHUSD", "ETH/USD", "ETHUSDT", "ETH-USD"],
+    "SOLUSD":   ["SOLUSD", "SOL/USD", "SOLUSDT", "SOL-USD"],
+    "XRPUSD":   ["XRPUSD", "XRP/USD", "XRPUSDT", "XRP-USD"],
+    "BNBUSD":   ["BNBUSD", "BNB/USD", "BNBUSDT", "BNB-USD"],
+    "ADAUSD":   ["ADAUSD", "ADA/USD", "ADAUSDT", "ADA-USD"],
+    "LTCUSD":   ["LTCUSD", "LTC/USD", "LTCUSDT", "LTC-USD"],
+    "DOGEUSD":  ["DOGEUSD", "DOGE/USD", "DOGEUSDT", "DOGE-USD"],
+    "DOTUSD":   ["DOTUSD", "DOT/USD", "DOTUSDT", "DOT-USD"],
+    "LINKUSD":  ["LINKUSD", "LINK/USD", "LINKUSDT", "LINK-USD"],
+    "AVAXUSD":  ["AVAXUSD", "AVAX/USD", "AVAXUSDT", "AVAX-USD"],
+    "MATICUSD": ["MATICUSD", "MATIC/USD", "MATICUSDT", "POLUSD", "POL/USD"],
+    "BCHUSD":   ["BCHUSD", "BCH/USD", "BCHUSDT", "BCH-USD"],
+    "UNIUSD":   ["UNIUSD", "UNI/USD", "UNIUSDT", "UNI-USD"],
+    "XLMUSD":   ["XLMUSD", "XLM/USD", "XLMUSDT", "XLM-USD"],
+    "ATOMUSD":  ["ATOMUSD", "ATOM/USD", "ATOMUSDT", "ATOM-USD"],
+    "NEARUSD":  ["NEARUSD", "NEAR/USD", "NEARUSDT", "NEAR-USD"],
+    "SHIBUSD":  ["SHIBUSD", "SHIB/USD", "SHIBUSDT", "1000SHIBUSD"],
+    "TRXUSD":   ["TRXUSD", "TRX/USD", "TRXUSDT", "TRX-USD"],
+    "TONUSD":   ["TONUSD", "TON/USD", "TONUSDT", "TON-USD"],
+    "SUIUSD":   ["SUIUSD", "SUI/USD", "SUIUSDT", "SUI-USD"],
+    "PEPEUSD":  ["PEPEUSD", "PEPE/USD", "PEPEUSDT", "1000PEPEUSD"],
     "NAS100":  ["US100", "NAS100", "USTEC"],
     "GER40":   ["DE40", "GER40", "DAX40"],
     "UK100":   ["UK100", "FTSE100"],
@@ -1134,7 +1160,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     ap = argparse.ArgumentParser(description="Oracle demo trader on cTrader (63 symbols)")
     ap.add_argument("--symbols", nargs="+", default=None)
-    ap.add_argument("--preset", choices=["all", "live"], default="all")
+    ap.add_argument("--preset", choices=["all", "live", "crypto"], default="all")
     ap.add_argument("--interval", type=int, default=300, help="seconds between cycles")
     ap.add_argument("--cycles", type=int, default=None, help="stop after N cycles")
     ap.add_argument("--max-trades", type=int, default=None)
@@ -1146,6 +1172,8 @@ def main():
         symbols = [s.upper() for s in args.symbols]
     elif args.preset == "live":
         symbols = _LIVE_PRESET
+    elif args.preset == "crypto":
+        symbols = CRYPTO_SYMBOLS
     else:
         symbols = DEFAULT_SYMBOLS
     trader = CTraderDemoTrader(

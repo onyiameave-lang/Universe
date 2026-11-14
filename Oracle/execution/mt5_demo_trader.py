@@ -85,7 +85,14 @@ _DEFAULT_MANAGE_INTERVAL = 15   # seconds; override with ORACLE_MANAGE_INTERVAL_
 # Set TRADER_ID=demo_trader_1 in .env (or leave as default "demo_trader")
 _TRADER_ID: str = os.getenv("TRADER_ID", "demo_trader")
 
-# ── 41-symbol default watchlist ───────────────────────────────────────────────
+# ── Default multi-asset + expanded crypto watchlist ───────────────────────────
+CRYPTO_SYMBOLS: List[str] = [
+    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+    "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+    "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+]
+
 DEFAULT_SYMBOLS: List[str] = [
     # Major forex
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
@@ -95,8 +102,8 @@ DEFAULT_SYMBOLS: List[str] = [
     "AUDCAD", "AUDCHF", "AUDNZD",
     # Commodities
     "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
-    # Crypto
-    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    # Crypto (22 pairs)
+    *CRYPTO_SYMBOLS,
     # Indices
     "US30", "US500", "NAS100", "GER40", "UK100", "JPN225", "AUS200",
 ]
@@ -116,12 +123,28 @@ MAX_POSITIONS_PER_SYMBOL: int = 1   # never stack more than this many positions 
 # MT5_BROKER_SYMBOL_MAP overrides them when set.
 _DEMO_BROKER_MAP: Dict[str, str] = {
     # Crypto (MetaQuotes-Demo uses 'm' suffix)
-    "BTCUSD":  "BTCUSDm",
-    "ETHUSD":  "ETHUSDm",
-    "SOLUSD":  "SOLUSDm",
-    "XRPUSD":  "XRPUSDm",
-    "BNBUSD":  "BNBUSDm",
-    "ADAUSD":  "ADAUSDm",
+    "BTCUSD":   "BTCUSDm",
+    "ETHUSD":   "ETHUSDm",
+    "SOLUSD":   "SOLUSDm",
+    "XRPUSD":   "XRPUSDm",
+    "BNBUSD":   "BNBUSDm",
+    "ADAUSD":   "ADAUSDm",
+    "LTCUSD":   "LTCUSDm",
+    "DOGEUSD":  "DOGEUSDm",
+    "DOTUSD":   "DOTUSDm",
+    "LINKUSD":  "LINKUSDm",
+    "AVAXUSD":  "AVAXUSDm",
+    "MATICUSD": "MATICUSDm",
+    "BCHUSD":   "BCHUSDm",
+    "UNIUSD":   "UNIUSDm",
+    "XLMUSD":   "XLMUSDm",
+    "ATOMUSD":  "ATOMUSDm",
+    "NEARUSD":  "NEARUSDm",
+    "SHIBUSD":  "SHIBUSDm",
+    "TRXUSD":   "TRXUSDm",
+    "TONUSD":   "TONUSDm",
+    "SUIUSD":   "SUIUSDm",
+    "PEPEUSD":  "PEPEUSDm",
     # Commodities
     "USOIL":   "XTIUSD",
     "UKOIL":   "XBRUSD",
@@ -304,13 +327,28 @@ _FALLBACK_ALIASES: Dict[str, List[str]] = {
     "XAGUSD":  ["XAGUSDm", "XAGUSD.", "SILVER"],
     "XPTUSD":  ["XPTUSDm", "PLATINUM"],
     "NATGAS":  ["XNGUSD", "NATGAS.", "NG", "NGas"],
-    "BTCUSD":  ["BTCUSDm", "BTCUSD.", "BTC/USD", "BTCUSDT"],
-    "ETHUSD":  ["ETHUSDm", "ETHUSD.", "ETH/USD", "ETHUSDT"],
-    "SOLUSD":  ["SOLUSDm", "SOLUSD.", "SOL/USD"],
-    "XRPUSD":  ["XRPUSDm", "XRPUSD.", "XRP/USD"],
-    "BNBUSD":  ["BNBUSDm", "BNBUSD.", "BNB/USD"],
-    "ADAUSD":  ["ADAUSDm", "ADAUSD.", "ADA/USD"],
-    "LTCUSD":  ["LTCUSDm", "LTCUSD.", "LTC/USD"],
+    "BTCUSD":   ["BTCUSDm", "BTCUSD.", "BTC/USD", "BTCUSDT", "BTCUSDx", "BTCUSD#", "BTCUSD.i", "BTCUSD.a", "BTCUSD.pro"],
+    "ETHUSD":   ["ETHUSDm", "ETHUSD.", "ETH/USD", "ETHUSDT", "ETHUSDx", "ETHUSD#", "ETHUSD.i", "ETHUSD.a", "ETHUSD.pro"],
+    "SOLUSD":   ["SOLUSDm", "SOLUSD.", "SOL/USD", "SOLUSDT", "SOLUSDx", "SOLUSD#", "SOLUSD.i", "SOLUSD.a"],
+    "XRPUSD":   ["XRPUSDm", "XRPUSD.", "XRP/USD", "XRPUSDT", "XRPUSDx", "XRPUSD#", "XRPUSD.i", "XRPUSD.a"],
+    "BNBUSD":   ["BNBUSDm", "BNBUSD.", "BNB/USD", "BNBUSDT", "BNBUSDx", "BNBUSD#", "BNBUSD.i", "BNBUSD.a"],
+    "ADAUSD":   ["ADAUSDm", "ADAUSD.", "ADA/USD", "ADAUSDT", "ADAUSDx", "ADAUSD#", "ADAUSD.i", "ADAUSD.a"],
+    "LTCUSD":   ["LTCUSDm", "LTCUSD.", "LTC/USD", "LTCUSDT", "LTCUSDx", "LTCUSD#", "LTCUSD.i", "LTCUSD.a"],
+    "DOGEUSD":  ["DOGEUSDm", "DOGEUSD.", "DOGE/USD", "DOGEUSDT", "DOGEUSDx", "DOGEUSD#", "DOGEUSD.i", "DOGEUSD.a"],
+    "DOTUSD":   ["DOTUSDm", "DOTUSD.", "DOT/USD", "DOTUSDT", "DOTUSDx", "DOTUSD#", "DOTUSD.i", "DOTUSD.a"],
+    "LINKUSD":  ["LINKUSDm", "LINKUSD.", "LINK/USD", "LINKUSDT", "LINKUSDx", "LINKUSD#", "LINKUSD.i", "LINKUSD.a"],
+    "AVAXUSD":  ["AVAXUSDm", "AVAXUSD.", "AVAX/USD", "AVAXUSDT", "AVAXUSDx", "AVAXUSD#", "AVAXUSD.i", "AVAXUSD.a"],
+    "MATICUSD": ["MATICUSDm", "MATICUSD.", "MATIC/USD", "MATICUSDT", "POLUSD", "POLUSDm", "POLUSDT", "MATICUSDx"],
+    "BCHUSD":   ["BCHUSDm", "BCHUSD.", "BCH/USD", "BCHUSDT", "BCHUSDx", "BCHUSD#", "BCHUSD.i", "BCHUSD.a"],
+    "UNIUSD":   ["UNIUSDm", "UNIUSD.", "UNI/USD", "UNIUSDT", "UNIUSDx", "UNIUSD#", "UNIUSD.i", "UNIUSD.a"],
+    "XLMUSD":   ["XLMUSDm", "XLMUSD.", "XLM/USD", "XLMUSDT", "XLMUSDx", "XLMUSD#", "XLMUSD.i", "XLMUSD.a"],
+    "ATOMUSD":  ["ATOMUSDm", "ATOMUSD.", "ATOM/USD", "ATOMUSDT", "ATOMUSDx", "ATOMUSD#", "ATOMUSD.i", "ATOMUSD.a"],
+    "NEARUSD":  ["NEARUSDm", "NEARUSD.", "NEAR/USD", "NEARUSDT", "NEARUSDx", "NEARUSD#", "NEARUSD.i", "NEARUSD.a"],
+    "SHIBUSD":  ["SHIBUSDm", "SHIBUSD.", "SHIB/USD", "SHIBUSDT", "1000SHIBUSD", "SHIBUSDx", "SHIBUSD#"],
+    "TRXUSD":   ["TRXUSDm", "TRXUSD.", "TRX/USD", "TRXUSDT", "TRXUSDx", "TRXUSD#", "TRXUSD.i", "TRXUSD.a"],
+    "TONUSD":   ["TONUSDm", "TONUSD.", "TON/USD", "TONUSDT", "TONUSDx", "TONUSD#", "TONUSD.i", "TONUSD.a"],
+    "SUIUSD":   ["SUIUSDm", "SUIUSD.", "SUI/USD", "SUIUSDT", "SUIUSDx", "SUIUSD#", "SUIUSD.i", "SUIUSD.a"],
+    "PEPEUSD":  ["PEPEUSDm", "PEPEUSD.", "PEPE/USD", "PEPEUSDT", "1000PEPEUSD", "PEPEUSDx", "PEPEUSD#"],
     "EURUSD":  ["EURUSDm", "EURUSD.", "EUR/USD"],
     "GBPUSD":  ["GBPUSDm", "GBPUSD.", "GBP/USD"],
     "USDJPY":  ["USDJPYm", "USDJPY.", "USD/JPY"],
@@ -1533,8 +1571,8 @@ def main():
     ap = argparse.ArgumentParser(description="Oracle demo trader on MetaTrader 5 (41 symbols)")
     ap.add_argument("--symbols", nargs="+", default=None,
                     help="override symbol list (default: all 41)")
-    ap.add_argument("--preset", choices=["all", "live"], default="all",
-                    help="'all' = 41 symbols (default), 'live' = same 8 as live_trader")
+    ap.add_argument("--preset", choices=["all", "live", "crypto"], default="all",
+                    help="'all' = full watchlist (default), 'live' = 8 core FX/metals, 'crypto' = 22 crypto pairs")
     ap.add_argument("--interval",  type=int,   default=300,  help="seconds between cycles")
     ap.add_argument("--cycles",    type=int,   default=None, help="stop after N cycles")
     ap.add_argument("--max-trades", type=int,  default=None)
@@ -1550,6 +1588,8 @@ def main():
         symbols = [s.upper() for s in args.symbols]
     elif args.preset == "live":
         symbols = _LIVE_PRESET
+    elif args.preset == "crypto":
+        symbols = CRYPTO_SYMBOLS
     else:
         symbols = DEFAULT_SYMBOLS
 

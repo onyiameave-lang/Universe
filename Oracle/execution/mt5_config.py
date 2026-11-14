@@ -61,8 +61,11 @@ ALL_41_SYMBOLS: List[str] = [
     "EURGBP", "EURJPY", "GBPJPY",
     # metals / commodities
     "XAUUSD", "USOIL",
-    # crypto
+    # crypto (22 pairs)
     "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+    "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+    "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+    "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
     # global indices
     "SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
     "NIKKEI", "HSI", "SENSEX", "ASX200",
@@ -76,7 +79,12 @@ SYMBOL_PRESETS: Dict[str, List[str]] = {
     "fx":      ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
                 "NZDUSD", "EURGBP", "EURJPY", "GBPJPY"],
     "metals":  ["XAUUSD", "USOIL"],
-    "crypto":  ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD"],
+    "crypto":  [
+        "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD", "ADAUSD",
+        "LTCUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "AVAXUSD", "MATICUSD",
+        "BCHUSD", "UNIUSD", "XLMUSD", "ATOMUSD", "NEARUSD", "SHIBUSD",
+        "TRXUSD", "TONUSD", "SUIUSD", "PEPEUSD",
+    ],
     "indices": ["SPX", "NASDAQ", "DJI", "RUT", "VIX", "FTSE", "DAX", "CAC40",
                 "NIKKEI", "HSI", "SENSEX", "ASX200"],
     "stocks":  ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
@@ -108,14 +116,30 @@ SYMBOL_PRESETS: Dict[str, List[str]] = {
 #  Leave empty ({}) to rely entirely on auto-discovery.
 # ─────────────────────────────────────────────────────────────────────────────
 SYMBOL_MAP_OVERRIDES: Dict[str, str] = {
-    # ── MetaQuotes-Demo broker overrides (pre-filled for the 13 unmapped symbols) ──
-    # Crypto — MetaQuotes-Demo adds 'm' suffix to all crypto pairs
-    "BTCUSD": "BTCUSDm",
-    "ETHUSD": "ETHUSDm",
-    "SOLUSD": "SOLUSDm",
-    "XRPUSD": "XRPUSDm",
-    "BNBUSD": "BNBUSDm",
-    "ADAUSD": "ADAUSDm",
+    # ── MetaQuotes-Demo broker overrides ──
+    # Crypto — MetaQuotes-Demo adds 'm' suffix to crypto pairs
+    "BTCUSD":   "BTCUSDm",
+    "ETHUSD":   "ETHUSDm",
+    "SOLUSD":   "SOLUSDm",
+    "XRPUSD":   "XRPUSDm",
+    "BNBUSD":   "BNBUSDm",
+    "ADAUSD":   "ADAUSDm",
+    "LTCUSD":   "LTCUSDm",
+    "DOGEUSD":  "DOGEUSDm",
+    "DOTUSD":   "DOTUSDm",
+    "LINKUSD":  "LINKUSDm",
+    "AVAXUSD":  "AVAXUSDm",
+    "MATICUSD": "MATICUSDm",
+    "BCHUSD":   "BCHUSDm",
+    "UNIUSD":   "UNIUSDm",
+    "XLMUSD":   "XLMUSDm",
+    "ATOMUSD":  "ATOMUSDm",
+    "NEARUSD":  "NEARUSDm",
+    "SHIBUSD":  "SHIBUSDm",
+    "TRXUSD":   "TRXUSDm",
+    "TONUSD":   "TONUSDm",
+    "SUIUSD":   "SUIUSDm",
+    "PEPEUSD":  "PEPEUSDm",
     # Indices — MetaQuotes-Demo uses these names
     "NASDAQ": "NAS100",    # NASDAQ → NAS100
     "FTSE":   "UK100",     # FTSE   → UK100

@@ -237,6 +237,8 @@ class Portfolio:
         s = symbol.upper().strip()
         if len(s) == 6 and s.isalpha():
             return s[:3], s[3:]
+        if len(s) > 6 and s.isalpha() and s.endswith("USD"):
+            return s[:-3], "USD"
         return s, None
 
     def currency_exposure(self) -> Dict[str, float]:

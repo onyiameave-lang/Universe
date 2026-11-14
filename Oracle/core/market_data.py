@@ -358,11 +358,15 @@ class YFinanceSource:
         "USOIL":   "CL=F",      # WTI Crude Oil futures
         "UKOIL":   "BZ=F",      # Brent Crude Oil futures
         "NATGAS":  "NG=F",      # Natural Gas futures
-        # ── Crypto ────────────────────────────────────────────────────────────
+        # ── Crypto (22 pairs) ─────────────────────────────────────────────────
         "BTCUSD":  "BTC-USD",   "ETHUSD":  "ETH-USD",   "SOLUSD":  "SOL-USD",
         "XRPUSD":  "XRP-USD",   "BNBUSD":  "BNB-USD",   "ADAUSD":  "ADA-USD",
-        "LTCUSD":  "LTC-USD",   "DOTUSD":  "DOT-USD",   "LINKUSD": "LINK-USD",
-        "AVAXUSD": "AVAX-USD",  "MATICUSD":"MATIC-USD", "DOGEUSD": "DOGE-USD",
+        "LTCUSD":  "LTC-USD",   "DOGEUSD": "DOGE-USD",  "DOTUSD":  "DOT-USD",
+        "LINKUSD": "LINK-USD",  "AVAXUSD": "AVAX-USD",  "MATICUSD":"MATIC-USD",
+        "BCHUSD":  "BCH-USD",   "UNIUSD":  "UNI-USD",   "XLMUSD":  "XLM-USD",
+        "ATOMUSD": "ATOM-USD",  "NEARUSD": "NEAR-USD",  "SHIBUSD": "SHIB-USD",
+        "TRXUSD":  "TRX-USD",   "TONUSD":  "TON-USD",   "SUIUSD":  "SUI-USD",
+        "PEPEUSD": "PEPE-USD",
         # ── Indices ───────────────────────────────────────────────────────────
         "US30":    "^DJI",      # Dow Jones Industrial Average
         "US500":   "^GSPC",     # S&P 500
@@ -504,10 +508,15 @@ class StooqSource:
         "USOIL":   "cl.f",    # WTI Crude Oil (Stooq futures format)
         "UKOIL":   "lco.f",   # Brent Crude Oil
         "NATGAS":  "ng.f",    # Natural Gas
-        # ── Crypto ────────────────────────────────────────────────────────────
+        # ── Crypto (22 pairs) ─────────────────────────────────────────────────
         "BTCUSD":  "btcusd",  "ETHUSD":  "ethusd",  "SOLUSD":  "solusd",
         "XRPUSD":  "xrpusd",  "BNBUSD":  "bnbusd",  "ADAUSD":  "adausd",
-        "LTCUSD":  "ltcusd",  "DOGEUSD": "dogeusd",
+        "LTCUSD":  "ltcusd",  "DOGEUSD": "dogeusd", "DOTUSD":  "dotusd",
+        "LINKUSD": "linkusd", "AVAXUSD": "avaxusd", "MATICUSD":"maticusd",
+        "BCHUSD":  "bchusd",  "UNIUSD":  "uniusd",  "XLMUSD":  "xlmusd",
+        "ATOMUSD": "atomusd", "NEARUSD": "nearusd", "SHIBUSD": "shibusd",
+        "TRXUSD":  "trxusd",  "TONUSD":  "tonusd",  "SUIUSD":  "suiusd",
+        "PEPEUSD": "pepeusd",
         # ── Indices ───────────────────────────────────────────────────────────
         "US30":    "^dji",    "US500":   "^spx",    "NAS100":  "^ndq",
         "GER40":   "^dax",    "UK100":   "^ftm",    "JPN225":  "^nkx",
