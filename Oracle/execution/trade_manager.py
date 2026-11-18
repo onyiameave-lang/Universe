@@ -45,6 +45,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 log = logging.getLogger("oracle.trade_manager")
+SCOUT_ENTRY_CONTEXT_KEY = "__scout_evaluation_at_entry"
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +93,8 @@ class Position:
     strategy_id: Optional[str] = None   # Oracle champion genome active when this position opened
     timeframe_policy_id: Optional[str] = None  # Forge policy version, when the live signal used one
     execution_environment: str = "unknown"  # demo outcomes may train Forge; live outcomes may not
+    entry_scout_dimension_scores: Dict[str, float] = field(default_factory=dict)
+    entry_scout_session: Optional[str] = None
 
     # Mutable trailing state -- the manager updates these as it runs.
     current_stop: float = field(init=False)
@@ -201,7 +204,9 @@ class TradeManager:
     def __init__(self, config: Optional[TradeManagerConfig] = None):
         self.config = config or TradeManagerConfig()
 
-    def evaluate(self, pos: Position, snap: MarketSnapshot) -> ManagedDecision:
+    def evaluate(
+        self, pos: Position, snap: MarketSnapshot, *, at_time: Optional[float] = None
+    ) -> ManagedDecision:
         cfg = self.config
 
         # Remember the most recent snapshot, in case this position later
@@ -350,7 +355,7 @@ class TradeManager:
         #         genuinely isn't working (unrealized_r below the minimum)
         #         -- a big winner that's just taking a while is left alone. ----
         if cfg.max_holding_sec is not None:
-            held_sec = time.time() - pos.entry_time
+            held_sec = (time.time() if at_time is None else float(at_time)) - pos.entry_time
             if held_sec >= cfg.max_holding_sec and unrealized_r < cfg.time_exit_min_r:
                 return ManagedDecision(Action.CLOSE, reason=(
                     f"time exit: held {held_sec/3600:.1f}h (limit {cfg.max_holding_sec/3600:.0f}h) "

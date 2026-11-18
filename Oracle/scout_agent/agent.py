@@ -39,8 +39,11 @@ try:
     )
     from scout_agent.tournament import rank_cross_sectional_tournament  # type: ignore
     from scout_agent.learner import (  # type: ignore
+        blend_strategy_performance,
+        compute_learned_session_edge_adjustment,
         compute_learned_conviction_floor,
         compute_learned_dimension_weights,
+        compare_strategy_performance,
         update_scout_from_counterfactual,
         update_scout_from_outcome,
     )
@@ -58,8 +61,11 @@ except ImportError:
     )
     from Oracle.scout_agent.tournament import rank_cross_sectional_tournament  # type: ignore
     from Oracle.scout_agent.learner import (  # type: ignore
+        blend_strategy_performance,
+        compute_learned_session_edge_adjustment,
         compute_learned_conviction_floor,
         compute_learned_dimension_weights,
+        compare_strategy_performance,
         update_scout_from_counterfactual,
         update_scout_from_outcome,
     )
@@ -244,9 +250,28 @@ class OracleScoutSubAgent:
             if sr_trades > 0
             else effective_confidence
         )
+        candidate_strategy_id = strategy_id or str(tech_stream.get("genome") or "indicator_fusion")
+        empirical_win_prob, sr_mean_r = blend_strategy_performance(
+            self._scout_state,
+            symbol=sym,
+            regime=regime,
+            strategy_id=candidate_strategy_id,
+            prior_win_probability=empirical_win_prob,
+            prior_mean_r=sr_mean_r,
+        )
+        session_edge_adjustment = compute_learned_session_edge_adjustment(
+            self._scout_state, session
+        )
+        strategy_performance_comparison = compare_strategy_performance(
+            self._scout_state,
+            symbol=sym,
+            regime=regime,
+            strategy_id=candidate_strategy_id,
+        )
         expected_net_r = round(
             empirical_win_prob * rr_ratio - (1.0 - empirical_win_prob) * (1.0 + spread_to_risk)
-            + (0.2 * sr_mean_r if sr_trades > 0 else 0.0),
+            + (0.2 * sr_mean_r if sr_trades > 0 else 0.0)
+            + session_edge_adjustment,
             4,
         )
         scout_score = round(effective_confidence * max(0.1, 1.0 + expected_net_r), 4)
@@ -297,7 +322,7 @@ class OracleScoutSubAgent:
             hypothetical_target=float(target_price),
             reward_risk_ratio=rr_ratio,
             spread_to_risk_ratio=spread_to_risk,
-            strategy_id=strategy_id or str(tech_stream.get("genome") or "indicator_fusion"),
+            strategy_id=candidate_strategy_id,
             using_evolved_champion=bool(using_evolved_champion),
             dimension_scores=dimension_scores,
             learned_dimension_weights=weights,
@@ -314,6 +339,7 @@ class OracleScoutSubAgent:
                 "pause_new_entries": social_obj.pause_new_entries,
                 "reason": social_obj.reason,
             },
+            strategy_performance_comparison=strategy_performance_comparison,
             why_trade_reasons=why_trade,
             why_not_reasons=why_not,
         )
@@ -328,11 +354,12 @@ class OracleScoutSubAgent:
         *,
         symbol: str,
         regime: str,
-        session: str,
+        session: Optional[str],
         entry_conviction: float,
         dimension_scores_at_entry: Dict[str, float],
         won: bool,
         pnl_r: float,
+        strategy_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         res = update_scout_from_outcome(
             self._scout_state,
@@ -343,6 +370,7 @@ class OracleScoutSubAgent:
             dimension_scores_at_entry=dimension_scores_at_entry,
             won=won,
             pnl_r=pnl_r,
+            strategy_id=strategy_id,
         )
         self.store.save()
         return res
@@ -356,6 +384,9 @@ class OracleScoutSubAgent:
         stage_rejected: str,
         counterfactual_r: float,
         would_have_won: bool,
+        strategy_id: Optional[str] = None,
+        session: Optional[str] = None,
+        shadow_observation: bool = False,
     ) -> Dict[str, Any]:
         res = update_scout_from_counterfactual(
             self._scout_state,
@@ -365,6 +396,9 @@ class OracleScoutSubAgent:
             stage_rejected=stage_rejected,
             counterfactual_r=counterfactual_r,
             would_have_won=would_have_won,
+            strategy_id=strategy_id,
+            session=session,
+            shadow_observation=shadow_observation,
         )
         self.store.save()
         return res
@@ -381,6 +415,7 @@ class OracleScoutSubAgent:
         pnl_r: float,
         dimension_scores: Optional[Dict[str, float]] = None,
         dimension_scores_at_entry: Optional[Dict[str, float]] = None,
+        strategy_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self.learn_from_outcome(
             symbol=symbol,
@@ -390,4 +425,5 @@ class OracleScoutSubAgent:
             dimension_scores_at_entry=dimension_scores or dimension_scores_at_entry or {},
             won=won,
             pnl_r=pnl_r,
+            strategy_id=strategy_id,
         )

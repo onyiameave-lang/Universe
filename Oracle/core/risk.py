@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import os
 import time
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -129,6 +130,10 @@ _TARGET_MULT = _float_env("ORACLE_TARGET_MULT", 3.0)
 
 # Reward:risk label surfaced in the trade plan dict.
 _REWARD_RISK = _float_env("ORACLE_REWARD_RISK", 1.5)
+# A learned geometry can vary with evidence, but it may not propose a target
+# whose gross reward is smaller than its initial stop risk by default. Deploy
+# environments can set this through their reviewed risk policy.
+_MIN_REWARD_RISK = max(0.0, _float_env("ORACLE_MIN_REWARD_RISK", 1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +462,34 @@ class RiskManager:
                     "confidence_floor": self.confidence_floor,
                     "mode": "paper" if self.paper else "live"}
 
-        st   = self.stop_target(entry, direction, atr)
+        st = self.stop_target(entry, direction, atr)
+        risk_distance = abs(float(entry) - float(st["stop"]))
+        reward_distance = abs(float(st["target"]) - float(entry))
+        geometry_reasons = []
+        direction_valid = (
+            (direction in ("long", "buy") and st["stop"] < entry < st["target"])
+            or (direction in ("short", "sell") and st["target"] < entry < st["stop"])
+        )
+        if (not math.isfinite(risk_distance) or not math.isfinite(reward_distance)
+                or risk_distance <= 0 or reward_distance <= 0 or not direction_valid):
+            geometry_reasons.append("learned stop/target geometry is invalid")
+        else:
+            expected_reward_risk = reward_distance / risk_distance
+            if expected_reward_risk + 1e-9 < _MIN_REWARD_RISK:
+                geometry_reasons.append(
+                    "learned reward/risk geometry rejected: "
+                    f"target={expected_reward_risk:.3f}R is below configured "
+                    f"minimum {_MIN_REWARD_RISK:.3f}R"
+                )
+        if geometry_reasons:
+            return {"approved": False, "reasons": geometry_reasons,
+                    "paper_trading": self.paper,
+                    "confidence_floor": self.confidence_floor,
+                    "mode": "paper" if self.paper else "live",
+                    "stop": st["stop"], "target": st["target"],
+                    "reward_risk": (reward_distance / risk_distance
+                                    if risk_distance > 0 else None)}
+
         size = self.size_position(entry, st["stop"], confidence)
 
         # exposure cap: single trade notional <= max_lot_pct of equity
@@ -493,7 +525,7 @@ class RiskManager:
             "stop":          st["stop"],
             "target":        st["target"],
             "risk_amount":   round(self.portfolio.equity * self.risk_per_trade, 2),
-            "reward_risk":   self.reward_risk,
+            "reward_risk":   round(reward_distance / risk_distance, 4),
             "confidence_floor": self.confidence_floor,
         }
 

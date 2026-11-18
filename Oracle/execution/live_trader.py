@@ -38,8 +38,8 @@ Changes vs v2:
            [SYMBOL] TIMEOUT after 60 s — skipping
   FIX-4  run() cycle summary line printed after every full scan:
            Cycle 1/10 done — scanned 8 symbols, 1 trade, 5 hold, 2 reject
-  FIX-5  max_trades cap checked BEFORE oracle.act() so we skip the expensive
-         signal call once the session cap is reached.
+  FIX-5  Candidates continue through signal evaluation after the position cap
+         is reached; the cap blocks orders and excluded valid setups are shadowed.
   FIX-6  _kill_switch_check() double-fire guard: once it fires it latches True
          so the caller's post-tick check always sees it even if equity recovers
          between the two calls.
@@ -106,7 +106,10 @@ from execution.mt5_broker import MT5Broker  # type: ignore
 from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
 from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
     TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+    SCOUT_ENTRY_CONTEXT_KEY,
 )
+from execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
+from execution.shadow_feedback import replay_shadow_candidates, record_max_positions_shadow  # type: ignore
 from execution.telegram_notifier import (  # type: ignore
     TelegramNotifier, RecentSignalCache, signal_only_enabled,
     format_entry_alert, format_execution_alert, format_position_alert,
@@ -764,6 +767,8 @@ class LiveTrader:
         # when this position eventually closes. Empty for backfilled/orphaned
         # positions (we never saw their original entry).
         entry_streams = dict(self._open_context.get(symbol, {}) or {})
+        scout_entry = entry_streams.pop(SCOUT_ENTRY_CONTEXT_KEY, {})
+        scout_entry = scout_entry if isinstance(scout_entry, dict) else {}
 
         # Capture which Sentinel news terms were live at entry (one call,
         # not repeated every poll) so Demo Trade Learning can later report
@@ -789,6 +794,10 @@ class LiveTrader:
                 entry_confidence=confidence, entry_regime=entry_regime,
                 entry_streams=entry_streams, entry_atr=entry_atr,
                 entry_term_evidence=entry_term_evidence,
+                strategy_id=scout_entry.get("strategy_id"),
+                entry_scout_dimension_scores=dict(scout_entry.get("dimension_scores") or {}),
+                entry_scout_session=scout_entry.get("session"),
+                execution_environment=str(getattr(self.broker.status, "account_type", "unknown")),
             )
             self._managed_positions[symbol].journal_id = self.oracle.trade_journal.log_entry(
                 symbol, direction, confidence, entry_regime,
@@ -1062,6 +1071,7 @@ class LiveTrader:
 
                 # FIX-2/3: _tick() now returns a summary dict, never hangs
                 summary = self._tick()
+                replay_shadow_candidates(self.oracle)
 
                 # FIX-4: cycle summary line
                 print(
@@ -1128,6 +1138,18 @@ class LiveTrader:
         summary = dict(scanned=0, trades=0, signals=0, holds=0, rejects=0,
                        errors=0, timeouts=0, unmapped=0, managed=0,
                        kill_switch=False)
+        observed_count = len(self._managed_positions)
+        if not self.signal_only and self.broker.status.connected:
+            try:
+                observed_positions = self.broker.positions()
+                if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                    raise RuntimeError("broker position snapshot is not authoritative")
+                observed_count = len(observed_positions)
+            except Exception as exc:
+                log.warning("Cannot establish account-wide open-position count; refusing new entries: %s", exc)
+                summary["errors"] += 1
+                return summary
+        position_budget = OpenPositionBudget(self.max_trades, observed_count)
         approved_candidates: List[Tuple[str, str, Dict[str, Any]]] = []
         duplicate_mappings = _duplicate_broker_symbol_mappings(self.symbols, self._sym_mapper)
 
@@ -1192,7 +1214,9 @@ class LiveTrader:
                     direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
                     recent = self._recent_signals.match(symbol, direction, existing_pos.get("time"))
                     if recent:
-                        self._open_context[symbol] = recent.get("streams") or {}
+                        recovered_context = dict(recent.get("streams") or {})
+                        recovered_context[SCOUT_ENTRY_CONTEXT_KEY] = dict(recent.get("scout_evaluation") or {})
+                        self._open_context[symbol] = recovered_context
                         sl = float(recent["plan"].get("stop") or 0.0)
                         tp = float(recent["plan"].get("target") or 0.0)
                         confidence = float(recent.get("effective_confidence", 0.5))
@@ -1221,11 +1245,6 @@ class LiveTrader:
                           "owns it; skipping new entry this cycle", symbol)
                 continue   # never open a new position on the same symbol this cycle
             # ── end FIX-POS ───────────────────────────────────────────────────
-
-            if len(self._managed_positions) >= self.max_trades:
-                log.info("[%s] new entry skipped — max open positions reached; "
-                         "existing positions remain monitored", symbol)
-                continue
 
             if broker_sym.upper() in self._trading_disabled_symbols:
                 reason = "broker rejected symbol with TRADING_DISABLED earlier in this session"
@@ -1354,36 +1373,19 @@ class LiveTrader:
                 conf_str = f"scout={scout_score:.3f} conf={eff_conf:.3f} rank=#{rank}/{len(approved_candidates)}"
 
                 # Check if session slot budget is now full after higher-ranked fills
-                if len(self._managed_positions) >= session_slot_cap:
+                if position_budget.open_count >= session_slot_cap or position_budget.full:
                     reason = (
-                        f"Outranked for session slots (rank #{rank}/{len(approved_candidates)}, "
-                        f"active_positions={len(self._managed_positions)} >= slot_cap={session_slot_cap})"
+                        f"No session slot available (rank #{rank}/{len(approved_candidates)}, "
+                        f"account_open_positions={position_budget.open_count}, "
+                        f"slot_cap={session_slot_cap}, hard_cap={self.max_trades})"
                     )
                     log.info("[%s] OUTRANKED %s — %s", symbol, conf_str, reason)
                     print(f"[{symbol}] OUTRANKED {conf_str}  ({reason})")
-                    if ledger is not None:
-                        ledger.record_trade_not_entered(
-                            symbol=symbol,
-                            direction=plan.get("direction", "hold"),
-                            rejection_stage="outranked_for_session_slots",
-                            primary_reason=reason,
-                            reasons=[reason],
-                            scout_score=scout_score,
-                            entry_confidence=eff_conf,
-                            learned_conviction_floor=float(sig.get("learned_conviction_floor", 0.5)),
-                            tournament_rank=rank,
-                            total_candidates=len(approved_candidates),
-                            regime=str((sig.get("scout_evaluation") or {}).get("regime") or "ranging"),
-                            news_impact=str(sig.get("news_impact", "none")),
-                            news_reason=str(sig.get("news_reason", "")),
-                            social_risk=str(sig.get("social_risk", "none")),
-                            social_reason=str(sig.get("social_reason", "")),
-                            hypothetical_entry_price=float(plan.get("entry") or 0.0),
-                            hypothetical_stop=float(plan.get("stop") or 0.0),
-                            hypothetical_target=float(plan.get("target") or 0.0),
-                            atr=float(sig.get("atr") or 0.0),
-                            entry_streams=dict(sig.get("_streams") or {}),
-                        )
+                    if record_max_positions_shadow(
+                        ledger, symbol=symbol, plan=plan, signal=sig, reason=reason,
+                        tournament_rank=rank, candidates_evaluated=len(approved_candidates),
+                    ):
+                        log.info("[%s] max-position rejection saved as shadow candidate", symbol)
                     summary["rejects"] += 1
                     continue
 
@@ -1431,7 +1433,9 @@ class LiveTrader:
                         summary["rejects"] += 1
                         continue
 
-                self._open_context[symbol] = sig.get("_streams", {})
+                entry_context = dict(sig.get("_streams", {}) or {})
+                entry_context[SCOUT_ENTRY_CONTEXT_KEY] = dict(sig.get("scout_evaluation") or {})
+                self._open_context[symbol] = entry_context
 
                 if self.signal_only:
                     alert = format_entry_alert(symbol, sig)
@@ -1442,6 +1446,7 @@ class LiveTrader:
                             "plan": dict(plan),
                             "effective_confidence": eff_conf,
                             "streams": sig.get("_streams", {}),
+                            "scout_evaluation": sig.get("scout_evaluation") or {},
                         })
                     summary["signals"] += 1
                     log.info("[%s→%s] SIGNAL ONLY direction=%s %s Telegram=%s",
@@ -1465,7 +1470,29 @@ class LiveTrader:
                     )
 
                 if self.broker.status.connected:
-                    result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
+                    with account_position_lock():
+                        try:
+                            latest_positions = self.broker.positions()
+                            if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                                raise RuntimeError("broker position snapshot is not authoritative")
+                            position_budget.reconcile(len(latest_positions))
+                        except Exception as exc:
+                            log.warning("[%s] refusing order; could not reconcile account positions: %s", symbol, exc)
+                            summary["errors"] += 1
+                            continue
+                        if position_budget.full:
+                            reason = (f"account-wide max open positions reached "
+                                      f"({position_budget.open_count}/{self.max_trades})")
+                            record_max_positions_shadow(
+                                ledger, symbol=symbol, plan=plan, signal=sig, reason=reason
+                            )
+                            log.info("[%s] order skipped — %s; tracking as shadow candidate", symbol, reason)
+                            summary["rejects"] += 1
+                            continue
+                        if not position_budget.reserve():
+                            summary["rejects"] += 1
+                            continue
+                        result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
                     res_status = result.get("status", "unknown")
                     res_reason = result.get("reason", "")
                     if _is_trading_disabled_rejection(result):
@@ -1499,7 +1526,7 @@ class LiveTrader:
                             entry_price=fill_price,
                             stop=fill_sl,
                             target=fill_tp,
-                            confidence=s.get("confidence", 0.0),
+                            confidence=eff_conf,
                             size=fill_vol,
                             news_level=sig.get("news_impact", "none"),
                             news_reason=sig.get("news_reason", ""),
@@ -1530,6 +1557,12 @@ class LiveTrader:
                                 tournament_rank=rank,
                                 total_candidates=len(approved_candidates),
                                 regime=str(getattr(pos_obj, "entry_regime", "ranging")),
+                                session=str(getattr(pos_obj, "entry_scout_session", None) or "unknown"),
+                                strategy_id=getattr(pos_obj, "strategy_id", None),
+                                dimension_scores=dict(getattr(pos_obj, "entry_scout_dimension_scores", {}) or {}),
+                                learned_dimension_weights=dict(
+                                    (sig.get("scout_evaluation") or {}).get("learned_dimension_weights") or {}
+                                ),
                                 news_impact=str(sig.get("news_impact", "none")),
                                 news_reason=str(sig.get("news_reason", "")),
                                 social_risk=str(sig.get("social_risk", "none")),
@@ -1538,6 +1571,8 @@ class LiveTrader:
                                 journal_id=getattr(pos_obj, "journal_id", None),
                             )
                     else:
+                        if str(res_status).lower() in {"rejected", "blocked"}:
+                            position_budget.release_rejected_order()
                         summary["rejects"] += 1
                         if self.telegram.enabled:
                             exec_alert = format_execution_alert(symbol, broker_sym, sig, result)

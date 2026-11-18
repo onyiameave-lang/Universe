@@ -36,6 +36,115 @@ def compute_learned_dimension_weights(scout_state: Dict[str, Any]) -> Dict[str, 
     return weights
 
 
+def compute_learned_session_edge_adjustment(
+    scout_state: Dict[str, Any], session: Optional[str]
+) -> float:
+    """Return a small-sample-shrunk session edge relative to all sessions."""
+    if not session:
+        return 0.0
+    sessions = scout_state.get("session_stats") or {}
+    local = sessions.get(str(session).lower())
+    if not isinstance(local, dict):
+        return 0.0
+    try:
+        local_n = max(0, int(local.get("wins", 0))) + max(0, int(local.get("losses", 0)))
+        if local_n <= 0:
+            return 0.0
+        local_sum = float(local.get("sum_r", 0.0))
+        if not math.isfinite(local_sum):
+            return 0.0
+        total_n = 0
+        total_sum = 0.0
+        for row in sessions.values():
+            if not isinstance(row, dict):
+                continue
+            row_n = int(row.get("wins", 0)) + int(row.get("losses", 0))
+            row_sum = float(row.get("sum_r", 0.0))
+            if row_n > 0 and math.isfinite(row_sum):
+                total_n += row_n
+                total_sum += row_sum
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if total_n <= 0:
+        return 0.0
+    session_mean = local_sum / local_n
+    all_session_mean = total_sum / total_n
+    credibility = local_n / (local_n + 5.0)
+    # Keep a single extreme outcome from dominating cross-sectional ranking.
+    return round(max(-0.25, min(0.25, credibility * (session_mean - all_session_mean))), 4)
+
+
+def blend_strategy_performance(
+    scout_state: Dict[str, Any],
+    *,
+    symbol: str,
+    regime: str,
+    strategy_id: Optional[str],
+    prior_win_probability: float,
+    prior_mean_r: float,
+) -> Tuple[float, float]:
+    """Shrink strategy-specific evidence toward the symbol/regime estimate."""
+    if not strategy_id:
+        return prior_win_probability, prior_mean_r
+    key = f"{symbol.upper()}::{regime}::{strategy_id}"
+    row = (scout_state.get("strategy_stats") or {}).get(key)
+    if not isinstance(row, dict):
+        return prior_win_probability, prior_mean_r
+    try:
+        wins = max(0, int(row.get("wins", 0)))
+        losses = max(0, int(row.get("losses", 0)))
+        sum_r = float(row.get("sum_r", 0.0))
+    except (TypeError, ValueError, OverflowError):
+        return prior_win_probability, prior_mean_r
+    trades = wins + losses
+    if trades <= 0 or not math.isfinite(sum_r):
+        return prior_win_probability, prior_mean_r
+    credibility = trades / (trades + 5.0)
+    local_win_rate = wins / trades
+    local_mean_r = sum_r / trades
+    return (
+        (1.0 - credibility) * prior_win_probability + credibility * local_win_rate,
+        (1.0 - credibility) * prior_mean_r + credibility * local_mean_r,
+    )
+
+
+def compare_strategy_performance(
+    scout_state: Dict[str, Any], *, symbol: str, regime: str, strategy_id: Optional[str]
+) -> Dict[str, Any]:
+    """Present realized and shadow evidence side by side without mixing samples."""
+    if not strategy_id:
+        return {"realized": None, "shadow": None, "shadow_used_for_live_scoring": False}
+    key = f"{symbol.upper()}::{regime}::{strategy_id}"
+
+    def summarize(source: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        row = source.get(key)
+        if not isinstance(row, dict):
+            return None
+        try:
+            wins = max(0, int(row.get("wins", 0)))
+            losses = max(0, int(row.get("losses", 0)))
+            observations = max(wins + losses, int(row.get("observations", 0)))
+            sum_r = float(row.get("sum_r", 0.0))
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(sum_r):
+            return None
+        total = wins + losses
+        return {
+            "observations": observations,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": round(wins / total, 4) if total else None,
+            "mean_r": round(sum_r / observations, 4) if observations else None,
+        }
+
+    return {
+        "realized": summarize(scout_state.get("strategy_stats") or {}),
+        "shadow": summarize(scout_state.get("shadow_strategy_stats") or {}),
+        "shadow_used_for_live_scoring": False,
+    }
+
+
 def compute_learned_conviction_floor(
     scout_state: Dict[str, Any],
     symbol: Optional[str] = None,
@@ -102,22 +211,42 @@ def update_scout_from_outcome(
     *,
     symbol: str,
     regime: str,
-    session: str,
+    session: Optional[str],
     entry_conviction: float,
     dimension_scores_at_entry: Dict[str, float],
     won: bool,
     pnl_r: float,
+    strategy_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Update Scout's empirical Dirichlet reliability weights, conviction floor
     history, and symbol::regime Bayesian statistics after a closed trade.
     """
+    try:
+        pnl_r = float(pnl_r)
+        entry_conviction = float(entry_conviction)
+    except (TypeError, ValueError, OverflowError):
+        return {"status": "ignored", "reason": "invalid_trade_outcome"}
+    if not math.isfinite(pnl_r) or not math.isfinite(entry_conviction):
+        return {"status": "ignored", "reason": "non_finite_trade_outcome"}
+    entry_conviction = max(0.0, min(1.0, entry_conviction))
+
     alphas = scout_state.setdefault("dimension_alpha", {d: 1.0 for d in SCOUT_DIMENSIONS})
     betas = scout_state.setdefault("dimension_beta", {d: 1.0 for d in SCOUT_DIMENSIONS})
 
-    magnitude = min(3.0, max(0.25, abs(float(pnl_r))))
+    magnitude = min(3.0, max(0.25, abs(pnl_r)))
     for dim in SCOUT_DIMENSIONS:
-        score = float((dimension_scores_at_entry or {}).get(dim, 0.5))
+        if dim not in (dimension_scores_at_entry or {}):
+            # Historical/adopted positions may not have an entry snapshot.
+            # Record their outcome, but do not invent feature attribution.
+            continue
+        try:
+            score = float(dimension_scores_at_entry[dim])
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not math.isfinite(score):
+            continue
+        score = max(0.0, min(1.0, score))
         contribution = max(0.0, score - 0.35)
         if won:
             alphas[dim] = round(float(alphas.get(dim, 1.0)) + contribution * magnitude, 4)
@@ -129,6 +258,8 @@ def update_scout_from_outcome(
         "conviction": round(float(entry_conviction), 4),
         "pnl_r": round(float(pnl_r), 4),
         "won": bool(won),
+        "session": str(session).lower() if session else None,
+        "strategy_id": str(strategy_id) if strategy_id else None,
         "timestamp": time.time(),
     })
     if len(conv_list) > 500:
@@ -144,20 +275,40 @@ def update_scout_from_outcome(
     sr["sum_r"] = round(float(sr.get("sum_r", 0.0)) + float(pnl_r), 4)
     sr["sum_r2"] = round(float(sr.get("sum_r2", 0.0)) + float(pnl_r) ** 2, 4)
 
-    sess_map = scout_state.setdefault("session_stats", {})
-    ss = sess_map.setdefault(session, {"wins": 0, "losses": 0, "sum_r": 0.0})
-    if won:
-        ss["wins"] = int(ss.get("wins", 0)) + 1
-    else:
-        ss["losses"] = int(ss.get("losses", 0)) + 1
-    ss["sum_r"] = round(float(ss.get("sum_r", 0.0)) + float(pnl_r), 4)
+    if strategy_id:
+        strategy_key = f"{symbol.upper()}::{regime}::{strategy_id}"
+        strategy_map = scout_state.setdefault("strategy_stats", {})
+        strategy = strategy_map.setdefault(
+            strategy_key, {"symbol": symbol.upper(), "regime": regime,
+                           "strategy_id": str(strategy_id), "wins": 0,
+                           "losses": 0, "sum_r": 0.0, "sum_r2": 0.0}
+        )
+        if won:
+            strategy["wins"] = int(strategy.get("wins", 0)) + 1
+        else:
+            strategy["losses"] = int(strategy.get("losses", 0)) + 1
+        strategy["sum_r"] = round(float(strategy.get("sum_r", 0.0)) + pnl_r, 4)
+        strategy["sum_r2"] = round(float(strategy.get("sum_r2", 0.0)) + pnl_r ** 2, 4)
+
+    if session:
+        session_key = str(session).strip().lower()
+        if session_key:
+            sess_map = scout_state.setdefault("session_stats", {})
+            ss = sess_map.setdefault(session_key, {"wins": 0, "losses": 0, "sum_r": 0.0})
+            if won:
+                ss["wins"] = int(ss.get("wins", 0)) + 1
+            else:
+                ss["losses"] = int(ss.get("losses", 0)) + 1
+            ss["sum_r"] = round(float(ss.get("sum_r", 0.0)) + pnl_r, 4)
 
     new_weights = compute_learned_dimension_weights(scout_state)
     new_floor = compute_learned_conviction_floor(scout_state, symbol, regime)
     return {
+        "status": "complete",
         "updated_dimension_weights": new_weights,
         "learned_conviction_floor": new_floor,
         "symbol_regime_record": dict(sr),
+        "strategy_record": dict(strategy) if strategy_id else None,
     }
 
 
@@ -170,12 +321,16 @@ def update_scout_from_counterfactual(
     stage_rejected: str,
     counterfactual_r: float,
     would_have_won: bool,
+    strategy_id: Optional[str] = None,
+    session: Optional[str] = None,
+    shadow_observation: bool = False,
 ) -> Dict[str, Any]:
     """
-    Update Scout's conviction floor distribution when Chronicle Night Research
-    or Forge Shadow Runner replays a trade that Oracle did NOT enter.
+    Store a replayed non-entry outcome. Shadow observations remain separate
+    from the live conviction-floor evidence and realized trade statistics.
     """
-    cf_list = scout_state.setdefault("counterfactual_outcomes", [])
+    list_key = "shadow_counterfactual_outcomes" if shadow_observation else "counterfactual_outcomes"
+    cf_list = scout_state.setdefault(list_key, [])
     cf_list.append({
         "symbol": symbol.upper(),
         "regime": regime,
@@ -183,9 +338,37 @@ def update_scout_from_counterfactual(
         "stage": stage_rejected,
         "counterfactual_r": round(float(counterfactual_r), 4),
         "would_have_won": bool(would_have_won),
+        "strategy_id": str(strategy_id) if strategy_id else None,
+        "session": str(session).lower() if session else None,
+        "shadow_observation": bool(shadow_observation),
         "timestamp": time.time(),
     })
     if len(cf_list) > 500:
         del cf_list[:-500]
+    # Paper observations are valuable for comparing strategies, but should not
+    # tune the live conviction floor as though they were executable outcomes.
     new_floor = compute_learned_conviction_floor(scout_state, symbol, regime)
-    return {"learned_conviction_floor": new_floor, "counterfactual_count": len(cf_list)}
+    strategy_record = None
+    if strategy_id:
+        strategy_key = f"{symbol.upper()}::{regime}::{strategy_id}"
+        strategy_map_key = "shadow_strategy_stats" if shadow_observation else "counterfactual_strategy_stats"
+        strategy_map = scout_state.setdefault(strategy_map_key, {})
+        strategy_record = strategy_map.setdefault(
+            strategy_key,
+            {"symbol": symbol.upper(), "regime": regime,
+             "strategy_id": str(strategy_id), "wins": 0, "losses": 0,
+             "sum_r": 0.0, "sum_r2": 0.0, "observations": 0},
+        )
+        strategy_record["observations"] = int(strategy_record.get("observations", 0)) + 1
+        if would_have_won:
+            strategy_record["wins"] = int(strategy_record.get("wins", 0)) + 1
+        else:
+            strategy_record["losses"] = int(strategy_record.get("losses", 0)) + 1
+        strategy_record["sum_r"] = round(float(strategy_record.get("sum_r", 0.0)) + float(counterfactual_r), 4)
+        strategy_record["sum_r2"] = round(float(strategy_record.get("sum_r2", 0.0)) + float(counterfactual_r) ** 2, 4)
+    return {
+        "learned_conviction_floor": new_floor,
+        "counterfactual_count": len(cf_list),
+        "counterfactual_strategy_record": dict(strategy_record) if strategy_record else None,
+        "shadow_observation": bool(shadow_observation),
+    }

@@ -19,7 +19,6 @@ try:
     from scout_agent import (  # type: ignore
         OracleScoutSubAgent,
         classify_asset_class,
-        current_trading_session,
     )
     from portfolio_agent import OraclePortfolioSubAgent  # type: ignore
     from risk_agent import OracleRiskSubAgent  # type: ignore
@@ -31,7 +30,6 @@ except ImportError:
     from Oracle.scout_agent import (  # type: ignore
         OracleScoutSubAgent,
         classify_asset_class,
-        current_trading_session,
     )
     from Oracle.portfolio_agent import OraclePortfolioSubAgent  # type: ignore
     from Oracle.risk_agent import OracleRiskSubAgent  # type: ignore
@@ -161,6 +159,7 @@ class OracleCIOEngine:
         entry_confidence: float = 0.6,
         entry_regime: str = "ranging",
         exit_regime: str = "ranging",
+        entry_session: Optional[str] = None,
         pnl_r: float,
         won: bool,
         exit_reason: str = "unknown",
@@ -177,7 +176,9 @@ class OracleCIOEngine:
         **extra: Any,
     ) -> Dict[str, Any]:
         sym = symbol.upper()
-        session = current_trading_session()
+        # An adopted/recovered position may not carry its entry snapshot. Do
+        # not mislabel it with the session in which it happened to close.
+        session = str(entry_session).strip().lower() if entry_session else None
         asset_class = classify_asset_class(sym)
 
         atr_val = float(entry_atr or (abs(entry_price - initial_stop) / 2.0) or 1e-6)
@@ -192,6 +193,7 @@ class OracleCIOEngine:
             dimension_scores_at_entry=dimension_scores_at_entry or {},
             won=won,
             pnl_r=pnl_r,
+            strategy_id=strategy_id,
         )
         portfolio_update = self.portfolio.learn_from_outcome(
             asset_class=asset_class,
@@ -219,6 +221,11 @@ class OracleCIOEngine:
             "portfolio": portfolio_update,
             "risk": risk_update,
             "synced_risk_manager": synced,
+            "scout_entry_snapshot": {
+                "session": session,
+                "strategy_id": strategy_id,
+                "dimension_scores": dict(dimension_scores_at_entry or {}),
+            },
         }
         ledger_rec = self.decision_ledger.record_trade_closed(
             symbol=sym,
@@ -246,6 +253,9 @@ class OracleCIOEngine:
         max_items: int = 25,
         max_records: Optional[int] = None,
         invoke_shadow_runner_on_demand: bool = False,
+        shadow_only: bool = False,
+        trade_manager: Any = None,
+        current_snapshots: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         return replay_unentered_counterfactuals(
             oracle_agent=self.oracle,
@@ -254,6 +264,9 @@ class OracleCIOEngine:
             max_items=max_items,
             max_records=max_records,
             invoke_shadow_runner_on_demand=invoke_shadow_runner_on_demand,
+            shadow_only=shadow_only,
+            trade_manager=trade_manager,
+            current_snapshots=current_snapshots,
         )
 
     def conduct_atlas_forge_research_review(

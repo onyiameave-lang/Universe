@@ -828,7 +828,9 @@ class MT5ShadowExecutionBridge:
             est_r = round(net_usd / unit_risk_usd, 4)
             exit_reason = str(d.get("exit_reason", "CLIENT_OR_EXPERT_CLOSE"))
 
-            if exit_reason == "TAKE_PROFIT" or est_r >= target_r:
+            # Broker exit reason is the authoritative evidence for a live TP
+            # fill; net profit divided by an estimated risk unit is not.
+            if exit_reason.strip().upper() == "TAKE_PROFIT":
                 status_tag = "CLOSED_AT_MAJOR_TP"
             elif exit_reason == "STOP_LOSS" and net_usd < 0:
                 status_tag = "CLOSED_INITIAL_STOP_LOSS"

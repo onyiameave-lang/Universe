@@ -307,6 +307,7 @@ def execute_cio_tournament_cycle(
             "atr": cand.atr,
             "_streams": cand.streams,
             "_dimension_scores": cand.dimension_scores,
+            "scout_evaluation": cand.to_dict(),
             "_risk_check": risk_check,
         })
 

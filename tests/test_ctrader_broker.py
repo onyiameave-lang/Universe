@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 import threading
+import time
 
 from Oracle.execution.ctrader_broker import (
     _execution_error_reason,
@@ -130,6 +131,59 @@ def test_send_and_wait_removes_a_request_after_timeout(monkeypatch):
 
     assert broker._send_and_wait(object(), timeout=0.01) is None
     assert broker._pending == {}
+
+
+def test_transport_disconnect_marks_session_unusable_and_wakes_pending_requests():
+    from Oracle.execution.ctrader_broker import BrokerStatus, CTraderBroker
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker.status = BrokerStatus(connected=True)
+    broker._positions_last_refresh_ok = True
+    broker._pending_lock = threading.Lock()
+    waiter = threading.Event()
+    broker._pending = {"order-1": {"event": waiter, "result": ["pending"]}}
+    broker._connection_state_lock = threading.RLock()
+
+    broker._mark_disconnected("socket lost")
+
+    assert broker.status.connected is False
+    assert "socket lost" in broker.status.reason
+    assert broker._positions_last_refresh_ok is False
+    assert waiter.is_set()
+    assert broker._pending["order-1"]["result"] == [None]
+
+
+def test_authenticated_reconnect_restores_status_only_after_position_sync():
+    from Oracle.execution.ctrader_broker import BrokerStatus, CTraderBroker
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker.status = BrokerStatus(connected=False, account_type="demo", login=480)
+    broker._positions_last_refresh_ok = False
+    broker._reconnect_recovery_lock = threading.Lock()
+    broker._connection_state_lock = threading.RLock()
+    broker._use_demo = True
+    broker._account_id = 480
+    broker._client = SimpleNamespace(isConnected=True)
+    broker._load_symbols = lambda _request: True
+    broker._load_assets = lambda _request: None
+    broker._fetch_balance = lambda _request: (154.84, 154.84, "USD")
+    synced = threading.Event()
+
+    def positions():
+        broker._positions_last_refresh_ok = True
+        synced.set()
+        return []
+
+    broker.positions = positions
+    broker._start_reconnect_recovery(broker._client, object, object, object)
+
+    assert synced.wait(timeout=2.0)
+    deadline = time.monotonic() + 2.0
+    while not broker.status.connected and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert broker.status.connected is True
+    assert broker.status.account_info_available is True
+    assert broker.status.login == 480
 
 
 def test_historical_bar_requests_use_shared_history_throttle(monkeypatch):

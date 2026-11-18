@@ -177,6 +177,16 @@ except Exception:
 log = logging.getLogger("oracle")
 
 
+def _is_capacity_only_rejection(reasons: List[str]) -> bool:
+    """True only when the position limit is the sole reason a plan was rejected."""
+    normalized = [str(reason).strip().lower() for reason in reasons if str(reason).strip()]
+    return (
+        len(normalized) == 1
+        and normalized[0].startswith("max positions (")
+        and normalized[0].endswith(") reached")
+    )
+
+
 def _strategy_promotion_verifier():
     """Load Oracle's independently scoped Aegis trust configuration."""
     raw_keys = os.environ.get("ORACLE_AEGIS_TRUSTED_ISSUERS_JSON")
@@ -1508,31 +1518,45 @@ class OracleAgent(BaseAgent):
 
             atr = sig["_technicals"].get("atr_14") or (sig["last"] * 0.01)
             direction = "long" if s["call"] == "buy" else "short"
-            sign = 1 if direction == "long" else -1
-            hypothetical_stop = float(sig["last"] - sign * 2.0 * atr)
-            hypothetical_target = float(sig["last"] + sign * 3.0 * atr)
-
-            # Evaluate candidate through Oracle V2 Scout Sub-Agent & sync learned limits
             scout_eval = None
-            if hasattr(self, "cio") and self.cio is not None:
-                try:
-                    self.cio.sync_learned_limits_to_risk_manager()
-                    scout_eval = self.cio.scout.evaluate_candidate(
-                        symbol=symbol,
-                        last_price=float(sig["last"]),
-                        atr=float(atr),
-                        technicals=sig.get("_technicals") or {},
-                        fused_signal=s,
-                        streams=streams,
-                        stop_price=hypothetical_stop,
-                        target_price=hypothetical_target,
-                        using_evolved_champion=bool(sig.get("using_evolved_champion")),
-                        learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
-                        learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
-                    )
-                    self.risk.confidence_floor = scout_eval.learned_conviction_floor
-                except Exception as exc:
-                    log.warning("[%s] Scout evaluation error: %s", symbol, exc)
+            if not getattr(self, "cio", None):
+                return {"status": "error",
+                        "message": "CIO risk/scout agents unavailable; refusing to create a trade proposal"}
+            try:
+                self.cio.sync_learned_limits_to_risk_manager()
+            except Exception as exc:
+                log.warning("[%s] CIO learned-risk sync error: %s", symbol, exc)
+                return {"status": "error",
+                        "message": "learned risk policy unavailable; refusing to create a trade proposal",
+                        "risk_policy_error": type(exc).__name__}
+
+            # Scout ranks the same learned stop/target geometry that the Risk
+            # Manager will submit; do not score a fixed 2:3 ATR surrogate.
+            learned_levels = self.risk.stop_target(float(sig["last"]), direction, float(atr))
+            hypothetical_stop = float(learned_levels["stop"])
+            hypothetical_target = float(learned_levels["target"])
+
+            # Evaluate candidate through Oracle V2 Scout Sub-Agent.
+            try:
+                scout_eval = self.cio.scout.evaluate_candidate(
+                    symbol=symbol,
+                    last_price=float(sig["last"]),
+                    atr=float(atr),
+                    technicals=sig.get("_technicals") or {},
+                    fused_signal=s,
+                    streams=streams,
+                    stop_price=hypothetical_stop,
+                    target_price=hypothetical_target,
+                    using_evolved_champion=bool(sig.get("using_evolved_champion")),
+                    learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
+                    learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
+                )
+                self.risk.confidence_floor = scout_eval.learned_conviction_floor
+            except Exception as exc:
+                log.warning("[%s] Scout evaluation error: %s", symbol, exc)
+                return {"status": "error",
+                        "message": "Scout evaluation unavailable; refusing to bypass candidate ranking",
+                        "scout_error": type(exc).__name__}
 
             # Strip private provider payloads before returning public trade.propose output
             news_stream.pop("_risk_articles", None)
@@ -1559,34 +1583,79 @@ class OracleAgent(BaseAgent):
                 self.trade_journal.log_rejection(
                     symbol, direction, effective_confidence, reasons)
                 if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
-                    self.decision_ledger.record_trade_not_entered(
-                        symbol=symbol,
-                        direction=direction,
-                        rejection_stage="risk_gate_rejected",
-                        primary_reason=reasons[0] if reasons else "risk gate rejected",
-                        reasons=reasons,
-                        scout_score=scout_eval.scout_score if scout_eval else effective_confidence,
-                        entry_confidence=effective_confidence,
-                        learned_conviction_floor=(
-                            scout_eval.learned_conviction_floor
-                            if scout_eval else float(self.risk.min_confidence)
-                        ),
-                        regime=regime,
-                        news_impact=news.level,
-                        news_reason=news.reason,
-                        social_risk=social.level,
-                        social_reason=social.reason,
-                        hypothetical_entry_price=float(sig["last"]),
-                        hypothetical_stop=float(plan.get("stop") or hypothetical_stop),
-                        hypothetical_target=float(plan.get("target") or hypothetical_target),
-                        atr=float(atr),
-                        entry_streams=dict(s.get("streams") or {}),
+                    capacity_only = _is_capacity_only_rejection(reasons)
+                    scout_snapshot = scout_eval.to_dict() if scout_eval else {}
+                    strategy_id = scout_snapshot.get("strategy_id")
+                    pending_check = getattr(
+                        self.decision_ledger, "has_pending_shadow_candidate", None
                     )
+                    duplicate_shadow = bool(
+                        capacity_only
+                        and callable(pending_check)
+                        and pending_check(
+                            symbol=symbol,
+                            direction=direction,
+                            strategy_id=strategy_id,
+                        )
+                    )
+                    if duplicate_shadow:
+                        record_overlap = getattr(
+                            self.decision_ledger, "record_shadow_candidate_overlap", None
+                        )
+                        if callable(record_overlap):
+                            record_overlap(
+                                symbol=symbol,
+                                direction=direction,
+                                strategy_id=str(strategy_id) if strategy_id else None,
+                                candidate_context={
+                                    "entry": float(sig["last"]),
+                                    "stop": float(plan.get("stop") or hypothetical_stop),
+                                    "target": float(plan.get("target") or hypothetical_target),
+                                    "reason": reasons[0] if reasons else "risk gate rejected",
+                                    "confidence": effective_confidence,
+                                },
+                            )
+                    if not duplicate_shadow:
+                        self.decision_ledger.record_trade_not_entered(
+                            symbol=symbol,
+                            direction=direction,
+                            rejection_stage=("max_positions_shadow" if capacity_only else "risk_gate_rejected"),
+                            primary_reason=reasons[0] if reasons else "risk gate rejected",
+                            reasons=reasons,
+                            scout_score=scout_eval.scout_score if scout_eval else effective_confidence,
+                            entry_confidence=effective_confidence,
+                            learned_conviction_floor=(
+                                scout_eval.learned_conviction_floor
+                                if scout_eval else float(self.risk.min_confidence)
+                            ),
+                            regime=regime,
+                            session=str(scout_snapshot.get("session") or "unknown"),
+                            strategy_id=str(strategy_id) if strategy_id else None,
+                            news_impact=news.level,
+                            news_reason=news.reason,
+                            social_risk=social.level,
+                            social_reason=social.reason,
+                            hypothetical_entry_price=float(sig["last"]),
+                            hypothetical_stop=float(plan.get("stop") or hypothetical_stop),
+                            hypothetical_target=float(plan.get("target") or hypothetical_target),
+                            atr=float(atr),
+                            entry_streams=dict(s.get("streams") or {}),
+                            shadow_observation=capacity_only,
+                            dimension_scores=dict(scout_snapshot.get("dimension_scores") or {}),
+                            learned_dimension_weights=dict(
+                                scout_snapshot.get("learned_dimension_weights") or {}
+                            ),
+                        )
                 return {"status": "error", "message": "risk gate rejected", "risk": plan,
+                        "signal": s, "last": sig.get("last"), "regime": regime,
+                        "atr": atr,
+                        "effective_confidence": effective_confidence,
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason,
-                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence}
+                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                        "scout_evaluation": scout_eval.to_dict() if scout_eval else None}
             return {"status": "complete", "plan": plan, "signal": s,
+                    "last": sig.get("last"), "regime": regime,
                     "effective_confidence": effective_confidence,
                     "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
                     "learned_conviction_floor": (

@@ -17,7 +17,7 @@ from Oracle.core.v2_cio_engine import (
 from Oracle.intelligence.decision_ledger import OracleDecisionLedger
 
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 
 
@@ -43,7 +43,7 @@ def _make_trending_series(symbol: str, start_price: float = 1.1000, step: float 
         low_p = min(open_p, close_p) - abs(step) * 0.3
         bars.append(
             Bar(
-                ts=f"2026-01-{(i % 28) + 1:02d}T00:00:00Z",
+                ts=(datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=i)).isoformat(),
                 open=round(open_p, 5),
                 high=round(high_p, 5),
                 low=round(low_p, 5),
@@ -388,6 +388,7 @@ def test_counterfactual_replay_and_atlas_forge_deficiency_loop(tmp_path: Path):
         hypothetical_stop=series.bars[10].close - 0.0050,
         hypothetical_target=series.bars[10].close + 0.0075,
         atr=0.0025,
+        observed_at_unix=datetime.fromisoformat(series.bars[10].ts.replace("Z", "+00:00")).timestamp(),
     )
     assert last_bar_close > series.bars[10].close + 0.0075
 

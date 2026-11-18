@@ -76,6 +76,7 @@ class ScoutCandidateEvaluation:
     streams: Dict[str, Any]
     news_assessment: Dict[str, Any]
     social_assessment: Dict[str, Any]
+    strategy_performance_comparison: Dict[str, Any] = field(default_factory=dict)
     why_trade_reasons: List[str] = field(default_factory=list)
     why_not_reasons: List[str] = field(default_factory=list)
     tournament_rank: Optional[int] = None
@@ -106,6 +107,7 @@ class ScoutCandidateEvaluation:
             "learned_dimension_weights": dict(self.learned_dimension_weights),
             "news_assessment": dict(self.news_assessment),
             "social_assessment": dict(self.social_assessment),
+            "strategy_performance_comparison": dict(self.strategy_performance_comparison),
             "why_trade_reasons": list(self.why_trade_reasons),
             "why_not_reasons": list(self.why_not_reasons),
             "tournament_rank": self.tournament_rank,

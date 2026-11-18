@@ -70,8 +70,12 @@ class OracleV2LearningStore:
                 "dimension_weights": {d: uniform_w for d in SCOUT_DIMENSIONS},
                 "conviction_outcomes": [],
                 "counterfactual_outcomes": [],
+                "counterfactual_strategy_stats": {},
+                "shadow_strategy_stats": {},
+                "shadow_counterfactual_outcomes": [],
                 "learned_conviction_floor": 0.50,
                 "symbol_regime_stats": {},
+                "strategy_stats": {},
                 "session_stats": {},
             },
             "portfolio": {

@@ -149,3 +149,63 @@ def test_timed_out_symbol_call_remains_single_flight_until_it_finishes(monkeypat
     assert capacity_timed_out is True
     release.set()
     assert future.result(timeout=1)["status"] == "complete"
+
+
+def test_shadow_mode_still_starts_position_management_thread(monkeypatch):
+    import Oracle.execution.ctrader_demo_trader as trader_module
+
+    starts = []
+
+    class FakeThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def is_alive(self):
+            return False
+
+        def start(self):
+            starts.append(self.kwargs["name"])
+
+    monkeypatch.setattr(trader_module.threading, "Thread", FakeThread)
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    trader.shadow_mode = True
+    trader._manage_thread = None
+    trader._manage_stop_event = threading.Event()
+    trader._manage_interval = 15
+
+    trader.start_trade_manager()
+
+    assert starts == ["ctm-poll"]
+
+
+def test_manager_adopts_every_broker_position_even_same_symbol_in_shadow_mode():
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    positions = [
+        {"ticket": 101, "symbol": "EURUSD", "type": "buy", "price_open": 1.1,
+         "sl": 1.09, "tp": 1.12, "volume": 1000},
+        {"ticket": 102, "symbol": "EURUSD", "type": "sell", "price_open": 1.11,
+         "sl": 1.12, "tp": 1.09, "volume": 1000},
+        {"ticket": 103, "symbol": "GBPUSD", "type": "buy", "price_open": 1.3,
+         "sl": 1.29, "tp": 1.32, "volume": 1000},
+    ]
+    trader.shadow_mode = True
+    trader.broker = SimpleNamespace(
+        status=SimpleNamespace(connected=True, account_type="demo"),
+        _positions_last_refresh_ok=True,
+        positions=lambda: positions,
+        market_state=lambda _symbol: {"state": "CLOSED"},
+    )
+    trader._manage_lock = threading.RLock()
+    trader._managed_positions = {}
+    trader._sym_mapper = SimpleNamespace(translate=lambda symbol: symbol)
+    trader._oracle_symbol_for_broker = lambda symbol: symbol
+    trader._position_key = CTraderDemoTrader._position_key
+
+    def fake_register(symbol, direction, **kwargs):
+        trader._managed_positions[str(kwargs["position_id"])] = SimpleNamespace(symbol=symbol)
+
+    trader._register_position = fake_register
+
+    trader._poll_managed_positions()
+
+    assert set(trader._managed_positions) == {"101", "102", "103"}

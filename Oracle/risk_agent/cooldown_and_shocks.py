@@ -8,6 +8,7 @@ OracleRiskSubAgent.
 from __future__ import annotations
 
 import math
+import statistics
 from typing import Any, Dict, Optional, Tuple
 
 
@@ -101,16 +102,32 @@ def compute_learned_social_multipliers(scout_state: Dict[str, Any]) -> Dict[str,
 
 def compute_learned_stop_target_multipliers(risk_state: Dict[str, Any]) -> Tuple[float, float]:
     """
-    Learn optimal ATR stop and target multipliers from realized geometry outcomes.
-    Starts at golden-ratio structural geometry (phi, phi^2) before outcomes accumulate.
+    Estimate paired ATR geometry from all valid realized outcomes.
+
+    Winners and losers both inform the estimate. Selecting only winning trades
+    creates survivorship bias and can widen stops without accounting for the
+    losing trades that resulted from that same geometry.
     """
-    geom = list(risk_state.get("geometry_outcomes") or [])
-    winning = [g for g in geom if isinstance(g, dict) and g.get("won") and float(g.get("pnl_r", 0.0)) > 0]
-    if not winning:
+    geometry = list(risk_state.get("geometry_outcomes") or [])
+    observations = []
+    for item in geometry:
+        if not isinstance(item, dict):
+            continue
+        try:
+            stop_mult = float(item.get("stop_atr_mult"))
+            target_mult = float(item.get("target_atr_mult"))
+            pnl_r = float(item.get("pnl_r"))
+        except (TypeError, ValueError):
+            continue
+        if (not all(math.isfinite(value) for value in (stop_mult, target_mult, pnl_r))
+                or stop_mult <= 0 or target_mult <= 0):
+            continue
+        observations.append((stop_mult, target_mult))
+    if not observations:
         phi = (1.0 + math.sqrt(5.0)) / 2.0
         return round(phi, 3), round(phi * phi, 3)
-
-    total_w = sum(max(0.1, float(g.get("pnl_r", 1.0))) for g in winning)
-    stop_m = sum(float(g["stop_atr_mult"]) * max(0.1, float(g.get("pnl_r", 1.0))) for g in winning) / total_w
-    targ_m = sum(float(g["target_atr_mult"]) * max(0.1, float(g.get("pnl_r", 1.0))) for g in winning) / total_w
+    # Use medians over paired observations so one outsized winner or loser
+    # cannot independently pull one side of the geometry away from the other.
+    stop_m = statistics.median(item[0] for item in observations)
+    targ_m = statistics.median(item[1] for item in observations)
     return round(max(0.8, min(4.0, stop_m)), 3), round(max(1.2, min(6.0, targ_m)), 3)

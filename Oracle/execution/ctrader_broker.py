@@ -233,6 +233,9 @@ class CTraderBroker:
 
         self._reactor_thread: Optional[threading.Thread] = None
         self._reactor_started = threading.Event()
+        self._initial_bootstrap_complete = threading.Event()
+        self._connection_state_lock = threading.RLock()
+        self._reconnect_recovery_lock = threading.Lock()
 
     # ── connection lifecycle ──────────────────────────────────────────────
 
@@ -307,10 +310,16 @@ class CTraderBroker:
             elif payload_type == account_auth_payload_type:
                 log.info("cTrader account auth successful")
                 connected_ok.set()
+                if self._initial_bootstrap_complete.is_set():
+                    self._start_reconnect_recovery(
+                        client,
+                        ProtoOASymbolsListReq,
+                        ProtoOAAssetListReq,
+                        ProtoOATraderReq,
+                    )
 
         def on_disconnected(client, reason):
-            log.warning("cTrader disconnected: %s", reason)
-            self.status.connected = False
+            self._mark_disconnected(reason)
 
         self._client.setConnectedCallback(on_connected)
         self._client.setDisconnectedCallback(on_disconnected)
@@ -336,11 +345,26 @@ class CTraderBroker:
         if not connected_ok.is_set():
             reason = auth_error[0] if auth_error else "timed out waiting for auth"
             self.status = BrokerStatus(connected=False, reason=reason)
+            self._finish_initial_bootstrap(connected_ok, self._client,
+                                           ProtoOASymbolsListReq, ProtoOAAssetListReq,
+                                           ProtoOATraderReq)
             return self.status.to_dict()
 
         # Pull the symbol list once — needed to translate symbol name <-> id.
-        self._load_symbols(ProtoOASymbolsListReq)
+        symbols_loaded = self._load_symbols(ProtoOASymbolsListReq)
         self._load_assets(ProtoOAAssetListReq)
+
+        if not symbols_loaded:
+            self.status = BrokerStatus(
+                connected=False,
+                account_type="demo" if self._use_demo else "live",
+                login=self._account_id,
+                reason="cTrader authenticated but symbol catalogue could not be confirmed",
+            )
+            self._finish_initial_bootstrap(connected_ok, self._client,
+                                           ProtoOASymbolsListReq, ProtoOAAssetListReq,
+                                           ProtoOATraderReq)
+            return self.status.to_dict()
 
         account_info = self._fetch_balance(ProtoOATraderReq)
         if account_info is None:
@@ -356,18 +380,116 @@ class CTraderBroker:
             )
             log.error("cTrader account %s authenticated but account info was unavailable; "
                       "marking connection unusable", self._account_id)
+            self._finish_initial_bootstrap(connected_ok, self._client,
+                                           ProtoOASymbolsListReq, ProtoOAAssetListReq,
+                                           ProtoOATraderReq)
             return self.status.to_dict()
 
         balance, equity, currency = account_info
 
-        self.status = BrokerStatus(connected=True,
-                                    account_type="demo" if self._use_demo else "live",
-                                    login=self._account_id, balance=balance,
-                                    equity=equity, currency=currency,
-                                    account_info_available=True)
+        with self._connection_state_lock:
+            if not getattr(self._client, "isConnected", True):
+                self.status = BrokerStatus(
+                    connected=False,
+                    account_type="demo" if self._use_demo else "live",
+                    login=self._account_id,
+                    reason="cTrader transport disconnected during initial account sync",
+                )
+            else:
+                self.status = BrokerStatus(connected=True,
+                                            account_type="demo" if self._use_demo else "live",
+                                            login=self._account_id, balance=balance,
+                                            equity=equity, currency=currency,
+                                            account_info_available=True)
+        self._finish_initial_bootstrap(connected_ok, self._client,
+                                       ProtoOASymbolsListReq, ProtoOAAssetListReq,
+                                       ProtoOATraderReq)
         log.info("cTrader connected: account %s (%s)", self._account_id,
                  "demo" if self._use_demo else "live")
         return self.status.to_dict()
+
+    def _finish_initial_bootstrap(self, connected_ok, client, symbols_req, assets_req, trader_req) -> None:
+        """Allow a later successful transport re-auth to recover a failed startup."""
+        self._initial_bootstrap_complete.set()
+        if connected_ok.is_set() and not self.status.connected:
+            self._start_reconnect_recovery(client, symbols_req, assets_req, trader_req)
+
+    def _mark_disconnected(self, reason: Any) -> None:
+        reason_text = str(reason or "connection lost")
+        with self._connection_state_lock:
+            self.status.connected = False
+            self.status.reason = f"cTrader transport disconnected: {reason_text}"
+        self._positions_last_refresh_ok = False
+        log.warning("cTrader disconnected: %s", reason_text)
+
+        # Wake in-flight synchronous callers immediately. In particular, do
+        # not leave an order waiter blocked until its full request timeout.
+        with self._pending_lock:
+            pending = list(self._pending.values())
+        for slot in pending:
+            slot["result"][0] = None
+            slot["event"].set()
+
+    def _start_reconnect_recovery(self, client, symbols_req, assets_req, trader_req) -> None:
+        if not self._reconnect_recovery_lock.acquire(blocking=False):
+            return
+
+        def recover() -> None:
+            delay = 1.0
+            try:
+                while client is self._client:
+                    if not getattr(client, "isConnected", False):
+                        return
+                    try:
+                        self._positions_last_refresh_ok = False
+                        if not self._load_symbols(symbols_req):
+                            raise RuntimeError("symbol catalogue refresh failed")
+                        self._load_assets(assets_req)
+                        account_info = self._fetch_balance(trader_req)
+                        if account_info is None:
+                            raise RuntimeError("account snapshot refresh failed")
+
+                        # Never advertise a recovered connection until the
+                        # position snapshot also works; the trader uses it for
+                        # duplicate detection and the account-wide position cap.
+                        self.positions()
+                        if not self._positions_last_refresh_ok:
+                            raise RuntimeError("position reconciliation failed")
+                        if not getattr(client, "isConnected", False) or client is not self._client:
+                            return
+
+                        balance, equity, currency = account_info
+                        with self._connection_state_lock:
+                            if not getattr(client, "isConnected", False) or client is not self._client:
+                                return
+                            self.status = BrokerStatus(
+                                connected=True,
+                                account_type="demo" if self._use_demo else "live",
+                                login=self._account_id,
+                                balance=balance,
+                                equity=equity,
+                                currency=currency,
+                                account_info_available=True,
+                            )
+                        log.info("cTrader session restored after reconnect: account %s (%s)",
+                                 self._account_id, "demo" if self._use_demo else "live")
+                        return
+                    except Exception as exc:
+                        with self._connection_state_lock:
+                            self.status.connected = False
+                            self.status.reason = f"cTrader reconnect recovery failed: {exc}"
+                        log.warning("cTrader reconnect recovery failed; retrying in %.1fs: %s",
+                                    delay, exc)
+                        time.sleep(delay)
+                        delay = min(30.0, delay * 2.0)
+            finally:
+                self._reconnect_recovery_lock.release()
+
+        threading.Thread(
+            target=recover,
+            name="ctrader-session-recovery",
+            daemon=True,
+        ).start()
 
     def _run_reactor(self):
         self._reactor_started.set()
@@ -405,7 +527,7 @@ class CTraderBroker:
                     waiter["quote"][0] = {"bid": int(bid), "ask": int(ask)}
                     waiter["event"].set()
 
-    def _load_symbols(self, ProtoOASymbolsListReq) -> None:
+    def _load_symbols(self, ProtoOASymbolsListReq) -> bool:
         # Retry once: found on first live connection that the FIRST request
         # sent right after auth completes is more prone to timing out than
         # ones sent slightly later (likely a brief server-side settle delay
@@ -424,11 +546,12 @@ class CTraderBroker:
                         self._symbol_base_asset_by_name[name] = int(sym.baseAssetId)
                     if getattr(sym, "quoteAssetId", None) is not None:
                         self._symbol_quote_asset_by_name[name] = int(sym.quoteAssetId)
-                return
+                return bool(getattr(payload, "symbol", []))
             if attempt == 1:
                 log.info("cTrader: symbol list fetch timed out on first attempt, retrying once...")
                 time.sleep(1.0)
         log.warning("cTrader: symbol list fetch timed out twice; symbol translation will fail")
+        return False
 
     def _load_assets(self, ProtoOAAssetListReq) -> None:
         """Cache broker asset IDs so account deposit currency is explicit."""
@@ -700,7 +823,7 @@ class CTraderBroker:
         """Send a protobuf request, block this (calling) thread until the
         matching response/event arrives (via clientMsgId correlation) or
         timeout. Returns the extracted payload, or None on timeout."""
-        if self._client is None:
+        if self._client is None or not getattr(self._client, "isConnected", True):
             return None
         msg_id = str(uuid.uuid4())
         ev = threading.Event()

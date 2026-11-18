@@ -267,7 +267,62 @@ class MultiTimeframeInstitutionalEngine:
             return f"{upper}=X"
         return upper
 
+    @staticmethod
+    def _safe_atr_for_price(price: Any, atr_value: Any) -> Optional[float]:
+        """Return a positive ATR scale, or None when the bar price is invalid."""
+        try:
+            price_f = float(price)
+            atr_f = float(atr_value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(price_f) or price_f <= 0:
+            return None
+        if not math.isfinite(atr_f) or atr_f < 0:
+            atr_f = 0.0
+        return max(atr_f, price_f * 0.00015, 1e-12)
+
+    @staticmethod
+    def _training_split_bounds(series_length: int) -> Tuple[int, int]:
+        """Return dev and training-prefix ends bounded by available bars."""
+        length = max(0, int(series_length))
+        dev_end = min(length, max(35, int(length * 0.60)))
+        train_end = min(dev_end, max(30, int(dev_end * 0.67)))
+        return dev_end, train_end
+
+    @staticmethod
+    def _clean_ohlcv_bars(raw_bars: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+        """Drop malformed candles before indicator calculations or training."""
+        cleaned: List[Dict[str, Any]] = []
+        dropped = 0
+        for bar in raw_bars:
+            if not isinstance(bar, dict):
+                dropped += 1
+                continue
+            try:
+                open_p = float(bar["open"])
+                high_p = float(bar["high"])
+                low_p = float(bar["low"])
+                close_p = float(bar["close"])
+                unix_sec = int(bar["unix_sec"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                dropped += 1
+                continue
+            prices = (open_p, high_p, low_p, close_p)
+            if (
+                not all(math.isfinite(price) and price > 0 for price in prices)
+                or high_p < max(open_p, close_p)
+                or low_p > min(open_p, close_p)
+                or high_p < low_p
+            ):
+                dropped += 1
+                continue
+            if not bar.get("ts"):
+                bar = {**bar, "ts": datetime.fromtimestamp(unix_sec, tz=timezone.utc).isoformat()}
+            cleaned.append(bar)
+        return cleaned, dropped
+
     def annotate_bar_series(self, raw_bars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        raw_bars, _ = self._clean_ohlcv_bars(raw_bars)
         n = len(raw_bars)
         if n == 0:
             return []
@@ -401,7 +456,9 @@ class MultiTimeframeInstitutionalEngine:
                 "session": classify_utc_session(unix_sec),
                 "adaptive_session": adaptive_session,
                 "regime": regime,
-                "atr14": round(atr14, 6),
+                # Keep enough precision for low-priced crypto instruments;
+                # six-decimal rounding can turn a valid ATR into exactly zero.
+                "atr14": round(atr14, 12),
                 "ema9": round(ema9, 5),
                 "ema21": round(ema21, 5),
                 "rsi14": round(rsi14, 2),
@@ -764,13 +821,28 @@ class MultiTimeframeInstitutionalEngine:
         pulse_bar_scores: List[float] = [0.0] * n
 
         for i, b in enumerate(trig_series):
+            if not isinstance(b, dict):
+                continue
+            try:
+                close_p = float(b["close"])
+                open_p = float(b["open"])
+                atr_raw = float(b.get("atr14", 0.0) or 0.0)
+            except (KeyError, TypeError, ValueError):
+                continue
+            # Zero/invalid prices can arrive in otherwise well-formed history
+            # batches. Keep their aligned feature slots neutral; never divide by
+            # a zero ATR or let a corrupt bar manufacture a huge signal.
+            if (not math.isfinite(close_p) or not math.isfinite(open_p)
+                    or close_p <= 0):
+                continue
+            if not math.isfinite(atr_raw) or atr_raw < 0:
+                atr_raw = 0.0
+            atr = max(atr_raw, close_p * 0.00015, 1e-12)
+
             # Sentinel models institutional news/catalyst releases: high-rel volume + volatility expansion
             # aligned with directional body impulse & term-reliability scaling
             vol_pct = float(b.get("volatility_percentile", 0.5))
             er = float(b.get("efficiency_ratio", 0.3))
-            close_p = float(b["close"])
-            open_p = float(b["open"])
-            atr = max(float(b.get("atr14", 0.0005)), close_p * 0.00015)
             body_atr = (close_p - open_p) / atr
 
             # Sentinel News Signal: activates during macro catalyst hours (London/NY economic release windows)
@@ -1883,7 +1955,9 @@ class MultiTimeframeInstitutionalEngine:
             r_val = float(t.get("realized_r", 0.0) or 0.0)
             p_audit = t.get("penalty_audit") or {}
             pen_adj_r = float(p_audit.get("penalty_adjusted_r", r_val))
-            is_true_win = bool(p_audit.get("is_true_tp_win", r_val >= float(t.get("initial_major_tp_r", 2.0)) * 0.85))
+            # Missing or malformed audit data is not evidence of a target fill.
+            # Never infer a true TP win from proximity or realized R alone.
+            is_true_win = p_audit.get("is_true_tp_win") is True
             is_scratch = bool(p_audit.get("is_positive_scratch_only", 0.0 <= r_val < 0.45 and not is_true_win))
             p_tier = str(p_audit.get("penalty_tier", "NONE"))
             cf_audit = str(p_audit.get("counterfactual_audit", ""))
@@ -2056,7 +2130,8 @@ class MultiTimeframeInstitutionalEngine:
 
         trig_tf = stack["trigger_timeframe"]
         trig_series = dataset.get("series", {}).get(trig_tf, [])
-        train_split_idx = max(30, int(dev_end_idx * 0.67))
+        dev_end_idx = min(len(trig_series), max(0, int(dev_end_idx)))
+        train_split_idx = min(dev_end_idx, max(30, int(dev_end_idx * 0.67)))
 
         sentinel_scores = (news_social_context or {}).get("sentinel_bar_scores") or [0.0] * len(trig_series)
         pulse_scores = (news_social_context or {}).get("pulse_bar_scores") or [0.0] * len(trig_series)
@@ -2088,14 +2163,21 @@ class MultiTimeframeInstitutionalEngine:
         winning_htf_room_atr: List[float] = []
 
         # ── PHASE A: 40% TRAINING PREFIX FEATURE & TIMEFRAME WEIGHT LEARNING ──
-        for i in range(25, max(26, train_split_idx - horizon)):
+        training_loop_end = min(len(trig_series), train_split_idx) - max(0, int(horizon))
+        for i in range(25, max(25, training_loop_end)):
             b = trig_series[i]
             if b.get("adaptive_session") == "ROLLOVER_SPREAD_GUARD":
                 continue
-            u_sec = int(b["unix_sec"])
-            entry_p = float(b["close"])
-            atr = max(float(b.get("atr14", 0.0005)), entry_p * 0.00015)
-            fwd_bar = trig_series[min(train_split_idx - 1, i + horizon)]
+            try:
+                u_sec = int(b["unix_sec"])
+                entry_p = float(b["close"])
+                fwd_bar = trig_series[min(train_split_idx - 1, i + horizon)]
+                fwd_close = float(fwd_bar["close"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            atr = self._safe_atr_for_price(entry_p, b.get("atr14", 0.0))
+            if atr is None or not math.isfinite(fwd_close) or fwd_close <= 0:
+                continue
             fwd_ret_atr = (float(fwd_bar["close"]) - entry_p) / atr
 
             for tf in all_stack_tfs:
@@ -3244,8 +3326,51 @@ class MultiTimeframeInstitutionalEngine:
                 "message": f"Could not ingest 7-TF dataset for {upper_sym}.",
             }
 
+        # Cached datasets predate current OHLC validation and may contain zero
+        # or malformed candles. Rebuild indicator fields from valid raw prices
+        # before any training, simulation, or ATR-normalized calculations.
+        series_by_tf = dataset.get("series")
+        if not isinstance(series_by_tf, dict):
+            return {"status": "error", "symbol": upper_sym,
+                    "message": "Market dataset has no valid timeframe series."}
+        dropped_by_tf: Dict[str, int] = {}
+        for timeframe, bars in list(series_by_tf.items()):
+            if not isinstance(bars, list):
+                dropped_by_tf[str(timeframe)] = 1
+                series_by_tf[timeframe] = []
+                continue
+            cleaned_bars, dropped_count = self._clean_ohlcv_bars(bars)
+            if dropped_count:
+                dropped_by_tf[str(timeframe)] = dropped_count
+            series_by_tf[timeframe] = self.annotate_bar_series(cleaned_bars)
+        if dropped_by_tf:
+            source_fingerprint = str(dataset.get("dataset_fingerprint") or "")
+            dataset["source_dataset_fingerprint"] = source_fingerprint
+            dataset["data_quality_report"] = {
+                "invalid_ohlcv_bars_dropped_by_timeframe": dropped_by_tf,
+                "invalid_ohlcv_bars_dropped_total": sum(dropped_by_tf.values()),
+            }
+            dataset["dataset_fingerprint"] = sha256_hex({
+                "source_dataset_fingerprint": source_fingerprint,
+                "invalid_ohlcv_bars_dropped_by_timeframe": dropped_by_tf,
+                "series_ohlcv": {
+                    tf: [
+                        {key: bar.get(key) for key in ("ts", "unix_sec", "open", "high", "low", "close", "volume")}
+                        for bar in bars
+                    ]
+                    for tf, bars in series_by_tf.items()
+                },
+            })
+
         cp = cost_profile_override if isinstance(cost_profile_override, dict) else self.ensure_verified_cost_profile(upper_sym)
         m15_bars = dataset.get("series", {}).get("M15", [])
+        if len(m15_bars) < 40 or len(dataset["series"].get("H1", [])) < 20:
+            return {
+                "status": "blocked",
+                "symbol": upper_sym,
+                "message": "Insufficient valid M15/H1 bars remain after rejecting malformed OHLC data.",
+                "data_quality_report": dataset.get("data_quality_report", {}),
+            }
         physics = self.compute_instrument_physics_profile(upper_sym, m15_bars)
         universal_adapters_registry = get_universal_agent_adapter_registry()
         oracle_adapter_contract = OracleTrainingAdapter().describe_contract()
@@ -3323,6 +3448,23 @@ class MultiTimeframeInstitutionalEngine:
 
             trig_tf = stack["trigger_timeframe"]
             trig_series = dataset.get("series", {}).get(trig_tf, [])
+            dev_end_idx, train_split_idx = self._training_split_bounds(len(trig_series))
+            minimum_train_prefix = 26 + horizon
+            if train_split_idx < minimum_train_prefix:
+                trained_results[style_up] = {
+                    "status": "blocked",
+                    "symbol": upper_sym,
+                    "trader_style": style_up,
+                    "trigger_timeframe": trig_tf,
+                    "available_trigger_bars": len(trig_series),
+                    "training_prefix_bars": train_split_idx,
+                    "minimum_training_prefix_bars": minimum_train_prefix,
+                    "message": (
+                        f"Insufficient valid {trig_tf} bars for the {horizon}-bar "
+                        "forward training horizon after data validation."
+                    ),
+                }
+                continue
 
             # Section 9 Gate: Verify Transaction-Cost, Price-Basis & Data-Provenance Integrity
             cost_integrity_report = TransactionCostAndDataIntegrityGate.verify_cost_and_data_integrity(
@@ -3340,7 +3482,6 @@ class MultiTimeframeInstitutionalEngine:
             pulse_scores = news_social_ctx["pulse_bar_scores"]
 
             # ── STAGE 1: 60% DEV PARTITION DISCOVERY, ABLATION & WALK-FORWARD WINDOWS ──
-            dev_end_idx = max(35, int(len(trig_series) * 0.60))
             shadow_fb = self.load_shadow_win_loss_feedback(upper_sym, style_up)
             learned_genome = self.discover_strategy_genome_from_data(
                 upper_sym,

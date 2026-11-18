@@ -62,6 +62,7 @@ class OracleDecisionLedger:
         self.ledger_path = resolved_path
         self.chronicle = chronicle_client
         self._lock = threading.RLock()
+        self._shadow_replay_cursor = 0
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
@@ -126,6 +127,8 @@ class OracleDecisionLedger:
         regime: str = "ranging",
         session: str = "london",
         strategy_id: Optional[str] = None,
+        dimension_scores: Optional[Dict[str, float]] = None,
+        learned_dimension_weights: Optional[Dict[str, float]] = None,
         streams: Optional[Dict[str, Any]] = None,
         entry_streams: Optional[Dict[str, Any]] = None,
         news_assessment: Optional[Dict[str, Any]] = None,
@@ -168,6 +171,8 @@ class OracleDecisionLedger:
             "regime": str(regime),
             "session": str(session),
             "strategy_id": strategy_id,
+            "dimension_scores": dict(dimension_scores or {}),
+            "learned_dimension_weights": dict(learned_dimension_weights or {}),
             "streams": streams or entry_streams or {},
             "news_assessment": n_assess,
             "news_impact": str(n_assess.get("level") or news_impact or "none"),
@@ -219,9 +224,13 @@ class OracleDecisionLedger:
         social_risk: Optional[str] = None,
         social_reason: str = "",
         atr: float = 0.0,
+        shadow_observation: bool = False,
+        dimension_scores: Optional[Dict[str, float]] = None,
+        learned_dimension_weights: Optional[Dict[str, float]] = None,
+        observed_at_unix: Optional[float] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
-        now = time.time()
+        now = float(observed_at_unix) if observed_at_unix is not None else time.time()
         event_id = self._make_event_id("SKIPPED", symbol, now)
         h_entry = float(hypothetical_entry_price if hypothetical_entry_price is not None else hypothetical_entry)
         eff_conf = float(entry_confidence if entry_confidence is not None else effective_confidence)
@@ -274,6 +283,9 @@ class OracleDecisionLedger:
             "social_assessment": s_assess,
             "social_risk": resolved_social_risk,
             "counterfactual_evaluated": False,
+            "shadow_observation": bool(shadow_observation),
+            "dimension_scores": dict(dimension_scores or {}),
+            "learned_dimension_weights": dict(learned_dimension_weights or {}),
         }
         summary = (
             f"NOT_ENTERED [{stage_rejected.upper()}:{resolved_reason_code}] {direction.upper()} {symbol.upper()} "
@@ -345,6 +357,19 @@ class OracleDecisionLedger:
         counterfactual_r: float,
         classification: str,  # "AVOIDED_LOSS" | "MISSED_WINNER" | "NEUTRAL"
         learning_adjustments: Dict[str, Any],
+        strategy_id: Optional[str] = None,
+        entry_session: Optional[str] = None,
+        exit_price: Optional[float] = None,
+        exit_reason: str = "",
+        bars_observed: int = 0,
+        data_source: str = "",
+        data_timeframe: str = "",
+        pnl_basis: str = "",
+        ambiguous_bar: bool = False,
+        final_stop_price: Optional[float] = None,
+        max_favorable_excursion_r: Optional[float] = None,
+        max_adverse_excursion_r: Optional[float] = None,
+        management_actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         event_id = self._make_event_id("CF_REPLAY", symbol, now)
@@ -362,6 +387,19 @@ class OracleDecisionLedger:
             "counterfactual_r": round(float(counterfactual_r), 4),
             "classification": classification,
             "learning_adjustments": learning_adjustments,
+            "strategy_id": strategy_id,
+            "entry_session": entry_session,
+            "exit_price": float(exit_price) if exit_price is not None else None,
+            "exit_reason": str(exit_reason),
+            "bars_observed": int(bars_observed),
+            "data_source": str(data_source),
+            "data_timeframe": str(data_timeframe),
+            "pnl_basis": str(pnl_basis),
+            "ambiguous_bar": bool(ambiguous_bar),
+            "final_stop_price": float(final_stop_price) if final_stop_price is not None else None,
+            "max_favorable_excursion_r": float(max_favorable_excursion_r) if max_favorable_excursion_r is not None else None,
+            "max_adverse_excursion_r": float(max_adverse_excursion_r) if max_adverse_excursion_r is not None else None,
+            "management_actions": list(management_actions or []),
         }
         summary = (
             f"COUNTERFACTUAL {classification} on {symbol.upper()} ({original_event_id}): "
@@ -468,7 +506,9 @@ class OracleDecisionLedger:
         """Alias for read_all(event_type=..., limit=...)."""
         return self.read_all(event_type=event_type, limit=limit)
 
-    def unentered_trades_pending_replay(self, max_items: int = 50) -> List[Dict[str, Any]]:
+    def unentered_trades_pending_replay(
+        self, max_items: int = 50, *, shadow_only: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Return TRADE_NOT_ENTERED records that have valid hypothetical entry/stop/target
         levels and have not yet been replayed by Chronicle Night Research / Forge Shadow Runner.
@@ -480,9 +520,75 @@ class OracleDecisionLedger:
             if r.get("event_type") in {"COUNTERFACTUAL_REPLAY", "COUNTERFACTUAL_REPLAY_INVALIDATED"}
             and r.get("original_event_id")
         }
+        progress_by_event: Dict[str, Dict[str, Any]] = {}
+        if shadow_only:
+            # Older versions could open multiple virtual positions for one
+            # symbol. Keep the earliest one as the active shadow position and
+            # preserve each later setup as an overlap observation.
+            already_superseded = {
+                str(row.get("superseded_candidate_id"))
+                for row in all_records
+                if row.get("event_type") == "SHADOW_CANDIDATE_OVERLAP"
+                and row.get("superseded_candidate_id")
+            }
+            replayed_already = {
+                str(row.get("original_event_id"))
+                for row in all_records
+                if row.get("event_type") in {"COUNTERFACTUAL_REPLAY", "COUNTERFACTUAL_REPLAY_INVALIDATED"}
+                and row.get("original_event_id")
+            }
+            by_symbol: Dict[str, List[Dict[str, Any]]] = {}
+            for row in all_records:
+                if (row.get("event_type") != "TRADE_NOT_ENTERED"
+                        or not row.get("shadow_observation")
+                        or row.get("event_id") in replayed_already
+                        or row.get("event_id") in already_superseded):
+                    continue
+                if (float(row.get("hypothetical_entry") or 0.0) <= 0
+                        or float(row.get("hypothetical_stop") or 0.0) <= 0
+                        or float(row.get("hypothetical_target") or 0.0) <= 0):
+                    continue
+                by_symbol.setdefault(str(row.get("symbol") or "").upper(), []).append(row)
+            for symbol_key, rows in by_symbol.items():
+                if len(rows) < 2:
+                    continue
+                rows.sort(key=lambda row: float(row.get("timestamp") or 0.0))
+                incumbent = rows[0]
+                for duplicate in rows[1:]:
+                    self.record_shadow_candidate_overlap(
+                        symbol=symbol_key,
+                        direction=str(duplicate.get("direction") or "hold"),
+                        strategy_id=str(duplicate.get("strategy_id") or "") or None,
+                        superseded_candidate_id=str(duplicate.get("event_id") or ""),
+                        candidate_context={
+                            "entry": duplicate.get("hypothetical_entry"),
+                            "stop": duplicate.get("hypothetical_stop"),
+                            "target": duplicate.get("hypothetical_target"),
+                            "reason": "preexisting_duplicate_shadow_position",
+                        },
+                    )
+            all_records = self.read_all()
+            already_superseded = {
+                str(row.get("superseded_candidate_id"))
+                for row in all_records
+                if row.get("event_type") == "SHADOW_CANDIDATE_OVERLAP"
+                and row.get("superseded_candidate_id")
+            }
+            for row in self.read_all(event_type="COUNTERFACTUAL_REPLAY_PROGRESS"):
+                original_id = row.get("original_event_id")
+                if original_id and (
+                    original_id not in progress_by_event
+                    or float(row.get("timestamp") or 0.0)
+                    > float(progress_by_event[original_id].get("timestamp") or 0.0)
+                ):
+                    progress_by_event[str(original_id)] = row
         pending = []
         for rec in all_records:
             if rec.get("event_type") != "TRADE_NOT_ENTERED":
+                continue
+            if shadow_only and not rec.get("shadow_observation"):
+                continue
+            if shadow_only and str(rec.get("event_id") or "") in already_superseded:
                 continue
             if rec.get("event_id") in replayed_ids:
                 continue
@@ -490,8 +596,138 @@ class OracleDecisionLedger:
                 continue
             if float(rec.get("hypothetical_stop") or 0.0) <= 0:
                 continue
+            if float(rec.get("hypothetical_target") or 0.0) <= 0:
+                continue
+            progress = progress_by_event.get(str(rec.get("event_id") or ""), {})
+            rec["_shadow_last_bar_ts"] = progress.get("last_bar_ts")
+            rec["_shadow_bars_observed"] = int(progress.get("bars_observed") or 0)
+            rec["_shadow_last_progress_at"] = float(progress.get("timestamp") or rec.get("timestamp") or 0.0)
+            rec["_shadow_position_state"] = progress.get("position_state") or {}
             pending.append(rec)
-        return pending[-max_items:]
+        # Rotate fairly across still-open candidates so one quiet symbol cannot
+        # monopolize every bounded replay batch.
+        if shadow_only:
+            pending.sort(key=lambda row: float(row.get("_shadow_last_progress_at") or row.get("timestamp") or 0.0))
+            if pending and max_items > 0:
+                start = self._shadow_replay_cursor % len(pending)
+                rotated = pending[start:] + pending[:start]
+                selected = rotated[:max_items]
+                self._shadow_replay_cursor = (start + len(selected)) % len(pending)
+                return selected
+        return pending[:max_items]
+
+    def record_shadow_replay_progress(
+        self, *, original_event_id: str, symbol: str, last_bar_ts: float,
+        bars_observed: int, position_state: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Persist the last completed bar examined for an unresolved paper trade."""
+        now = time.time()
+        record = {
+            "schema": "oracle.v2.decision_ledger.v1",
+            "event_type": "COUNTERFACTUAL_REPLAY_PROGRESS",
+            "event_id": self._make_event_id("CF_PROGRESS", symbol, now),
+            "original_event_id": str(original_event_id),
+            "timestamp": now,
+            "symbol": symbol.upper(),
+            "last_bar_ts": float(last_bar_ts),
+            "bars_observed": max(0, int(bars_observed)),
+            "position_state": dict(position_state or {}),
+        }
+        return self._append_record(
+            record,
+            tags=["oracle_v2", "shadow_replay_progress", symbol.upper()],
+            summary=f"SHADOW replay progress {symbol.upper()} through bar {last_bar_ts}",
+        )
+
+    def has_pending_shadow_candidate(
+        self, *, symbol: str, direction: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+    ) -> bool:
+        """Return whether this symbol already has an active virtual position.
+
+        The shadow book enforces one active position per symbol regardless of
+        direction or strategy, just as Oracle's live book does for broker positions.
+        The optional legacy arguments remain accepted for existing callers.
+        """
+        symbol_key = str(symbol).upper()
+        replayed_ids = {
+            row.get("original_event_id")
+            for row in self.read_all()
+            if row.get("event_type") in {"COUNTERFACTUAL_REPLAY", "COUNTERFACTUAL_REPLAY_INVALIDATED"}
+            and row.get("original_event_id")
+        }
+        superseded_ids = {
+            str(row.get("superseded_candidate_id"))
+            for row in self.read_all(event_type="SHADOW_CANDIDATE_OVERLAP")
+            if row.get("superseded_candidate_id")
+        }
+        for row in self.read_all(event_type="TRADE_NOT_ENTERED"):
+            if (not row.get("shadow_observation")
+                    or row.get("event_id") in replayed_ids
+                    or str(row.get("event_id") or "") in superseded_ids):
+                continue
+            if str(row.get("symbol") or "").upper() == symbol_key:
+                return True
+        return False
+
+    def record_shadow_candidate_overlap(
+        self, *, symbol: str, direction: str, strategy_id: Optional[str] = None,
+        candidate_context: Optional[Dict[str, Any]] = None,
+        superseded_candidate_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Record a same-symbol setup without opening a second shadow position."""
+        symbol_key = str(symbol).upper()
+        records = self.read_all()
+        settled_ids = {
+            row.get("original_event_id") for row in records
+            if row.get("event_type") in {"COUNTERFACTUAL_REPLAY", "COUNTERFACTUAL_REPLAY_INVALIDATED"}
+            and row.get("original_event_id")
+        }
+        superseded_ids = {
+            str(row.get("superseded_candidate_id")) for row in records
+            if row.get("event_type") == "SHADOW_CANDIDATE_OVERLAP"
+            and row.get("superseded_candidate_id")
+        }
+        active = next((row for row in records if
+            row.get("event_type") == "TRADE_NOT_ENTERED"
+            and row.get("shadow_observation")
+            and row.get("event_id") not in settled_ids
+            and str(row.get("event_id") or "") not in superseded_ids
+            and str(row.get("symbol") or "").upper() == symbol_key
+        ), None)
+        if active is None:
+            return None
+        duplicate_key = (str(active.get("event_id")), str(direction).lower(), str(strategy_id or ""))
+        for row in records:
+            if row.get("event_type") != "SHADOW_CANDIDATE_OVERLAP":
+                continue
+            if (
+                str(row.get("active_event_id")) == duplicate_key[0]
+                and str(row.get("direction") or "").lower() == duplicate_key[1]
+                and str(row.get("strategy_id") or "") == duplicate_key[2]
+                and str(row.get("superseded_candidate_id") or "")
+                    == str(superseded_candidate_id or "")
+            ):
+                return row
+        now = time.time()
+        record = {
+            "schema": "oracle.v2.decision_ledger.v1",
+            "event_type": "SHADOW_CANDIDATE_OVERLAP",
+            "event_id": self._make_event_id("SHADOW_OVERLAP", symbol_key, now),
+            "timestamp": now,
+            "symbol": symbol_key,
+            "active_event_id": active.get("event_id"),
+            "superseded_candidate_id": str(superseded_candidate_id) if superseded_candidate_id else None,
+            "direction": str(direction).lower(),
+            "strategy_id": str(strategy_id) if strategy_id else None,
+            "candidate_context": dict(candidate_context or {}),
+            "reason": "one_active_shadow_position_per_symbol",
+        }
+        return self._append_record(
+            record,
+            tags=["oracle_v2", "shadow_candidate_overlap", symbol_key],
+            summary=f"SHADOW setup for {symbol_key} observed while a same-symbol virtual position is active",
+        )
 
     def summarize_diagnostics(self) -> Dict[str, Any]:
         """
@@ -560,10 +796,23 @@ class OracleDecisionLedger:
 
         missed_winners = [r for r in replays if r.get("classification") == "MISSED_WINNER"]
         avoided_losses = [r for r in replays if r.get("classification") == "AVOIDED_LOSS"]
+        shadow_candidate_ids = {
+            row.get("event_id") for row in not_entered
+            if row.get("shadow_observation") and row.get("event_id")
+        }
+        shadow_replays = [
+            row for row in replays
+            if row.get("original_event_id") in shadow_candidate_ids
+        ]
+        invalidated_shadow_ids = invalidated_ids.intersection(
+            str(candidate_id) for candidate_id in shadow_candidate_ids
+        )
 
         wins_count = sum(1 for c in closed if c.get("won"))
         losses_count = sum(1 for c in closed if not c.get("won"))
         pending_cf = len(self.unentered_trades_pending_replay(max_items=500))
+        pending_shadow = len(self.unentered_trades_pending_replay(max_items=500, shadow_only=True))
+        shadow_r = sum(float(row.get("counterfactual_r") or 0.0) for row in shadow_replays)
 
         return {
             "total_events": len(all_records),
@@ -581,6 +830,16 @@ class OracleDecisionLedger:
                 "avoided_losses": len(avoided_losses),
                 "pending_unreplayed": pending_cf,
                 "invalidated": len(invalidated_replays),
+            },
+            "shadow_observations": {
+                "candidates": len(shadow_candidate_ids),
+                "settled": len(shadow_replays),
+                "pending": pending_shadow,
+                "wins": sum(1 for row in shadow_replays if row.get("would_have_won")),
+                "losses": sum(1 for row in shadow_replays if not row.get("would_have_won")),
+                "mean_r": round(shadow_r / len(shadow_replays), 4) if shadow_replays else None,
+                "invalidated": len(invalidated_shadow_ids),
+                "separate_from_realized_trades": True,
             },
             "exposed_failures_count": len(failures),
             "exposed_system_failures": len(failures),

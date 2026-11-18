@@ -546,6 +546,10 @@ class TradeLearningEngine:
                     exit_confidence=float(exit_confidence),
                     entry_regime=str(pos.entry_regime),
                     exit_regime=str(exit_regime),
+                    entry_session=getattr(pos, "entry_scout_session", None),
+                    dimension_scores_at_entry=dict(
+                        getattr(pos, "entry_scout_dimension_scores", {}) or {}
+                    ),
                     entry_streams=dict(getattr(pos, "entry_streams", {}) or {}),
                     strategy_id=getattr(pos, "strategy_id", None),
                     journal_id=getattr(pos, "journal_id", None),

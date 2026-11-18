@@ -1853,11 +1853,13 @@ class LearnedPenaltyAndNecessityEngine:
         learned_near_tp_zone = float(policy.get("learned_near_tp_zone_pct", 1.0))
         shortfall_ratio = max(0.0, min(1.0, (target_r - max(0.0, realized_r)) / target_r))
 
+        # A TP win must correspond to an actual simulator exit at a target.
+        # Realized R can include partial banking, and strings such as
+        # CLOSED_TIME_HORIZON_AFTER_1_EXPANSIONS only say a prior target stage
+        # was reached; neither proves the active final target filled.
         reached_major_tp = (
-            "CLOSED_AT_MAJOR_TP" in shadow_status
-            or "CLOSED_AT_EXPANDED_MAJOR_TP" in shadow_status
-            or "EXPANSIONS" in shadow_status
-            or realized_r >= target_r
+            shadow_status == "CLOSED_AT_MAJOR_TP"
+            or shadow_status.startswith("CLOSED_AT_EXPANDED_MAJOR_TP_")
         )
 
         if reached_major_tp:
@@ -1919,7 +1921,11 @@ class LearnedPenaltyAndNecessityEngine:
                 if realized_r < 0
                 else "BREAKEVEN_OR_EARLY_STOP_MINOR_PENALTY"
             ),
-            "is_true_tp_win": bool(is_near_tp_save),
+            # Defensive exits near a target are not target fills. Keep their
+            # save classification separate so no learner can count them as
+            # true TP wins.
+            "is_true_tp_win": False,
+            "is_near_tp_save": bool(is_near_tp_save),
             "is_positive_scratch_only": bool(realized_r >= 0 and not is_near_tp_save),
             "penalty_tier": (
                 "MINOR_PENALTY_PLUS_UNNECESSARY_STOP_PENALTY"
