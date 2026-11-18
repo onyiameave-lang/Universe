@@ -156,7 +156,6 @@ _CTRADER_BROKER_MAP: Dict[str, str] = {
     "NIKKEI":  "JP225",
     "HSI":     "HK50",
     "SENSEX":  "IN50",
-    "ASX200":  "ASX.AU",
     "BRKB":    "BRK.B.US",
     "V":       "V.US",
 }

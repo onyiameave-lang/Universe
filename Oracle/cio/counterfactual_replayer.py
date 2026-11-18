@@ -12,6 +12,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _ORACLE_ROOT = Path(__file__).resolve().parents[1]
+_MAX_REPLAY_PRICE_SCALE_RATIO = 10.0
+
+
+def _price_scale_mismatch(bar: Any, reference_price: float) -> Optional[Dict[str, float]]:
+    """Reject replay bars whose quote scale is implausible for the setup."""
+    if not isinstance(reference_price, (int, float)) or reference_price <= 0:
+        return {"reference_price": float(reference_price or 0.0)}
+    prices = {
+        name: float(getattr(bar, name))
+        for name in ("open", "high", "low", "close")
+    }
+    if any(not (price > 0 and price < float("inf")) for price in prices.values()):
+        return prices
+    lower = reference_price / _MAX_REPLAY_PRICE_SCALE_RATIO
+    upper = reference_price * _MAX_REPLAY_PRICE_SCALE_RATIO
+    if any(price < lower or price > upper for price in prices.values()):
+        return prices
+    return None
 
 
 def replay_unentered_counterfactuals(
@@ -56,7 +74,23 @@ def replay_unentered_counterfactuals(
                 sign = 1.0 if direction in ("long", "buy") else -1.0
                 hit_tp = False
                 hit_sl = False
+                invalid_scale = False
                 for bar in recent_bars[-5:]:
+                    bad_prices = _price_scale_mismatch(bar, entry)
+                    if bad_prices is not None:
+                        decision_ledger.record_counterfactual_replay_invalidated(
+                            original_event_id=str(item.get("event_id")),
+                            symbol=sym,
+                            reason_code="replay_bar_price_scale_mismatch",
+                            details={
+                                "reference_entry": entry,
+                                "max_scale_ratio": _MAX_REPLAY_PRICE_SCALE_RATIO,
+                                "bar_ohlc": bad_prices,
+                                "data_source": str(md.get("source") or getattr(md["series"], "source", "unknown")),
+                            },
+                        )
+                        invalid_scale = True
+                        break
                     if sign > 0:
                         if target > entry and bar.high >= target:
                             hit_tp = True
@@ -71,6 +105,8 @@ def replay_unentered_counterfactuals(
                         if bar.high >= stop:
                             hit_sl = True
                             break
+                if invalid_scale:
+                    continue
                 if hit_tp:
                     would_win = True
                     cf_r = abs(target - entry) / risk_unit

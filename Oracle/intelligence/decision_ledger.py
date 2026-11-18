@@ -373,6 +373,28 @@ class OracleDecisionLedger:
             summary=summary,
         )
 
+    def record_counterfactual_replay_invalidated(
+        self, *, original_event_id: str, symbol: str, reason_code: str,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Append an audit event when replay data fails integrity checks."""
+        now = time.time()
+        record = {
+            "schema": "oracle.v2.decision_ledger.v1",
+            "event_type": "COUNTERFACTUAL_REPLAY_INVALIDATED",
+            "event_id": self._make_event_id("CF_INVALID", symbol, now),
+            "original_event_id": str(original_event_id),
+            "timestamp": now,
+            "symbol": str(symbol).upper(),
+            "reason_code": str(reason_code),
+            "details": dict(details or {}),
+        }
+        return self._append_record(
+            record,
+            tags=["oracle_v2", "counterfactual_replay_invalidated", str(symbol).upper()],
+            summary=f"INVALIDATED counterfactual replay for {str(symbol).upper()}: {reason_code}",
+        )
+
     def expose_failure(
         self,
         *,
@@ -455,7 +477,8 @@ class OracleDecisionLedger:
         replayed_ids = {
             r.get("original_event_id")
             for r in all_records
-            if r.get("event_type") == "COUNTERFACTUAL_REPLAY" and r.get("original_event_id")
+            if r.get("event_type") in {"COUNTERFACTUAL_REPLAY", "COUNTERFACTUAL_REPLAY_INVALIDATED"}
+            and r.get("original_event_id")
         }
         pending = []
         for rec in all_records:
@@ -479,7 +502,20 @@ class OracleDecisionLedger:
         entered = [r for r in all_records if r.get("event_type") == "TRADE_ENTERED"]
         closed = [r for r in all_records if r.get("event_type") == "TRADE_CLOSED"]
         not_entered = [r for r in all_records if r.get("event_type") == "TRADE_NOT_ENTERED"]
-        replays = [r for r in all_records if r.get("event_type") == "COUNTERFACTUAL_REPLAY"]
+        invalidated_ids = {
+            str(r.get("original_event_id")) for r in all_records
+            if r.get("event_type") == "COUNTERFACTUAL_REPLAY_INVALIDATED"
+            and r.get("original_event_id")
+        }
+        invalidated_replays = [
+            r for r in all_records
+            if r.get("event_type") == "COUNTERFACTUAL_REPLAY_INVALIDATED"
+        ]
+        replays = [
+            r for r in all_records
+            if r.get("event_type") == "COUNTERFACTUAL_REPLAY"
+            and str(r.get("original_event_id") or "") not in invalidated_ids
+        ]
         failures = [r for r in all_records if r.get("event_type") == "SYSTEM_FAILURE_EXPOSED"]
 
         by_symbol_regime: Dict[str, Dict[str, Any]] = {}
@@ -544,6 +580,7 @@ class OracleDecisionLedger:
                 "missed_winners": len(missed_winners),
                 "avoided_losses": len(avoided_losses),
                 "pending_unreplayed": pending_cf,
+                "invalidated": len(invalidated_replays),
             },
             "exposed_failures_count": len(failures),
             "exposed_system_failures": len(failures),
