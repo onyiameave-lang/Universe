@@ -27,8 +27,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from core.embeddings import cosine_similarity  # type: ignore
-from core.memory_record import MemoryRecord      # type: ignore
+try:
+    from Chronicle.core.embeddings import cosine_similarity  # type: ignore
+    from Chronicle.core.memory_record import MemoryRecord      # type: ignore
+except ImportError:
+    from core.embeddings import cosine_similarity  # type: ignore
+    from core.memory_record import MemoryRecord      # type: ignore
 
 log = logging.getLogger("chronicle.vector_store")
 

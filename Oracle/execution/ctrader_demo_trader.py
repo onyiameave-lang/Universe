@@ -69,22 +69,55 @@ except Exception:
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]   # Oracle/
 _ECO_ROOT  = _REPO_ROOT.parent                     # Universe/ (ecosystem root)
-for p in (_REPO_ROOT, _ECO_ROOT):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+for p in (_ECO_ROOT, _REPO_ROOT):
+    if str(p) in sys.path:
+        sys.path.remove(str(p))
+    sys.path.insert(0, str(p))
 
-from execution.ctrader_broker import CTraderBroker  # type: ignore
-from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore
-from execution.trade_manager import (  # type: ignore
-    TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
-    SCOUT_ENTRY_CONTEXT_KEY,
-)
-from execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
-from execution.shadow_feedback import replay_shadow_candidates  # type: ignore
-from intelligence.news_impact import assess_news_impact  # type: ignore
-from intelligence.social_risk import assess_social_risk  # type: ignore
-from intelligence.trade_learning import TradeLearningEngine  # type: ignore
-from core.risk import Position as RiskPosition  # type: ignore
+try:
+    from execution.ctrader_broker import CTraderBroker  # type: ignore
+    from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore
+    from execution.trade_manager import (  # type: ignore
+        TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+        SCOUT_ENTRY_CONTEXT_KEY,
+    )
+    from execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
+    from execution.shadow_feedback import replay_shadow_candidates  # type: ignore
+    from execution.telegram_notifier import (  # type: ignore
+        RecentSignalCache,
+        TelegramNotifier,
+        format_entry_alert,
+        format_execution_alert,
+        format_native_close_alert,
+        format_position_alert,
+        signal_only_enabled,
+    )
+    from intelligence.news_impact import assess_news_impact  # type: ignore
+    from intelligence.social_risk import assess_social_risk  # type: ignore
+    from intelligence.trade_learning import TradeLearningEngine  # type: ignore
+    from core.risk import Position as RiskPosition  # type: ignore
+except ImportError:
+    from Oracle.execution.ctrader_broker import CTraderBroker  # type: ignore
+    from Oracle.execution.chronicle_position_log import ChroniclePositionLog  # type: ignore
+    from Oracle.execution.trade_manager import (  # type: ignore
+        TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+        SCOUT_ENTRY_CONTEXT_KEY,
+    )
+    from Oracle.execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
+    from Oracle.execution.shadow_feedback import replay_shadow_candidates  # type: ignore
+    from Oracle.execution.telegram_notifier import (  # type: ignore
+        RecentSignalCache,
+        TelegramNotifier,
+        format_entry_alert,
+        format_execution_alert,
+        format_native_close_alert,
+        format_position_alert,
+        signal_only_enabled,
+    )
+    from Oracle.intelligence.news_impact import assess_news_impact  # type: ignore
+    from Oracle.intelligence.social_risk import assess_social_risk  # type: ignore
+    from Oracle.intelligence.trade_learning import TradeLearningEngine  # type: ignore
+    from Oracle.core.risk import Position as RiskPosition  # type: ignore
 
 log = logging.getLogger("oracle.ctrader_demo")
 
@@ -492,6 +525,9 @@ class CTraderDemoTrader:
         self.shadow_mode = os.getenv("ORACLE_CTRADER_SHADOW_MODE", "true").strip().lower() not in {
             "0", "false", "no", "off",
         }
+        self.signal_only = signal_only_enabled()
+        self.telegram = TelegramNotifier()
+        self._recent_signals = RecentSignalCache()
         self.broker = CTraderBroker()
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
@@ -534,7 +570,10 @@ class CTraderDemoTrader:
         _unload_conflicting_modules()
         self.atlas = _load("Atlas", "agents/research_agent.py", "AtlasAgent")
         _unload_conflicting_modules()
-        from agents.oracle_agent import OracleAgent  # type: ignore
+        try:
+            from agents.oracle_agent import OracleAgent  # type: ignore
+        except ImportError:
+            from Oracle.agents.oracle_agent import OracleAgent  # type: ignore
         self.oracle = OracleAgent(
             chronicle_client=self.chronicle, sentinel_client=self.sentinel,
             pulse_client=self.pulse, atlas_client=self.atlas)
@@ -545,7 +584,8 @@ class CTraderDemoTrader:
 
         self._pos_log = ChroniclePositionLog(
             chronicle_agent=self.chronicle, trader_id=_TRADER_ID)
-        log.info("CTraderDemoTrader: TRADER_ID=%r", _TRADER_ID)
+        log.info("CTraderDemoTrader: TRADER_ID=%r signal_only=%s telegram=%s",
+                 _TRADER_ID, self.signal_only, self.telegram.enabled)
 
     def connect(self):
         status = self.broker.connect()
@@ -777,6 +817,7 @@ class CTraderDemoTrader:
                 live_pos = self._get_open_position(broker_sym, open_positions)
             if live_pos is None:
                 log.info("[%s] no longer open — deregistering from CTM", symbol)
+                won_outcome: Optional[bool] = None
                 try:
                     outcome = self._trade_learning.record_close_once(
                         f"{symbol}:{pos.entry_time}:broker-close",
@@ -784,12 +825,26 @@ class CTraderDemoTrader:
                         exit_confidence=pos.last_confidence, exit_regime=pos.last_regime,
                         exit_reason="closed at broker (SL/TP hit or manual)")
                     if outcome is not None:
+                        won_outcome = bool(outcome.won)
                         if outcome.won:
                             self.oracle.risk.portfolio.record_win(symbol)
                         else:
                             self.oracle.risk.portfolio.record_loss(symbol)
                 except Exception as exc:
                     log.warning("[%s] Trade Learning failed on close: %s", symbol, exc)
+                tg = getattr(self, "telegram", None)
+                if tg is not None and tg.enabled:
+                    tg.send_text(
+                        format_native_close_alert(
+                            symbol,
+                            broker_sym,
+                            position_key,
+                            pos.last_price,
+                            "closed at broker (SL/TP hit or manual)",
+                            won=won_outcome,
+                            broker_name="cTrader",
+                        )
+                    )
                 self._remove_risk_position_for(pos)
                 with self._manage_lock:
                     self._managed_positions.pop(position_key, None)
@@ -822,6 +877,8 @@ class CTraderDemoTrader:
                                    social_risk=social_assessment.level, atr=current_atr)
             decision = self._trade_manager.evaluate(pos, snap)
             pos_id = live_pos.get("ticket") or live_pos.get("id")
+            tg = getattr(self, "telegram", None)
+            sig_only = bool(getattr(self, "signal_only", False))
             if decision.action == Action.HOLD:
                 if decision.reason != pos.last_journaled_hold_reason:
                     self.oracle.trade_journal.log_hold(
@@ -829,6 +886,18 @@ class CTraderDemoTrader:
                     pos.last_journaled_hold_reason = decision.reason
                 continue
             if decision.action == Action.TIGHTEN_STOP:
+                if sig_only:
+                    log.info("[%s] SIGNAL-ONLY CTM tighten #%s -> %.5f: %s",
+                             symbol, pos_id, decision.new_stop, decision.reason)
+                    if tg is not None and tg.enabled:
+                        tg.send_text(
+                            format_position_alert(
+                                symbol, pos_id, "tighten_stop", decision,
+                                pos.initial_stop, pos.initial_target,
+                                executed=False, broker_name="cTrader",
+                            )
+                        )
+                    continue
                 log.info("[%s] CTM tighten #%s -> %.5f: %s",
                          symbol, pos_id, decision.new_stop, decision.reason)
                 try:
@@ -838,6 +907,15 @@ class CTraderDemoTrader:
                               f"stop->{decision.new_stop:.5f}  {decision.reason}")
                         self._pos_log.log_modified(symbol, broker_sym, pos_id,
                                                     sl=decision.new_stop or 0.0, tp=pos.initial_target)
+                        if tg is not None and tg.enabled:
+                            tg.send_text(
+                                format_position_alert(
+                                    symbol, pos_id, "tighten_stop", decision,
+                                    pos.initial_stop, pos.initial_target,
+                                    executed=True, execution_status="modified",
+                                    broker_name="cTrader",
+                                )
+                            )
                     else:
                         log.warning("[%s] CTM: stop modification not confirmed #%s: %s",
                                     symbol, pos_id, mod.get("reason", "unknown broker response"))
@@ -847,12 +925,32 @@ class CTraderDemoTrader:
                     log.warning("[%s] CTM: modify failed #%s: %s", symbol, pos_id, exc)
                     print(f"[{symbol}->{broker_sym}] CTM TIGHTEN FAILED #{pos_id}: {exc}")
             elif decision.action == Action.CLOSE:
+                if sig_only:
+                    log.info("[%s] SIGNAL-ONLY CTM close #%s: %s", symbol, pos_id, decision.reason)
+                    if tg is not None and tg.enabled:
+                        tg.send_text(
+                            format_position_alert(
+                                symbol, pos_id, "close", decision,
+                                pos.initial_stop, pos.initial_target,
+                                executed=False, broker_name="cTrader",
+                            )
+                        )
+                    continue
                 log.info("[%s] CTM close #%s: %s", symbol, pos_id, decision.reason)
                 print(f"[{symbol}->{broker_sym}] CTM CLOSE #{pos_id}  {decision.reason}")
                 try:
                     close_result = self.broker.close_position(pos_id)
                     if close_result.get("status") == "closed":
                         self._pos_log.log_closed(symbol, broker_sym, pos_id, reason=decision.reason)
+                        if tg is not None and tg.enabled:
+                            tg.send_text(
+                                format_position_alert(
+                                    symbol, pos_id, "close", decision,
+                                    pos.initial_stop, pos.initial_target,
+                                    executed=True, execution_status="closed",
+                                    broker_name="cTrader",
+                                )
+                            )
                         try:
                             outcome = self._trade_learning.record_close_once(
                                 f"{symbol}:{pos_id}:manager-close",
@@ -1107,11 +1205,32 @@ class CTraderDemoTrader:
             conf_str = f"conf={s.get('confidence', 0):.3f}"
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym
+            broker_plan["rebase_stops_to_market"] = True
+            tg = getattr(self, "telegram", None)
+            sig_cache = getattr(self, "_recent_signals", None)
+            if getattr(self, "signal_only", False):
+                summary["shadowed"] += 1
+                print(f"[{symbol}->{broker_sym}] SIGNAL-ONLY direction={plan['direction']} "
+                      f"conf={s.get('confidence', 0):.3f} stop={plan.get('stop')} target={plan.get('target')}")
+                if tg is not None and tg.enabled:
+                    if sig_cache is None or sig_cache.should_send(
+                        symbol, plan["direction"], plan.get("entry"), plan.get("stop"), plan.get("target")
+                    ):
+                        tg.send_text(format_entry_alert(symbol, sig))
+                self._record_shadow_proposal(
+                    symbol, broker_sym, sig, market_state, rejection_reason="signal_only_mode"
+                )
+                continue
             if self.shadow_mode:
                 summary["shadowed"] += 1
                 print(f"[{symbol}->{broker_sym}] SHADOW direction={plan['direction']} "
                       f"conf={s.get('confidence', 0):.3f} size={plan.get('size', 0)} "
                       f"stop={plan.get('stop')} target={plan.get('target')}; no order sent")
+                if tg is not None and tg.enabled:
+                    if sig_cache is None or sig_cache.should_send(
+                        symbol, plan["direction"], plan.get("entry"), plan.get("stop"), plan.get("target")
+                    ):
+                        tg.send_text(format_entry_alert(symbol, sig))
                 self._record_shadow_proposal(symbol, broker_sym, sig, market_state)
                 continue
             if self.broker.status.connected:
@@ -1143,33 +1262,42 @@ class CTraderDemoTrader:
                 res_reason = result.get("reason", "")
                 print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  -> {res_status}  {res_reason}")
+                if tg is not None and tg.enabled:
+                    tg.send_text(
+                        format_execution_alert(
+                            symbol, broker_sym, sig, result, broker_name="cTrader"
+                        )
+                    )
                 if res_status == "filled":
                     self._trades_this_session += 1
                     summary["trades"] += 1
                     ticket = result.get("order") or result.get("ticket") or 0
+                    actual_sl = result.get("sl") if result.get("sl") is not None else plan.get("stop", 0.0)
+                    actual_tp = result.get("tp") if result.get("tp") is not None else plan.get("target", 0.0)
                     self._pos_log.log_opened(symbol, broker_sym, ticket,
                         direction=plan["direction"],
                         volume=result.get("volume", plan.get("size", 0)),
                         price=result.get("price", 0.0),
-                        sl=plan.get("stop", 0.0), tp=plan.get("target", 0.0))
+                        sl=actual_sl, tp=actual_tp)
                     open_positions.append({
                         "symbol": broker_sym,
                         "ticket": ticket,
                         "type": "buy" if plan["direction"] in ("long", "buy") else "sell",
                         "price_open": result.get("price") or plan.get("entry", 0.0),
                         "volume": result.get("volume", plan.get("size", 0.0)),
-                        "sl": plan.get("stop", 0.0),
-                        "tp": plan.get("target", 0.0),
+                        "sl": actual_sl,
+                        "tp": actual_tp,
                     })
                     self._register_position(symbol, plan["direction"],
                         entry_price=result.get("price") or plan.get("entry", 0.0),
-                        stop=plan.get("stop", 0.0), target=plan.get("target", 0.0),
+                        stop=actual_sl, target=actual_tp,
                         confidence=float(sig.get("effective_confidence", s.get("confidence", 0.0))),
                         size=result.get("volume", plan.get("size", 0.0)),
                         news_level=sig.get("news_impact", "none"),
                         news_reason=sig.get("news_reason", ""),
                         social_level=sig.get("social_risk", "none"),
-                        social_reason=sig.get("social_reason", ""))
+                        social_reason=sig.get("social_reason", ""),
+                        position_id=ticket)
                     self.oracle.risk.portfolio.record_trade_opened(symbol)
                 else:
                     if str(res_status).lower() in {"rejected", "blocked"}:

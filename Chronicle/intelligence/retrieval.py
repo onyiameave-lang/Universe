@@ -24,22 +24,32 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.embeddings import get_embedding_model, cosine_similarity  # type: ignore
-from core.memory_record import MemoryRecord, MemoryPillar, SOURCE_CREDIBILITY  # type: ignore
-from core.vector_store import VectorStore                             # type: ignore
-from core.knowledge_graph import KnowledgeGraph                       # type: ignore
+try:
+    from Chronicle.core.embeddings import get_embedding_model, cosine_similarity  # type: ignore
+    from Chronicle.core.memory_record import MemoryRecord, MemoryPillar, SOURCE_CREDIBILITY  # type: ignore
+    from Chronicle.core.vector_store import VectorStore                             # type: ignore
+    from Chronicle.core.knowledge_graph import KnowledgeGraph                       # type: ignore
+except ImportError:
+    from core.embeddings import get_embedding_model, cosine_similarity  # type: ignore
+    from core.memory_record import MemoryRecord, MemoryPillar, SOURCE_CREDIBILITY  # type: ignore
+    from core.vector_store import VectorStore                             # type: ignore
+    from core.knowledge_graph import KnowledgeGraph                       # type: ignore
 
 # FIX-HYBRID-01: import the hybrid scorer
 try:
-    from intelligence.hybrid_retrieval import HybridRetriever  # type: ignore
+    from Chronicle.intelligence.hybrid_retrieval import HybridRetriever  # type: ignore
     _HYBRID_AVAILABLE = True
 except ImportError:
     try:
-        from hybrid_retrieval import HybridRetriever  # type: ignore
+        from intelligence.hybrid_retrieval import HybridRetriever  # type: ignore
         _HYBRID_AVAILABLE = True
     except ImportError:
-        _HYBRID_AVAILABLE = False
-        HybridRetriever = None  # type: ignore
+        try:
+            from hybrid_retrieval import HybridRetriever  # type: ignore
+            _HYBRID_AVAILABLE = True
+        except ImportError:
+            _HYBRID_AVAILABLE = False
+            HybridRetriever = None  # type: ignore
 
 log = logging.getLogger("chronicle.retrieval")
 

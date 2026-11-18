@@ -31,7 +31,8 @@ def compute_htf_structure_score(
     target_price: float,
 ) -> Tuple[float, float, List[str]]:
     """
-    Evaluate structural room-to-run and multi-indicator regime alignment.
+    Evaluate structural room-to-run, entry precision (minimal stop distance),
+    asymmetric reward-to-risk geometry (SL < TP), and multi-indicator regime alignment.
     Returns (structure_score in [0, 1], reward_risk_ratio, reasons).
     """
     reasons: List[str] = []
@@ -39,8 +40,30 @@ def compute_htf_structure_score(
     reward_dist = abs(target_price - last_price)
     rr = (reward_dist / risk_dist) if risk_dist > 1e-12 else 0.0
 
-    # Reward-to-risk structural efficiency mapped smoothly via r / (r + 1)
-    rr_score = rr / (rr + 1.0) if rr > 0 else 0.0
+    # Constitutional Law: Stop Loss must be strictly smaller than Take Profit (SL < TP)
+    if rr <= 1.0 + 1e-9:
+        rr_score = 0.0
+        reasons.append(
+            f"Constitutional violation: Stop Loss ({risk_dist:.5f}) >= Take Profit ({reward_dist:.5f}) (R:R={rr:.2f} <= 1.0)"
+        )
+    else:
+        # Reward high asymmetric payoff (minimum 1.5R target preferred)
+        rr_score = min(1.0, (rr / (rr + 1.0)) * (1.08 if rr >= 1.5 else 0.75))
+        reasons.append(
+            f"Asymmetric payoff R:R={rr:.2f}x (SL dist={risk_dist:.5f} < TP dist={reward_dist:.5f})"
+        )
+
+    # Evaluate entry precision & stop tightness in ATR units (minimal SL near invalidation)
+    safe_atr = max(float(atr or 0.0), abs(last_price) * 1e-4, 1e-9)
+    stop_atr = risk_dist / safe_atr
+    if 0.4 <= stop_atr <= 1.85:
+        tight_stop_bonus = 0.08
+        reasons.append(f"Tight structural stop loss ({stop_atr:.2f} ATR)")
+    elif stop_atr > 2.5:
+        tight_stop_bonus = -0.10
+        reasons.append(f"Wide stop distance ({stop_atr:.2f} ATR) penalized")
+    else:
+        tight_stop_bonus = 0.0
 
     regime_info = technicals.get("regime") if isinstance(technicals.get("regime"), dict) else {}
     regime = str(regime_info.get("regime") or "ranging")
@@ -64,7 +87,8 @@ def compute_htf_structure_score(
     if slope * sign > 0:
         alignment = min(1.0, alignment + 0.1)
 
-    score = round(0.5 * rr_score + 0.5 * alignment, 4)
+    raw_score = 0.5 * rr_score + 0.5 * alignment + tight_stop_bonus
+    score = round(max(0.0, min(1.0, raw_score)), 4)
     return score, round(rr, 4), reasons
 
 

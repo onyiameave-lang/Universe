@@ -1161,28 +1161,46 @@ class CTraderBroker:
         if req.volume <= 0:
             return {"status": "rejected",
                     "reason": "requested order volume is below cTrader minimum; refusing to upsize"}
-        if plan.get("stop") is not None:
-            stop = float(plan["stop"])
+        planned_entry = float(plan["entry"]) if plan.get("entry") is not None else None
+        planned_stop = float(plan["stop"]) if plan.get("stop") is not None else None
+        planned_target = float(plan["target"]) if plan.get("target") is not None else None
+        planned_stop_dist: Optional[float] = None
+        planned_target_dist: Optional[float] = None
+
+        if planned_entry is not None and planned_stop is not None and planned_target is not None:
+            planned_stop_dist = abs(planned_entry - planned_stop)
+            planned_target_dist = abs(planned_target - planned_entry)
+            if planned_stop_dist <= 1e-12 or planned_target_dist <= planned_stop_dist:
+                return {
+                    "status": "rejected",
+                    "reason": (
+                        f"constitutional risk law violation: stop distance ({planned_stop_dist:.5f}) "
+                        f">= target distance ({planned_target_dist:.5f}); never risk more than reward"
+                    ),
+                }
+
+        digits: Optional[int] = None
+        if planned_stop is not None:
             constraints = self._get_symbol_constraints(symbol_id, symbol_name)
             digits = constraints.get("digits")
             if not isinstance(digits, int) or digits < 0:
                 return {"status": "error",
                         "reason": f"cTrader price precision unavailable for {symbol_name}"}
-            req.stopLoss = _round_price_to_digits(stop, digits)
-            if req.stopLoss != stop:
+            req.stopLoss = _round_price_to_digits(planned_stop, digits)
+            if req.stopLoss != planned_stop:
                 log.info("cTrader: rounded %s stop loss from %s to %s (%d digits)",
-                         symbol_name, stop, req.stopLoss, digits)
-        if plan.get("target") is not None:
-            target = float(plan["target"])
-            constraints = self._get_symbol_constraints(symbol_id, symbol_name)
-            digits = constraints.get("digits")
-            if not isinstance(digits, int) or digits < 0:
-                return {"status": "error",
-                        "reason": f"cTrader price precision unavailable for {symbol_name}"}
-            req.takeProfit = _round_price_to_digits(target, digits)
-            if req.takeProfit != target:
+                         symbol_name, planned_stop, req.stopLoss, digits)
+        if planned_target is not None:
+            if digits is None:
+                constraints = self._get_symbol_constraints(symbol_id, symbol_name)
+                digits = constraints.get("digits")
+                if not isinstance(digits, int) or digits < 0:
+                    return {"status": "error",
+                            "reason": f"cTrader price precision unavailable for {symbol_name}"}
+            req.takeProfit = _round_price_to_digits(planned_target, digits)
+            if req.takeProfit != planned_target:
                 log.info("cTrader: rounded %s take profit from %s to %s (%d digits)",
-                         symbol_name, target, req.takeProfit, digits)
+                         symbol_name, planned_target, req.takeProfit, digits)
 
         payload = self._send_and_wait(req)
         if payload is None:
@@ -1196,8 +1214,51 @@ class CTraderBroker:
                         direction, symbol_name, reason)
             return {"status": "rejected", "reason": reason}
 
+        final_sl = getattr(req, "stopLoss", planned_stop) if planned_stop is not None else None
+        final_tp = getattr(req, "takeProfit", planned_target) if planned_target is not None else None
+
+        # Rebase SL and TP around the actual live fill_price whenever market price drifted from
+        # the signal's reference entry, guaranteeing that fill_price drift never makes SL >= TP!
+        if (
+            fill_price
+            and float(fill_price) > 0
+            and planned_stop_dist is not None
+            and planned_target_dist is not None
+            and digits is not None
+        ):
+            fp = float(fill_price)
+            actual_sl_dist = abs(fp - float(final_sl)) if final_sl is not None else planned_stop_dist
+            actual_tp_dist = abs(float(final_tp) - fp) if final_tp is not None else planned_target_dist
+            rebase_requested = bool(plan.get("rebase_stops_to_market", True))
+            drift_inverted = (
+                actual_tp_dist <= actual_sl_dist * 1.15
+                or (is_buy and (final_sl >= fp or final_tp <= fp))
+                or (not is_buy and (final_sl <= fp or final_tp >= fp))
+            )
+            if (rebase_requested and abs(fp - float(planned_entry)) > 1e-7) or drift_inverted:
+                rebased_sl = _round_price_to_digits(
+                    (fp - planned_stop_dist) if is_buy else (fp + planned_stop_dist),
+                    digits,
+                )
+                rebased_tp = _round_price_to_digits(
+                    (fp + planned_target_dist) if is_buy else (fp - planned_target_dist),
+                    digits,
+                )
+                if rebased_sl != final_sl or rebased_tp != final_tp:
+                    try:
+                        mod_res = self.modify_position(position_id, stop_loss=rebased_sl, take_profit=rebased_tp)
+                        if mod_res.get("status") == "modified":
+                            final_sl = rebased_sl
+                            final_tp = rebased_tp
+                            log.info(
+                                "cTrader: rebased %s #%s SL/TP around fill %.5f -> SL=%s TP=%s (preserving SL < TP)",
+                                symbol_name, position_id, fp, final_sl, final_tp,
+                            )
+                    except Exception as exc:
+                        log.warning("cTrader: post-fill SL/TP rebase failed for #%s: %s", position_id, exc)
+
         return {"status": "filled", "order": position_id, "price": fill_price,
-                "volume": float(plan["size"]), "sl": plan.get("stop"), "tp": plan.get("target"),
+                "volume": float(plan["size"]), "sl": final_sl, "tp": final_tp,
                 "symbol": symbol_name, "account_type": self.status.account_type}
 
     def close_position(self, ticket: int) -> Dict[str, Any]:

@@ -1450,42 +1450,8 @@ class LearnedPenaltyAndNecessityEngine:
         Zero hardcoded thresholds.
         """
         fb = shadow_feedback or {}
-        # 1. Learn optimal stop distance multiplier from observed winning MAE distribution + bar noise
-        mean_win_mae = cls._empirical_mean(winning_maes_atr)
-        std_win_mae = cls._empirical_std(winning_maes_atr)
-        mean_noise = cls._empirical_mean(bar_noise_atr_ratios)
-        std_noise = cls._empirical_std(bar_noise_atr_ratios)
-        # Empirical upper coverage of winning adverse excursion + 1-bar structural noise floor
-        learned_sl_atr_mult = round(
-            max(mean_win_mae + std_win_mae, mean_noise + std_noise, 1e-4), 4
-        )
-
-        # 2. Learn initial Major TP (in R) by scanning observed MFE/SL ratios to maximize expected R
-        mfe_r_samples = sorted(
-            [m / learned_sl_atr_mult for m in all_mfes_atr if m > 0]
-        )
-        if mfe_r_samples:
-            n_mfe = float(len(mfe_r_samples))
-            best_tp_r = mfe_r_samples[len(mfe_r_samples) // 2]
-            best_expected_val = float("-inf")
-            # Candidate TP targets come directly from the observed MFE_R order statistics
-            step = max(1, len(mfe_r_samples) // 25)
-            for idx in range(0, len(mfe_r_samples), step):
-                cand_tp = mfe_r_samples[idx]
-                if cand_tp <= learned_sl_atr_mult / max(learned_sl_atr_mult, 1e-9):
-                    continue
-                reach_prob = sum(1.0 for x in mfe_r_samples if x >= cand_tp) / n_mfe
-                fail_prob = 1.0 - reach_prob
-                expected_val = (reach_prob * cand_tp) - (fail_prob * 1.0)
-                if expected_val > best_expected_val:
-                    best_expected_val = expected_val
-                    best_tp_r = cand_tp
-            learned_major_tp_r = round(max(best_tp_r, cls._empirical_mean(mfe_r_samples)), 3)
-        else:
-            learned_major_tp_r = round(cls._empirical_mean(all_mfes_atr) + cls._empirical_std(all_mfes_atr), 3)
-
-        # 3. Partition observed trajectories into Main-TP winners vs. SL losers,
-        #    and Bayesian-update with real MT5 & Shadow win/loss outcomes from `shadow_feedback`
+        # 1. Partition observed trajectories into Main-TP winners vs. SL losers first
+        #    so any stop-distance calibration happens BEFORE R-multiple target discovery.
         sl_trajectories = [t for t in trajectories if bool(t.get("hit_full_sl"))]
         tp_trajectories = [t for t in trajectories if bool(t.get("hit_major_tp"))]
         fb_losses = float(fb.get("shadow_losses", 0) or 0) + float(fb.get("major_sl_penalties_count", 0) or 0) * 0.5
@@ -1496,13 +1462,55 @@ class LearnedPenaltyAndNecessityEngine:
         p_sl_emp = max(1.0 / n_total, eff_sl_count / n_total)
         p_tp_emp = max(1.0 / n_total, eff_tp_count / n_total)
 
-        # If live MT5 / Shadow losses exceed True TP Wins, adaptively widen `learned_sl_atr_mult`
-        # within the empirical volatility distribution so tight stops stop getting hunted
+        # 2. Learn optimal stop distance multiplier from observed winning MAE distribution + bar noise
+        #    Constitutional Environment Law: Keep stop loss tight near structural invalidation ([0.75, 1.75] ATR)
+        #    so risk is minimized and never bloats above reward.
+        mean_win_mae = cls._empirical_mean(winning_maes_atr)
+        std_win_mae = cls._empirical_std(winning_maes_atr)
+        mean_noise = cls._empirical_mean(bar_noise_atr_ratios)
+        std_noise = cls._empirical_std(bar_noise_atr_ratios)
+        raw_sl_atr_mult = max(mean_win_mae + std_win_mae * 0.75, mean_noise + std_noise * 0.5, 0.75)
         if (fb_losses + fb_wins) > 0 and fb_losses > fb_wins:
-            loss_excess_ratio = (fb_losses - fb_wins) / (fb_losses + fb_wins)
-            learned_sl_atr_mult = round(
-                learned_sl_atr_mult * (1.0 + loss_excess_ratio * (p_sl_emp / (p_sl_emp + p_tp_emp))),
-                4,
+            loss_excess_ratio = min(0.20, (fb_losses - fb_wins) / (fb_losses + fb_wins))
+            raw_sl_atr_mult = raw_sl_atr_mult * (1.0 + loss_excess_ratio * 0.25)
+        learned_sl_atr_mult = round(min(1.75, max(0.75, raw_sl_atr_mult)), 4)
+
+        # 3. Constitutional Anti-Cheating Law for Main Take Profit (in R):
+        #    - You CANNOT risk more than or equal to what you stand to win (SL < TP always).
+        #    - Minimum asymmetric Main Take Profit floor is 1.80R (TP >= 1.80 * SL).
+        #    - The learner is forbidden from shrinking Major TP toward 1.0R on restart just to
+        #      artificially inflate `reach_prob` and evade Major/Minor penalties.
+        min_constitutional_tp_r = 1.80
+        mfe_r_samples = sorted(
+            [m / learned_sl_atr_mult for m in all_mfes_atr if m > 0]
+        )
+        if mfe_r_samples:
+            n_mfe = float(len(mfe_r_samples))
+            mean_mfe_r = cls._empirical_mean(mfe_r_samples)
+            p65_mfe_r = mfe_r_samples[min(len(mfe_r_samples) - 1, int(len(mfe_r_samples) * 0.65))]
+            anti_cheat_tp_floor = max(min_constitutional_tp_r, mean_mfe_r * 0.85, p65_mfe_r * 0.75)
+            best_tp_r = max(p65_mfe_r, anti_cheat_tp_floor)
+            best_expected_val = float("-inf")
+            step = max(1, len(mfe_r_samples) // 25)
+            for idx in range(0, len(mfe_r_samples), step):
+                cand_tp = mfe_r_samples[idx]
+                if cand_tp < anti_cheat_tp_floor:
+                    continue
+                reach_prob = sum(1.0 for x in mfe_r_samples if x >= cand_tp) / n_mfe
+                fail_prob = 1.0 - reach_prob
+                # Reward asymmetric payoff so the learner seeks high-return structural targets
+                asymmetry_bonus = 1.0 + 0.15 * max(0.0, cand_tp - min_constitutional_tp_r)
+                expected_val = (reach_prob * cand_tp * asymmetry_bonus) - (fail_prob * 1.0)
+                if expected_val > best_expected_val:
+                    best_expected_val = expected_val
+                    best_tp_r = cand_tp
+            learned_major_tp_r = round(
+                max(best_tp_r, mean_mfe_r, p65_mfe_r * 0.85, min_constitutional_tp_r), 3
+            )
+        else:
+            learned_major_tp_r = round(
+                max(min_constitutional_tp_r, cls._empirical_mean(all_mfes_atr) + cls._empirical_std(all_mfes_atr)),
+                3,
             )
 
         # 4. Derive Major SL Penalty vs. Minor Early-Exit/Breakeven Penalty from empirical probabilities

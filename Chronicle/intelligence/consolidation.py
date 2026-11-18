@@ -25,8 +25,12 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
-from core.memory_record import MemoryRecord, MemoryPillar           # type: ignore
+try:
+    from Chronicle.core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
+    from Chronicle.core.memory_record import MemoryRecord, MemoryPillar           # type: ignore
+except ImportError:
+    from core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
+    from core.memory_record import MemoryRecord, MemoryPillar           # type: ignore
 
 
 class ConsolidationEngine:

@@ -234,8 +234,10 @@ class OracleScoutSubAgent:
         effective_confidence = round(max(0.0, min(0.99, blended_conf)), 4)
 
         floor = self.learned_conviction_floor(sym, regime)
+        asymmetric_rr_ok = rr_ratio > 1.0 + 1e-9
         passes_floor = (
             direction in ("long", "short")
+            and asymmetric_rr_ok
             and not news_obj.pause_new_entries
             and not social_obj.pause_new_entries
             and round(effective_confidence, 4) >= round(floor, 4)
@@ -274,7 +276,9 @@ class OracleScoutSubAgent:
             + session_edge_adjustment,
             4,
         )
-        scout_score = round(effective_confidence * max(0.1, 1.0 + expected_net_r), 4)
+        # Reward setups with tight Stop Loss and high Take Profit (R:R >= 1.5)
+        asymmetry_mult = 1.0 + min(0.35, max(0.0, (rr_ratio - 1.5) * 0.15)) if asymmetric_rr_ok else 0.25
+        scout_score = round(effective_confidence * max(0.1, 1.0 + expected_net_r) * asymmetry_mult, 4)
 
         why_trade: List[str] = []
         why_not: List[str] = []
@@ -283,9 +287,13 @@ class OracleScoutSubAgent:
         else:
             why_trade.append(
                 f"Direction={direction.upper()} fused_conf={raw_conf:.3f} effective_conf={effective_confidence:.3f} "
-                f"(learned_floor={floor:.3f}) expected_net_R={expected_net_r:+.2f}R"
+                f"(learned_floor={floor:.3f}) R:R={rr_ratio:.2f}x expected_net_R={expected_net_r:+.2f}R"
             )
             why_trade.extend(htf_reasons)
+            if not asymmetric_rr_ok:
+                why_not.append(
+                    f"Constitutional violation: Stop Loss >= Take Profit (R:R={rr_ratio:.3f} <= 1.0; cannot risk more than reward)"
+                )
             if news_stream.get("articles", 0) > 0:
                 why_trade.append(
                     f"Sentinel news ({news_stream.get('articles')} articles, dir={news_stream.get('direction', 0):+.2f}, impact={news_obj.level})"

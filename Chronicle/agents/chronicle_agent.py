@@ -34,22 +34,34 @@ import socket
 socket.setdefaulttimeout(8)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 _ECO_ROOT = Path(__file__).resolve().parents[2]
-if str(_ECO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ECO_ROOT))
+for _p in (_ECO_ROOT, _REPO_ROOT):
+    if str(_p) in sys.path:
+        sys.path.remove(str(_p))
+    sys.path.insert(0, str(_p))
 
-from core.embeddings import get_embedding_model                              # type: ignore
-from core.memory_record import MemoryRecord, MemoryPillar, validate_memory   # type: ignore
-from core.vector_store import VectorStore                                    # type: ignore
-from core.knowledge_graph import KnowledgeGraph                              # type: ignore
-from intelligence.retrieval import RetrievalEngine                           # type: ignore
-from intelligence.anticipation import AnticipationEngine                     # type: ignore
-from intelligence.consolidation import ConsolidationEngine                   # type: ignore
-from intelligence.improvement import ImprovementEngine                       # type: ignore
-from intelligence.contradiction import ContradictionEngine                   # type: ignore
-from intelligence.provenance import ProvenanceEngine                         # type: ignore
+try:
+    from core.embeddings import get_embedding_model                              # type: ignore
+    from core.memory_record import MemoryRecord, MemoryPillar, validate_memory   # type: ignore
+    from core.vector_store import VectorStore                                    # type: ignore
+    from core.knowledge_graph import KnowledgeGraph                              # type: ignore
+    from intelligence.retrieval import RetrievalEngine                           # type: ignore
+    from intelligence.anticipation import AnticipationEngine                     # type: ignore
+    from intelligence.consolidation import ConsolidationEngine                   # type: ignore
+    from intelligence.improvement import ImprovementEngine                       # type: ignore
+    from intelligence.contradiction import ContradictionEngine                   # type: ignore
+    from intelligence.provenance import ProvenanceEngine                         # type: ignore
+except ImportError:
+    from Chronicle.core.embeddings import get_embedding_model                              # type: ignore
+    from Chronicle.core.memory_record import MemoryRecord, MemoryPillar, validate_memory   # type: ignore
+    from Chronicle.core.vector_store import VectorStore                                    # type: ignore
+    from Chronicle.core.knowledge_graph import KnowledgeGraph                              # type: ignore
+    from Chronicle.intelligence.retrieval import RetrievalEngine                           # type: ignore
+    from Chronicle.intelligence.anticipation import AnticipationEngine                     # type: ignore
+    from Chronicle.intelligence.consolidation import ConsolidationEngine                   # type: ignore
+    from Chronicle.intelligence.improvement import ImprovementEngine                       # type: ignore
+    from Chronicle.intelligence.contradiction import ContradictionEngine                   # type: ignore
+    from Chronicle.intelligence.provenance import ProvenanceEngine                         # type: ignore
 
 try:
     from shared.agent import BaseAgent

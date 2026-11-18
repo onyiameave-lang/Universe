@@ -28,7 +28,10 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from core.memory_record import MemoryRecord, MemoryPillar  # type: ignore
+try:
+    from Chronicle.core.memory_record import MemoryRecord, MemoryPillar  # type: ignore
+except ImportError:
+    from core.memory_record import MemoryRecord, MemoryPillar  # type: ignore
 
 
 class ImprovementEngine:

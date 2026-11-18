@@ -28,8 +28,12 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
-from core.memory_record import MemoryRecord                          # type: ignore
+try:
+    from Chronicle.core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
+    from Chronicle.core.memory_record import MemoryRecord                          # type: ignore
+except ImportError:
+    from core.embeddings import cosine_similarity, get_embedding_model  # type: ignore
+    from core.memory_record import MemoryRecord                          # type: ignore
 
 _NEG = re.compile(r"\b(no|not|never|cannot|can't|without|fails?|failed|false|refut|disprov|"
                   r"contradict|unlikely|ineffective|insufficient|avoid|worse)\b", re.IGNORECASE)

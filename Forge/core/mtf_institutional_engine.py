@@ -2271,12 +2271,12 @@ class MultiTimeframeInstitutionalEngine:
             s = sorted(arr)
             return round(s[min(len(s) - 1, max(0, int(len(s) * q)))], 2)
 
-        learned_rsi_long_min = _quantile(winning_long_rsis, 0.12, 35.0)
-        learned_rsi_long_max = _quantile(winning_long_rsis, 0.88, 70.0)
-        learned_rsi_short_min = _quantile(winning_short_rsis, 0.12, 30.0)
-        learned_rsi_short_max = _quantile(winning_short_rsis, 0.88, 65.0)
-        learned_macro_cap = min(0.96, max(0.68, _quantile(winning_macro_pos_long, 0.85, 0.88)))
-        learned_htf_room = min(1.35, max(0.35, _quantile(winning_htf_room_atr, 0.25, 0.65)))
+        learned_rsi_long_min = min(35.0, _quantile(winning_long_rsis, 0.08, 32.0))
+        learned_rsi_long_max = max(72.0, _quantile(winning_long_rsis, 0.92, 72.0))
+        learned_rsi_short_min = min(28.0, _quantile(winning_short_rsis, 0.08, 28.0))
+        learned_rsi_short_max = max(65.0, _quantile(winning_short_rsis, 0.92, 68.0))
+        learned_macro_cap = min(0.96, max(0.82, _quantile(winning_macro_pos_long, 0.88, 0.88)))
+        learned_htf_room = min(0.85, max(0.35, _quantile(winning_htf_room_atr, 0.20, 0.55)))
 
         # Helper to score any candidate genome on the 20% validation screen
         def _evaluate_genome_on_validation(
@@ -2404,10 +2404,14 @@ class MultiTimeframeInstitutionalEngine:
             shadow_r_delta = float(fb_feat_deltas.get(f_name, 0.0) or 0.0)
 
             # Decide whether to prune (leave out) or retain `f_name`:
-            # Prune if leaving it out improved validation expectancy AND it does not have
-            # strong positive shadow trade reinforcement or strong training edge.
+            # Prune only if leaving it out improved validation expectancy AND it does not have
+            # positive training IC edge or positive shadow trade reinforcement.
             should_prune = (
-                (marginal_value_added < -0.015 and shadow_r_delta <= 0.10)
+                (
+                    marginal_value_added < -0.025
+                    and mean_train_edge < 0.08
+                    and shadow_r_delta <= 0.05
+                )
                 or (
                     marginal_value_added <= 0.0
                     and mean_train_edge <= 0.005
@@ -2455,8 +2459,11 @@ class MultiTimeframeInstitutionalEngine:
                 verdict = "LEFT_OUT_PRUNED"
             else:
                 retained_components.append(f_name)
-                # Scale retained component weight by its proven marginal contribution + train edge
-                boost = max(0.0, marginal_value_added * 1.75)
+                # Scale retained component weight moderately so no single noisy validation feature drowns out core drivers
+                if trader_style != "RANGE_SPECIALIST" and f_name == "dealing_range_reversion" and mean_train_edge < 0.0:
+                    boost = 0.0
+                else:
+                    boost = min(0.18, max(0.0, marginal_value_added * 0.25))
                 post_ablation_raw[f_name] = initial_feature_weights[f_name] + boost
                 verdict = "RETAINED_ADDS_VALUE"
 
@@ -2472,15 +2479,15 @@ class MultiTimeframeInstitutionalEngine:
                 "verdict": verdict,
             }
 
-        # Ensure at least the top 2 core structural components stay active if all were noisy
-        if len(retained_components) < 2:
+        # Ensure at least the top 3 core structural components stay active if too many were pruned
+        if len(retained_components) < 3:
             ranked_by_val = sorted(
                 feat_names,
                 key=lambda fn: ablation_table[fn]["marginal_value_added_atr"]
                 + ablation_table[fn]["train_ic_edge"],
                 reverse=True,
             )
-            for fn in ranked_by_val[:2]:
+            for fn in ranked_by_val[:3]:
                 if fn in pruned_components:
                     pruned_components.remove(fn)
                 if fn not in retained_components:
@@ -2494,13 +2501,37 @@ class MultiTimeframeInstitutionalEngine:
             for f_name in feat_names
         }
 
-        # Re-calibrate threshold and validation score after pruning unhelpful components
+        # Re-calibrate threshold and validation score after pruning unhelpful components.
+        # Guard against multi-feature interaction collapse: if simultaneous pruning collapses
+        # validation trade count or expectancy compared to pre-ablation weights, restore top train-edge pruned features.
         pruned_val_score = float("-inf")
+        pruned_val_trades = 0
+        min_acceptable_trades = max(3, int(baseline_trades * 0.55))
         for post_thresh in (0.18, 0.22, 0.26, 0.30, 0.34, 0.40):
             p_score, p_cnt, _ = _evaluate_genome_on_validation(learned_feature_weights, post_thresh)
-            if p_cnt >= 3 and p_score > pruned_val_score:
+            if p_cnt >= min_acceptable_trades and p_score > pruned_val_score:
                 pruned_val_score = p_score
+                pruned_val_trades = p_cnt
                 best_threshold = post_thresh
+        if not math.isfinite(pruned_val_score) or pruned_val_score < best_val_score - 0.05:
+            # Multi-component interaction check: restore pruned signal features with positive train edge
+            for fn in list(pruned_components):
+                if ablation_table[fn]["train_ic_edge"] > 0.02:
+                    pruned_components.remove(fn)
+                    if fn not in retained_components:
+                        retained_components.append(fn)
+                    post_ablation_raw[fn] = initial_feature_weights[fn]
+                    ablation_table[fn]["verdict"] = "RETAINED_INTERACTION_GUARD"
+            post_norm = sum(post_ablation_raw.values()) or 1.0
+            learned_feature_weights = {
+                f_name: round(post_ablation_raw[f_name] / post_norm, 3)
+                for f_name in feat_names
+            }
+            for post_thresh in (0.18, 0.22, 0.26, 0.30, 0.34, 0.40):
+                p_score, p_cnt, _ = _evaluate_genome_on_validation(learned_feature_weights, post_thresh)
+                if p_cnt >= 3 and p_score > pruned_val_score:
+                    pruned_val_score = p_score
+                    best_threshold = post_thresh
         if not math.isfinite(pruned_val_score):
             pruned_val_score, _, _ = _evaluate_genome_on_validation(
                 learned_feature_weights, best_threshold
@@ -2707,10 +2738,13 @@ class MultiTimeframeInstitutionalEngine:
         elif bar.get("fvg_bearish"):
             trigger_score -= float(f_weights.get("fvg_impulse", 0.18)) * 1.5
 
+        bos_dir = int(bar.get("bos_direction", 0) or 0)
         if bar.get("discount_premium_zone") == "DISCOUNT":
-            trigger_score += float(f_weights.get("dealing_range_reversion", 0.10)) * 1.3
+            if trader_style == "RANGE_SPECIALIST" or bos_dir >= 0:
+                trigger_score += float(f_weights.get("dealing_range_reversion", 0.10)) * 1.3
         elif bar.get("discount_premium_zone") == "PREMIUM":
-            trigger_score -= float(f_weights.get("dealing_range_reversion", 0.10)) * 1.3
+            if trader_style == "RANGE_SPECIALIST" or bos_dir <= 0:
+                trigger_score -= float(f_weights.get("dealing_range_reversion", 0.10)) * 1.3
 
         # Sentinel News Agent & Pulse Social Agent contributions (0 if pruned by ablation)
         w_sentinel = float(f_weights.get("sentinel_news_sentiment", 0.0))
@@ -3515,8 +3549,12 @@ class MultiTimeframeInstitutionalEngine:
                 horizon=horizon,
             )
 
-            winning_maes_atr: List[float] = list(shadow_fb.get("winning_maes_r", []))
-            all_mfes_atr: List[float] = list(shadow_fb.get("all_mfes_r", []))
+            # Note: `shadow_fb["winning_maes_r"]` and `shadow_fb["all_mfes_r"]` are already in R-multiples,
+            # NOT raw ATR multiples! Do NOT mix R-multiples directly into `all_mfes_atr` without converting
+            # back to ATR units, otherwise `discover_empirical_policy_from_trajectories` divides them by
+            # `learned_sl_atr_mult` a second time on every restart and artificially shrinks Take Profit!
+            winning_maes_atr: List[float] = []
+            all_mfes_atr: List[float] = []
             session_stats: Dict[str, Dict[str, float]] = {
                 k: dict(v) for k, v in (shadow_fb.get("session_r_deltas") or {}).items()
             }
@@ -3621,13 +3659,15 @@ class MultiTimeframeInstitutionalEngine:
                 winning_maes_atr=winning_maes_atr,
                 shadow_feedback=shadow_fb,
             )
-            sl_mult = management_policy["learned_optimal_stop_atr_mult"]
-            primary_tp_r = management_policy["learned_initial_major_tp_r"]
+            sl_mult = round(min(1.75, max(0.75, float(management_policy["learned_optimal_stop_atr_mult"]))), 4)
+            primary_tp_r = round(max(1.80, float(management_policy["learned_initial_major_tp_r"])), 3)
+            management_policy["learned_optimal_stop_atr_mult"] = sl_mult
+            management_policy["learned_initial_major_tp_r"] = primary_tp_r
             partial_tp_r = management_policy["learned_partial_tp_r"]
             be_r = management_policy["learned_be_trigger_r"]
             trail_mult = management_policy["learned_trail_atr_mult"]
-            tp_mult = round(sl_mult * primary_tp_r, 3)
-            rr_target = round(primary_tp_r, 2)
+            tp_mult = round(max(sl_mult * primary_tp_r, sl_mult * 1.80), 3)
+            rr_target = round(max(primary_tp_r, tp_mult / max(sl_mult, 1e-9)), 2)
 
             # Collect chronological walk-forward fold trades on the 60% Dev partition (Section 8.2)
             dev_walk_forward_trades: List[Dict[str, Any]] = []
@@ -3721,17 +3761,26 @@ class MultiTimeframeInstitutionalEngine:
                     key=lambda kv: kv[1]["r_sum"] / max(1.0, kv[1]["setups"]),
                     reverse=True,
                 )
-                if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.20 or v["wins"] / v["setups"] >= 0.40)
-            ][:3]
+                if v["setups"] >= 2 and (v["r_sum"] / v["setups"] > -0.25 or v["wins"] / v["setups"] >= 0.35)
+            ][:4]
             if style_up != "RANGE_SPECIALIST":
                 for tr_reg in ("TRENDING_BULLISH", "TRENDING_BEARISH"):
-                    if tr_reg not in rec_regimes and len(rec_regimes) < 3:
+                    if tr_reg not in rec_regimes and len(rec_regimes) < 4:
                         rec_regimes.append(tr_reg)
+                if (
+                    "CONSOLIDATION_RANGING" not in rec_regimes
+                    and (
+                        physics.get("dominant_personality") == "STOP_HUNT_MEAN_REVERTING"
+                        or regime_stats.get("CONSOLIDATION_RANGING", {}).get("setups", 0) >= 2
+                    )
+                    and len(rec_regimes) < 4
+                ):
+                    rec_regimes.append("CONSOLIDATION_RANGING")
             if not rec_regimes:
                 rec_regimes = (
                     ["CONSOLIDATION_RANGING"]
                     if style_up == "RANGE_SPECIALIST"
-                    else ["TRENDING_BULLISH", "TRENDING_BEARISH", "VOLATILITY_EXPANSION"]
+                    else ["TRENDING_BULLISH", "TRENDING_BEARISH", "VOLATILITY_EXPANSION", "CONSOLIDATION_RANGING"]
                 )
 
             # ── STAGE 2: UNTOUCHED 40% LOCKBOX EVALUATION (ABLATIONS + 5-ARM PILOT + NO-TRADE DIAGNOSTICS) ──

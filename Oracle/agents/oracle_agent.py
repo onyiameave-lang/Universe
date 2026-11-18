@@ -349,37 +349,45 @@ class OracleAgent(BaseAgent):
         sym = symbol.upper()
         key = f"{sym}::{regime}"
 
-        # 1. Check EvolutionLab if already instantiated, else read champions.json
+        # 1. Check EvolutionLab if already instantiated, else read evolved_strategies.json (or champions.json)
         champ: Optional[StrategyGenome] = None
         if getattr(self, "_evolution", None) is not None:
             champ = self._evolution.champion(sym, regime)
         else:
-            champ_path = _REPO_ROOT / "memory" / "champions.json"
-            if champ_path.exists():
-                try:
-                    raw = json.loads(champ_path.read_text(encoding="utf-8"))
-                    rec = (raw.get(key) or raw.get(sym)) if isinstance(raw, dict) else None
-                    genome_dict = rec.get("genome") if isinstance(rec, dict) else None
-                    if isinstance(genome_dict, dict):
-                        champ = StrategyGenome.from_dict(genome_dict)
-                except Exception:
-                    champ = None
+            for fname in ("evolved_strategies.json", "champions.json"):
+                champ_path = _REPO_ROOT / "memory" / fname
+                if champ_path.exists():
+                    try:
+                        raw = json.loads(champ_path.read_text(encoding="utf-8"))
+                        if isinstance(raw, dict):
+                            pool = raw.get("champions") if isinstance(raw.get("champions"), dict) else raw
+                            rec = pool.get(key) or pool.get(sym)
+                            genome_dict = rec.get("genome") if isinstance(rec, dict) and "genome" in rec else rec
+                            if isinstance(genome_dict, dict) and ("modules" in genome_dict or "entry_module" in genome_dict or "genome_id" in genome_dict):
+                                champ = StrategyGenome.from_dict(genome_dict)
+                                break
+                    except Exception:
+                        champ = None
         if champ is not None:
             return champ, "evolution_library"
 
-        # 2. Check ScientificResearchLab if already instantiated, else read scientific_champions.json
+        # 2. Check ScientificResearchLab if already instantiated, else read champion_library.json (or scientific_champions.json)
         lab_champion: Optional[Dict[str, Any]] = None
         if getattr(self, "_lab", None) is not None:
             lab_champion = self._lab.champion_info(sym, regime)
         else:
-            sci_path = _REPO_ROOT / "memory" / "scientific_champions.json"
-            if sci_path.exists():
-                try:
-                    raw = json.loads(sci_path.read_text(encoding="utf-8"))
-                    if isinstance(raw, dict):
-                        lab_champion = raw.get(key) or raw.get(sym)
-                except Exception:
-                    lab_champion = None
+            for fname in ("champion_library.json", "scientific_champions.json"):
+                sci_path = _REPO_ROOT / "memory" / fname
+                if sci_path.exists():
+                    try:
+                        raw = json.loads(sci_path.read_text(encoding="utf-8"))
+                        if isinstance(raw, dict):
+                            pool = raw.get("champions") if isinstance(raw.get("champions"), dict) else raw
+                            lab_champion = pool.get(key) or pool.get(sym)
+                            if isinstance(lab_champion, dict):
+                                break
+                    except Exception:
+                        lab_champion = None
         if isinstance(lab_champion, dict) and isinstance(lab_champion.get("genome"), dict):
             try:
                 return StrategyGenome.from_dict(lab_champion["genome"]), "scientific_library"

@@ -23,13 +23,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 _ECO_ROOT = Path(__file__).resolve().parents[2]
-if str(_ECO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ECO_ROOT))
+for _p in (_ECO_ROOT, _REPO_ROOT):
+    if str(_p) in sys.path:
+        sys.path.remove(str(_p))
+    sys.path.insert(0, str(_p))
 
-from core.intelligence_engine import IntelligenceEngine  # type: ignore
+try:
+    from Sentinel.core.intelligence_engine import IntelligenceEngine  # type: ignore
+except ImportError:
+    from core.intelligence_engine import IntelligenceEngine  # type: ignore
 
 try:
     from shared.agent import BaseAgent

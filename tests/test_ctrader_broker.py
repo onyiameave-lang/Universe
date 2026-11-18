@@ -239,3 +239,101 @@ def test_trendbar_request_timeouts_are_eligible_for_bounded_bisection():
     from Forge.core.oracle_research_data import _history_error_can_be_bisected
 
     assert _history_error_can_be_bisected("cTrader historical-bar request timed out or failed")
+
+
+def test_place_order_rejects_stop_loss_greater_than_or_equal_to_take_profit(monkeypatch):
+    import sys
+    from types import ModuleType
+    from Oracle.execution.ctrader_broker import CTraderBroker
+
+    api_package = ModuleType("ctrader_open_api")
+    api_package.__path__ = []
+    messages_package = ModuleType("ctrader_open_api.messages")
+    messages_package.__path__ = []
+    open_api_messages = ModuleType("ctrader_open_api.messages.OpenApiMessages_pb2")
+    model_messages = ModuleType("ctrader_open_api.messages.OpenApiModelMessages_pb2")
+
+    class NewOrderReq:
+        pass
+
+    open_api_messages.ProtoOANewOrderReq = NewOrderReq
+    model_messages.ProtoOAOrderType = SimpleNamespace(MARKET=1)
+    model_messages.ProtoOATradeSide = SimpleNamespace(BUY=1, SELL=2)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api", api_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages", messages_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiMessages_pb2", open_api_messages)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiModelMessages_pb2", model_messages)
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker.status = SimpleNamespace(connected=True, account_type="demo")
+    broker._symbol_id_by_name = {"EURUSD": 1}
+    broker._account_id = 100
+    broker._clamp_volume = lambda vol, *_a: 100_000
+    broker._get_symbol_constraints = lambda *_a: {"digits": 5}
+
+    bad_plan = {
+        "symbol": "EURUSD",
+        "direction": "buy",
+        "size": 1000.0,
+        "entry": 1.10000,
+        "stop": 1.09500,    # 50 pips SL
+        "target": 1.10300,  # 30 pips TP (SL > TP -> illegal!)
+    }
+    res = broker.place_order(bad_plan)
+    assert res["status"] == "rejected"
+    assert "constitutional risk law violation" in res["reason"]
+
+
+def test_place_order_rebases_sl_and_tp_around_drifted_fill_price(monkeypatch):
+    import sys
+    from types import ModuleType
+    from Oracle.execution.ctrader_broker import CTraderBroker
+
+    api_package = ModuleType("ctrader_open_api")
+    api_package.__path__ = []
+    messages_package = ModuleType("ctrader_open_api.messages")
+    messages_package.__path__ = []
+    open_api_messages = ModuleType("ctrader_open_api.messages.OpenApiMessages_pb2")
+    model_messages = ModuleType("ctrader_open_api.messages.OpenApiModelMessages_pb2")
+
+    class NewOrderReq:
+        pass
+
+    open_api_messages.ProtoOANewOrderReq = NewOrderReq
+    model_messages.ProtoOAOrderType = SimpleNamespace(MARKET=1)
+    model_messages.ProtoOATradeSide = SimpleNamespace(BUY=1, SELL=2)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api", api_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages", messages_package)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiMessages_pb2", open_api_messages)
+    monkeypatch.setitem(sys.modules, "ctrader_open_api.messages.OpenApiModelMessages_pb2", model_messages)
+
+    broker = CTraderBroker.__new__(CTraderBroker)
+    broker.status = SimpleNamespace(connected=True, account_type="demo")
+    broker._symbol_id_by_name = {"EURUSD": 1}
+    broker._account_id = 100
+    broker._clamp_volume = lambda vol, *_a: 100_000
+    broker._get_symbol_constraints = lambda *_a: {"digits": 5}
+    # Simulate market price drifting from 1.10000 to 1.10250 at fill time
+    broker._send_and_wait = lambda _req: SimpleNamespace(
+        position=SimpleNamespace(positionId=777, price=1.10250)
+    )
+    amended = []
+    broker.modify_position = lambda ticket, stop_loss=None, take_profit=None: (
+        amended.append((ticket, stop_loss, take_profit)) or {"status": "modified"}
+    )
+
+    plan = {
+        "symbol": "EURUSD",
+        "direction": "buy",
+        "size": 1000.0,
+        "entry": 1.10000,
+        "stop": 1.09800,    # 20 pips SL
+        "target": 1.10400,  # 40 pips TP (2:1 R:R)
+    }
+    res = broker.place_order(plan)
+    assert res["status"] == "filled"
+    assert res["sl"] == 1.10050
+    assert res["tp"] == 1.10650
+    assert abs(res["tp"] - res["price"]) > abs(res["price"] - res["sl"])
+    assert amended == [(777, 1.1005, 1.1065)]
+

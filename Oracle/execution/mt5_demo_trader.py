@@ -46,27 +46,47 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]   # Oracle/
 _ECO_ROOT  = _REPO_ROOT.parent                     # Universe/ (ecosystem root)
-for p in (_REPO_ROOT, _ECO_ROOT):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+for p in (_ECO_ROOT, _REPO_ROOT):
+    if str(p) in sys.path:
+        sys.path.remove(str(p))
+    sys.path.insert(0, str(p))
 
-from execution.mt5_broker import MT5Broker  # type: ignore
-from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
-from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
-    TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
-    SCOUT_ENTRY_CONTEXT_KEY,
-)
-from execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
-from execution.shadow_feedback import replay_shadow_candidates, record_max_positions_shadow  # type: ignore
-from execution.telegram_notifier import (  # type: ignore
-    TelegramNotifier, RecentSignalCache, signal_only_enabled,
-    format_entry_alert, format_execution_alert, format_position_alert,
-    format_native_close_alert,
-)
-from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
-from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
-from intelligence.trade_learning import TradeLearningEngine  # type: ignore  # Demo Trade Learning
-from core.risk import Position as RiskPosition  # type: ignore  # Portfolio Awareness sync (roadmap Phase 2 item 9)
+try:
+    from execution.mt5_broker import MT5Broker  # type: ignore
+    from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
+    from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
+        TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+        SCOUT_ENTRY_CONTEXT_KEY,
+    )
+    from execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
+    from execution.shadow_feedback import replay_shadow_candidates, record_max_positions_shadow  # type: ignore
+    from execution.telegram_notifier import (  # type: ignore
+        TelegramNotifier, RecentSignalCache, signal_only_enabled,
+        format_entry_alert, format_execution_alert, format_position_alert,
+        format_native_close_alert,
+    )
+    from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
+    from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
+    from intelligence.trade_learning import TradeLearningEngine  # type: ignore  # Demo Trade Learning
+    from core.risk import Position as RiskPosition  # type: ignore  # Portfolio Awareness sync (roadmap Phase 2 item 9)
+except ImportError:
+    from Oracle.execution.mt5_broker import MT5Broker  # type: ignore
+    from Oracle.execution.chronicle_position_log import ChroniclePositionLog  # type: ignore
+    from Oracle.execution.trade_manager import (  # type: ignore
+        TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
+        SCOUT_ENTRY_CONTEXT_KEY,
+    )
+    from Oracle.execution.position_limits import OpenPositionBudget, account_position_lock  # type: ignore
+    from Oracle.execution.shadow_feedback import replay_shadow_candidates, record_max_positions_shadow  # type: ignore
+    from Oracle.execution.telegram_notifier import (  # type: ignore
+        TelegramNotifier, RecentSignalCache, signal_only_enabled,
+        format_entry_alert, format_execution_alert, format_position_alert,
+        format_native_close_alert,
+    )
+    from Oracle.intelligence.news_impact import assess_news_impact  # type: ignore
+    from Oracle.intelligence.social_risk import assess_social_risk  # type: ignore
+    from Oracle.intelligence.trade_learning import TradeLearningEngine  # type: ignore
+    from Oracle.core.risk import Position as RiskPosition  # type: ignore
 
 log = logging.getLogger("oracle.demo")
 

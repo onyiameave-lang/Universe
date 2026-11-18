@@ -209,3 +209,38 @@ def test_manager_adopts_every_broker_position_even_same_symbol_in_shadow_mode():
     trader._poll_managed_positions()
 
     assert set(trader._managed_positions) == {"101", "102", "103"}
+
+
+def test_ctrader_telegram_execution_alert_uses_ctrader_label():
+    from Oracle.execution.telegram_notifier import format_execution_alert
+
+    msg = format_execution_alert(
+        "EURUSD",
+        "EURUSD",
+        {
+            "effective_confidence": 0.72,
+            "plan": {
+                "direction": "long",
+                "entry": 1.1000,
+                "stop": 1.0980,
+                "target": 1.1040,
+                "confidence_floor": 0.55,
+                "risk_amount": 50.0,
+                "reward_risk": 2.0,
+            },
+            "signal": {"confidence": 0.68},
+        },
+        {
+            "status": "filled",
+            "order": 9001,
+            "price": 1.1001,
+            "volume": 1000,
+            "sl": 1.0981,
+            "tp": 1.1041,
+        },
+        broker_name="cTrader",
+    )
+    assert "ORACLE cTrader TRADE EXECUTED" in msg
+    assert "Ticket #9001" in msg
+    assert "monitoring this cTrader position" in msg
+

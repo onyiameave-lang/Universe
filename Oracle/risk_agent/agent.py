@@ -193,6 +193,16 @@ class OracleRiskSubAgent:
         cand_closes = price_histories.get(candidate.symbol, [])
         cand_sign = 1.0 if candidate.direction == "long" else -1.0
 
+        # Constitutional Risk Gate: Never risk more than or equal to what we can win (SL < TP)
+        risk_dist = abs(float(candidate.last_price) - float(candidate.hypothetical_stop))
+        reward_dist = abs(float(candidate.hypothetical_target) - float(candidate.last_price))
+        if risk_dist <= 1e-12 or reward_dist <= risk_dist or float(candidate.reward_risk_ratio) <= 1.0 + 1e-9:
+            reasons.append(
+                f"constitutional risk law violation on {candidate.symbol}: stop distance ({risk_dist:.5f}) "
+                f">= target distance ({reward_dist:.5f}) (R:R={candidate.reward_risk_ratio:.2f} <= 1.0; "
+                f"never risk more than reward)"
+            )
+
         loss_cd = self.learned_cooldown_seconds(candidate.symbol, "loss")
         if seconds_since_last_loss is not None and seconds_since_last_loss < loss_cd:
             reasons.append(

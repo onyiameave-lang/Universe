@@ -105,6 +105,11 @@ class OracleCIOEngine:
         loss_cd = self.risk_subagent.learned_cooldown_seconds(prior_won=False)
         win_cd = self.risk_subagent.learned_cooldown_seconds(prior_won=True)
         stop_m, targ_m = self.risk_subagent.learned_stop_target_multipliers()
+        # Constitutional Anti-Cheating Environment Law:
+        # Stop Loss must ALWAYS be smaller than Take Profit (minimum 1.5:1 Reward:Risk).
+        # Never allow the learner to bloat SL above TP or shrink TP toward/below SL.
+        stop_m = round(min(2.2, max(0.8, float(stop_m))), 3)
+        targ_m = round(max(float(targ_m), stop_m * 1.5, stop_m + 0.5), 3)
 
         rm.risk_per_trade = risk_frac
         rm.max_positions = max(rm.max_positions, slot_budget)

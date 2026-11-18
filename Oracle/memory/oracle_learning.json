@@ -77710,6 +77710,36 @@
       "confidence": 0.4,
       "repeated": true,
       "repeat_count": 5654
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.improvement.request",
+      "root_cause": "Oracle has no active champion genome to challenge",
+      "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 1
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.improvement.request",
+      "root_cause": "Oracle has no active champion genome to challenge",
+      "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": false,
+      "repeat_count": 2
+    },
+    {
+      "source": "heuristic",
+      "task": "strategy.improvement.request",
+      "root_cause": "Oracle has no active champion genome to challenge",
+      "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+      "adjustment": "Add precondition checks and retry with corrected inputs.",
+      "confidence": 0.4,
+      "repeated": true,
+      "repeat_count": 3
     }
   ],
   "failure_signatures": {
@@ -77741,7 +77771,60 @@
     "trade.propose::no live market data for EURJPY (sources unreachable, no cache available)": 1,
     "trade.propose::no live market data for GBPJPY (sources unreachable, no cache available)": 1,
     "trade.signal::no live market data for XAUUSD (sources unreachable, no cache available)": 6,
-    "trade.propose::no live market data for USOIL (sources unreachable, no cache available)": 4
+    "trade.propose::no live market data for USOIL (sources unreachable, no cache available)": 4,
+    "strategy.improvement.request::Oracle has no active champion genome to challenge": 3
   },
-  "pending_chronicle": []
+  "pending_chronicle": [
+    {
+      "memory_id": "learning-oracle-ba053faffe1d4dfb9feec335292f3727",
+      "lesson": {
+        "source": "heuristic",
+        "task": "strategy.improvement.request",
+        "root_cause": "Oracle has no active champion genome to challenge",
+        "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+        "adjustment": "Add precondition checks and retry with corrected inputs.",
+        "confidence": 0.4,
+        "repeated": false,
+        "repeat_count": 1
+      },
+      "created_at": 1795021875.970038,
+      "attempts": 0,
+      "next_attempt_at": 0.0,
+      "last_error": ""
+    },
+    {
+      "memory_id": "learning-oracle-4f0909633a29494a8ed0d431394c6707",
+      "lesson": {
+        "source": "heuristic",
+        "task": "strategy.improvement.request",
+        "root_cause": "Oracle has no active champion genome to challenge",
+        "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+        "adjustment": "Add precondition checks and retry with corrected inputs.",
+        "confidence": 0.4,
+        "repeated": false,
+        "repeat_count": 2
+      },
+      "created_at": 1795025142.9292252,
+      "attempts": 0,
+      "next_attempt_at": 0.0,
+      "last_error": ""
+    },
+    {
+      "memory_id": "learning-oracle-626fcca041744048b6b8d44a095c9141",
+      "lesson": {
+        "source": "heuristic",
+        "task": "strategy.improvement.request",
+        "root_cause": "Oracle has no active champion genome to challenge",
+        "lesson": "Task 'strategy.improvement.request' failed. Validate inputs and preconditions before retry.",
+        "adjustment": "Add precondition checks and retry with corrected inputs.",
+        "confidence": 0.4,
+        "repeated": true,
+        "repeat_count": 3
+      },
+      "created_at": 1795031737.3074076,
+      "attempts": 0,
+      "next_attempt_at": 0.0,
+      "last_error": ""
+    }
+  ]
 }
