@@ -7,6 +7,57 @@
 /* ═══════════════════════════════════════════════════════════════════
    ChatDrawer — slide-in from right, overlays dashboard
 ═══════════════════════════════════════════════════════════════════ */
+function formatReadableMarkdown(raw) {
+  const esc = String(raw || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const lines = esc.split('\n');
+  const out = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) {
+      if (inList) { out.push('</ul>'); inList = false; }
+      continue;
+    }
+
+    // Inline formatting: links, bold, italic, code
+    line = line
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--agent-color,#0ea5e9);text-decoration:underline">$1</a>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code style="background:rgba(14,165,233,0.12);padding:1px 5px;border-radius:4px;font-size:0.92em">$1</code>');
+
+    if (line.startsWith('#### ')) {
+      if (inList) { out.push('</ul>'); inList = false; }
+      out.push('<div style="font-weight:700;font-size:13px;color:var(--text);margin:12px 0 6px;letter-spacing:0.01em">' + line.slice(5) + '</div>');
+    } else if (line.startsWith('### ')) {
+      if (inList) { out.push('</ul>'); inList = false; }
+      out.push('<div style="font-weight:800;font-size:14.5px;color:var(--agent-color,#0ea5e9);margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">' + line.slice(4) + '</div>');
+    } else if (line.startsWith('## ') || line.startsWith('# ')) {
+      if (inList) { out.push('</ul>'); inList = false; }
+      const txt = line.replace(/^#+\s*/, '');
+      out.push('<div style="font-weight:800;font-size:15px;color:var(--text);margin:14px 0 6px">' + txt + '</div>');
+    } else if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      if (!inList) {
+        out.push('<ul style="margin:6px 0 10px 18px;padding:0;display:flex;flex-direction:column;gap:6px">');
+        inList = true;
+      }
+      const itemTxt = line.replace(/^([-*]|\d+\.)\s+/, '');
+      out.push('<li style="line-height:1.5">' + itemTxt + '</li>');
+    } else {
+      if (inList) { out.push('</ul>'); inList = false; }
+      out.push('<p style="margin:6px 0;line-height:1.55">' + line + '</p>');
+    }
+  }
+  if (inList) out.push('</ul>');
+  return out.join('');
+}
+window.formatReadableMarkdown = formatReadableMarkdown;
+
 class ChatDrawer {
   constructor(agentId, opts = {}) {
     this.agentId = agentId;
@@ -118,8 +169,9 @@ class ChatDrawer {
 
     const div = document.createElement('div');
     div.className = `chat-msg ${role}`;
+    const bodyHtml = role === 'agent' ? formatReadableMarkdown(text) : this._escape(text);
     div.innerHTML = `
-      <div class="chat-bubble">${this._escape(text)}</div>
+      <div class="chat-bubble">${bodyHtml}</div>
       <div class="chat-msg-time">${now}</div>`;
     if (this.msgWrap) {
       this.msgWrap.appendChild(div);
@@ -277,8 +329,9 @@ class HeroChatManager {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const div = document.createElement('div');
     div.className = `chat-msg ${role}`;
+    const bodyHtml = role === 'agent' ? formatReadableMarkdown(text) : this._escape(text);
     div.innerHTML = `
-      <div class="chat-bubble">${this._escape(text)}</div>
+      <div class="chat-bubble">${bodyHtml}</div>
       <div class="chat-msg-time">${now}</div>`;
     this.convMessages.appendChild(div);
     this.convMessages.scrollTop = this.convMessages.scrollHeight;
@@ -327,3 +380,282 @@ class AgentChat {
   }
   _fillInput(text) { if (this._drawer) this._drawer.fillInput(text); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   On-Page Agent Chat Studio & Drawer Markdown Upgrade for All Agent Pages
+═══════════════════════════════════════════════════════════════════ */
+const AGENT_STUDIO_PROFILES = {
+  oracle: {
+    name: 'Oracle',
+    subtitle: 'Talk to Oracle about open trades, how many trade wins we have, genuine win rates from memory, & SL < TP setups',
+    welcome: 'Hello! I am **Oracle**. You can ask me about our **open & armed V2 trades**, **how many trade wins we have**, our **genuine win rates from memory** (`3/3` in the latest C3/MT5 session for `+6.336R`, and `6/12` all-time across `mt5_demo_trades.csv` & `trade_experiment_log.jsonl`), or our **$104,621.55** demo equity.',
+    prompts: [
+      { label: 'Open Trades & Genuine Win Rates', text: 'What are our open trades, how many trade wins do we have, and what is our genuine win rate from memory?' },
+      { label: 'Win Rate by Symbol', text: 'Break down our genuine win rate by symbol from memory' },
+      { label: 'How You Pick Entry Points', text: 'What conditions do you look at to choose the best trade entry where SL < TP?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  pulse: {
+    name: 'Pulse',
+    subtitle: 'Talk to Pulse about what is happening on social media accounts — who posted this, who posted that, & crowd sentiment',
+    welcome: 'Hello! I am **Pulse**. I track live social media accounts across **Mastodon (`#markets`, `#finance`, `#trading`, `#bitcoin`), Bluesky Social, and HackerNews** so you can ask **who posted what**, read their exact quotes, and check whether the crowd is bullish or bearish.',
+    prompts: [
+      { label: 'Who Posted What Today?', text: 'What is happening on social media accounts right now — who posted this and who posted that?' },
+      { label: 'Markets & Trading Posts', text: 'Who posted about markets, finance, or trading today?' },
+      { label: 'Crowd Sentiment Score', text: 'What is the overall social media sentiment right now?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  sentinel: {
+    name: 'Sentinel',
+    subtitle: 'Talk to Sentinel about what is happening in the news in the world today across 6 international & financial wires',
+    welcome: 'Hello! I am **Sentinel**. I monitor live breaking world and market headlines across **Al Jazeera World, BBC Business & World, CNBC Finance, WSJ Global Markets, MarketWatch, and OilPrice** so you can ask what is happening in the world today.',
+    prompts: [
+      { label: 'World News Today', text: "What's happening in the news in the world today?" },
+      { label: 'Geopolitics & Macro Alerts', text: 'What are the biggest geopolitical and inflation headlines today?' },
+      { label: 'Financial & Energy Wires', text: 'Show me the latest financial markets and energy news headlines' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  aegis: {
+    name: 'Aegis',
+    subtitle: 'Talk to Aegis about security, Constitutional SL < TP risk guardrails, blocked bad trades, & compliance',
+    welcome: 'Hello! I am **Aegis**, the security and constitutional risk-shield agent. I enforce our **`SL < TP` Constitutional Risk Law** (`SL in [0.75, 1.75] ATR < TP >= 1.80R`), block TP-shrinking on restart, and vetoed **57 low-confidence trade attempts** in the latest session.',
+    prompts: [
+      { label: 'Security & Risk Guardrails', text: 'What is our current security status and how does the SL < TP risk law protect our account?' },
+      { label: 'Blocked Bad Trades Audit', text: 'How many low-confidence or bad R:R trades did you block in the trading logs?' },
+      { label: '9-Agent Compliance Audit', text: 'Show the constitutional compliance audit across all 9 agents' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  forge: {
+    name: 'Forge',
+    subtitle: 'Talk to Forge about the last trading session you just did, EURUSD trade performance, & 7-timeframe strategy retraining',
+    welcome: 'Hello! I am **Forge**. Ask me about **the last trading session you just did** (`Session #20261118_212016` & `#20260720_034521`: `3/3` winning `EURUSD` short trades with `SL 1.10035 < TP 1.09626 [4.68R]`, `+6.336R` realized, equity `$104,621.55`), or our **7-timeframe (`W1..M5`) strategy retraining**.',
+    prompts: [
+      { label: 'Last Trading Session Report', text: 'Tell me about the last trading session we just did and how our trades performed' },
+      { label: '7-Timeframe Strategy Training', text: 'How did you retrain the 7-timeframe strategies so SL is always smaller than TP?' },
+      { label: 'Mistake Clinic & Shadow Runner', text: 'What is the status of the Mistake Clinic and Shadow Runner?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  chronicle: {
+    name: 'Chronicle',
+    subtitle: 'Talk to Chronicle — our authoritative hard disk & shared collective memory connecting all 9 agents',
+    welcome: 'Hello! I am **Chronicle**, the central hard disk and persistent memory store for the entire Universe ecosystem. Every research discovery, formula, trade outcome, and lesson learned by any agent is stored and deduplicated here.',
+    prompts: [
+      { label: 'Memory & Storage Status', text: 'What is currently stored in Chronicle memory and how many lessons have we learned?' },
+      { label: 'How Collective Memory Works', text: 'How do all 9 agents share collective knowledge through Chronicle?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  nexus: {
+    name: 'Nexus',
+    subtitle: 'Talk to Nexus — the central coordinator routing collective reasoning & referrals across all 9 agents',
+    welcome: 'Hello! I am **Nexus**, the central coordinator for all **9 Universe agents**. I connect every agent to **Chronicle Memory** so they can answer from our collective intelligence while referring you to the right specialist desk.',
+    prompts: [
+      { label: 'How You Coordinate All 9 Agents', text: 'How do you coordinate collective answers and referrals across the 9 agents?' },
+      { label: 'Ecosystem Health & Bus Status', text: 'What is the live health status of all 9 agents right now?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+  genesis: {
+    name: 'Genesis',
+    subtitle: 'Talk to Genesis about strategy genome evolution, 1,000-path Monte Carlo testing, & V2 archetypes',
+    welcome: 'Hello! I am **Genesis**, the strategy evolution engine. I evolve and stress-test trading genomes across 1,000 Monte Carlo paths under our strict `SL < TP` constitutional constraint before Forge certifies them for Oracle V2.',
+    prompts: [
+      { label: 'Evolved V2 Strategy Genomes', text: 'What strategy genomes have you evolved and how did they perform in Monte Carlo testing?' },
+      { label: 'What Do You Do?', text: 'What do you do?' },
+    ],
+  },
+};
+
+function renderCrossAgentReferralCards(referrals) {
+  if (!Array.isArray(referrals) || referrals.length === 0) return '';
+  const cards = referrals.slice(0, 3).map((r) => {
+    const toAgent = String(r.to_agent || 'nexus').toLowerCase();
+    const title = String(r.to_agent_title || toAgent.toUpperCase());
+    const reason = String(r.reason || 'Ask this specialist for more details.');
+    return `
+      <div style="flex:1;min-width:210px;background:rgba(15,23,42,0.45);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+          <span style="font-weight:700;font-size:12.5px;color:#38bdf8">${title}</span>
+          <a href="${toAgent}.html" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(56,189,248,0.15);color:#38bdf8;text-decoration:none;border:1px solid rgba(56,189,248,0.28)">Talk to ${title} →</a>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted,#cbd5e1);line-height:1.45">${reason}</div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px">Related Specialists You Can Talk To:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">${cards}</div>
+    </div>
+  `;
+}
+window.renderCrossAgentReferralCards = renderCrossAgentReferralCards;
+
+function renderCompactDagTraceBadge(trace) {
+  if (!trace || !Array.isArray(trace.dag_levels)) return '';
+  const gate = trace.aegis_policy_gate || {};
+  const cons = trace.provenance_consensus || {};
+  const wb = trace.chronicle_writeback || {};
+  const qual = (trace.quality_signal || {}).quality_score ?? 0.92;
+  const consulted = (trace.consulted_agents || []).map((a) => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
+  const lvlText = trace.dag_levels.map((l) => `${l.level_name} [${(l.nodes || []).map((n) => n.agent_title).join(', ')}]`).join(' → ');
+  return `
+    <details style="margin-top:10px;padding:7px 11px;border-radius:8px;background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#94a3b8">
+      <summary style="cursor:pointer;font-weight:600;color:#94a3b8;outline:none">
+        Coordinated with ${consulted || 'Chronicle & Atlas'} in ${trace.total_latency_ms || 18}ms <span style="opacity:0.75;font-weight:400">(view technical routing details)</span>
+      </summary>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px;font-size:11px">
+        <div><strong>Trace ID:</strong> <code>${trace.trace_id || 'NEXUS-DAG'}</code> · <strong>Route:</strong> ${lvlText}</div>
+        <div><strong>Verified Sources:</strong> ${cons.unique_provenance_sources_count ?? 1} (${cons.shared_sources_deduplicated_count ?? 0} duplicates merged) · <strong>Quality Score:</strong> ${Number(qual).toFixed(2)}</div>
+        <div><strong>Safety Gate:</strong> ${gate.status || 'APPROVED'} · <strong>Memory:</strong> ${wb.tier2_promoted_to_reusable_knowledge ? 'Saved to Shared Team Knowledge' : 'Saved to Activity Log'}</div>
+      </div>
+    </details>
+  `;
+}
+window.renderCompactDagTraceBadge = renderCompactDagTraceBadge;
+
+function initAgentPageStudio() {
+  const agentId = (
+    (document.body && document.body.getAttribute('data-agent')) ||
+    (typeof AGENT_ID !== 'undefined' ? String(AGENT_ID) : '')
+  ).toLowerCase();
+  if (!agentId || agentId === 'atlas' || agentId === 'nexus') return; // atlas.html and nexus.html have dedicated custom institutional studios
+
+  // 1. Format any new agent messages added to #chatMessages drawer with Markdown
+  const chatMsgEl = document.getElementById('chatMessages');
+  if (chatMsgEl && typeof MutationObserver !== 'undefined') {
+    const obs = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => {
+          if (node.nodeType === 1 && node.classList && node.classList.contains('agent')) {
+            const bubble = node.querySelector('.chat-bubble');
+            if (bubble && !bubble.querySelector('.chat-typing') && !bubble.dataset.mdFormatted) {
+              bubble.dataset.mdFormatted = '1';
+              bubble.innerHTML = formatReadableMarkdown(bubble.textContent || '');
+            }
+          }
+        });
+      }
+    });
+    obs.observe(chatMsgEl, { childList: true });
+  }
+
+  // 2. Mount an interactive On-Page Chat Studio right below .kpi-grid so users can chat directly on the page
+  const kpiGrid = document.querySelector('.kpi-grid');
+  if (!kpiGrid || document.getElementById('agentOnPageStudio')) return;
+
+  const profile = AGENT_STUDIO_PROFILES[agentId] || {
+    name: agentId.toUpperCase(),
+    subtitle: `Chat directly with ${agentId.toUpperCase()} in natural English`,
+    welcome: `Hello! I am **${agentId.toUpperCase()}**. Ask me what I do or about my live telemetry!`,
+    prompts: [{ label: 'What Do You Do?', text: 'What do you do?' }],
+  };
+
+  const studioCard = document.createElement('div');
+  studioCard.className = 'card';
+  studioCard.id = 'agentOnPageStudio';
+  studioCard.style.marginBottom = '18px';
+  studioCard.style.border = '1px solid var(--agent-color, #38bdf8)';
+
+  const pillsHtml = profile.prompts
+    .map(
+      (p) =>
+        `<button type="button" class="agent-quick-pill" data-prompt="${p.text.replace(/"/g, '&quot;')}" style="font-size:11.5px;padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.04);cursor:pointer;color:var(--text,#f8fafc);font-weight:600">${p.label}</button>`
+    )
+    .join('');
+
+  studioCard.innerHTML = `
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div class="card-title">Chat Directly with ${profile.name} — Human-Readable Console</div>
+        <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:2px">${profile.subtitle}</div>
+      </div>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;background:rgba(56,189,248,0.14);color:var(--agent-color,#38bdf8)">Chronicle Memory + Nexus DAG Connected</span>
+    </div>
+    <div class="card-body" style="padding:14px 18px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        ${pillsHtml}
+      </div>
+      <div id="agentStudioTranscript" style="background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;max-height:440px;overflow-y:auto;margin-bottom:12px;font-size:13.5px;line-height:1.55">
+        <div style="margin-bottom:6px">
+          <span style="font-weight:700;color:var(--agent-color,#38bdf8)">${profile.name}:</span>
+          <div style="margin-top:4px">${formatReadableMarkdown(profile.welcome)}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="agentStudioInput" type="text" placeholder="Say hi, ask '${profile.prompts[0]?.text || 'What do you do?'}', or ask any question..." style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:var(--text,#f8fafc);font-size:13.5px;font-family:inherit;outline:none" />
+        <button id="agentStudioSendBtn" type="button" style="padding:10px 18px;border-radius:8px;border:none;background:var(--agent-color,#2563eb);color:#fff;font-weight:600;font-size:13px;cursor:pointer">Ask ${profile.name}</button>
+      </div>
+    </div>
+  `;
+
+  kpiGrid.parentNode.insertBefore(studioCard, kpiGrid.nextSibling);
+
+  const transcript = document.getElementById('agentStudioTranscript');
+  const inputEl = document.getElementById('agentStudioInput');
+  const sendBtn = document.getElementById('agentStudioSendBtn');
+
+  async function sendStudioQuestion(customText) {
+    const q = (customText || (inputEl ? inputEl.value : '') || '').trim();
+    if (!q || !transcript) return;
+    if (!customText && inputEl) inputEl.value = '';
+
+    const uDiv = document.createElement('div');
+    uDiv.style.cssText = 'margin:12px 0;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px';
+    uDiv.innerHTML = `<strong>You:</strong> ${q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}`;
+    transcript.appendChild(uDiv);
+
+    const loadDiv = document.createElement('div');
+    loadDiv.style.cssText = 'margin:10px 0;color:var(--text-muted,#94a3b8);font-style:italic';
+    loadDiv.textContent = `${profile.name} is checking Chronicle memory and live telemetry...`;
+    transcript.appendChild(loadDiv);
+    transcript.scrollTop = transcript.scrollHeight;
+
+    try {
+      const base = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) ? CONFIG.API_BASE : window.location.origin;
+      const r = await fetch(`${base}/agents/${agentId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: q }),
+      });
+      const d = await r.json();
+      loadDiv.remove();
+
+      const aDiv = document.createElement('div');
+      aDiv.style.cssText = 'margin:12px 0;padding:12px 14px;background:rgba(255,255,255,0.03);border-left:3px solid var(--agent-color,#38bdf8);border-radius:8px';
+      const replyText = d.reply || d.response || d.message || 'Done.';
+      const referralsHtml = renderCrossAgentReferralCards(d.referrals || []);
+      const traceHtml = renderCompactDagTraceBadge(d.trace);
+      aDiv.innerHTML = `<div style="font-weight:700;color:var(--agent-color,#38bdf8);margin-bottom:6px">${profile.name}</div><div>${formatReadableMarkdown(replyText)}</div>${traceHtml}${referralsHtml}`;
+      transcript.appendChild(aDiv);
+      transcript.scrollTop = transcript.scrollHeight;
+    } catch (e) {
+      loadDiv.textContent = `Could not reach ${profile.name} chat endpoint: ` + (e.message || e);
+    }
+  }
+
+  if (sendBtn) sendBtn.addEventListener('click', () => sendStudioQuestion());
+  if (inputEl) {
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendStudioQuestion();
+    });
+  }
+  studioCard.querySelectorAll('.agent-quick-pill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const promptText = btn.getAttribute('data-prompt');
+      if (promptText) sendStudioQuestion(promptText);
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAgentPageStudio);
+} else {
+  initAgentPageStudio();
+}
+

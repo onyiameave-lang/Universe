@@ -1192,15 +1192,20 @@ class NexusAgent(BaseAgent):
         return None
 
     def _manual_orchestrate(self, c: Dict[str, Any]) -> Dict[str, Any]:
-        """FIX-CA-05: Manual multi-domain dispatch when orchestrator.decompose() threshold
-        is too strict.
-
-        Uses _classify_domains() (lower threshold) to find all domains, then
-        dispatches each agent directly via executor.call() and synthesizes results.
-        Constitutional law: Book II Principle V Graceful Degradation.
+        """FIX-CA-05 + Institutional V2: Manual multi-domain dispatch when orchestrator.decompose()
+        threshold is too strict, upgraded with provenance deduplication, independent Aegis policy gate,
+        and quality signal scoring.
         """
         import time
         from Nexus.core.orchestration import PRIMARY_TASK  # type: ignore
+        from Nexus.core.institutional_contracts import (  # type: ignore
+            extract_claim_envelope,
+            deduplicate_and_resolve_claims,
+            evaluate_aegis_policy_gate,
+            compute_coordination_quality_signal,
+            classify_chronicle_writeback,
+        )
+        t0 = time.time()
         query = c.get("query", "")
         domains = self._classify_domains(query)
         specialist_domains = [d for d in domains if d not in ("general", "coordination", "memory")]
@@ -1214,6 +1219,7 @@ class NexusAgent(BaseAgent):
         )
 
         results: Dict[str, Any] = {}
+        claim_envelopes: Dict[str, Dict[str, Any]] = {}
         missing: List[str] = []
         for domain in specialist_domains:
             from Nexus.intelligence.domain_classifier import DOMAIN_TO_REPO  # type: ignore
@@ -1224,21 +1230,19 @@ class NexusAgent(BaseAgent):
                 log.warning("_manual_orchestrate: no agent for domain=%s repo=%s — skipping.", domain, repo)
                 continue
             dispatch_domain = _canonical_domain(domain)
-            # FIX-CA-19 (also in _manual_orchestrate): extract symbol for news/social too
             if dispatch_domain in ("trading", "news", "social"):
                 symbol = _extract_symbol(query)
             else:
                 symbol = query.upper()
-            # FIX-CA-20: pass topics for Sentinel/Pulse collectors
             topics = [symbol] if symbol and dispatch_domain in ("news", "social") else None
-            # FIX-CA-09: Wrap with timeout (30s per agent in parallel orchestration)
+            step_t0 = time.time()
             out = self._dispatch_with_timeout(
                 agent.name,
                 PRIMARY_TASK.get(agent.name, ""),
                 {
                     "query": query,
                     "symbol": symbol,
-                    "topics": topics,                # FIX-CA-20
+                    "topics": topics,
                     "domain": dispatch_domain,
                     "depth": c.get("depth", "standard"),
                     "user_id": c.get("user_id", "user"),
@@ -1246,19 +1250,33 @@ class NexusAgent(BaseAgent):
                 priority=c.get("priority", 4),
                 timeout_sec=30,
             )
-            results[domain] = {"agent": agent.name, "output": out,
-                              "ok": isinstance(out, dict) and out.get("status") != "error"}
+            step_ms = (time.time() - step_t0) * 1000.0
+            ok = isinstance(out, dict) and out.get("status") != "error"
+            task_name = PRIMARY_TASK.get(agent.name, "")
+            env = extract_claim_envelope(
+                agent_name=agent.name,
+                domain=dispatch_domain,
+                task=task_name,
+                raw_output=out if isinstance(out, dict) else {"summary": str(out)},
+                latency_ms=step_ms,
+            )
+            claim_envelopes[domain] = env
+            results[domain] = {
+                "agent": agent.name,
+                "output": out,
+                "ok": ok,
+                "claim_envelope": env,
+                "latency_ms": round(step_ms, 1),
+            }
 
         if not results:
             return {"status": "error", "message": f"all agents unavailable: {missing}"}
 
-        # Synthesize: build a structured multi-agent answer
         parts = []
         for domain, r in results.items():
             if not r["ok"]:
                 continue
             out = r["output"]
-            # Extract summary from the agent's output
             summary = None
             if isinstance(out, dict):
                 report = out.get("report", {})
@@ -1270,17 +1288,62 @@ class NexusAgent(BaseAgent):
                 label = domain.upper()
                 parts.append(f"[{label}] {summary}")
 
+        dedup_resolution = deduplicate_and_resolve_claims(list(claim_envelopes.values()))
+        aegis_gate = evaluate_aegis_policy_gate(
+            query=query,
+            primary_domain=specialist_domains[0],
+            participating_domains=specialist_domains,
+            envelopes=list(claim_envelopes.values()),
+        )
         synthesis = "\n\n".join(parts) if parts else "No results from specialist agents."
-        overall = bool(parts)
+        if aegis_gate.get("status") == "BLOCKED":
+            synthesis += f"\n\n[AEGIS POLICY GATE ({aegis_gate.get('policy_version')})]: {aegis_gate.get('summary')}"
+
+        total_latency_ms = (time.time() - t0) * 1000.0
+        quality_signal = compute_coordination_quality_signal(
+            envelopes=list(claim_envelopes.values()),
+            consensus_info=dedup_resolution,
+            aegis_gate=aegis_gate,
+            duration_ms=total_latency_ms,
+        )
+        overall = bool(parts) and bool(quality_signal.get("passed", False))
+        agents_involved = [r["agent"] for r in results.values()]
+        self.graph.record_session(
+            specialist_domains,
+            {d: r["ok"] for d, r in results.items()},
+            overall,
+            quality_score=quality_signal.get("quality_score"),
+        )
+        writeback = classify_chronicle_writeback(
+            query=query,
+            envelopes=list(claim_envelopes.values()),
+            consensus_info=dedup_resolution,
+            aegis_gate=aegis_gate,
+            quality_signal=quality_signal,
+        )
 
         return {
-            "status": "complete" if overall else "error",
-            "routed_to": [r["agent"] for r in results.values()],
+            "status": "complete" if bool(parts) else "error",
+            "routed_to": agents_involved,
             "_strategy": "manual_orchestrate",
             "multi_agent": True,
             "domains": specialist_domains,
             "missing_agents": missing,
             "results": results,
-            "session": {"synthesis": synthesis, "multi_agent": True},
-            "message": synthesis if overall else f"No agents responded. Missing: {missing}",
+            "claim_envelopes": claim_envelopes,
+            "provenance_deduplication": dedup_resolution,
+            "aegis_policy_gate": aegis_gate,
+            "quality_signal": quality_signal,
+            "chronicle_writeback": writeback,
+            "session": {
+                "synthesis": synthesis,
+                "multi_agent": True,
+                "claim_envelopes": claim_envelopes,
+                "provenance_deduplication": dedup_resolution,
+                "aegis_policy_gate": aegis_gate,
+                "quality_signal": quality_signal,
+                "chronicle_writeback": writeback,
+            },
+            "message": synthesis if parts else f"No agents responded. Missing: {missing}",
         }
+

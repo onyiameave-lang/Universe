@@ -145,35 +145,47 @@ class CollaborationGraph:
 
     # ---- learning from real multi-agent sessions ----
 
-    def record_session(self, ordering: List[str], per_agent_success: Dict[str, bool],
-                       overall_success: bool) -> None:
+    def record_session(
+        self,
+        ordering: List[str],
+        per_agent_success: Dict[str, bool],
+        overall_success: bool,
+        quality_score: Optional[float] = None,
+    ) -> None:
         """
-        Learn from a completed multi-agent session:
-          * ordering quality,
+        Learn from a completed multi-agent session using provenance-verified
+        coordination quality (Stage 3):
+          * ordering quality (requires quality_score >= 0.65 when provided),
           * affinity of the domain set,
-          * dependency helpfulness (did running X before Y coincide with Y
-            succeeding?).
+          * dependency helpfulness (did running X before Y produce a high-quality,
+            provenance-backed outcome in Y?).
         """
+        q_val = float(quality_score) if quality_score is not None else (0.75 if overall_success else 0.0)
+        qualified_success = bool(overall_success and q_val >= 0.65)
         with self._lock:
             # ordering quality
             okey = ">".join(ordering)
             self._order_stats[okey]["total"] += 1
-            if overall_success:
+            if qualified_success:
                 self._order_stats[okey]["success"] += 1
 
             # affinity of the whole set
             akey = "+".join(sorted(ordering))
             self._affinity[akey]["total"] += 1
-            if overall_success:
+            if qualified_success:
                 self._affinity[akey]["success"] += 1
 
             # dependency helpfulness: for each pair where dep ran before dependent,
-            # count it as "helpful" if the dependent succeeded.
+            # count it as "helpful" only if both dep and dependent succeeded with quality >= 0.65.
             for i, dep in enumerate(ordering):
                 for dependent in ordering[i + 1:]:
                     k = self._key(dep, dependent)
                     self._dep_stats[k]["total"] += 1
-                    if per_agent_success.get(dependent, False):
+                    if (
+                        per_agent_success.get(dep, False)
+                        and per_agent_success.get(dependent, False)
+                        and qualified_success
+                    ):
                         self._dep_stats[k]["help"] += 1
             self._persist()
 
@@ -189,3 +201,4 @@ class CollaborationGraph:
                 key=lambda x: x["quality"], reverse=True)[:5]
             return {"learned_dependencies": top_deps, "best_orderings": top_orders,
                    "affinity_sets": len(self._affinity)}
+

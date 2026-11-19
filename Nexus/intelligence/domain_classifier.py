@@ -104,72 +104,130 @@ INTENT_BOOST = 10.0  # multiplier applied to the intent-matched domain score
 
 INTENT_SIGNALS: Dict[str, str] = {
     # News intent → Sentinel
-    "latest news":        "news",
-    "recent news":        "news",
-    "breaking news":      "news",
-    "news on":            "news",
-    "news about":         "news",
-    "news for":           "news",
-    "headlines":          "news",
-    "headline":           "news",
-    "what is the news":   "news",
-    "any news":           "news",
-    "market news":        "news",
-    "financial news":     "news",
-    "news sentiment":     "news",
-    "news coverage":      "news",
-    "in the news":        "news",
-    "news today":         "news",
+    "latest news":          "news",
+    "recent news":          "news",
+    "breaking news":        "news",
+    "world news":           "news",
+    "news on":              "news",
+    "news about":           "news",
+    "news for":             "news",
+    "headlines":            "news",
+    "headline":             "news",
+    "what is the news":     "news",
+    "any news":             "news",
+    "market news":          "news",
+    "financial news":       "news",
+    "news sentiment":       "news",
+    "news coverage":        "news",
+    "in the news":          "news",
+    "news today":           "news",
+    "sentinel":             "news",
     # Social intent → Pulse
-    "people saying":      "social",
-    "what are people":    "social",
-    "social media":       "social",
-    "on twitter":         "social",
-    "on reddit":          "social",
-    "on telegram":        "social",
-    "on discord":         "social",
-    "social sentiment":   "social",
-    "community saying":   "social",
-    "retail sentiment":   "social",
-    "buzz about":         "social",
-    "trending on":        "social",
+    "people saying":        "social",
+    "what are people":      "social",
+    "who posted":           "social",
+    "social media":         "social",
+    "on twitter":           "social",
+    "on reddit":            "social",
+    "on telegram":          "social",
+    "on discord":           "social",
+    "on mastodon":          "social",
+    "on bluesky":           "social",
+    "social sentiment":     "social",
+    "crowd sentiment":      "social",
+    "community saying":     "social",
+    "retail sentiment":     "social",
+    "buzz about":           "social",
+    "trending on":          "social",
+    "pulse":                "social",
     # Trading intent → Oracle (prediction)
-    "is there a trade":   "trading",
-    "open trade":         "trading",
-    "open position":      "trading",
-    "trade signal":       "trading",
-    "trade on":           "trading",
-    "buy signal":         "trading",
-    "sell signal":        "trading",
-    "market analysis":    "trading",
-    "technical analysis": "trading",
-    "price action":       "trading",
-    "entry point":        "trading",
-    "exit point":         "trading",
-    # Research intent → Atlas
-    "what is":            "research",
-    "what are":           "research",
-    "how does":           "research",
-    "explain":            "research",
-    "define":             "research",
-    "definition of":      "research",
-    "tell me about":      "research",
-    "describe":           "research",
-    # Training intent → Forge
-    "train a":            "training",
-    "train new":          "training",
-    "train model":        "training",
-    "new strategy":       "training",
-    "optimize strategy":  "training",
-    "backtest":           "training",
-    "evolve strategy":    "training",
+    "trades of the day":    "trading",
+    "today's trades":       "trading",
+    "todays trades":        "trading",
+    "trades today":         "trading",
+    "our trades":           "trading",
+    "my trades":            "trading",
+    "is there a trade":     "trading",
+    "open trade":           "trading",
+    "open trades":          "trading",
+    "open position":        "trading",
+    "win rate":             "trading",
+    "winning rate":         "trading",
+    "trade wins":           "trading",
+    "trade signal":         "trading",
+    "trade on":             "trading",
+    "buy signal":           "trading",
+    "sell signal":          "trading",
+    "market analysis":      "trading",
+    "technical analysis":   "trading",
+    "price action":         "trading",
+    "entry point":          "trading",
+    "exit point":           "trading",
+    "account balance":      "trading",
+    "oracle":               "trading",
+    # Governance / Security intent → Aegis
+    "security status":      "governance",
+    "security":             "governance",
+    "risk policy":          "governance",
+    "risk_policy":          "governance",
+    "risk law":             "governance",
+    "blocked trades":       "governance",
+    "vetoed trades":        "governance",
+    "compliance":           "governance",
+    "asx200":               "governance",
+    "outlier":              "governance",
+    "aegis":                "governance",
     # Creation intent → Genesis
-    "create an agent":    "creation",
-    "spawn an agent":     "creation",
-    "deploy an agent":    "creation",
-    "new agent":          "creation",
-    "build an agent":     "creation",
+    "strategy genome":      "creation",
+    "evolve a new":         "creation",
+    "create an agent":      "creation",
+    "spawn an agent":       "creation",
+    "deploy an agent":      "creation",
+    "new agent":            "creation",
+    "build an agent":       "creation",
+    "genesis":              "creation",
+    # Training intent → Forge
+    "mistake clinic":       "training",
+    "shadow runner":        "training",
+    "retrain":              "training",
+    "last trading session": "training",
+    "trading session":      "training",
+    "7-timeframe":          "training",
+    "train a":              "training",
+    "train new":            "training",
+    "train model":          "training",
+    "new strategy":         "training",
+    "optimize strategy":    "training",
+    "backtest":             "training",
+    "evolve strategy":      "training",
+    "forge":                "training",
+    # Memory intent → Chronicle
+    "chronicle":            "memory",
+    "shared memory":        "memory",
+    "memory matrix":        "memory",
+    "stored lessons":       "memory",
+    "hard disk":            "memory",
+    # Explicit Research intent → Atlas
+    "atlas":                "research",
+    "research desk":        "research",
+    "5 desks":              "research",
+    "five desks":           "research",
+    "peer-reviewed":        "research",
+    "formula for":          "research",
+    "equation for":         "research",
 }
+
+# Generic question starters ONLY apply to "research" when NO specific domain intent matched.
+GENERIC_RESEARCH_STARTERS: tuple[str, ...] = (
+    "what is",
+    "what are",
+    "how does",
+    "explain",
+    "define",
+    "definition of",
+    "tell me about",
+    "describe",
+)
 
 # ---------------------------------------------------------------------------
 # BUG C FIX (Phase 5c): Stop words for relevance_filter().
@@ -355,14 +413,30 @@ class DomainClassifier:
         self._load()
 
     def _load(self) -> None:
+        norm_stops = {_normalize(w) for w in STOP_WORDS}
+        base = {
+            d: {k: v for k, v in self._normalize_vocab(vocab).items() if k not in norm_stops}
+            for d, vocab in SEED_VOCAB.items()
+        }
         if self._path.exists():
             try:
                 raw = json.loads(self._path.read_text(encoding="utf-8"))
-                self._vocab = {d: self._normalize_vocab(v) for d, v in raw.items()}
+                loaded = {
+                    d: {k: v for k, v in self._normalize_vocab(vocab).items() if k not in norm_stops}
+                    for d, vocab in raw.items()
+                }
+                for d, vocab in base.items():
+                    if d not in loaded:
+                        loaded[d] = dict(vocab)
+                    else:
+                        for k, w in vocab.items():
+                            if k not in loaded[d]:
+                                loaded[d][k] = w
+                self._vocab = loaded
                 return
             except Exception:
                 pass
-        self._vocab = {d: self._normalize_vocab(v) for d, v in SEED_VOCAB.items()}
+        self._vocab = base
 
     @staticmethod
     def _normalize_vocab(vocab: Dict[str, float]) -> Dict[str, float]:
@@ -379,31 +453,53 @@ class DomainClassifier:
             pass  # aegis:allow-silent
 
     def _tokens(self, text: str) -> List[str]:
-        return [_normalize(w) for w in _WORD.findall((text or "").lower())]
+        norm_stops = {_normalize(w) for w in STOP_WORDS}
+        return [
+            _normalize(w)
+            for w in _WORD.findall((text or "").lower())
+            if w not in STOP_WORDS and _normalize(w) not in norm_stops
+        ]
 
     def classify(self, query: str) -> Dict[str, Any]:
         tokens = self._tokens(query)
-        if not tokens:
+        q_lower = (query or "").lower()
+        if not tokens and not q_lower.strip():
             return {"domain": "general", "repository": DOMAIN_TO_REPO.get("general", "nexus"),
                    "confidence": 0.0, "scores": {}}
 
-        # FIX-DC-07: Check INTENT_SIGNALS first — strong intent phrases override keyword scoring.
-        q_lower = (query or "").lower()
+        # FIX-DC-07: Check specific INTENT_SIGNALS first (never let generic "what is"/"what are"
+        # override an explicit specialist domain like trading, news, social, training, or security).
         intent_domain: Optional[str] = None
+        matched_intents: List[str] = []
         for phrase, domain in INTENT_SIGNALS.items():
             if phrase in q_lower:
-                intent_domain = domain
-                break  # first (longest) match wins; dict is ordered by specificity
+                if intent_domain is None:
+                    intent_domain = domain
+                if domain not in matched_intents:
+                    matched_intents.append(domain)
 
         with self._lock:
             scores = {domain: sum(vocab.get(tok, 0.0) for tok in tokens)
                      for domain, vocab in self._vocab.items()}
             scores = {d: s for d, s in scores.items() if s > 0}
 
-        # FIX-DC-07: Boost intent-matched domain score by INTENT_BOOST so it dominates.
+        # Only apply generic research starters ("what is", "what are", "explain", etc.)
+        # when NO specific domain intent matched AND no other domain already strongly leads.
+        if not matched_intents:
+            top_non_research = max((s for d, s in scores.items() if d != "research"), default=0.0)
+            if top_non_research < 3.0 and any(st in q_lower for st in GENERIC_RESEARCH_STARTERS):
+                intent_domain = "research"
+                matched_intents.append("research")
+
+        # Boost primary intent domain by INTENT_BOOST so it dominates keyword scores,
+        # and boost secondary intent domains for multi-clause decomposition.
+        max_other = max(scores.values()) if scores else 1.0
         if intent_domain:
-            base = scores.get(intent_domain, 0.5)
-            scores[intent_domain] = base * INTENT_BOOST if base > 0 else INTENT_BOOST
+            base = scores.get(intent_domain, 1.0)
+            scores[intent_domain] = max(base * INTENT_BOOST, max_other + INTENT_BOOST)
+        for sec_dom in matched_intents[1:]:
+            base_sec = scores.get(sec_dom, 0.5)
+            scores[sec_dom] = max(base_sec, 4.0)
 
         if not scores:
             return {"domain": "general", "repository": DOMAIN_TO_REPO.get("general", "nexus"),
@@ -416,32 +512,16 @@ class DomainClassifier:
         return {"domain": top_domain, "repository": DOMAIN_TO_REPO.get(top_domain, "nexus"),
                 "confidence": round(confidence, 4),
                 "scores": {d: round(s, 2) for d, s in ranked[:5]},
-                "intent_signal": intent_domain}
+                "ranked": [(d, round(s, 2)) for d, s in ranked],
+                "intent_signal": intent_domain,
+                "matched_intents": matched_intents}
 
     def relevance_filter(self, query: str, memories: List[Any]) -> List[Any]:
-        """FIX-DC-08 (updated Phase 5c): Filter Chronicle memories by topic relevance.
-
-        BUG C ROOT CAUSE: The old filter used ALL tokens including stop words
-        ("a", "on", "the", "is"). "train a new strategy on AAPL" shared stop-word
-        tokens with "what is an animal" memories → false 50% overlap → 8 spurious
-        "relevant" memories → Chronicle fast path fired for unrelated queries.
-
-        Fix:
-          1. Strip STOP_WORDS before computing overlap (meaningful tokens only).
-          2. Require >= 30% overlap on meaningful tokens (raised from 10%).
-          3. Require at least 1 meaningful token in common (guards against
-             empty-after-stop-word-removal edge cases).
-
-        Constitutional law: Book II Principle I Memory First — inject only
-        relevant memories, not all recent ones.
-        """
+        """FIX-DC-08 (updated Phase 5c): Filter Chronicle memories by topic relevance."""
         if not memories or not query:
             return memories
-        # Strip stop words from query tokens
-        all_query_tokens = set(self._tokens(query))
-        query_tokens = all_query_tokens - STOP_WORDS
+        query_tokens = set(self._tokens(query))
         if not query_tokens:
-            # All query words are stop words — fall back to unfiltered (edge case)
             return memories
         filtered = []
         for mem in memories:
@@ -451,13 +531,10 @@ class DomainClassifier:
                 text = mem.get("content") or mem.get("text") or mem.get("summary") or str(mem)
             else:
                 text = str(mem)
-            # Strip stop words from memory tokens too
-            all_mem_tokens = set(self._tokens(text))
-            mem_tokens = all_mem_tokens - STOP_WORDS
+            mem_tokens = set(self._tokens(text))
             if not mem_tokens:
                 continue
             common = query_tokens & mem_tokens
-            # Require at least 1 meaningful token AND >= 30% overlap
             if len(common) >= 1 and len(common) / len(query_tokens) >= 0.30:
                 filtered.append(mem)
         return filtered
@@ -467,7 +544,7 @@ class DomainClassifier:
             self._vocab[correct_domain] = {}
         with self._lock:
             for tok in set(self._tokens(query)):
-                if len(tok) >= 2:
+                if len(tok) >= 3:
                     self._vocab[correct_domain][tok] = self._vocab[correct_domain].get(tok, 0.0) + weight
             self._persist()
 

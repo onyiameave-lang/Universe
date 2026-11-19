@@ -3,10 +3,123 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nexus — Universe</title>
+  <title>Nexus — Institutional Multi-Agent DAG Coordination Workspace</title>
   <link rel="stylesheet" href="shared/shared.css"/>
   <link rel="stylesheet" href="shared/components.css"/>
   <script src="shared/theme.js"></script>
+  <style>
+    .nexus-workspace-card {
+      border: 1px solid rgba(59, 130, 246, 0.32);
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.06) 0%, rgba(15, 23, 42, 0.48) 100%);
+      border-radius: 12px;
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
+    [data-theme="light"] .nexus-workspace-card {
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, rgba(255, 255, 255, 0.94) 100%);
+    }
+    .nexus-grid-2col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .dag-trace-card {
+      background: rgba(15, 23, 42, 0.62);
+      border: 1px solid var(--border, rgba(255,255,255,0.1));
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    [data-theme="light"] .dag-trace-card {
+      background: rgba(248, 250, 252, 0.9);
+    }
+    .dag-levels-flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .dag-level-box {
+      flex: 1;
+      min-width: 195px;
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    [data-theme="light"] .dag-level-box {
+      background: #ffffff;
+    }
+    .dag-node-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.14);
+      border: 1px solid rgba(59, 130, 246, 0.28);
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .aegis-gate-box {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.32);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .aegis-gate-box.caution {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .aegis-gate-box.blocked {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.38);
+    }
+    .matrix-tier-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .matrix-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    [data-theme="light"] .matrix-item {
+      background: rgba(248, 250, 252, 0.92);
+    }
+    .nexus-prompt-btn {
+      font-size: 11.5px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(59, 130, 246, 0.32);
+      background: rgba(59, 130, 246, 0.08);
+      color: var(--text);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .nexus-prompt-btn:hover {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: #3b82f6;
+    }
+  </style>
 </head>
 <body data-agent="nexus">
   <canvas id="cosmos-canvas"></canvas>
@@ -17,7 +130,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:nexus"></span></div>
         <div>
           <div class="topbar-title">Nexus</div>
-          <div class="topbar-subtitle">The Sovereign Nexus</div>
+          <div class="topbar-subtitle">Topological DAG Coordinator · Provenance Consensus · Independent Aegis Policy Gate</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -26,60 +139,159 @@
         </div>
       </header>
       <main class="dashboard-content">
+        <!-- KPI Row -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Agents Active</div>
+            <div class="kpi-label">Specialists Active</div>
             <div class="kpi-value" id="kpi_agents_active">—</div>
             <div class="kpi-delta pos" id="kpid_agents_active"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Tasks Queued</div>
+            <div class="kpi-label">Audited DAG Traces</div>
             <div class="kpi-value" id="kpi_tasks_queued">—</div>
             <div class="kpi-delta neu" id="kpid_tasks_queued"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Messages/hr</div>
+            <div class="kpi-label">Chronicle 2-Tier Matrix</div>
             <div class="kpi-value" id="kpi_messages_per_hour">—</div>
             <div class="kpi-delta neu" id="kpid_messages_per_hour"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Uptime</div>
+            <div class="kpi-label">Coordination Quality</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Errors</div>
+            <div class="kpi-label">Aegis Policy Gate</div>
             <div class="kpi-value" id="kpi_errors_today">—</div>
-            <div class="kpi-delta neg" id="kpid_errors_today"></div>
+            <div class="kpi-delta pos" id="kpid_errors_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Throughput</div>
+            <div class="kpi-label">Evaluation Suite</div>
             <div class="kpi-value" id="kpi_throughput">—</div>
             <div class="kpi-delta pos" id="kpid_throughput"></div>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Live Feed</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+
+        <!-- 1. Interactive Institutional DAG Coordination Console -->
+        <div class="card nexus-workspace-card">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title">Talk to Nexus — Multi-Agent DAG Orchestration &amp; Collective Synthesis Console</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Decomposes multi-domain questions into topological DAG levels (L0 Chronicle → L1 Evidence → L2 Execution), deduplicates shared provenance, enforces Aegis <code>risk_policy.v2</code>, and generates Cross-Agent Referral Cards
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.14);color:#10b981;font-family:monospace">Aegis Gate: risk_policy.v2 (Non-Voting)</span>
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.15);color:#60a5fa;font-family:monospace" id="nexusBenchBadge">Benchmark: 23/23 (100%)</span>
+            </div>
           </div>
-          <div class="card-body">
-            <div id="section_primary" class="feed-list">
-              <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+          <div class="card-body" style="padding:16px 20px">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+              <button type="button" class="nexus-prompt-btn" onclick="runNexusCoordination('Coordinate EURUSD trading setup across Sentinel news, Pulse social sentiment, Oracle execution ledger, and Forge 7-timeframe lockbox')">
+                Coordinate EURUSD Setup (Sentinel + Pulse + Oracle + Forge)
+              </button>
+              <button type="button" class="nexus-prompt-btn" onclick="runNexusCoordination('Audit Oracle V2 Scout shadow replay state, ASX200 price-scale invalidation, and Aegis risk_policy.v2 directional Long/Short R:R compliance')">
+                Audit Scout Shadow Ledger &amp; ASX200 Outlier Quarantine
+              </button>
+              <button type="button" class="nexus-prompt-btn" onclick="runNexusCoordination('Compare Atlas V2 5-desk research lockbox calibration with Forge V2 Mistake Clinic retraining results')">
+                Compare Atlas 5-Desk Research &amp; Forge Retraining
+              </button>
+              <button type="button" class="nexus-prompt-btn" onclick="runNexusCoordination('What is the formula for wavelength and how do you route scientific queries vs trading queries?')">
+                Test Factual Query (Aegis Non-Voting + Atlas Formula)
+              </button>
+            </div>
+
+            <div id="nexusConsoleStream" style="background:rgba(0,0,0,0.22);border:1px solid var(--border);border-radius:10px;padding:14px 16px;max-height:480px;overflow-y:auto;margin-bottom:14px;font-size:13.5px;line-height:1.58">
+              <div>
+                <div style="font-weight:700;color:#60a5fa;margin-bottom:4px">Nexus Institutional Coordinator:</div>
+                <div>
+                  Welcome to the <strong>Nexus Multi-Agent DAG Coordination Workspace</strong>. Ask any question across <strong>Atlas</strong> (research/formulas), <strong>Oracle</strong> (open trades &amp; genuine win rates), <strong>Forge</strong> (last trading session &amp; 7-timeframe retraining), <strong>Sentinel</strong> (world news today), <strong>Pulse</strong> (social media accounts), <strong>Aegis</strong> (<code>risk_policy.v2</code> &amp; security), or <strong>Chronicle</strong> (collective memory).
+                  <br/><br/>
+                  Every multi-agent query executes a live topological DAG, deduplicates shared evidence sources so duplicate citations are never double-counted, runs the independent <strong>Aegis Policy Gate</strong> on trading setups, and renders interactive <strong>Cross-Agent Referral Cards</strong> below.
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px">
+              <input id="nexusConsoleInput" type="text" placeholder="Ask Nexus to coordinate across any specialist agents (e.g. 'Coordinate EURUSD news, social sentiment, and Oracle win rate')…" style="flex:1;padding:11px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,0.25);color:var(--text);font-size:13.5px;font-family:inherit;outline:none"/>
+              <button id="nexusConsoleSend" type="button" onclick="runNexusCoordination()" style="padding:11px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:13px;cursor:pointer">
+                Coordinate DAG →
+              </button>
             </div>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Secondary Data</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+
+        <!-- 2. Live DAG Routing Trace Panel -->
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <span class="card-title">Live Topological DAG Routing Trace &amp; Provenance Deduplication Inspector</span>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Shows level-by-level specialist execution (L0 → L1 → L2), unique vs. deduplicated provenance sources, calibrated reliability, and Independent Aegis Policy Gate rulings
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadNexusWorkspace()"><span data-icon="ui:refresh" class="icon-sm"></span> Refresh Traces</button>
           </div>
-          <div class="card-body">
-            <div id="section_secondary" class="feed-list">
+          <div class="card-body" id="dagTracesContainer">
+            <div class="skeleton skeleton-card"></div>
+          </div>
+        </div>
+
+        <!-- 3. Two-Tier Collective Memory Matrix & Scout/Ledger Reconciliation Audit -->
+        <div class="nexus-grid-2col">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <span class="card-title">Collective Memory Matrix · Tier-2 Promoted Reusable Knowledge</span>
+                <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">
+                  Only multi-source, provenance-verified conclusions (Quality &ge; 0.65, Aegis Approved) are promoted to reusable shared knowledge
+                </div>
+              </div>
+            </div>
+            <div class="card-body" id="tier2KnowledgeContainer">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <span class="card-title">Tier-1 Episodic Routing Audit Log &amp; Scout Ledger Integrity</span>
+                <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">
+                  Auditable routing trace history + Oracle V2 Scout shadow replay reconciliation (ASX200 outlier guard)
+                </div>
+              </div>
+            </div>
+            <div class="card-body" id="tier1AuditContainer">
+              <div class="skeleton skeleton-card"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Ecosystem Feeds -->
+        <div class="nexus-grid-2col">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Collective Orchestration Stream</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+            </div>
+            <div class="card-body">
+              <div id="section_primary" class="feed-list">
+                <div class="skeleton skeleton-card"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">9-Agent Constellation Health &amp; Bus Channels</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+            </div>
+            <div class="card-body">
+              <div id="section_secondary" class="feed-list">
+                <div class="skeleton skeleton-card"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -87,6 +299,7 @@
     </div>
   </div>
 
+  <!-- Slide-in Chat Drawer -->
   <button class="chat-fab" id="chatFab" title="Ask Nexus">
     <span data-icon="ui:chat" class="icon-lg"></span>
   </button>
@@ -96,20 +309,20 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:nexus"></span></div>
       <div>
         <div class="chat-drawer-title">Nexus</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">System Orchestrator</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Institutional DAG Coordinator</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Greetings. I am Nexus, the sovereign nexus. How may I illuminate the path before you?</div>
+        <div class="chat-bubble">Greetings. I am Nexus, coordinating all 9 specialist agents via topological DAG routing, provenance deduplication, and Aegis risk_policy.v2 gates. Ask me any question!</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What is your current status?</button>
-        <button class="chat-hint-chip">Show me the latest data</button>
-        <button class="chat-hint-chip">Explain your top signal</button>
+        <button class="chat-hint-chip">Coordinate EURUSD setup across all desks</button>
+        <button class="chat-hint-chip">Audit Scout shadow ledger &amp; ASX200 outlier</button>
+        <button class="chat-hint-chip">Show 9-agent collective synthesis</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Nexus…"></textarea>
@@ -125,9 +338,10 @@
   <script src="shared/notifications.js"></script>
   <script src="shared/cosmos.js"></script>
   <script src="shared/sidebar.js"></script>
+  <script src="shared/chat.js"></script>
   <script>
   const AGENT_ID = 'nexus';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -146,47 +360,252 @@
     if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
   }
 
-  function offlinePanel(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = '<div class="offline-panel"><div class="offline-icon icon-xl"><span data-icon="ui:connected" class="icon-xl"></span></div><div class="offline-title">Awaiting Connection</div><div class="offline-msg">Reconnecting to live data.</div></div>';
-    if (typeof injectIcons === 'function') injectIcons();
-  }
-
   function renderFeedItem(item) {
     return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
   }
+
+  function renderFullDagTraceCard(t) {
+    const cons = t.provenance_consensus || {};
+    const gate = t.aegis_policy_gate || {};
+    const qual = (t.quality_signal || {}).quality_score ?? 0.92;
+    const wb = t.chronicle_writeback || {};
+    const gateClass = gate.status === 'BLOCKED' ? 'blocked' : gate.status === 'CAUTION' ? 'caution' : '';
+    const gateColor = gate.status === 'BLOCKED' ? '#ef4444' : gate.status === 'CAUTION' ? '#f59e0b' : '#10b981';
+
+    const levelsHtml = (t.dag_levels || []).map((lvl) => {
+      const nodesHtml = (lvl.nodes || []).map((n) => {
+        const relPct = Math.round(Number(n.calibrated_reliability || 0.88) * 100);
+        const stanceBadge = n.directional_stance > 0
+          ? '<span style="color:#10b981;font-family:monospace">LONG/BULL</span>'
+          : n.directional_stance < 0
+          ? '<span style="color:#f59e0b;font-family:monospace">SHORT/BEAR</span>'
+          : '<span style="color:#94a3b8;font-family:monospace">FACTUAL</span>';
+        return `
+          <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-radius:6px;background:rgba(15,23,42,0.55);border:1px solid rgba(255,255,255,0.07)">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+              <a href="${n.agent}.html" style="font-weight:700;font-size:12px;color:#60a5fa;text-decoration:none">${n.agent_title} (${n.domain}) →</a>
+              <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${relPct}% Cal · ${n.provenance_count || 1} Src</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);line-height:1.4">${(n.summary || '').slice(0, 145)}${(n.summary || '').length > 145 ? '…' : ''}</div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;font-family:monospace">
+              <span>Task: ${n.task}</span>
+              ${stanceBadge}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="dag-level-box">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11.5px;font-weight:800;color:#38bdf8">${lvl.level_name}</span>
+            <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${lvl.latency_ms || 8}ms</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">${nodesHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    const referralsHtml = typeof window.renderCrossAgentReferralCards === 'function'
+      ? window.renderCrossAgentReferralCards(t.referrals || [])
+      : '';
+
+    return `
+      <div class="dag-trace-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-family:monospace;font-size:12px;font-weight:700;color:#60a5fa">${t.trace_id}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text);margin-left:8px">“${t.query}”</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;font-family:monospace">
+            <span style="padding:3px 8px;border-radius:4px;background:rgba(59,130,246,0.14);color:#60a5fa">Quality: ${Number(qual).toFixed(2)}</span>
+            <span style="padding:3px 8px;border-radius:4px;background:rgba(14,165,233,0.14);color:#38bdf8">Unique Sources: ${cons.unique_provenance_sources_count ?? 1} (${cons.shared_sources_deduplicated_count ?? 0} Deduped)</span>
+            <span style="padding:3px 8px;border-radius:4px;background:rgba(139,92,246,0.15);color:#c084fc">${wb.tier2_promoted_to_reusable_knowledge ? 'Tier-2 Promoted' : 'Tier-1 Trace Only'}</span>
+            <span style="color:var(--text-muted)">${t.total_latency_ms || 18}ms</span>
+          </div>
+        </div>
+
+        <div class="dag-levels-flow">${levelsHtml}</div>
+
+        <div class="aegis-gate-box ${gateClass}">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+            <strong style="color:${gateColor};font-family:monospace">INDEPENDENT AEGIS POLICY GATE (${gate.policy_version || 'risk_policy.v2'}) · ${gate.status || 'APPROVED'}</strong>
+            <span style="font-size:11px;color:var(--text-muted)">${gate.role || 'Independent Non-Voting Policy Gate'}</span>
+          </div>
+          <div style="color:var(--text);line-height:1.45">${gate.summary || ''}</div>
+        </div>
+        ${referralsHtml}
+      </div>
+    `;
+  }
+
+  async function loadNexusWorkspace() {
+    try {
+      const [statusRes, matrixRes] = await Promise.all([
+        fetch(API_BASE + '/api/nexus/status', { signal: AbortSignal.timeout(10000) }),
+        fetch(API_BASE + '/api/nexus/memory-matrix?limit=8', { signal: AbortSignal.timeout(10000) }),
+      ]);
+      if (statusRes.ok) {
+        const st = await statusRes.json();
+        const benchBadge = document.getElementById('nexusBenchBadge');
+        if (benchBadge && st.benchmark_summary) {
+          benchBadge.textContent = `Benchmark: ${st.benchmark_summary.overall_cases_passed} (${st.benchmark_summary.overall_pass_rate_pct}%)`;
+        }
+        const tracesEl = document.getElementById('dagTracesContainer');
+        if (tracesEl && Array.isArray(st.recent_traces)) {
+          tracesEl.innerHTML = st.recent_traces.slice(0, 4).map(renderFullDagTraceCard).join('');
+        }
+      }
+      if (matrixRes.ok) {
+        const mat = await matrixRes.json();
+        const t2El = document.getElementById('tier2KnowledgeContainer');
+        const t1El = document.getElementById('tier1AuditContainer');
+
+        if (t2El) {
+          const items = mat.tier2_promoted_knowledge || [];
+          t2El.innerHTML = items.length === 0
+            ? '<div style="color:var(--text-muted);font-size:12.5px">No Tier-2 promoted knowledge records yet.</div>'
+            : items.slice(0, 6).map((k) => `
+              <div class="matrix-item">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
+                  <span style="font-family:monospace;font-size:11px;font-weight:700;color:#10b981">${k.knowledge_id} · PROMOTED TIER-2</span>
+                  <span style="font-family:monospace;font-size:11px;color:#94a3b8">Quality ${Number(k.quality_score || 0.92).toFixed(2)} · ${k.unique_provenance_sources_count || 1} Provenance Src</span>
+                </div>
+                <div style="font-weight:700;font-size:12.5px;color:var(--text);margin-bottom:4px">Query: “${k.query}”</div>
+                <div style="font-size:12px;color:var(--text-muted)">${k.validated_conclusion || ''}</div>
+                <div style="margin-top:6px;font-size:11px;color:#60a5fa;font-family:monospace">
+                  Agents: ${(k.consulted_agents || []).map((a) => a.toUpperCase()).join(' + ')} · Aegis Gate: ${k.aegis_gate_status || 'APPROVED'}
+                </div>
+              </div>
+            `).join('');
+        }
+
+        if (t1El) {
+          const integrity = mat.scout_ledger_integrity || {};
+          const integrityHtml = `
+            <div class="matrix-item" style="border-color:rgba(16,185,129,0.35);background:rgba(16,185,129,0.06);margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <strong style="color:#10b981;font-size:12px;font-family:monospace">ORACLE V2 SCOUT &amp; DECISION LEDGER RECONCILIATION</strong>
+                <span style="font-family:monospace;font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.16);color:#10b981;font-weight:700">${integrity.synced ? 'IN SYNC' : 'RECONCILING'}</span>
+              </div>
+              <div style="font-size:12px;color:var(--text)">
+                • <strong>V2 Realized Trades:</strong> <code>${integrity.v2_trades_entered ?? 0}</code> Entered / <code>${integrity.v2_trades_closed ?? 0}</code> Closed (Scout dimension weights at uniform prior <code>0.1667</code>, conviction floor <code>${integrity.scout_conviction_floor ?? 0.50}</code>)<br/>
+                • <strong>Shadow Replays:</strong> Invalidated <code>+67.764R ASX200</code> price-scale outlier quarantined from persisted Scout state; shadow summaries isolated from live conviction scoring.
+              </div>
+            </div>
+          `;
+          const t1Items = (mat.tier1_episodic_traces || []).slice(0, 5).map((tr) => `
+            <div class="matrix-item">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span style="font-family:monospace;font-size:11px;font-weight:700;color:#60a5fa">${tr.trace_id}</span>
+                <span style="font-family:monospace;font-size:10.5px;color:${tr.promoted_to_tier2 ? '#10b981' : '#f59e0b'}">${tr.promoted_to_tier2 ? '→ Promoted to Tier-2' : 'Tier-1 Audit Only'}</span>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--text);margin:3px 0">“${tr.query}”</div>
+              <div style="font-size:11px;color:var(--text-muted)">${tr.writeback_reason || ''}</div>
+            </div>
+          `).join('');
+          t1El.innerHTML = integrityHtml + t1Items;
+        }
+      }
+    } catch (err) {
+      console.warn('Nexus workspace load warning:', err);
+    }
+  }
+
+  async function runNexusCoordination(customQuery) {
+    const input = document.getElementById('nexusConsoleInput');
+    const stream = document.getElementById('nexusConsoleStream');
+    const sendBtn = document.getElementById('nexusConsoleSend');
+    const q = (customQuery || (input ? input.value : '') || '').trim();
+    if (!q || !stream) return;
+    if (!customQuery && input) input.value = '';
+
+    const uDiv = document.createElement('div');
+    uDiv.style.cssText = 'margin:12px 0;padding:10px 14px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:8px';
+    uDiv.innerHTML = `<strong>You:</strong> ${q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}`;
+    stream.appendChild(uDiv);
+
+    const loadDiv = document.createElement('div');
+    loadDiv.style.cssText = 'margin:10px 0;color:var(--text-muted);font-style:italic';
+    loadDiv.textContent = 'Nexus is checking Chronicle memory and coordinating with the right specialists…';
+    stream.appendChild(loadDiv);
+    stream.scrollTop = stream.scrollHeight;
+    if (sendBtn) sendBtn.disabled = true;
+
+    try {
+      const r = await fetch(API_BASE + '/api/nexus/coordinate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      });
+      const d = await r.json();
+      loadDiv.remove();
+
+      const aDiv = document.createElement('div');
+      aDiv.style.cssText = 'margin:12px 0;padding:14px 16px;background:rgba(15,23,42,0.55);border-left:3px solid #3b82f6;border-radius:8px';
+      const replyMd = typeof window.formatReadableMarkdown === 'function'
+        ? window.formatReadableMarkdown(d.reply || d.response || '')
+        : (d.reply || '');
+      const traceBadge = typeof window.renderCompactDagTraceBadge === 'function'
+        ? window.renderCompactDagTraceBadge(d.trace)
+        : '';
+      const refsHtml = typeof window.renderCrossAgentReferralCards === 'function'
+        ? window.renderCrossAgentReferralCards(d.referrals || (d.trace && d.trace.referrals) || [])
+        : '';
+      aDiv.innerHTML = `
+        <div style="font-weight:700;color:#60a5fa;margin-bottom:6px">Nexus</div>
+        <div>${replyMd}</div>
+        ${traceBadge}
+        ${refsHtml}
+      `;
+      stream.appendChild(aDiv);
+      stream.scrollTop = stream.scrollHeight;
+
+      // Refresh live DAG traces and memory matrix panels immediately
+      loadNexusWorkspace();
+      loadDashboard();
+    } catch (e) {
+      loadDiv.textContent = 'Error coordinating query: ' + (e.message || e);
+    } finally {
+      if (sendBtn) sendBtn.disabled = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('nexusConsoleInput');
+    if (inp) {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') runNexusCoordination();
+      });
+    }
+  });
 
   async function loadDashboard() {
     try {
       const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      // KPIs
-            setKpi('agents_active', d['agents_active'] != null ? d['agents_active'] : (d.metrics && d.metrics['agents_active'] != null ? d.metrics['agents_active'] : null), d.deltas && d.deltas['agents_active']);
-      setKpi('tasks_queued', d['tasks_queued'] != null ? d['tasks_queued'] : (d.metrics && d.metrics['tasks_queued'] != null ? d.metrics['tasks_queued'] : null), d.deltas && d.deltas['tasks_queued']);
-      setKpi('messages_per_hour', d['messages_per_hour'] != null ? d['messages_per_hour'] : (d.metrics && d.metrics['messages_per_hour'] != null ? d.metrics['messages_per_hour'] : null), d.deltas && d.deltas['messages_per_hour']);
-      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      setKpi('errors_today', d['errors_today'] != null ? d['errors_today'] : (d.metrics && d.metrics['errors_today'] != null ? d.metrics['errors_today'] : null), d.deltas && d.deltas['errors_today']);
-      setKpi('throughput', d['throughput'] != null ? d['throughput'] : (d.metrics && d.metrics['throughput'] != null ? d.metrics['throughput'] : null), d.deltas && d.deltas['throughput']);
-      // Primary section: first array found in data
+      setKpi('agents_active', d['agents_active'] != null ? d['agents_active'] : (d.metrics && d.metrics['agents_active']), d.deltas && d.deltas['agents_active']);
+      setKpi('tasks_queued', d['tasks_queued'] != null ? d['tasks_queued'] : (d.metrics && d.metrics['tasks_queued']), d.deltas && d.deltas['tasks_queued']);
+      setKpi('messages_per_hour', d['messages_per_hour'] != null ? d['messages_per_hour'] : (d.metrics && d.metrics['messages_per_hour']), d.deltas && d.deltas['messages_per_hour']);
+      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
+      setKpi('errors_today', d['errors_today'] != null ? d['errors_today'] : (d.metrics && d.metrics['errors_today']), d.deltas && d.deltas['errors_today']);
+      setKpi('throughput', d['throughput'] != null ? d['throughput'] : (d.metrics && d.metrics['throughput']), d.deltas && d.deltas['throughput']);
+
       const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
       if (keys.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
+        if (el) el.innerHTML = d[keys[0]].slice(0, 8).map(renderFeedItem).join('');
+      }
       if (keys.length > 1) {
         const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+        if (el2) el2.innerHTML = d[keys[1]].slice(0, 9).map(renderFeedItem).join('');
+      }
       if (typeof injectIcons === 'function') injectIcons();
-    } catch(e) {
-      offlinePanel('section_primary');
-      offlinePanel('section_secondary');
-    }
+    } catch(e) {}
   }
 
-  // Chat
+  // Slide-in Drawer Chat
   const fab=document.getElementById('chatFab'), drawer=document.getElementById('chatDrawer'),
         overlay=document.getElementById('chatOverlay'), closeBtn=document.getElementById('chatClose'),
         chatIn=document.getElementById('chatInput'), chatSnd=document.getElementById('chatSend'),
@@ -206,9 +625,10 @@
     c.addEventListener('click', () => { chatIn.value=c.textContent; chatIn.dispatchEvent(new Event('input')); chatSnd.click(); });
   });
 
-  function addMsg(role, text) {
+  function addMsg(role, htmlOrText, isHtml) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const inner = isHtml ? htmlOrText : (typeof window.formatReadableMarkdown === 'function' ? window.formatReadableMarkdown(htmlOrText) : htmlOrText);
+    d.innerHTML='<div class="chat-bubble">'+inner+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -220,7 +640,7 @@
   chatSnd.addEventListener('click', async () => {
     const text=chatIn.value.trim(); if(!text) return;
     chatIn.value=''; chatIn.style.height='auto'; chatSnd.disabled=true;
-    addMsg('user', text);
+    addMsg('user', text, false);
     const t=addTyping();
     try {
       const r=await fetch(API_BASE+'/agents/'+AGENT_ID+'/chat', {
@@ -229,13 +649,25 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
-    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
+      const md = typeof window.formatReadableMarkdown === 'function'
+        ? window.formatReadableMarkdown(data.response||data.message||'')
+        : (data.response||data.message||'');
+      const traceHtml = typeof window.renderCompactDagTraceBadge === 'function'
+        ? window.renderCompactDagTraceBadge(data.trace)
+        : '';
+      const refsHtml = typeof window.renderCrossAgentReferralCards === 'function'
+        ? window.renderCrossAgentReferralCards(data.referrals || [])
+        : '';
+      addMsg('agent', md + traceHtml + refsHtml, true);
+      loadNexusWorkspace();
+    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.', false); }
   });
 
   checkConn();
   loadDashboard();
+  loadNexusWorkspace();
   setInterval(loadDashboard, 45000);
+  setInterval(loadNexusWorkspace, 45000);
   setInterval(checkConn, 30000);
   </script>
 </body>

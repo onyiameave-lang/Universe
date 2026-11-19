@@ -44,10 +44,21 @@
         Nine celestial minds orbit the nexus of infinite possibility.
       </p>
       <div class="hero-composer" id="heroComposer">
-        <textarea class="hero-input" id="heroInput" rows="1" placeholder="Speak your query into the void…"
+        <textarea class="hero-input" id="heroInput" rows="1" placeholder="Ask Atlas Research or the Universe anything (e.g. 'How good is Atlas research right now?')…"
           aria-label="Message the Universe"></textarea>
         <button class="hero-send-btn" id="heroSend" disabled title="Send">
           <span data-icon="ui:send" class="icon-md"></span>
+        </button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:14px">
+        <a href="atlas.html" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;background:#0ea5e9;color:#fff;font-size:12.5px;font-weight:700;text-decoration:none">
+          <span>Open Atlas Research Studio &amp; Chat →</span>
+        </a>
+        <button type="button" onclick="sendMessage('How good is your research right now? Show your 5 certified desks, lockbox accuracy, and Brier calibration.')" style="padding:8px 14px;border-radius:8px;background:rgba(14,165,233,0.12);border:1px solid rgba(14,165,233,0.35);color:var(--text);font-size:12px;cursor:pointer">
+          Ask Atlas: How good is your research right now?
+        </button>
+        <button type="button" onclick="sendMessage('What does your research say about EURUSD and XAUUSD (Gold) across 7 timeframes?')" style="padding:8px 14px;border-radius:8px;background:rgba(14,165,233,0.12);border:1px solid rgba(14,165,233,0.35);color:var(--text);font-size:12px;cursor:pointer">
+          Ask Atlas: Research EURUSD &amp; XAUUSD (Gold)
         </button>
       </div>
     </section>
@@ -241,22 +252,26 @@
       });
     });
 
-    function addMessage(role, text) {
+    function addMessage(role, text, extraData) {
       const div = document.createElement('div');
       div.className = `conv-msg ${role}`;
       const bubble = document.createElement('div');
       bubble.className = 'conv-bubble';
-      // Render markdown-lite: escape HTML, then convert bold/italic/newlines
-      const escaped = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      const formatted = escaped
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px;font-family:monospace">$1</code>')
-        .replace(/\n/g, '<br>');
-      bubble.innerHTML = formatted;
+      if (role === 'agent' && typeof window.formatReadableMarkdown === 'function') {
+        const traceHtml = (extraData && extraData.trace && typeof window.renderCompactDagTraceBadge === 'function')
+          ? window.renderCompactDagTraceBadge(extraData.trace)
+          : '';
+        const refsHtml = (extraData && extraData.referrals && typeof window.renderCrossAgentReferralCards === 'function')
+          ? window.renderCrossAgentReferralCards(extraData.referrals)
+          : '';
+        bubble.innerHTML = window.formatReadableMarkdown(text) + traceHtml + refsHtml;
+      } else {
+        const escaped = String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+        bubble.innerHTML = escaped.replace(/\n/g, '<br>');
+      }
       div.appendChild(bubble);
       convMsgs.appendChild(div);
       convMsgs.scrollTop = convMsgs.scrollHeight;
@@ -295,13 +310,13 @@
         const r = await fetch(`${API_BASE}/ecosystem/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: text, agent: 'nexus' }),
           signal: AbortSignal.timeout(60000)
         });
         removeTyping();
         if (r.ok) {
           const d = await r.json();
-          addMessage('agent', d.response || d.message || 'The constellation has received your query.');
+          addMessage('agent', d.response || d.message || 'The constellation has received your query.', d);
         } else {
           addMessage('agent', 'The ecosystem is still working or reconnecting. Please try again in a moment.');
         }

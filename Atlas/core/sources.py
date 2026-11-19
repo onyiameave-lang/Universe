@@ -66,7 +66,7 @@ log = logging.getLogger("atlas.sources")
 
 from core.chronicle_access import bounded_chronicle_search  # type: ignore
 
-_USER_AGENT = "AtlasResearchAI/2.0 (AI Ecosystem; constitutional research desk)"
+_USER_AGENT = "UniverseAtlasResearch/2.0 (https://github.com/universe-ecosystem; withinpenny@gmail.com)"
 _TIMEOUT = 5   # FIX-SRC-V3-01: reduced from 12s -> 5s per-source HTTP timeout
                # 12s * 3 sources = 36s just for one gather round; 5s keeps us under budget.
                # (Book II Principle V Graceful Degradation -- fast fail, not slow hang.)
@@ -104,15 +104,44 @@ _EXTERNAL_QUERY_DETAIL_MARKERS = re.compile(
 )
 
 
+_CONVERSATIONAL_PREAMBLE_RE = re.compile(
+    r"(?i)\b(?:how good is your research|what does (?:it|your research) say about|"
+    r"can you (?:tell|show|explain|research|investigate)|tell me about|show me|"
+    r"what is your current status|give me your|right now|please|i want to know|"
+    r"how good is it|break down your \d+ desks|scorecard|report card|"
+    r"what is|what are|who is|who was|who invented|who discovered|how does|how do|"
+    r"why is|why do|why does|when did|when was|where is|explain|describe)\b"
+)
+
+_TICKER_SEARCH_EXPANSIONS = {
+    "EURUSD": "EURUSD Euro US Dollar exchange rate monetary policy",
+    "GBPUSD": "GBPUSD British Pound Sterling exchange rate Bank of England",
+    "USDJPY": "USDJPY Japanese Yen exchange rate Bank of Japan yield curve",
+    "XAUUSD": "Gold XAUUSD bullion real interest rates inflation hedge",
+    "BTCUSD": "Bitcoin cryptocurrency market microstructure liquidity",
+    "ETHUSD": "Ethereum cryptocurrency decentralized finance liquidity",
+}
+
+
 def _compact_external_query(query: str) -> str:
-    """Keep research instructions/data local; send providers a short search phrase."""
+    """Keep research instructions/data local; send providers a clean subject search phrase."""
     text = " ".join(str(query or "").split())
     marker = _EXTERNAL_QUERY_DETAIL_MARKERS.search(text)
     if marker:
         text = text[:marker.start()].strip()
-    if len(text) > _EXTERNAL_QUERY_MAX_CHARS:
-        text = text[:_EXTERNAL_QUERY_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
-    return text or "institutional research evidence"
+    cleaned = _CONVERSATIONAL_PREAMBLE_RE.sub(" ", text)
+    cleaned = re.sub(r"[?!,;]+", " ", cleaned)
+    cleaned = " ".join(cleaned.split()).strip()
+    # Expand known market symbols so academic/encyclopedic databases retrieve domain literature
+    up = cleaned.upper()
+    expansions = [exp for sym, exp in _TICKER_SEARCH_EXPANSIONS.items() if sym in up]
+    if expansions:
+        cleaned = " ".join(expansions[:2])
+    elif not cleaned:
+        cleaned = " ".join(re.sub(r"[?!,;]+", " ", text).split()).strip()
+    if len(cleaned) > _EXTERNAL_QUERY_MAX_CHARS:
+        cleaned = cleaned[:_EXTERNAL_QUERY_MAX_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return cleaned or text or "general research query"
 
 
 # One planner worker for the process. A slow LLM call can time out at the caller,
@@ -406,6 +435,62 @@ class Evidence:
 # Source adapters
 # ============================================================
 
+def _clean_wikipedia_subject(query: str) -> str:
+    """
+    Turn a conversational user question into a clean encyclopedic subject phrase
+    while preserving internal prepositions like 'of' in 'speed of light' or
+    'president of the united states'.
+    """
+    q = " ".join(str(query or "").strip().split())
+    q = re.sub(r"[?!.;,]+$", "", q).strip()
+    # Repeatedly strip leading conversational / question framing
+    prefix_re = re.compile(
+        r"^(?:hi|hello|hey|atlas|please|can\s+you|could\s+you|would\s+you|"
+        r"i\s+want\s+to\s+know|i\s+need\s+to\s+know|do\s+you\s+know|"
+        r"tell\s+me\s+about|tell\s+me|show\s+me|explain\s+to\s+me|explain|"
+        r"describe|define|give\s+me|find\s+me|search\s+for|research|"
+        r"what'?s|whats|what\s+is|what\s+are|what\s+was|what\s+were|what\s+does|"
+        r"who'?s|whos|who\s+is|who\s+was|who\s+are|who\s+were|"
+        r"how\s+does|how\s+do|how\s+is|how\s+are|how\s+to|how\s+can|"
+        r"why\s+is|why\s+are|why\s+does|why\s+do|why\s+did|"
+        r"when\s+did|when\s+was|where\s+is|where\s+are)\s+",
+        re.IGNORECASE,
+    )
+    for _ in range(4):
+        new_q = prefix_re.sub("", q).strip()
+        if new_q == q:
+            break
+        q = new_q
+
+    # Transform "who invented/discovered X" -> "X" (or "invention of X" if appropriate)
+    q = re.sub(
+        r"^(?:the\s+)?(?:exact\s+|mathematical\s+|physics\s+|chemical\s+|general\s+|standard\s+)?"
+        r"(?:formula|formulas|equation|equations|calculation|definition|meaning|symbol|unit|units|concept|theory|law)\s+"
+        r"(?:for|of)\s+(?:a\s+|an\s+|the\s+)?",
+        "",
+        q,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    q = re.sub(
+        r"^(?:invented|discovered|created|founded|built|wrote)\s+(?:the\s+|a\s+|an\s+)?",
+        "",
+        q,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    # Strip trailing conversational suffixes like "... work?", "... working in plants", "... mean?"
+    q = re.sub(
+        r"\s+(?:work\s+in\s+\w+|work|works|working|mean|means|calculated|measured|today|right\s+now)\s*$",
+        "",
+        q,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    q = re.sub(r"^(?:a|an|the)\s+", "", q, flags=re.IGNORECASE).strip()
+    return q or query.strip()
+
+
 class WikipediaSource:
     name = "wikipedia"
     REST = "https://en.wikipedia.org/api/rest_v1/page/summary/"
@@ -413,50 +498,76 @@ class WikipediaSource:
     available = True
 
     def gather(self, query: str, limit: int = 3) -> List[Evidence]:
-        # FIX-SRC-V4-03: Fetch summaries in parallel instead of sequentially.
-        # Old: search (1 call) + for each title: fetch summary (3 calls) = 4 calls sequential = 20s worst case
-        # New: search (1 call) + fetch all summaries in parallel (3 calls concurrent) = ~5s worst case
-        params = urllib.parse.urlencode({"action": "opensearch", "search": query,
-                                        "limit": limit, "format": "json"})
+        subject_q = _clean_wikipedia_subject(query)
+        out: List[Evidence] = []
+
+        # Single batched MediaWiki generator=search request: returns top articles in exact
+        # search-rank order (`index` 1..N) with full plain-text intro extracts and URLs.
+        params = urllib.parse.urlencode({
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": subject_q,
+            "gsrlimit": max(limit, 4),
+            "prop": "extracts|info",
+            "exintro": 1,
+            "explaintext": 1,
+            "exlimit": max(limit, 4),
+            "inprop": "url",
+            "redirects": 1,
+            "format": "json",
+        })
         body = _http_get(f"{self.SEARCH}?{params}")
-        titles = []
         if body:
             try:
                 data = json.loads(body)
-                titles = data[1] if len(data) > 1 else []
-            except Exception:
-                titles = []
-        
-        out = []
-        if not titles:
-            return out
-        
-        # Fetch all summaries in parallel
-        def _fetch_summary(t: str) -> Optional[Evidence]:
-            try:
-                b = _http_get(self.REST + urllib.parse.quote(t))
-                if not b:
-                    return None
-                d = json.loads(b)
-                if d.get("extract"):
-                    return Evidence("wikipedia", d.get("title", t), d["extract"],
-                                  url=d.get("content_urls", {}).get("desktop", {}).get("page", ""),
-                                  credibility=SOURCE_CREDIBILITY["wikipedia"])
+                pages_dict = (data.get("query") or {}).get("pages") or {}
+                pages = sorted(pages_dict.values(), key=lambda x: int(x.get("index", 99)))
+                for p in pages:
+                    title = str(p.get("title") or "").strip()
+                    extract = str(p.get("extract") or "").strip()
+                    # Clean empty pronunciation parentheses left by explaintext=1, e.g. "CRISPR (; is" -> "CRISPR is"
+                    extract = re.sub(r"\(\s*[;,/•\-]*\s*\)\s*", "", extract)
+                    extract = re.sub(r"\(\s*;\s+", "(", extract)
+                    url = str(p.get("fullurl") or f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}").strip()
+                    if title and extract:
+                        out.append(Evidence(
+                            "wikipedia",
+                            title,
+                            extract,
+                            url=url,
+                            credibility=SOURCE_CREDIBILITY["wikipedia"],
+                        ))
+                    if len(out) >= limit:
+                        break
             except Exception:
                 pass
-            return None
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(titles), 3)) as pool:
-            futures = [pool.submit(_fetch_summary, t) for t in titles]
-            for fut in concurrent.futures.as_completed(futures, timeout=5.0):
-                try:
-                    ev = fut.result()
-                    if ev:
-                        out.append(ev)
-                except Exception:
-                    pass
-        
-        return out
+
+        # If the top canonical article's intro extract is short (< 1100 chars), fetch its multi-section
+        # plain-text extract (up to 2400 chars) so we have complete definitions, history, and theory.
+        if out and len(out[0].text) < 1100:
+            try:
+                ext_params = urllib.parse.urlencode({
+                    "action": "query",
+                    "prop": "extracts",
+                    "exchars": 2400,
+                    "explaintext": 1,
+                    "titles": out[0].title,
+                    "redirects": 1,
+                    "format": "json",
+                })
+                ext_body = _http_get(f"{self.SEARCH}?{ext_params}")
+                if ext_body:
+                    ext_data = json.loads(ext_body)
+                    ext_pages = (ext_data.get("query") or {}).get("pages") or {}
+                    for _, ep in ext_pages.items():
+                        full_txt = str(ep.get("extract") or "").strip()
+                        full_txt = re.sub(r"\(\s*[;,/•\-]*\s*\)\s*", "", full_txt)
+                        if len(full_txt) > len(out[0].text):
+                            out[0].text = full_txt
+            except Exception:
+                pass
+
+        return out[:limit]
 
 
 class ArxivSource:
@@ -579,10 +690,11 @@ class HackerNewsSource:
             return []
         out = []
         for h in hits:
-            title = h.get("title") or h.get("story_title") or ""
+            title = _strip_html(str(h.get("title") or h.get("story_title") or ""))
             if not title:
                 continue
-            out.append(Evidence("hackernews", title, h.get("story_text") or title,
+            raw_text = _strip_html(str(h.get("story_text") or title))
+            out.append(Evidence("hackernews", title, raw_text,
                               url=h.get("url") or f"https://news.ycombinator.com/item?id={h.get('objectID')}",
                               date=h.get("created_at", "")[:10],
                               citations=h.get("points", 0) or 0,
@@ -677,19 +789,24 @@ class SourceRegistry:
 
     # domain -> which sources are most appropriate (Atlas reasons over these)
     DOMAIN_SOURCES = {
-        "general":     ["wikipedia", "hackernews", "semantic_scholar"],
+        "general":     ["wikipedia", "crossref", "arxiv", "hackernews", "semantic_scholar"],
         # FIX-SRC-V3-03: removed gdelt from general/engineering/science.
-        # GDELT returns HTTP 429 constantly and has SSL timeouts. Wikipedia is
-        # fast, free, and reliable -- it should be first for all general queries.
-        # GDELT is kept only for news/trading/prediction where it's the right tool.
-        "research":    ["semantic_scholar", "arxiv", "pubmed", "crossref"],
-        "engineering": ["wikipedia", "arxiv", "hackernews", "semantic_scholar"],
-        "trading":     ["gdelt", "hackernews", "wikipedia"],
-        "prediction":  ["gdelt", "hackernews", "wikipedia"],
-        "news":        ["gdelt", "hackernews"],
-        "social":      ["hackernews", "gdelt"],
-        "medicine":    ["pubmed", "semantic_scholar"],
-        "science":     ["wikipedia", "arxiv", "semantic_scholar", "pubmed"],
+        # GDELT returns HTTP 429 constantly and has SSL timeouts. Wikipedia & Crossref are
+        # fast, free, and reliable -- they should be first for general & macro queries.
+        "research":    ["crossref", "arxiv", "semantic_scholar", "pubmed", "wikipedia"],
+        "macro":       ["wikipedia", "crossref", "arxiv", "semantic_scholar", "hackernews"],
+        "quant":       ["arxiv", "crossref", "wikipedia", "semantic_scholar"],
+        "finance":     ["wikipedia", "crossref", "arxiv", "hackernews", "semantic_scholar"],
+        "market":      ["wikipedia", "crossref", "hackernews", "gdelt"],
+        "fundamental": ["wikipedia", "crossref", "hackernews", "semantic_scholar"],
+        "forensic":    ["wikipedia", "crossref", "hackernews", "semantic_scholar"],
+        "engineering": ["wikipedia", "arxiv", "crossref", "hackernews", "semantic_scholar"],
+        "trading":     ["wikipedia", "crossref", "arxiv", "hackernews", "gdelt"],
+        "prediction":  ["wikipedia", "crossref", "hackernews", "gdelt"],
+        "news":        ["gdelt", "hackernews", "wikipedia"],
+        "social":      ["hackernews", "gdelt", "wikipedia"],
+        "medicine":    ["pubmed", "crossref", "semantic_scholar", "wikipedia"],
+        "science":     ["wikipedia", "arxiv", "crossref", "semantic_scholar", "pubmed"],
     }
 
     def __init__(self, chronicle_client=None, llm=None):

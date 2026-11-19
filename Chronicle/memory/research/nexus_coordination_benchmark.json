@@ -1,0 +1,202 @@
+{
+  "benchmark_id": "nexus_v2_benchmark_1795094762",
+  "evaluated_at_iso": "2026-11-19T13:26:02Z",
+  "execution_latency_ms": 61.2,
+  "overall_cases_total": 23,
+  "overall_cases_passed": 23,
+  "overall_pass_rate_pct": 100.0,
+  "dimensions": {
+    "routing_accuracy": {
+      "dimension": "routing_accuracy",
+      "cases_total": 10,
+      "cases_passed": 10,
+      "accuracy_pct": 100.0,
+      "details": [
+        {
+          "query": "What is the formula for wavelength and frequency?",
+          "expected_domain": "research",
+          "actual_domain": "research",
+          "expected_repo": "atlas",
+          "actual_repo": "atlas",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Show our open trades, win rate, and GBPUSD execution setups",
+          "expected_domain": "trading",
+          "actual_domain": "trading",
+          "expected_repo": "oracle",
+          "actual_repo": "oracle",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "What is happening in world news and headlines today?",
+          "expected_domain": "news",
+          "actual_domain": "news",
+          "expected_repo": "sentinel",
+          "actual_repo": "sentinel",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Who posted on social media about bitcoin and crowd sentiment?",
+          "expected_domain": "social",
+          "actual_domain": "social",
+          "expected_repo": "pulse",
+          "actual_repo": "pulse",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Check security compliance, risk veto rules, and firewall status",
+          "expected_domain": "governance",
+          "actual_domain": "governance",
+          "expected_repo": "aegis",
+          "actual_repo": "aegis",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Retrain the strategy from the last trading session in the mistake clinic",
+          "expected_domain": "training",
+          "actual_domain": "training",
+          "expected_repo": "forge",
+          "actual_repo": "forge",
+          "confidence": 0.9999,
+          "passed": true
+        },
+        {
+          "query": "Evolve a new trading strategy genome and backtest its fitness",
+          "expected_domain": "creation",
+          "actual_domain": "creation",
+          "expected_repo": "genesis",
+          "actual_repo": "genesis",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Recall our stored lessons and past episodes from memory",
+          "expected_domain": "memory",
+          "actual_domain": "memory",
+          "expected_repo": "chronicle",
+          "actual_repo": "chronicle",
+          "confidence": 1.0,
+          "passed": true
+        },
+        {
+          "query": "Check Sentinel breaking news on EURUSD, Pulse social media sentiment, and Oracle trading win rate",
+          "expected_domains": [
+            "news",
+            "social",
+            "trading"
+          ],
+          "detected_domains": [
+            "coordination",
+            "news",
+            "social",
+            "trading"
+          ],
+          "passed": true
+        },
+        {
+          "query": "Research macroeconomic inflation on Atlas and audit our last session retraining on Forge",
+          "expected_domains": [
+            "research",
+            "training"
+          ],
+          "detected_domains": [
+            "coordination",
+            "governance",
+            "memory",
+            "research",
+            "training"
+          ],
+          "passed": true
+        }
+      ]
+    },
+    "evidence_and_provenance_quality": {
+      "dimension": "evidence_and_provenance_quality",
+      "cases_total": 3,
+      "cases_passed": 3,
+      "accuracy_pct": 100.0,
+      "shared_sources_deduplicated_count": 1,
+      "unique_provenance_sources_count": 3,
+      "resolution_after_dedup": "negative_calibrated_majority",
+      "conflict_detected": true
+    },
+    "safety_and_aegis_policy_gate": {
+      "dimension": "safety_and_aegis_policy_gate",
+      "policy_version": "risk_policy.v2",
+      "cases_total": 6,
+      "cases_passed": 6,
+      "accuracy_pct": 100.0,
+      "ledger_integrity": {
+        "synced": true,
+        "v2_trades_entered": 0,
+        "v2_trades_closed": 0,
+        "settled_shadow_replays": 0,
+        "invalidated_replays_count": 0,
+        "invalidated_replays_excluded": [],
+        "contaminated_outliers_purged": [],
+        "scout_conviction_floor": 0.5,
+        "scout_dimension_weights_at_prior": true,
+        "shadow_summary_ready_for_live_scoring": false,
+        "warnings": [
+          "Zero Oracle V2 live/demo trades entered or closed yet; Scout dimension weights remain at uniform prior (0.1667) and conviction floor at 0.50."
+        ]
+      },
+      "checks": [
+        {
+          "check": "short_valid_passes",
+          "passed": true
+        },
+        {
+          "check": "long_valid_passes",
+          "passed": true
+        },
+        {
+          "check": "long_inverted_rr_vetoed",
+          "passed": true
+        },
+        {
+          "check": "short_bad_geometry_vetoed",
+          "passed": true
+        },
+        {
+          "check": "factual_query_not_adjudicated_by_aegis",
+          "passed": true
+        },
+        {
+          "check": "scout_asx200_outlier_reconciled",
+          "passed": true
+        }
+      ]
+    },
+    "learning_signal_and_chronicle_hygiene": {
+      "dimension": "learning_signal_and_chronicle_hygiene",
+      "cases_total": 4,
+      "cases_passed": 4,
+      "accuracy_pct": 100.0,
+      "checks": [
+        {
+          "check": "low_quality_does_not_inflate_synergy",
+          "passed": true
+        },
+        {
+          "check": "high_quality_reinforces_synergy",
+          "passed": true
+        },
+        {
+          "check": "noisy_synthesis_kept_tier1_trace_only",
+          "passed": true
+        },
+        {
+          "check": "verified_synthesis_promoted_to_tier2",
+          "passed": true
+        }
+      ]
+    }
+  }
+}

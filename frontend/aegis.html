@@ -60,7 +60,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Live Feed</span>
+            <span class="card-title">Security &amp; Constitutional Risk Shield (SL &lt; TP Law &amp; Pre-Trade Vetoes)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -73,7 +73,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Secondary Data</span>
+            <span class="card-title">9-Agent Constitutional Compliance &amp; Threat Audit</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -102,14 +102,14 @@
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Greetings. I am Aegis, the arcane shield. How may I illuminate the path before you?</div>
+        <div class="chat-bubble">Hello! I am Aegis, your security &amp; constitutional risk-shield agent. Ask me about our SL &lt; TP risk law, blocked bad trades, or compliance status.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What is your current status?</button>
-        <button class="chat-hint-chip">Show me the latest data</button>
-        <button class="chat-hint-chip">Explain your top signal</button>
+        <button class="chat-hint-chip">How does our SL &lt; TP risk law protect us?</button>
+        <button class="chat-hint-chip">How many bad trades did you block?</button>
+        <button class="chat-hint-chip">What do you do?</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Aegis…"></textarea>
@@ -125,9 +125,10 @@
   <script src="shared/notifications.js"></script>
   <script src="shared/cosmos.js"></script>
   <script src="shared/sidebar.js"></script>
+  <script src="shared/chat.js"></script>
   <script>
   const AGENT_ID = 'aegis';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');

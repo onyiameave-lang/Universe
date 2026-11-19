@@ -19,7 +19,6 @@ try:
     from scout_agent import (  # type: ignore
         OracleScoutSubAgent,
         classify_asset_class,
-        current_trading_session,
     )
     from portfolio_agent import OraclePortfolioSubAgent  # type: ignore
     from risk_agent import OracleRiskSubAgent  # type: ignore
@@ -31,7 +30,6 @@ except ImportError:
     from Oracle.scout_agent import (  # type: ignore
         OracleScoutSubAgent,
         classify_asset_class,
-        current_trading_session,
     )
     from Oracle.portfolio_agent import OraclePortfolioSubAgent  # type: ignore
     from Oracle.risk_agent import OracleRiskSubAgent  # type: ignore
@@ -107,6 +105,11 @@ class OracleCIOEngine:
         loss_cd = self.risk_subagent.learned_cooldown_seconds(prior_won=False)
         win_cd = self.risk_subagent.learned_cooldown_seconds(prior_won=True)
         stop_m, targ_m = self.risk_subagent.learned_stop_target_multipliers()
+        # Constitutional Anti-Cheating Environment Law:
+        # Stop Loss must ALWAYS be smaller than Take Profit (minimum 1.5:1 Reward:Risk).
+        # Never allow the learner to bloat SL above TP or shrink TP toward/below SL.
+        stop_m = round(min(2.2, max(0.8, float(stop_m))), 3)
+        targ_m = round(max(float(targ_m), stop_m * 1.5, stop_m + 0.5), 3)
 
         rm.risk_per_trade = risk_frac
         rm.max_positions = max(rm.max_positions, slot_budget)
@@ -161,6 +164,7 @@ class OracleCIOEngine:
         entry_confidence: float = 0.6,
         entry_regime: str = "ranging",
         exit_regime: str = "ranging",
+        entry_session: Optional[str] = None,
         pnl_r: float,
         won: bool,
         exit_reason: str = "unknown",
@@ -177,7 +181,9 @@ class OracleCIOEngine:
         **extra: Any,
     ) -> Dict[str, Any]:
         sym = symbol.upper()
-        session = current_trading_session()
+        # An adopted/recovered position may not carry its entry snapshot. Do
+        # not mislabel it with the session in which it happened to close.
+        session = str(entry_session).strip().lower() if entry_session else None
         asset_class = classify_asset_class(sym)
 
         atr_val = float(entry_atr or (abs(entry_price - initial_stop) / 2.0) or 1e-6)
@@ -192,6 +198,7 @@ class OracleCIOEngine:
             dimension_scores_at_entry=dimension_scores_at_entry or {},
             won=won,
             pnl_r=pnl_r,
+            strategy_id=strategy_id,
         )
         portfolio_update = self.portfolio.learn_from_outcome(
             asset_class=asset_class,
@@ -219,6 +226,11 @@ class OracleCIOEngine:
             "portfolio": portfolio_update,
             "risk": risk_update,
             "synced_risk_manager": synced,
+            "scout_entry_snapshot": {
+                "session": session,
+                "strategy_id": strategy_id,
+                "dimension_scores": dict(dimension_scores_at_entry or {}),
+            },
         }
         ledger_rec = self.decision_ledger.record_trade_closed(
             symbol=sym,
@@ -246,6 +258,9 @@ class OracleCIOEngine:
         max_items: int = 25,
         max_records: Optional[int] = None,
         invoke_shadow_runner_on_demand: bool = False,
+        shadow_only: bool = False,
+        trade_manager: Any = None,
+        current_snapshots: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         return replay_unentered_counterfactuals(
             oracle_agent=self.oracle,
@@ -254,6 +269,9 @@ class OracleCIOEngine:
             max_items=max_items,
             max_records=max_records,
             invoke_shadow_runner_on_demand=invoke_shadow_runner_on_demand,
+            shadow_only=shadow_only,
+            trade_manager=trade_manager,
+            current_snapshots=current_snapshots,
         )
 
     def conduct_atlas_forge_research_review(
@@ -281,6 +299,8 @@ class OracleCIOEngine:
         )
 
     def status_snapshot(self) -> Dict[str, Any]:
+        reconcile_fn = getattr(self.scout, "reconcile_with_ledger", None)
+        reconciliation = reconcile_fn() if callable(reconcile_fn) else None
         return {
             "architecture": "oracle_v2_wall_street_cio",
             "role": "Why-To-Trade Scouting, Portfolio Allocation & Risk Correlation CIO",
@@ -290,6 +310,7 @@ class OracleCIOEngine:
                     "learned_dimension_weights": self.scout.learned_dimension_weights(),
                     "learned_conviction_floor": self.scout.learned_conviction_floor(),
                     "tracked_symbol_regimes": len(self.learning_store.data["scout"].get("symbol_regime_stats", {})),
+                    "ledger_reconciliation": reconciliation,
                 },
                 "portfolio": {
                     "learned_session_slot_budget": self.portfolio.learned_session_slot_budget(),
@@ -312,3 +333,4 @@ class OracleCIOEngine:
 
     def status(self) -> Dict[str, Any]:
         return self.status_snapshot()
+

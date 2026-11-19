@@ -125,9 +125,10 @@
   <script src="shared/notifications.js"></script>
   <script src="shared/cosmos.js"></script>
   <script src="shared/sidebar.js"></script>
+  <script src="shared/chat.js"></script>
   <script>
   const AGENT_ID = 'genesis';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
