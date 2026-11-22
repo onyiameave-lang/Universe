@@ -1015,6 +1015,31 @@ async def chronicle_chat_history(limit: int = 25):
     return {"status": "ok", "total_logged": len(entries), "interactions": entries}
 
 
+@app.get("/api/llm/status")
+async def llm_status_endpoint():
+    from Nexus.intelligence.llm_translator import get_llm_layer_status
+    status = await run_in_threadpool(get_llm_layer_status)
+    return {"status": "ok", **status}
+
+
+@app.post("/api/llm/understand")
+async def llm_understand_endpoint(request: Request):
+    data = await request.json()
+    message = str(data.get("message") or data.get("query") or "How much did we make today?").strip()
+    from Nexus.intelligence.llm_translator import semantic_intent_classify, get_llm_layer_status
+    from Nexus.api.coordination_bridge import coordinate_query
+    intent = await run_in_threadpool(semantic_intent_classify, message)
+    trace = await run_in_threadpool(coordinate_query, message, "operator", "nexus")
+    return {
+        "status": "ok",
+        "query": message,
+        "llm_intent": intent,
+        "routed_primary_agent": trace.get("primary_agent", "oracle"),
+        "reply": trace.get("human_synthesis") or trace.get("final_synthesis") or "",
+        "llm_layer": await run_in_threadpool(get_llm_layer_status),
+    }
+
+
 def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto") -> Dict[str, Any]:
     """
     Shared institutional human-friendly chat handler for FastAPI (`api.py`) so port 8000
@@ -1029,6 +1054,7 @@ def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto"
         _load_oracle_ledger_snapshot,
         _ECOSYSTEM_OR_MARKET_RE,
     )
+    from Nexus.intelligence.llm_translator import get_llm_layer_status
     from Atlas.api.frontend_chat_bridge import build_frontend_dossier
 
     agent_id = (name or "nexus").strip().lower()
@@ -1037,7 +1063,7 @@ def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto"
 
     if agent_id == "nexus":
         trace = coordinate_query(clean_msg, user_id="operator", target_agent="nexus")
-        reply_text = str(trace.get("final_synthesis") or "").strip()
+        reply_text = str(trace.get("final_synthesis") or trace.get("human_synthesis") or "").strip()
         return {
             "agent": "nexus",
             "task": "ecosystem.coordinate",
@@ -1047,6 +1073,7 @@ def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto"
             "confidence": (trace.get("consensus") or {}).get("confidence", 0.92),
             "trace": trace,
             "referrals": trace.get("referrals") or [],
+            "llm_layer": trace.get("llm_layer") or get_llm_layer_status(),
             "evidence": [],
             "data": trace,
         }

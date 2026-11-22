@@ -35,6 +35,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from Nexus.intelligence.domain_classifier import DomainClassifier, DOMAIN_TO_REPO  # type: ignore
 from Nexus.intelligence.collaboration_graph import CollaborationGraph  # type: ignore
+from Nexus.intelligence.llm_translator import (  # type: ignore
+    get_llm_layer_status,
+    semantic_intent_classify,
+)
 from Nexus.core.institutional_contracts import (  # type: ignore
     AGENT_DISPLAY_ROLE,
     DOMAIN_TO_AGENT,
@@ -948,6 +952,26 @@ def coordinate_query(
     wants_full_overview = bool(_ECOSYSTEM_OVERVIEW_RE.search(clean_q)) or (
         not explicit_domains and bool(re.search(r"\b(?:overview|everything|collective|status\s+report)\b", q_low))
     )
+
+    # Hybrid Dual-LLM Semantic Intent Translator (Cloud Gemini gemini-4-hydrogen + Local Ollama):
+    # If deterministic patterns didn't catch an informal/slang ecosystem phrasing, consult the Dual-LLM layer.
+    llm_intent: Optional[Dict[str, Any]] = None
+    has_conversational_team_cue = bool(
+        re.search(
+            r"\b(?:we|our|us|my|today|cash|bag|print(?:ed|ing)?|took\s+an?\s+[lw]|bot|agents?|desks?|system|team)\b",
+            q_low,
+        )
+    )
+    if (
+        casual_intent is None
+        and not wants_full_overview
+        and not explicit_domains
+        and has_conversational_team_cue
+    ):
+        llm_intent = semantic_intent_classify(clean_q)
+        if llm_intent and llm_intent.get("is_ecosystem_question") and llm_intent.get("domains"):
+            explicit_domains = list(llm_intent["domains"])
+
     is_ecosystem_or_market = bool(
         explicit_domains
         and any(d != "research" for d in explicit_domains)
@@ -1208,6 +1232,8 @@ def coordinate_query(
         "referrals": referrals,
         "total_latency_ms": total_ms,
         "human_synthesis": human_synthesis,
+        "final_synthesis": human_synthesis,
+        "llm_layer": get_llm_layer_status(),
     }
 
     # Always write Tier-1 episodic routing trace

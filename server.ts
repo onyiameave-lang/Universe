@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 import {
@@ -2299,14 +2299,325 @@ function runNexusCoordinationBridge(payload: Record<string, any>): Promise<any> 
   });
 }
 
+// ── Hybrid Dual-LLM Layer: Cloud Gemini (gemini-4-hydrogen) + Free Local Ollama ──
+const DEFAULT_GEMINI_MODEL = "gemini-4-hydrogen";
+const DEFAULT_OLLAMA_HOST = (
+  process.env.OLLAMA_HOST || "http://127.0.0.1:11434"
+).replace(/\/+$/, "");
+
+let ollamaDiscoveryCache: {
+  checkedAt: number;
+  available: boolean;
+  model: string;
+  models: string[];
+} = {
+  checkedAt: 0,
+  available: false,
+  model: "",
+  models: [],
+};
+
+function getConfiguredGeminiApiKey(): string {
+  const key = (
+    process.env.GEMINI_API_KEY ||
+    process.env.NEXUS_GEMINI_KEY ||
+    ""
+  ).trim();
+  if (!key || key === "MY_GEMINI_API_KEY" || key === "YOUR_GEMINI_API_KEY") {
+    return "";
+  }
+  return key;
+}
+
+function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = getConfiguredGeminiApiKey();
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+async function discoverLocalOllamaServer(force = false): Promise<{
+  available: boolean;
+  model: string;
+  models: string[];
+  host: string;
+}> {
+  const now = Date.now();
+  if (!force && now - ollamaDiscoveryCache.checkedAt < 30000) {
+    return { ...ollamaDiscoveryCache, host: DEFAULT_OLLAMA_HOST };
+  }
+  const configuredModel = (process.env.OLLAMA_MODEL || "").trim();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 700);
+  try {
+    const resp = await fetch(`${DEFAULT_OLLAMA_HOST}/api/tags`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) throw new Error("Ollama tags not ok");
+    const data: any = await resp.json();
+    const names: string[] = Array.isArray(data?.models)
+      ? data.models
+          .map((m: any) => String(m?.name || "").trim())
+          .filter(Boolean)
+      : [];
+    let chosen = configuredModel;
+    if (!chosen && names.length > 0) {
+      const preferred = [
+        "llama3.2",
+        "qwen2.5",
+        "llama3.1",
+        "llama3",
+        "mistral",
+        "gemma2",
+        "phi3",
+      ];
+      for (const pref of preferred) {
+        const hit = names.find((n) => n.toLowerCase().startsWith(pref));
+        if (hit) {
+          chosen = hit;
+          break;
+        }
+      }
+      if (!chosen) chosen = names[0];
+    }
+    ollamaDiscoveryCache = {
+      checkedAt: now,
+      available: Boolean(chosen),
+      model: chosen,
+      models: names,
+    };
+  } catch {
+    clearTimeout(timer);
+    ollamaDiscoveryCache = {
+      checkedAt: now,
+      available: false,
+      model: configuredModel,
+      models: [],
+    };
+  }
+  return { ...ollamaDiscoveryCache, host: DEFAULT_OLLAMA_HOST };
+}
+
+async function getDualLlmStatus(force = false) {
+  const geminiKey = getConfiguredGeminiApiKey();
+  const ollama = await discoverLocalOllamaServer(force);
+  const activeProvider = geminiKey
+    ? "gemini"
+    : ollama.available
+    ? "ollama"
+    : "deterministic_sovereign";
+  return {
+    active_provider: activeProvider,
+    hybrid_mode: "dual_llm_plus_deterministic_grounding",
+    gemini: {
+      configured: Boolean(geminiKey),
+      model: DEFAULT_GEMINI_MODEL,
+    },
+    ollama: {
+      available: ollama.available,
+      host: ollama.host,
+      active_model: ollama.model || "llama3.2",
+      installed_models: ollama.models,
+    },
+  };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("LLM timeout")), ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+async function generateWithDualLlm(
+  prompt: string,
+  systemInstruction: string
+): Promise<{ text: string | null; provider: string }> {
+  const order = (process.env.LLM_PROVIDER_ORDER || "gemini,ollama").toLowerCase();
+  const preferOllamaFirst = order.startsWith("ollama");
+
+  const tryGemini = async (): Promise<string | null> => {
+    const ai = getGeminiClient();
+    if (!ai) return null;
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: DEFAULT_GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
+        }),
+        3500
+      );
+      const text = response.text;
+      return text && text.trim() ? text.trim() : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const tryOllama = async (): Promise<string | null> => {
+    const ollama = await discoverLocalOllamaServer();
+    if (!ollama.available || !ollama.model) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    try {
+      const resp = await fetch(`${DEFAULT_OLLAMA_HOST}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: ollama.model,
+          stream: false,
+          messages: [
+            { role: "system", content: systemInstruction },
+            { role: "user", content: prompt },
+          ],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      const data: any = await resp.json();
+      const content = data?.message?.content;
+      return typeof content === "string" && content.trim()
+        ? content.trim()
+        : null;
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
+  };
+
+  if (preferOllamaFirst) {
+    const ol = await tryOllama();
+    if (ol) return { text: ol, provider: "ollama" };
+    const gm = await tryGemini();
+    if (gm) return { text: gm, provider: "gemini" };
+  } else {
+    const gm = await tryGemini();
+    if (gm) return { text: gm, provider: "gemini" };
+    const ol = await tryOllama();
+    if (ol) return { text: ol, provider: "ollama" };
+  }
+  return { text: null, provider: "deterministic_sovereign" };
+}
+
+async function classifyIntentWithDualLlm(userMessage: string): Promise<{
+  target_agent: string;
+  domain: string;
+  intent_topic: string;
+  is_ecosystem_question: boolean;
+  provider: string;
+} | null> {
+  const ai = getGeminiClient();
+  if (ai) {
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: DEFAULT_GEMINI_MODEL,
+          contents: `Classify this user message for the 9-agent Universe ecosystem: "${userMessage}"`,
+          config: {
+            systemInstruction:
+              "You are Nexus, the intent router for the 9-agent Universe AI ecosystem. " +
+              "Map the user's message to the single best primary agent:\n" +
+              "- oracle (domain: trading): today's trades, did we make money, profit/loss, P&L, account balance, win rate, open positions, EURUSD/GBPUSD/XAUUSD/USDJPY signals.\n" +
+              "- forge (domain: training): last trading session review, Mistake Clinic, strategy retraining, 7-timeframe lockbox backtests.\n" +
+              "- aegis (domain: governance): is our account safe, risk rules, Stop-Loss < Take-Profit law, blocked/vetoed bad trades.\n" +
+              "- sentinel (domain: news): world news, financial headlines, macro events, geopolitics.\n" +
+              "- pulse (domain: social): social media posts, what people/traders are saying on Mastodon/Bluesky/HackerNews, crowd sentiment.\n" +
+              "- chronicle (domain: memory): what have we learned or saved in shared memory.\n" +
+              "- genesis (domain: creation): evolving new strategy genomes or Monte Carlo blueprints.\n" +
+              "- atlas (domain: research): general knowledge, science, history, formulas, equations, definitions, or how good Atlas's 5 research desks are.",
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                target_agent: { type: Type.STRING },
+                domain: { type: Type.STRING },
+                intent_topic: { type: Type.STRING },
+                is_ecosystem_question: { type: Type.BOOLEAN },
+              },
+            },
+          },
+        }),
+        3500
+      );
+      const raw = (response.text ?? "").trim();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.target_agent) {
+          return {
+            target_agent: String(parsed.target_agent).toLowerCase(),
+            domain: String(parsed.domain || "research").toLowerCase(),
+            intent_topic: String(parsed.intent_topic || "general"),
+            is_ecosystem_question: Boolean(parsed.is_ecosystem_question),
+            provider: "gemini",
+          };
+        }
+      }
+    } catch {
+      // Fall through to Ollama if Gemini times out or fails
+    }
+  }
+
+  const ollama = await discoverLocalOllamaServer();
+  if (!ollama.available) return null;
+  const { text, provider } = await generateWithDualLlm(
+    `User question: "${userMessage}"\nReturn JSON with keys: target_agent ("oracle"|"forge"|"aegis"|"sentinel"|"pulse"|"chronicle"|"genesis"|"atlas"), domain ("trading"|"training"|"governance"|"news"|"social"|"memory"|"creation"|"research"), intent_topic, is_ecosystem_question (boolean).`,
+    "Return ONLY valid JSON."
+  );
+  if (text) {
+    try {
+      const cleaned = text.replace(/^```(?:json)?\s*|\s*```$/gi, "").trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed && parsed.target_agent) {
+        return {
+          target_agent: String(parsed.target_agent).toLowerCase(),
+          domain: String(parsed.domain || "research").toLowerCase(),
+          intent_topic: String(parsed.intent_topic || "general"),
+          is_ecosystem_question: Boolean(parsed.is_ecosystem_question),
+          provider,
+        };
+      }
+    } catch {}
+  }
+  return null;
+}
+
 async function handleAgentChat(
   agentName: string,
   userMessage: string,
   mode: string = "auto"
-): Promise<{ reply: string; dossier?: any; trace?: any; referrals?: any[] }> {
+): Promise<{
+  reply: string;
+  dossier?: any;
+  trace?: any;
+  referrals?: any[];
+  llm_layer?: any;
+}> {
   const id = agentName.toLowerCase();
+  const llmStatus = await getDualLlmStatus();
 
   // When talking to Nexus, execute the full Python multi-agent DAG coordination session
+  // (which now also runs the Dual-LLM semantic intent classifier in Python)
   if (id === "nexus") {
     const trace = await runNexusCoordinationBridge({
       action: "coordinate",
@@ -2314,12 +2625,19 @@ async function handleAgentChat(
       target_agent: "nexus",
     });
     if (trace && trace.human_synthesis) {
-      appendChatHistoryLog(id, userMessage, mode, trace.human_synthesis, trace);
+      appendChatHistoryLog(
+        id,
+        userMessage,
+        mode,
+        trace.human_synthesis,
+        trace
+      );
       return {
         reply: trace.human_synthesis,
         dossier: trace,
         trace,
         referrals: trace.referrals || [],
+        llm_layer: trace.llm_layer || llmStatus,
       };
     }
   }
@@ -2344,6 +2662,7 @@ async function handleAgentChat(
         reply: finalReply,
         dossier: pyDossier,
         referrals: refRes?.referrals || [],
+        llm_layer: llmStatus,
       };
     }
   }
@@ -2359,8 +2678,39 @@ async function handleAgentChat(
   return {
     ...res,
     referrals: refRes?.referrals || [],
+    llm_layer: llmStatus,
   };
 }
+
+app.get("/api/llm/status", async (req, res) => {
+  const force = req.query.refresh === "true";
+  const status = await getDualLlmStatus(force);
+  res.json({
+    status: "ok",
+    ...status,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post("/api/llm/understand", async (req, res) => {
+  const message = String(
+    req.body?.message || req.body?.query || "How much did we make today?"
+  ).trim();
+  const intent = await classifyIntentWithDualLlm(message);
+  const trace = await runNexusCoordinationBridge({
+    action: "coordinate",
+    query: message,
+    target_agent: intent?.target_agent || "nexus",
+  });
+  res.json({
+    status: "ok",
+    query: message,
+    llm_intent: intent,
+    routed_primary_agent: trace?.primary_agent || intent?.target_agent || "oracle",
+    reply: trace?.human_synthesis || "",
+    llm_layer: await getDualLlmStatus(),
+  });
+});
 
 // ── Live Institutional Nexus Coordination API (/api/nexus/*) ──
 app.get("/api/nexus/status", async (_req, res) => {
