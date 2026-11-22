@@ -601,6 +601,7 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.error("Failed to load agent %s: %s", name, exc)
             add_log(name, "error", f"Initialization failed: {exc}")
+    ecosystem._unload_conflicting_modules()
     nexus = AGENTS.get("nexus")
     if nexus and hasattr(nexus, "register_agent"):
         for agent_name, agent in AGENTS.items():

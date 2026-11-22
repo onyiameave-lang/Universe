@@ -22,7 +22,10 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from intelligence.analysis import tokenize  # type: ignore
+try:
+    from Atlas.intelligence.analysis import tokenize  # type: ignore
+except ImportError:
+    from intelligence.analysis import tokenize  # type: ignore
 
 _NEG = re.compile(r"\b(no|not|never|cannot|can't|without|fails?|failed|false|refut|disprov|"
                   r"contradict|unlikely|ineffective|insufficient)\b", re.IGNORECASE)

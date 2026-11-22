@@ -64,7 +64,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("atlas.sources")
 
-from core.chronicle_access import bounded_chronicle_search  # type: ignore
+try:
+    from Atlas.core.chronicle_access import bounded_chronicle_search  # type: ignore
+except ImportError:
+    from core.chronicle_access import bounded_chronicle_search  # type: ignore
 
 _USER_AGENT = "UniverseAtlasResearch/2.0 (https://github.com/universe-ecosystem; withinpenny@gmail.com)"
 _TIMEOUT = 5   # FIX-SRC-V3-01: reduced from 12s -> 5s per-source HTTP timeout

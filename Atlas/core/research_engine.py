@@ -85,12 +85,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from core.sources import SourceRegistry, Evidence  # type: ignore
-from core.chronicle_access import bounded_chronicle_search  # type: ignore
-from core.institutional_research_v2 import AtlasV2InstitutionalEngine  # type: ignore
-from intelligence.analysis import (relevance, summarize, keywords, extract_claims,  # type: ignore
-                                   compute_corroboration, compute_confidence)
-from intelligence.contradiction import ContradictionEngine  # type: ignore
+try:
+    from Atlas.core.sources import SourceRegistry, Evidence  # type: ignore
+    from Atlas.core.chronicle_access import bounded_chronicle_search  # type: ignore
+    from Atlas.core.institutional_research_v2 import AtlasV2InstitutionalEngine  # type: ignore
+    from Atlas.intelligence.analysis import (relevance, summarize, keywords, extract_claims,  # type: ignore
+                                             compute_corroboration, compute_confidence)
+    from Atlas.intelligence.contradiction import ContradictionEngine  # type: ignore
+except ImportError:
+    from core.sources import SourceRegistry, Evidence  # type: ignore
+    from core.chronicle_access import bounded_chronicle_search  # type: ignore
+    from core.institutional_research_v2 import AtlasV2InstitutionalEngine  # type: ignore
+    from intelligence.analysis import (relevance, summarize, keywords, extract_claims,  # type: ignore
+                                       compute_corroboration, compute_confidence)
+    from intelligence.contradiction import ContradictionEngine  # type: ignore
 
 
 def stable_research_memory_id(domain: str, query: str) -> str:

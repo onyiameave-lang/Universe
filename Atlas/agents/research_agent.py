@@ -54,7 +54,10 @@ _ECO_ROOT = Path(__file__).resolve().parents[2]
 if str(_ECO_ROOT) not in sys.path:
     sys.path.insert(0, str(_ECO_ROOT))
 
-from core.research_engine import ResearchEngine, stable_research_memory_id  # type: ignore
+try:
+    from Atlas.core.research_engine import ResearchEngine, stable_research_memory_id  # type: ignore
+except ImportError:
+    from core.research_engine import ResearchEngine, stable_research_memory_id  # type: ignore
 
 try:
     from shared.agent import BaseAgent
@@ -247,14 +250,25 @@ class AtlasAgent(BaseAgent):
                         "deadline_exceeded": bool(report.get("deadline_exceeded"))}
 
             if self._is_explanatory_query(query) and not self._needs_fresh_evidence(query):
-                fallback_report = self._best_effort_report(query, domain)
-                self._remember_best_effort(fallback_report, domain)
-                return {
-                    "status": "complete",
-                    "report": fallback_report,
-                    "research_path": "memory_or_llm_explanation",
-                    "degraded": fallback_report.get("source_status", {}).get("_summary") != "chronicle_memory",
-                }
+                memory_hit = self._chronicle_best_effort(query, domain)
+                if memory_hit:
+                    fallback_report = {
+                        "query": (query or "").strip(),
+                        "domain": domain,
+                        "summary": memory_hit,
+                        "confidence": 0.78,
+                        "findings": [memory_hit],
+                        "limitations": [],
+                        "evidence": [{"source": "chronicle", "title": "Chronicle Memory", "text": memory_hit, "credibility": 0.85}],
+                        "key_terms": re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", (query or "").lower())[:8],
+                        "source_status": {"_summary": "chronicle_memory"},
+                    }
+                    return {
+                        "status": "complete",
+                        "report": fallback_report,
+                        "research_path": "chronicle_memory",
+                        "degraded": False,
+                    }
 
             if self.reasoning is not None:
                 solved = self.solve("research_path", {"query": ctx.get("query", ""),
