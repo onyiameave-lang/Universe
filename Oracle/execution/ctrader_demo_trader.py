@@ -454,13 +454,12 @@ class CTraderDemoTrader:
         self.symbols = [s.upper() for s in symbols]
         self.interval = interval_sec
         self.session_max_loss_pct = session_max_loss_pct
-        self.max_trades = max_trades if max_trades is not None else _env_int(
-            "ORACLE_MAX_TRADES_PER_SESSION", 10)
+        self.max_trades = max_trades
         self.confirm_live = confirm_live
-        # V2 starts observation-only. Order placement requires an explicit
-        # opt-in after shadow review and account isolation.
-        self.shadow_mode = os.getenv("ORACLE_CTRADER_SHADOW_MODE", "true").strip().lower() not in {
-            "0", "false", "no", "off",
+        # Shadow mode supplements live cTrader execution after its configured
+        # live-position capacity is reached.
+        self.shadow_mode = os.getenv("ORACLE_CTRADER_SHADOW_MODE", "false").strip().lower() in {
+            "1", "true", "yes", "on",
         }
         self.broker = CTraderBroker()
         self._trades_this_session = 0
@@ -505,6 +504,11 @@ class CTraderDemoTrader:
         self.oracle = OracleAgent(
             chronicle_client=self.chronicle, sentinel_client=self.sentinel,
             pulse_client=self.pulse, atlas_client=self.atlas)
+        # The active RL risk manager is the authority for concurrent positions.
+        # Keep any explicit CLI override for compatibility; otherwise mirror
+        # RL_MAX_POSITIONS as loaded by Oracle's risk configuration.
+        if self.max_trades is None:
+            self.max_trades = max(1, int(self.oracle.risk.max_positions))
         self.oracle.start()
         self._trade_learning.confidence = self.oracle._champion_confidence
 
@@ -746,9 +750,6 @@ class CTraderDemoTrader:
         log.info("CTM thread stopped")
 
     def start_trade_manager(self):
-        if self.shadow_mode:
-            log.info("Oracle cTrader shadow mode enabled; position management is disabled")
-            return
         if self._manage_thread is not None and self._manage_thread.is_alive():
             return
         self._manage_stop_event.clear()
@@ -761,8 +762,6 @@ class CTraderDemoTrader:
             self._manage_thread.join(timeout=5)
 
     def _close_all_positions(self):
-        if self.shadow_mode:
-            return {"status": "blocked", "reason": "shadow mode forbids broker close requests"}
         results = []
         try:
             for pos in self.broker.positions():
@@ -784,7 +783,8 @@ class CTraderDemoTrader:
         print(f"\ncTrader demo trader started. Symbols={self.symbols} interval={self.interval}s")
         print(f"Account: {status.get('account_type')} | login={status.get('login')} | "
               f"currency={status.get('currency', '?')}")
-        print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades} | shadow={self.shadow_mode}")
+        print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades} | "
+              f"overflow shadow={self.shadow_mode}")
         print(f"CTM: polling every {self._manage_interval:.0f}s")
         print("Press Ctrl+C to stop.\n")
         self.start_trade_manager()
@@ -830,9 +830,12 @@ class CTraderDemoTrader:
             log.warning("Skipping new entries because cTrader account equity is unavailable")
             return summary
         open_positions = []
+        real_position_count = 0
+        active_shadow_symbols = set()
         if self.broker.status.connected:
             try:
                 open_positions = self.broker.positions()
+                real_position_count = len(open_positions)
             except Exception as exc:
                 log.warning("Could not refresh open positions for scan: %s", exc)
                 summary["errors"] += 1
@@ -841,6 +844,15 @@ class CTraderDemoTrader:
                 log.warning("cTrader position reconciliation failed; skipping new-entry scan")
                 summary["errors"] += 1
                 return summary
+        try:
+            pending_shadow = self.oracle.decision_ledger.unentered_trades_pending_replay(
+                max_items=5000, shadow_only=True)
+            active_shadow_symbols = {
+                str(item.get("symbol") or "").upper()
+                for item in pending_shadow if item.get("symbol")
+            }
+        except Exception as exc:
+            log.warning("Could not load active cTrader shadow observations: %s", type(exc).__name__)
 
         for symbol in self.symbols:
             if self._kill_switch_check():
@@ -870,10 +882,6 @@ class CTraderDemoTrader:
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
-                if self.shadow_mode:
-                    # Shadow mode must not adopt or attribute positions opened
-                    # by another trader/account process.
-                    continue
                 if symbol not in self._managed_positions:
                     entry_price = existing_pos.get("price_open") or existing_pos.get("price") or 0.0
                     direction = "long" if str(existing_pos.get("type", "")).lower() == "buy" else "short"
@@ -890,9 +898,14 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] SKIP trading disabled by cTrader")
                 summary["market_closed"] += 1
                 continue
-            if len(open_positions) >= self.max_trades:
-                log.info("[%s] new entry skipped — max open positions reached; "
-                         "existing positions remain monitored", symbol)
+            capacity_full = real_position_count >= self.max_trades
+            if capacity_full and not self.shadow_mode:
+                log.info("[%s] new entry skipped; configured cTrader position limit reached", symbol)
+                summary["holds"] += 1
+                continue
+            if capacity_full and symbol in active_shadow_symbols:
+                log.info("[%s] duplicate shadow setup skipped; an unresolved shadow position already exists", symbol)
+                summary["holds"] += 1
                 continue
             if self._pos_log.has_open_position(symbol, broker_sym):
                 print(f"[{symbol}->{broker_sym}] DEDUP: Chronicle shows open position")
@@ -933,21 +946,32 @@ class CTraderDemoTrader:
                 message = (sig or {}).get("message", "unknown")
                 risk = (sig or {}).get("risk") or {}
                 reasons = risk.get("reasons")
-                if "hold" in message.lower():
-                    print(f"[{symbol}] HOLD   ({message})")
-                    summary["holds"] += 1
-                elif "risk gate" in message.lower() or reasons:
-                    conf_str = ""
-                    try:
-                        conf_str = f"conf={sig['signal']['confidence']:.3f}  "
-                    except Exception:
-                        pass
-                    print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
-                    summary["rejects"] += 1
+                shadow_candidate = (sig or {}).get("shadow_candidate")
+                capacity_only_rejection = bool(reasons) and all(
+                    str(reason).startswith("max positions (") for reason in reasons
+                )
+                if (capacity_full and self.shadow_mode and capacity_only_rejection
+                        and isinstance(shadow_candidate, dict)):
+                    # The risk decision remains rejected for real execution.
+                    # Reuse its non-executable candidate for the shadow path.
+                    sig = shadow_candidate
+                    status = "complete"
                 else:
-                    print(f"[{symbol}] ERROR  {message}")
-                    summary["errors"] += 1
-                continue
+                    if "hold" in message.lower():
+                        print(f"[{symbol}] HOLD   ({message})")
+                        summary["holds"] += 1
+                    elif "risk gate" in message.lower() or reasons:
+                        conf_str = ""
+                        try:
+                            conf_str = f"conf={sig['signal']['confidence']:.3f}  "
+                        except Exception:
+                            pass
+                        print(f"[{symbol}] REJECT {conf_str}reasons={reasons}")
+                        summary["rejects"] += 1
+                    else:
+                        print(f"[{symbol}] ERROR  {message}")
+                        summary["errors"] += 1
+                    continue
             plan = sig["plan"]
             s = sig["signal"]
             self._open_context[symbol] = dict(sig.get("_streams", {}) or {})
@@ -958,12 +982,18 @@ class CTraderDemoTrader:
             conf_str = f"conf={s.get('confidence', 0):.3f}"
             broker_plan = dict(plan)
             broker_plan["broker_symbol"] = broker_sym
-            if self.shadow_mode:
+            if capacity_full and self.shadow_mode:
                 summary["shadowed"] += 1
-                print(f"[{symbol}->{broker_sym}] SHADOW direction={plan['direction']} "
+                shadow_reason = f"cTrader position capacity full ({real_position_count}/{self.max_trades})"
+                print(f"[{symbol}->{broker_sym}] SHADOW ({shadow_reason}) direction={plan['direction']} "
                       f"conf={s.get('confidence', 0):.3f} size={plan.get('size', 0)} "
-                      f"stop={plan.get('stop')} target={plan.get('target')}; no order sent")
-                self._record_shadow_proposal(symbol, broker_sym, sig, market_state)
+                      f"stop={plan.get('stop')} target={plan.get('target')}; no cTrader order sent")
+                self._record_shadow_proposal(
+                    symbol, broker_sym, sig, market_state,
+                    reason_code="max_open_positions",
+                    reason=shadow_reason,
+                )
+                active_shadow_symbols.add(symbol)
                 continue
             if self.broker.status.connected:
                 result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
@@ -974,6 +1004,11 @@ class CTraderDemoTrader:
                 if res_status == "filled":
                     self._trades_this_session += 1
                     summary["trades"] += 1
+                    # Reserve the slot for the remainder of this scan. The
+                    # broker position snapshot is taken once per cycle, so
+                    # without this increment several simultaneous signals
+                    # could all pass the same final available slot.
+                    real_position_count += 1
                     ticket = result.get("order") or result.get("ticket") or 0
                     self._pos_log.log_opened(symbol, broker_sym, ticket,
                         direction=plan["direction"],
@@ -1012,6 +1047,24 @@ class CTraderDemoTrader:
                 print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
                       f"  (cTrader not connected)")
                 summary["trades"] += 1
+        # Replay only these broker-capacity shadow observations. Settled
+        # outcomes update Scout's shadow evidence; they never alter live
+        # conviction floors or open cTrader positions.
+        if self.shadow_mode:
+            try:
+                has_pending_shadow = bool(self.oracle.decision_ledger.unentered_trades_pending_replay(
+                    max_items=1, shadow_only=True))
+                if has_pending_shadow:
+                    replay_limit = _env_int("ORACLE_CTRADER_SHADOW_REPLAY_BATCH", 5)
+                    replay = self.oracle.act("cio.counterfactual_replay", {
+                        "max_records": max(1, replay_limit),
+                        "shadow_only": True,
+                        "_sender": "ctrader_demo_shadow_replay",
+                    })
+                    details = replay.get("data") if isinstance(replay, dict) else None
+                    log.info("cTrader shadow replay cycle: %s", details or (replay or {}).get("status"))
+            except Exception as exc:
+                log.warning("cTrader shadow replay pass unavailable: %s", type(exc).__name__)
         if self._kill_switch_check():
             summary["kill_switch"] = True
         elif self._ks_check_unavailable:
@@ -1052,8 +1105,6 @@ class CTraderDemoTrader:
         return self._ks_fired
 
     def _learn_from_closed(self):
-        if self.shadow_mode:
-            return
         for canon_sym, streams in self._open_context.items():
             broker_sym = self._sym_mapper.translate(canon_sym) or canon_sym
             poss = [p for p in self.broker.positions()
@@ -1065,13 +1116,45 @@ class CTraderDemoTrader:
                                              "realized_direction": realized,
                                              "_sender": "ctrader_demo"})
 
-    def _record_shadow_proposal(self, symbol, broker_symbol, response, market_state):
-        """Append a non-executable Oracle decision to Chronicle's research area."""
+    def _record_shadow_proposal(self, symbol, broker_symbol, response, market_state,
+                                reason_code="max_open_positions", reason="cTrader capacity full"):
+        """Persist an overflow setup for cTrader-bar replay and Scout learning."""
         signal = response.get("signal") or {}
         plan = response.get("plan") or {}
         streams = response.get("_streams") or {}
         technical = streams.get("technical") if isinstance(streams, dict) else {}
         technical = technical if isinstance(technical, dict) else {}
+        entry = float(plan.get("entry") or signal.get("last") or signal.get("price") or 0.0)
+        stop = float(plan.get("stop") or 0.0)
+        target = float(plan.get("target") or 0.0)
+        try:
+            self.oracle.decision_ledger.record_trade_not_entered(
+                symbol=symbol,
+                direction=str(plan.get("direction") or "hold"),
+                hypothetical_entry_price=entry,
+                hypothetical_stop=stop,
+                hypothetical_target=target,
+                scout_score=float(response.get("scout_score") or signal.get("confidence") or 0.0),
+                effective_confidence=float(response.get("effective_confidence") or signal.get("confidence") or 0.0),
+                entry_confidence=float(signal.get("confidence") or 0.0),
+                learned_conviction_floor=float(response.get("learned_conviction_floor") or 0.5),
+                regime=str(response.get("regime") or technical.get("regime") or "ranging"),
+                session=str(market_state.get("session") or "unknown"),
+                strategy_id=str(technical.get("genome") or technical.get("strategy_id") or "") or None,
+                stage_rejected="position_limit_shadow",
+                rejection_stage="position_limit_shadow",
+                reason_code=reason_code,
+                primary_reason=reason,
+                reasons=[reason],
+                streams=streams,
+                atr=float(response.get("atr") or 0.0),
+                shadow_observation=True,
+                execution_mode="ctrader_capacity_shadow",
+                broker_symbol=broker_symbol,
+            )
+        except Exception as exc:
+            log.warning("[%s] failed to record shadow setup for Scout replay: %s",
+                        symbol, type(exc).__name__)
         record = {
             "schema": "oracle.ctrader.shadow_proposal.v1",
             "observed_at_unix": time.time(),
@@ -1090,6 +1173,8 @@ class CTraderDemoTrader:
                 for key in ("state", "sessions", "overlap", "updated_at_utc")
             },
             "execution_mode": "shadow_no_order_sent",
+            "shadow_reason": reason,
+            "decision_ledger_replay_enabled": True,
         }
         path = _ECO_ROOT / "Chronicle" / "memory" / "research" / "oracle_shadow" / "proposals.jsonl"
         try:
@@ -1107,8 +1192,6 @@ class CTraderDemoTrader:
             log.warning("[%s] could not persist shadow proposal: %s", symbol, type(exc).__name__)
 
     def kill(self):
-        if self.shadow_mode:
-            return {"status": "blocked", "reason": "shadow mode forbids broker close requests"}
         return self._close_all_positions()
 
     def shutdown(self):

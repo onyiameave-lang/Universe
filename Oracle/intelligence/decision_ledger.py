@@ -219,6 +219,9 @@ class OracleDecisionLedger:
         social_risk: Optional[str] = None,
         social_reason: str = "",
         atr: float = 0.0,
+        shadow_observation: bool = False,
+        execution_mode: Optional[str] = None,
+        broker_symbol: Optional[str] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
         now = time.time()
@@ -274,7 +277,12 @@ class OracleDecisionLedger:
             "social_assessment": s_assess,
             "social_risk": resolved_social_risk,
             "counterfactual_evaluated": False,
+            "shadow_observation": bool(shadow_observation),
         }
+        if execution_mode:
+            record["execution_mode"] = str(execution_mode)
+        if broker_symbol:
+            record["broker_symbol"] = str(broker_symbol)
         summary = (
             f"NOT_ENTERED [{stage_rejected.upper()}:{resolved_reason_code}] {direction.upper()} {symbol.upper()} "
             f"(score={scout_score:.3f}, conf={eff_conf:.3f}): {'; '.join(resolved_reasons)[:120]}"
@@ -283,6 +291,34 @@ class OracleDecisionLedger:
             record,
             tags=["oracle_v2", "trade_not_entered", stage_rejected, resolved_reason_code, symbol.upper()],
             summary=summary,
+        )
+
+    def record_shadow_replay_progress(
+        self,
+        *,
+        original_event_id: str,
+        symbol: str,
+        last_bar_ts: float,
+        bars_observed: int,
+        position_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist resumable state for a still-open shadow observation."""
+        now = time.time()
+        record = {
+            "schema": "oracle.v2.decision_ledger.v1",
+            "event_type": "COUNTERFACTUAL_REPLAY_PROGRESS",
+            "event_id": self._make_event_id("CF_PROGRESS", symbol, now),
+            "original_event_id": str(original_event_id),
+            "timestamp": now,
+            "symbol": symbol.upper(),
+            "last_bar_ts": float(last_bar_ts),
+            "bars_observed": max(0, int(bars_observed)),
+            "position_state": dict(position_state or {}),
+        }
+        return self._append_record(
+            record,
+            tags=["oracle_v2", "counterfactual_progress", "shadow_observation", symbol.upper()],
+            summary=f"SHADOW REPLAY PROGRESS {symbol.upper()} ({bars_observed} bars observed)",
         )
 
     def record_trade_closed(
@@ -300,6 +336,10 @@ class OracleDecisionLedger:
         exit_regime: str,
         strategy_id: Optional[str],
         learning_updates: Dict[str, Any],
+        close_event_id: Optional[str] = None,
+        pnl_basis: Optional[str] = None,
+        cost_status: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         event_id = self._make_event_id("CLOSED", symbol, now)
@@ -321,6 +361,10 @@ class OracleDecisionLedger:
             "entry_regime": str(entry_regime),
             "exit_regime": str(exit_regime),
             "strategy_id": strategy_id,
+            "close_event_id": close_event_id,
+            "pnl_basis": pnl_basis,
+            "cost_status": cost_status,
+            "outcome_source": source,
             "learning_updates": learning_updates,
         }
         summary = (
@@ -446,7 +490,9 @@ class OracleDecisionLedger:
         """Alias for read_all(event_type=..., limit=...)."""
         return self.read_all(event_type=event_type, limit=limit)
 
-    def unentered_trades_pending_replay(self, max_items: int = 50) -> List[Dict[str, Any]]:
+    def unentered_trades_pending_replay(
+        self, max_items: int = 50, shadow_only: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Return TRADE_NOT_ENTERED records that have valid hypothetical entry/stop/target
         levels and have not yet been replayed by Chronicle Night Research / Forge Shadow Runner.
@@ -457,9 +503,15 @@ class OracleDecisionLedger:
             for r in all_records
             if r.get("event_type") == "COUNTERFACTUAL_REPLAY" and r.get("original_event_id")
         }
+        progress_by_id: Dict[str, Dict[str, Any]] = {}
+        for rec in all_records:
+            if rec.get("event_type") == "COUNTERFACTUAL_REPLAY_PROGRESS" and rec.get("original_event_id"):
+                progress_by_id[str(rec["original_event_id"])] = rec
         pending = []
         for rec in all_records:
             if rec.get("event_type") != "TRADE_NOT_ENTERED":
+                continue
+            if shadow_only and not rec.get("shadow_observation"):
                 continue
             if rec.get("event_id") in replayed_ids:
                 continue
@@ -467,7 +519,21 @@ class OracleDecisionLedger:
                 continue
             if float(rec.get("hypothetical_stop") or 0.0) <= 0:
                 continue
+            progress = progress_by_id.get(str(rec.get("event_id") or ""))
+            if progress:
+                rec = dict(rec)
+                rec["_shadow_bars_observed"] = int(progress.get("bars_observed") or 0)
+                rec["_shadow_last_bar_ts"] = progress.get("last_bar_ts")
+                rec["_shadow_position_state"] = dict(progress.get("position_state") or {})
+                rec["_shadow_progress_at"] = float(progress.get("timestamp") or 0.0)
+            else:
+                rec = dict(rec)
+                rec["_shadow_progress_at"] = 0.0
             pending.append(rec)
+        if shadow_only:
+            pending.sort(key=lambda item: (float(item.get("_shadow_progress_at") or 0.0),
+                                           float(item.get("timestamp") or 0.0)))
+            return pending[:max_items]
         return pending[-max_items:]
 
     def summarize_diagnostics(self) -> Dict[str, Any]:

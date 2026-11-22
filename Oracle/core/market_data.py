@@ -124,7 +124,8 @@ class YFinanceSource:
         try:
             import yfinance as yf
             df = yf.Ticker(self._map(symbol)).history(
-                period=period, interval=interval, timeout=_YFINANCE_TIMEOUT_SEC)
+                period=period, interval=interval, timeout=_YFINANCE_TIMEOUT_SEC,
+                auto_adjust=False, repair=True)
             if df is None or df.empty:
                 return None
             bars = []
@@ -139,11 +140,15 @@ class YFinanceSource:
                     continue
                 bars.append(bar)
             if invalid_bars:
-                logging.getLogger("oracle.market_data").warning(
-                    "discarding %d/%d invalid yfinance bars for %s "
-                    "(first invalid bar %s: %s); retaining %d valid bars",
-                    len(invalid_bars), len(df), symbol,
-                    invalid_bars[0][0], invalid_bars[0][1], len(bars))
+                logging.getLogger("oracle.market_data").error(
+                    "rejecting incomplete yfinance history for %s after repair: "
+                    "%d/%d invalid bars (first %s: %s); trying the next data source",
+                    symbol, len(invalid_bars), len(df),
+                    invalid_bars[0][0], invalid_bars[0][1])
+                # Returning a partial series hides missing dates from indicators
+                # and can make a shadow/live decision from a damaged history.
+                # MarketData.get() will try Stooq and then its validated cache.
+                return None
             if not bars:
                 return None
             return Series(symbol, bars, "yfinance")

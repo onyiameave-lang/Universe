@@ -8,6 +8,7 @@ Sentinel + Pulse + Atlas + Chronicle + Forge.
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 from typing import Any, Dict, List, Optional
 
 try:
@@ -57,6 +58,7 @@ class OracleCIOEngine:
         decision_ledger: Optional[OracleDecisionLedger] = None,
     ) -> None:
         self.oracle = oracle_agent
+        self._realized_outcome_lock = threading.RLock()
         resolved_chronicle = (
             chronicle_client if chronicle_client is not None else getattr(oracle_agent, "chronicle", None)
         )
@@ -152,7 +154,25 @@ class OracleCIOEngine:
             max_session_slots_override=max_session_slots_override,
         )
 
-    def record_realized_outcome(
+    def record_realized_outcome(self, *, close_event_id: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """Idempotent entry point for identified broker closes."""
+        if not close_event_id:
+            return self._apply_realized_outcome(**kwargs)
+        event_id = str(close_event_id).strip()
+        if not event_id or len(event_id) > 240:
+            return {"status": "error", "message": "close_event_id is invalid"}
+        with self._realized_outcome_lock:
+            processed = self.learning_store.data.setdefault("processed_close_event_ids", [])
+            if event_id in processed:
+                return {"status": "complete", "duplicate": True, "close_event_id": event_id}
+            result = self._apply_realized_outcome(close_event_id=event_id, **kwargs)
+            if result.get("status") == "complete":
+                processed.append(event_id)
+                self.learning_store.save()
+                result["close_event_id"] = event_id
+            return result
+
+    def _apply_realized_outcome(
         self,
         *,
         symbol: str,
@@ -178,6 +198,7 @@ class OracleCIOEngine:
         prior_trade_won: Optional[bool] = None,
         entry_atr: Optional[float] = None,
         strategy_id: Optional[str] = None,
+        close_event_id: Optional[str] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
         sym = symbol.upper()
@@ -245,6 +266,10 @@ class OracleCIOEngine:
             exit_regime=exit_regime,
             strategy_id=strategy_id,
             learning_updates=learning_updates,
+            close_event_id=close_event_id,
+            pnl_basis=extra.get("pnl_basis"),
+            cost_status=extra.get("cost_status"),
+            source=extra.get("feedback_source"),
         )
         return {
             "status": "complete",

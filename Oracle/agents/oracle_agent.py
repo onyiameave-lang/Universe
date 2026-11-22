@@ -274,7 +274,6 @@ class OracleAgent(BaseAgent):
             chronicle_client=chronicle_client,
             decision_ledger=self.decision_ledger,
         )
-
     @property
     def backtester(self) -> Backtester:
         if getattr(self, "_backtester", None) is None:
@@ -905,6 +904,99 @@ class OracleAgent(BaseAgent):
                 "bars": len(series.bars), "price_basis": "bid",
                 "broker_symbol": broker_symbol}
 
+    def _get_ctrader_replay_series(
+        self, symbol: str, from_timestamp: float, to_timestamp: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Fetch completed cTrader M15 bars for a bounded Scout shadow replay."""
+        connection = self._ensure_ctrader_research_broker()
+        if connection.get("status") != "complete":
+            return connection
+        broker = connection["broker"]
+        key = str(symbol).strip().upper()
+        broker_symbol = _ctrader_research_aliases().get(key, key)
+        try:
+            start_ms = int(float(from_timestamp) * 1000)
+            end_ms = int(float(to_timestamp or time.time()) * 1000)
+        except (TypeError, ValueError, OverflowError):
+            return {"status": "error", "message": "invalid shadow replay time range"}
+        if start_ms <= 0 or end_ms <= start_ms:
+            return {"status": "error", "message": "invalid shadow replay time range"}
+
+        interval_ms = 15 * 60 * 1000
+        chunk_ms = 7 * 24 * 60 * 60 * 1000
+        windows = [(start_ms, end_ms)]
+        raw_bars: Dict[str, Dict[str, Any]] = {}
+        requests = 0
+        with self._forge_ctrader_history_lock:
+            while windows:
+                left, right = windows.pop()
+                requests += 1
+                if requests > 1000:
+                    return {"status": "blocked", "symbol": key,
+                            "message": "shadow replay exceeded the bounded cTrader history request budget"}
+                # Keep each request within a predictable broker range and response size.
+                if right - left > chunk_ms:
+                    split = left + chunk_ms
+                    windows.extend(((split, right), (left, split)))
+                    continue
+                history = broker.historical_bars(
+                    symbol=broker_symbol,
+                    from_timestamp_ms=left,
+                    to_timestamp_ms=right,
+                    period="M15",
+                    count=2000,
+                    timeout=45.0,
+                )
+                if (isinstance(history, dict) and history.get("status") == "complete"
+                        and not history.get("has_more")):
+                    for item in history.get("bars", []):
+                        if isinstance(item, dict) and item.get("timestamp"):
+                            raw_bars[str(item["timestamp"])] = item
+                    continue
+                detail = (history.get("message", "") if isinstance(history, dict) else "")
+                lower_detail = str(detail).lower()
+                can_split = (
+                    isinstance(history, dict)
+                    and history.get("status") == "complete"
+                    and bool(history.get("has_more"))
+                ) or any(marker in lower_detail for marker in (
+                    "range", "too large", "maximum", "truncated", "too many",
+                ))
+                if can_split and right - left > interval_ms * 2:
+                    split = left + ((right - left) // 2)
+                    windows.extend(((split, right), (left, split)))
+                    continue
+                detail = detail or "cTrader returned truncated shadow replay bars"
+                return {"status": "blocked", "symbol": key, "message": str(detail)}
+
+        completed_bars = []
+        now_ms = int(time.time() * 1000)
+        try:
+            for timestamp in sorted(raw_bars):
+                opened = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                if opened.tzinfo is None:
+                    opened = opened.replace(tzinfo=timezone.utc)
+                if int(opened.timestamp() * 1000) + interval_ms > now_ms:
+                    continue
+                item = raw_bars[timestamp]
+                completed_bars.append(Bar(
+                    ts=timestamp,
+                    open=float(item["open"]), high=float(item["high"]),
+                    low=float(item["low"]), close=float(item["close"]),
+                    volume=float(item.get("volume", 0.0)),
+                ))
+            series = Series(key, completed_bars, "ctrader_open_api_bid")
+            invalid = self.data._series_validation_error(series)
+            if invalid:
+                return {"status": "error", "symbol": key,
+                        "message": f"invalid cTrader M15 replay bars: {invalid}"}
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            return {"status": "error", "symbol": key,
+                    "message": f"invalid cTrader M15 replay response: {type(exc).__name__}: {exc}"}
+        return {"status": "complete", "symbol": key, "series": series,
+                "source": series.source, "price_basis": "bid",
+                "broker_symbol": broker_symbol, "bars": len(series.bars)}
+
     def _get_ctrader_research_bundle(self, symbol: str) -> Dict[str, Any]:
         """Fetch five years of completed cTrader bars for the top-down stack.
 
@@ -1419,6 +1511,7 @@ class OracleAgent(BaseAgent):
             return self.cio.replay_pending_counterfactuals(
                 max_records=int(ctx.get("max_records", 25)),
                 invoke_shadow_runner_on_demand=bool(ctx.get("invoke_shadow_runner_on_demand", False)),
+                shadow_only=bool(ctx.get("shadow_only", False)),
             )
         if task == "cio.atlas_forge_review":
             symbols = ctx.get("symbols")
@@ -1521,7 +1614,6 @@ class OracleAgent(BaseAgent):
                         learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
                         learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
                     )
-                    self.risk.confidence_floor = scout_eval.learned_conviction_floor
                 except Exception as exc:
                     log.warning("[%s] Scout evaluation error: %s", symbol, exc)
 
@@ -1539,7 +1631,13 @@ class OracleAgent(BaseAgent):
             if social.level != "none":
                 log.info("[%s] social risk=%s: %s", symbol, social.level, social.reason)
 
-            plan = self.risk.evaluate(symbol, direction, sig["last"], atr, effective_confidence)
+            learned_floor = (
+                scout_eval.learned_conviction_floor if scout_eval is not None else None
+            )
+            plan = self.risk.evaluate(
+                symbol, direction, sig["last"], atr, effective_confidence,
+                confidence_floor=learned_floor,
+            )
             preserve_started = time.monotonic()
             self._preserve(symbol, sig)
             preserve_elapsed = time.monotonic() - preserve_started
@@ -1547,6 +1645,36 @@ class OracleAgent(BaseAgent):
                 log.warning("[%s] trade.propose Chronicle preserve took %.1fs", symbol, preserve_elapsed)
             if not plan["approved"]:
                 reasons = list(plan.get("reasons", []))
+                shadow_candidate = None
+                # Preserve a non-executable candidate only when the RL
+                # concurrent-position limit is the sole rejection. The trader
+                # may record it in its separate shadow book; this does not
+                # approve it or relax any live risk gate.
+                if reasons and all(str(reason).startswith("max positions (") for reason in reasons):
+                    levels = self.risk.stop_target(float(sig["last"]), direction, float(atr))
+                    shadow_candidate = {
+                        "plan": {
+                            "approved": False,
+                            "symbol": symbol,
+                            "direction": direction,
+                            "entry": float(sig["last"]),
+                            "stop": float(levels["stop"]),
+                            "target": float(levels["target"]),
+                            "size": float(self.risk.size_position(
+                                float(sig["last"]), float(levels["stop"]), effective_confidence
+                            )),
+                        },
+                        "signal": s,
+                        "effective_confidence": effective_confidence,
+                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                        "learned_conviction_floor": (
+                            scout_eval.learned_conviction_floor
+                            if scout_eval else float(self.risk.confidence_floor)
+                        ),
+                        "atr": float(atr),
+                        "regime": regime,
+                        "_streams": s["streams"],
+                    }
                 self.trade_journal.log_rejection(
                     symbol, direction, effective_confidence, reasons)
                 if hasattr(self, "decision_ledger") and self.decision_ledger is not None:
@@ -1560,7 +1688,7 @@ class OracleAgent(BaseAgent):
                         entry_confidence=effective_confidence,
                         learned_conviction_floor=(
                             scout_eval.learned_conviction_floor
-                            if scout_eval else float(self.risk.min_confidence)
+                            if scout_eval else float(self.risk.confidence_floor)
                         ),
                         regime=regime,
                         news_impact=news.level,
@@ -1576,13 +1704,14 @@ class OracleAgent(BaseAgent):
                 return {"status": "error", "message": "risk gate rejected", "risk": plan,
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason,
-                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence}
+                        "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                        "shadow_candidate": shadow_candidate}
             return {"status": "complete", "plan": plan, "signal": s,
                     "effective_confidence": effective_confidence,
                     "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
                     "learned_conviction_floor": (
                         scout_eval.learned_conviction_floor
-                        if scout_eval else float(self.risk.min_confidence)
+                        if scout_eval else float(self.risk.confidence_floor)
                     ),
                     "scout_evaluation": scout_eval.to_dict() if scout_eval else None,
                     "using_evolved_champion": sig["using_evolved_champion"],

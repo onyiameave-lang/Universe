@@ -64,6 +64,7 @@ class OracleV2LearningStore:
         return {
             "schema": "oracle.v2.learned_state.v1",
             "updated_at": time.time(),
+            "processed_close_event_ids": [],
             "scout": {
                 "dimension_alpha": {d: 1.0 for d in SCOUT_DIMENSIONS},
                 "dimension_beta": {d: 1.0 for d in SCOUT_DIMENSIONS},

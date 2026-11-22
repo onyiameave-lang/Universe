@@ -11,3 +11,16 @@ __pycache__/
 *.pyc
 .aistudio/
 
+# Runtime learning and local Chronicle state are durable local data, not source.
+# Keep them outside Git so branch switches, pulls, and Actions commits cannot
+# replace or publish a machine's learned state.
+/Chronicle/memory/store/
+/Oracle/memory/oracle_v2_learned_state.json
+/Oracle/memory/oracle_decision_ledger.jsonl
+/Oracle/memory/oracle_v1_close_inbox.jsonl
+/Oracle/memory/oracle_v2_close_event_ids.json
+/Oracle/memory/forge_strategy_feedback_outbox.jsonl
+/Oracle/memory/learned_closed_trades.json
+/Oracle/memory/oracle_learning.json
+/Oracle/memory/trade_experiment_log.jsonl
+/Oracle/memory/fusion_weights.json

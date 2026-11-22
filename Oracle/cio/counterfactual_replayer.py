@@ -136,12 +136,22 @@ def replay_unentered_counterfactuals(
             continue
         data_timeframe = "M15"
         try:
-            if sym not in series_cache:
-                try:
-                    series_cache[sym] = oracle_agent.data.get(sym, period="3mo", interval="15m")
-                except TypeError:
-                    series_cache[sym] = oracle_agent.data.get(sym)
-            md = series_cache[sym]
+            if item.get("shadow_observation") and callable(
+                getattr(oracle_agent, "_get_ctrader_replay_series", None)
+            ):
+                replay_from_ts = (
+                    _timestamp_epoch(item.get("_shadow_last_bar_ts")) or decision_ts
+                )
+                md = oracle_agent._get_ctrader_replay_series(
+                    sym, replay_from_ts, time.time()
+                )
+            else:
+                if sym not in series_cache:
+                    try:
+                        series_cache[sym] = oracle_agent.data.get(sym, period="3mo", interval="15m")
+                    except TypeError:
+                        series_cache[sym] = oracle_agent.data.get(sym)
+                md = series_cache[sym]
             series = md.get("series") if isinstance(md, dict) else None
             if not isinstance(md, dict) or md.get("status") != "complete" or series is None:
                 unavailable += 1
@@ -169,6 +179,25 @@ def replay_unentered_counterfactuals(
             future_bars.sort(key=lambda pair: pair[0])
             live = current_snapshots.get(sym)
             if not future_bars and not live:
+                if item.get("shadow_observation"):
+                    state = {
+                        "current_stop": pos.current_stop,
+                        "highest_price": pos.highest_price,
+                        "lowest_price": pos.lowest_price,
+                        "last_price": pos.last_price,
+                        "last_regime": pos.last_regime,
+                        "last_confidence": pos.last_confidence,
+                        "max_favorable_excursion_r": mfe_r,
+                        "max_adverse_excursion_r": mae_r,
+                        "management_actions": actions[-100:],
+                    }
+                    decision_ledger.record_shadow_replay_progress(
+                        original_event_id=str(item.get("event_id")),
+                        symbol=sym,
+                        last_bar_ts=last_bar_ts or decision_ts,
+                        bars_observed=bars_observed,
+                        position_state=state,
+                    )
                 still_open += 1
                 continue
 

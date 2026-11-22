@@ -100,7 +100,7 @@ class ResilientHTTPClient:
             elif exc.code in (401, 403):
                 delay = 6 * 60 * 60
                 cooldowns, cooldown_key = self._host_cooldowns, host
-            elif exc.code == 404:
+            elif exc.code in (404, 410):
                 delay = 6 * 60 * 60
                 cooldowns, cooldown_key = self._endpoint_cooldowns, endpoint
             elif exc.code >= 500:

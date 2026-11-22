@@ -384,7 +384,8 @@ class RiskManager:
     # ---- the constitutional risk gate ----
 
     def evaluate(self, symbol: str, direction: str, entry: float, atr: float,
-                 confidence: float) -> Dict[str, Any]:
+                 confidence: float,
+                 confidence_floor: Optional[float] = None) -> Dict[str, Any]:
         """
         Assess a proposed trade against ALL risk limits.  Returns approval +
         sizing + stop/target, or rejection with reasons.  No trade bypasses this.
@@ -394,6 +395,14 @@ class RiskManager:
         rejected.  Old code used strict < which silently rejected at-floor values.
         """
         rejections = []
+        # A candidate-specific learned floor may tighten the normal risk
+        # threshold, but must never relax it. Keep this per call so concurrent
+        # symbol evaluations cannot overwrite the shared manager setting.
+        active_confidence_floor = self.confidence_floor
+        if confidence_floor is not None:
+            active_confidence_floor = max(
+                active_confidence_floor, float(confidence_floor)
+            )
 
         # drawdown kill-switch
         if self.portfolio.drawdown >= self.max_drawdown:
@@ -438,11 +447,11 @@ class RiskManager:
 
         # confidence floor — BOUNDARY FIX: >= so exactly-at-floor values pass
         conf_rounded = round(confidence, 4)
-        if conf_rounded < self.confidence_floor:
+        if conf_rounded < active_confidence_floor:
             mode_label = "paper" if self.paper else "live"
             rejections.append(
                 f"confidence {conf_rounded:.4f} below {mode_label} floor "
-                f"{self.confidence_floor:.4f} (ORACLE_CONFIDENCE_FLOOR"
+                f"{active_confidence_floor:.4f} (ORACLE_CONFIDENCE_FLOOR"
                 f"{'_LIVE' if not self.paper else ''})")
 
         # need volatility to size
@@ -452,7 +461,7 @@ class RiskManager:
         if rejections:
             return {"approved": False, "reasons": rejections,
                     "paper_trading": self.paper,
-                    "confidence_floor": self.confidence_floor,
+                    "confidence_floor": active_confidence_floor,
                     "mode": "paper" if self.paper else "live"}
 
         st   = self.stop_target(entry, direction, atr)
@@ -476,7 +485,7 @@ class RiskManager:
         if concentration_reason:
             return {"approved": False, "reasons": [concentration_reason],
                     "paper_trading": self.paper,
-                    "confidence_floor": self.confidence_floor,
+                    "confidence_floor": active_confidence_floor,
                     "mode": "paper" if self.paper else "live"}
 
         return {
@@ -492,7 +501,7 @@ class RiskManager:
             "target":        st["target"],
             "risk_amount":   round(self.portfolio.equity * self.risk_per_trade, 2),
             "reward_risk":   self.reward_risk,
-            "confidence_floor": self.confidence_floor,
+            "confidence_floor": active_confidence_floor,
         }
 
     # ---- execution (paper by default) ----
