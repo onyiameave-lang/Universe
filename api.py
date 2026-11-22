@@ -791,10 +791,13 @@ def _get_rich_or_fallback_dashboard(name: str) -> Dict[str, Any]:
         from Nexus.api.coordination_bridge import build_rich_agent_dashboard_data
         rich = build_rich_agent_dashboard_data(name_low)
         if name_low in AGENTS:
-            base = _agent_dashboard_data(name_low, AGENTS[name_low])
-            merged = {**base, **rich}
-            merged["metrics"] = {**(base.get("metrics") or {}), **(rich.get("metrics") or {})}
-            return merged
+            agent = AGENTS[name_low]
+            try:
+                raw_st = agent.get_status() if hasattr(agent, "get_status") else {}
+                if isinstance(raw_st, dict):
+                    rich["raw_status"] = raw_st
+            except Exception:
+                pass
         return rich
     except Exception as exc:
         logger.warning("Rich dashboard data fallback for %s: %s", name_low, exc)
