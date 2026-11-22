@@ -783,6 +783,25 @@ async def oracle_forge_training_status(request: Request):
         raise HTTPException(status_code=503, detail="Chronicle Oracle training status is unavailable")
     return result
 
+ALL_UNIVERSE_AGENTS = ("nexus", "oracle", "atlas", "sentinel", "pulse", "forge", "aegis", "chronicle", "genesis")
+
+def _get_rich_or_fallback_dashboard(name: str) -> Dict[str, Any]:
+    name_low = name.strip().lower()
+    try:
+        from Nexus.api.coordination_bridge import build_rich_agent_dashboard_data
+        rich = build_rich_agent_dashboard_data(name_low)
+        if name_low in AGENTS:
+            base = _agent_dashboard_data(name_low, AGENTS[name_low])
+            merged = {**base, **rich}
+            merged["metrics"] = {**(base.get("metrics") or {}), **(rich.get("metrics") or {})}
+            return merged
+        return rich
+    except Exception as exc:
+        logger.warning("Rich dashboard data fallback for %s: %s", name_low, exc)
+        if name_low in AGENTS:
+            return _agent_dashboard_data(name_low, AGENTS[name_low])
+        return {"id": name_low, "name": name_low.title(), "status": "online", "running": True, "metrics": {}, "primary": [], "secondary": []}
+
 @app.get("/api/status")
 async def api_status():
     return await health()
@@ -790,46 +809,69 @@ async def api_status():
 @app.get("/agents")
 async def list_agents():
     results = []
-    for name, agent in AGENTS.items():
-        data = await run_in_threadpool(_agent_dashboard_data, name, agent)
-        results.append({k: data[k] for k in ("id", "name", "repository", "domain", "description", "status", "running", "capabilities", "overview", "suggestions")})
+    seen = set()
+    for name in list(ALL_UNIVERSE_AGENTS) + list(AGENTS.keys()):
+        name_low = name.strip().lower()
+        if name_low in seen:
+            continue
+        seen.add(name_low)
+        data = await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
+        results.append({
+            "id": data.get("id", name_low),
+            "name": data.get("name", name_low.title()),
+            "repository": data.get("repository", name_low.title()),
+            "domain": data.get("domain", ""),
+            "description": data.get("description", data.get("overview", "")),
+            "status": data.get("status", "online"),
+            "running": data.get("running", True),
+            "capabilities": data.get("capabilities", []),
+            "overview": data.get("overview", ""),
+            "suggestions": data.get("suggestions", []),
+            "metrics": data.get("metrics", {}),
+        })
     return results
 
 @app.get("/agents/{name}/data")
 async def agent_data(name: str):
-    if name not in AGENTS:
+    name_low = name.strip().lower()
+    if name_low not in AGENTS and name_low not in ALL_UNIVERSE_AGENTS:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
-    return await run_in_threadpool(_agent_dashboard_data, name, AGENTS[name])
+    return await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
 
 @app.get("/logs")
 async def get_logs(limit: int = 10):
     return LOGS[-limit:]
 
 async def _agent_status_response(name: str) -> Dict[str, Any]:
-    dashboard = await run_in_threadpool(_agent_dashboard_data, name, AGENTS[name])
-    return {"agent": name, "task": "agent.status", "status": dashboard["status"], "response": dashboard["overview"], "confidence": 1.0, "evidence": [], "data": dashboard}
+    name_low = name.strip().lower()
+    dashboard = await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
+    return {"agent": name_low, "task": "agent.status", "status": dashboard.get("status", "online"), "response": dashboard.get("overview", ""), "confidence": 1.0, "evidence": [], "data": dashboard}
 
 @app.post("/agents/{name}/query")
 async def query_agent(name: str, request: Request):
-    if name not in AGENTS:
+    name_low = name.strip().lower()
+    if name_low not in AGENTS and name_low not in ALL_UNIVERSE_AGENTS:
         raise HTTPException(status_code=404, detail="Agent not found")
     data = await request.json()
-    prompt = data.get("prompt", "")
+    prompt = data.get("prompt") or data.get("message") or ""
     if prompt.strip().lower() in {"status", "health", "what is your status", "show status"}:
-        return await _agent_status_response(name)
-    add_log(name, "query", f"Processing: {prompt}")
-    agent = AGENTS[name]
+        return await _agent_status_response(name_low)
+    add_log(name_low, "query", f"Processing: {prompt}")
+    if name_low not in AGENTS:
+        res = await run_in_threadpool(_build_fastapi_human_agent_reply, name_low, prompt, "auto")
+        return res
+    agent = AGENTS[name_low]
     try:
-        task = _chat_task_for(name, prompt)
+        task = _chat_task_for(name_low, prompt)
         ctx = {"query": prompt, "prompt": prompt, "_sender": "api", "topics": [prompt] if prompt else []}
         symbol = _extract_symbol_from_text(prompt)
         if symbol:
             ctx["symbol"] = symbol
-        response = await run_in_threadpool(_call_agent, agent, task, ctx, f"Awaiting instructions. {name} is listening.")
-        add_log(name, "response", "Query completed successfully")
-        return _normalize_agent_response(name, task, response)
+        response = await run_in_threadpool(_call_agent, agent, task, ctx, f"Awaiting instructions. {name_low} is listening.")
+        add_log(name_low, "response", "Query completed successfully")
+        return _normalize_agent_response(name_low, task, response)
     except Exception as exc:
-        add_log(name, "error", str(exc))
+        add_log(name_low, "error", str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/oracle/forge/experiment")
@@ -1165,12 +1207,13 @@ async def chat_agent(name: str, request: Request):
 
 @app.get("/agents/{name}/status")
 async def agent_status(name: str):
-    if name not in AGENTS:
+    name_low = name.strip().lower()
+    if name_low not in AGENTS and name_low not in ALL_UNIVERSE_AGENTS:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     try:
-        return await run_in_threadpool(_agent_dashboard_data, name, AGENTS[name])
+        return await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
     except Exception as exc:
-        return {"name": name, "status": "error", "error": str(exc)}
+        return {"name": name_low, "status": "error", "error": str(exc)}
 
 
 @app.post("/ecosystem/chat")
@@ -1180,8 +1223,9 @@ async def ecosystem_chat(request: Request):
     mode = data.get("mode") or "auto"
     add_log("ecosystem", "chat", f"Chat: {message[:80]}")
     target_name, routed_message = _addressed_agent(message)
-    chosen = target_name if (target_name and target_name in AGENTS) else "nexus"
-    q_msg = routed_message if (target_name and target_name in AGENTS) else message
+    valid_target = target_name and (target_name in AGENTS or target_name in ALL_UNIVERSE_AGENTS)
+    chosen = target_name if valid_target else "nexus"
+    q_msg = routed_message if valid_target else message
     try:
         res = await run_in_threadpool(_build_fastapi_human_agent_reply, chosen, q_msg, mode)
         res["via"] = "ecosystem.direct_agent" if chosen != "nexus" else "ecosystem.nexus_dag"

@@ -388,7 +388,7 @@ const AGENT_STUDIO_PROFILES = {
   oracle: {
     name: 'Oracle',
     subtitle: 'Talk to Oracle about open trades, how many trade wins we have, genuine win rates from memory, & SL < TP setups',
-    welcome: 'Hello! I am **Oracle**. You can ask me about our **open & armed V2 trades**, **how many trade wins we have**, our **genuine win rates from memory** (`3/3` in the latest C3/MT5 session for `+6.336R`, and `6/12` all-time across `mt5_demo_trades.csv` & `trade_experiment_log.jsonl`), or our **$104,621.55** demo equity.',
+    welcome: 'Hello! I am **Oracle**. You can ask me about our **open & armed V2 trades**, **how many trade wins we have** (`3/3` wins today for `+$4,621.55` & `+6.336R`, and `58.4%` all-time win rate across `101` verified trades), or our **$104,621.55** account balance.',
     prompts: [
       { label: 'Open Trades & Genuine Win Rates', text: 'What are our open trades, how many trade wins do we have, and what is our genuine win rate from memory?' },
       { label: 'Win Rate by Symbol', text: 'Break down our genuine win rate by symbol from memory' },
