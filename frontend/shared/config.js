@@ -8,8 +8,16 @@
 const BASE_URL = (() => {
   if (typeof window.UNIVERSE_API_BASE !== 'undefined') return window.UNIVERSE_API_BASE.replace(/\/$/, '');
   const stored = localStorage.getItem('universe-api-base');
-  if (stored && !stored.includes('localhost:8000')) return stored.replace(/\/$/, '');
-  return window.location.origin;
+  if (stored && /^https?:\/\//i.test(stored)) return stored.replace(/\/$/, '');
+  const origin = window.location.origin;
+  if (!origin || origin === 'null' || window.location.protocol === 'file:') {
+    return 'http://localhost:3000';
+  }
+  const port = window.location.port;
+  if (port === '5500' || port === '5501' || port === '8080' || port === '5173') {
+    return 'http://localhost:3000';
+  }
+  return origin.replace(/\/$/, '');
 })();
 
 const CONFIG = {
@@ -17,6 +25,29 @@ const CONFIG = {
 };
 window.CONFIG = CONFIG;
 window.API_BASE = BASE_URL;
+
+// Auto-probe fallback between localhost:3000 (Express) and localhost:8000 (FastAPI) when running locally
+(async function autoProbeLocalBackend() {
+  try {
+    const res = await fetch(`${window.API_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    if (res.ok) return;
+  } catch (e) {}
+  for (const candidate of ['http://localhost:3000', 'http://localhost:8000', 'http://127.0.0.1:3000', 'http://127.0.0.1:8000']) {
+    if (candidate === window.API_BASE) continue;
+    try {
+      const r = await fetch(`${candidate}/health`, { signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        window.API_BASE = candidate;
+        window.CONFIG.API_BASE = candidate;
+        API.base = candidate;
+        API.agents = `${candidate}/agents`;
+        API.health = `${candidate}/health`;
+        API.ecosystemChat = `${candidate}/ecosystem/chat`;
+        break;
+      }
+    } catch (e) {}
+  }
+})();
 
 // ── ENDPOINTS ─────────────────────────────────────────────────────────────────
 const API = {

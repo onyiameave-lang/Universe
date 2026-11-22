@@ -298,6 +298,8 @@ def _strip_html(html: str) -> str:
     for a, b in (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&#39;", "'")):
         text = text.replace(a, b)
     text = re.sub(r"&#\d+;", " ", text)
+    # Strip MediaWiki plaintext section markers like == Organisation == or === History ===
+    text = re.sub(r"={2,}\s*[^=\n]+?\s*={2,}", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -435,6 +437,16 @@ class Evidence:
 # Source adapters
 # ============================================================
 
+_NATURAL_PHENOMENON_CANONICAL_MAP: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"\bwhy\s+(?:is|does)\s+the\s+sky\s+(?:look\s+)?blue\b", re.I), "Diffuse sky radiation"),
+    (re.compile(r"\bwhy\s+(?:is|are)\s+(?:the\s+)?(?:ocean|sea|seawater)\s+salty\b", re.I), "Seawater"),
+    (re.compile(r"\bhow\s+do\s+(?:airplanes|planes|aircraft)\s+fly\b", re.I), "Lift (force)"),
+    (re.compile(r"\bwhy\s+do\s+(?:we|humans|people)\s+sleep\b", re.I), "Sleep"),
+    (re.compile(r"\bwhat\s+causes\s+(?:the\s+)?seasons\b", re.I), "Season"),
+    (re.compile(r"\bwhat\s+causes\s+tides\b", re.I), "Tide"),
+]
+
+
 def _clean_wikipedia_subject(query: str) -> str:
     """
     Turn a conversational user question into a clean encyclopedic subject phrase
@@ -443,6 +455,11 @@ def _clean_wikipedia_subject(query: str) -> str:
     """
     q = " ".join(str(query or "").strip().split())
     q = re.sub(r"[?!.;,]+$", "", q).strip()
+
+    for pat, canonical_topic in _NATURAL_PHENOMENON_CANONICAL_MAP:
+        if pat.search(q):
+            return canonical_topic
+
     # Repeatedly strip leading conversational / question framing
     prefix_re = re.compile(
         r"^(?:hi|hello|hey|atlas|please|can\s+you|could\s+you|would\s+you|"
@@ -562,6 +579,8 @@ class WikipediaSource:
                     for _, ep in ext_pages.items():
                         full_txt = str(ep.get("extract") or "").strip()
                         full_txt = re.sub(r"\(\s*[;,/•\-]*\s*\)\s*", "", full_txt)
+                        full_txt = re.sub(r"={2,}\s*[^=\n]+?\s*={2,}", " ", full_txt)
+                        full_txt = re.sub(r"\s+", " ", full_txt).strip()
                         if len(full_txt) > len(out[0].text):
                             out[0].text = full_txt
             except Exception:

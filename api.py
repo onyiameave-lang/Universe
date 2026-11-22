@@ -984,28 +984,157 @@ async def oracle_forge_cost_observations(request: Request):
         add_log("forge", "error", str(exc))
         raise HTTPException(status_code=500, detail=f"Forge cost observations failed: {type(exc).__name__}")
 
+@app.post("/api/atlas/investigate")
+async def atlas_investigate_endpoint(request: Request):
+    data = await request.json()
+    query = str(data.get("query") or data.get("message") or data.get("prompt") or "").strip()
+    mode = str(data.get("mode") or "auto").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    from Atlas.api.frontend_chat_bridge import build_frontend_dossier
+    dossier = await run_in_threadpool(build_frontend_dossier, query, mode)
+    return dossier
+
+
+@app.get("/api/chronicle/chat-history")
+async def chronicle_chat_history(limit: int = 25):
+    import json
+    chat_log = ROOT / "Chronicle" / "memory" / "research" / "chat_history_log.jsonl"
+    entries = []
+    if chat_log.exists():
+        try:
+            lines = [ln.strip() for ln in chat_log.read_text(encoding="utf-8").splitlines() if ln.strip().startswith("{")]
+            for ln in lines[-min(100, max(1, limit)):]:
+                try:
+                    entries.append(json.loads(ln))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    entries.reverse()
+    return {"status": "ok", "total_logged": len(entries), "interactions": entries}
+
+
+def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto") -> Dict[str, Any]:
+    """
+    Shared institutional human-friendly chat handler for FastAPI (`api.py`) so port 8000
+    provides the exact same natural, plain-English specialist & Nexus responses as port 3000.
+    """
+    from Nexus.api.coordination_bridge import (
+        coordinate_query,
+        build_cross_agent_referrals,
+        _build_specialist_domain_output,
+        _is_casual_nexus_message,
+        _build_casual_nexus_reply,
+        _load_oracle_ledger_snapshot,
+        _ECOSYSTEM_OR_MARKET_RE,
+    )
+    from Atlas.api.frontend_chat_bridge import build_frontend_dossier
+
+    agent_id = (name or "nexus").strip().lower()
+    clean_msg = (message or "").strip()
+    q_low = clean_msg.lower()
+
+    if agent_id == "nexus":
+        trace = coordinate_query(clean_msg, user_id="operator", target_agent="nexus")
+        reply_text = str(trace.get("final_synthesis") or "").strip()
+        return {
+            "agent": "nexus",
+            "task": "ecosystem.coordinate",
+            "status": "complete",
+            "reply": reply_text,
+            "response": reply_text,
+            "confidence": (trace.get("consensus") or {}).get("confidence", 0.92),
+            "trace": trace,
+            "referrals": trace.get("referrals") or [],
+            "evidence": [],
+            "data": trace,
+        }
+
+    if agent_id == "atlas":
+        dossier = build_frontend_dossier(clean_msg, requested_mode=mode)
+        reply_text = str(dossier.get("direct_human_answer") or dossier.get("readable_reply") or "").strip()
+        refs = build_cross_agent_referrals(clean_msg, "atlas", ["atlas"], is_nexus_chat=False)
+        return {
+            "agent": "atlas",
+            "task": "research.investigate",
+            "status": "complete",
+            "reply": reply_text,
+            "response": reply_text,
+            "confidence": dossier.get("confidence", 0.92),
+            "dossier": dossier,
+            "referrals": refs,
+            "evidence": dossier.get("sources") or [],
+            "data": dossier,
+        }
+
+    # Check if the user asked a general human/science/formula question to a non-Atlas specialist
+    is_ecosystem_q = bool(_ECOSYSTEM_OR_MARKET_RE.search(clean_msg)) or any(
+        w in q_low for w in ("memory", "memories", "learned", "saved", "stored", "lesson", "lessons", "money", "made", "safe", "safety", "strategy", "strategies", "train", "trained")
+    )
+    casual = _is_casual_nexus_message(clean_msg)
+    if agent_id != "chronicle" and casual is None and not is_ecosystem_q:
+        dossier = build_frontend_dossier(clean_msg, requested_mode=mode)
+        human_ans = str(dossier.get("direct_human_answer") or dossier.get("readable_reply") or "").strip()
+        if human_ans:
+            refs = build_cross_agent_referrals(clean_msg, agent_id, [agent_id, "atlas"], is_nexus_chat=False)
+            full_reply = f"{human_ans}\n\n---\n*Answered via our shared **Chronicle** memory (coordinated by **Nexus** with **Atlas Research**).*"
+            return {
+                "agent": agent_id,
+                "task": "research.investigate",
+                "status": "complete",
+                "reply": full_reply,
+                "response": full_reply,
+                "confidence": dossier.get("confidence", 0.92),
+                "dossier": dossier,
+                "referrals": refs,
+                "evidence": dossier.get("sources") or [],
+                "data": dossier,
+            }
+
+    agent_to_domain = {
+        "oracle": "trading",
+        "forge": "training",
+        "sentinel": "news",
+        "pulse": "social",
+        "aegis": "governance",
+        "chronicle": "memory",
+        "genesis": "creation",
+    }
+    dom = agent_to_domain.get(agent_id, "research")
+    _, task_name, out, _ = _build_specialist_domain_output(dom, clean_msg)
+    reply_text = str(out.get("human_section") or out.get("summary") or "").strip()
+    refs = build_cross_agent_referrals(clean_msg, agent_id, [agent_id], is_nexus_chat=False)
+    return {
+        "agent": agent_id,
+        "task": task_name,
+        "status": "complete",
+        "reply": reply_text,
+        "response": reply_text,
+        "confidence": out.get("confidence", 0.9),
+        "referrals": refs,
+        "evidence": out.get("sources") or [],
+        "data": out,
+    }
+
+
 @app.post("/agents/{name}/chat")
 async def chat_agent(name: str, request: Request):
-    if name not in AGENTS:
+    name_low = name.strip().lower()
+    if name_low not in AGENTS and name_low not in {"nexus", "oracle", "atlas", "sentinel", "pulse", "forge", "aegis", "chronicle", "genesis"}:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     data = await request.json()
     message = data.get("message") or data.get("prompt", "")
-    add_log(name, "chat", f"Chat: {message[:80]}")
-    if message.strip().lower() in {"status", "health", "what is your status", "show status"}:
-        return await _agent_status_response(name)
-    agent = AGENTS[name]
+    mode = data.get("mode") or "auto"
+    add_log(name_low, "chat", f"Chat: {message[:80]}")
     try:
-        task = _chat_task_for(name, message)
-        ctx = {"query": message, "prompt": message, "_sender": "chat", "topics": [message] if message else []}
-        symbol = _extract_symbol_from_text(message)
-        if symbol:
-            ctx["symbol"] = symbol
-        response = await run_in_threadpool(_call_agent, agent, task, ctx, f"I'm {name}. I received your message: {message}")
-        add_log(name, "chat", "Chat response sent")
-        return _normalize_agent_response(name, task, response)
+        res = await run_in_threadpool(_build_fastapi_human_agent_reply, name_low, message, mode)
+        add_log(name_low, "chat", "Chat response sent")
+        return res
     except Exception as exc:
-        add_log(name, "error", str(exc))
-        return {"agent": name, "task": AGENT_CHAT_TASKS.get(name, "user.query"), "status": "error", "response": f"{name} encountered an error: {str(exc)[:200]}", "confidence": None, "evidence": [], "data": {"status": "error", "message": str(exc)}}
+        add_log(name_low, "error", str(exc))
+        return {"agent": name_low, "task": AGENT_CHAT_TASKS.get(name_low, "user.query"), "status": "error", "response": f"{name_low} encountered an error: {str(exc)[:200]}", "reply": f"{name_low} encountered an error: {str(exc)[:200]}", "confidence": None, "evidence": [], "data": {"status": "error", "message": str(exc)}}
+
 
 @app.get("/agents/{name}/status")
 async def agent_status(name: str):
@@ -1016,67 +1145,20 @@ async def agent_status(name: str):
     except Exception as exc:
         return {"name": name, "status": "error", "error": str(exc)}
 
+
 @app.post("/ecosystem/chat")
 async def ecosystem_chat(request: Request):
     data = await request.json()
     message = data.get("message") or data.get("prompt", "")
+    mode = data.get("mode") or "auto"
     add_log("ecosystem", "chat", f"Chat: {message[:80]}")
     target_name, routed_message = _addressed_agent(message)
-    if target_name and target_name in AGENTS:
-        agent = AGENTS[target_name]
-        fallback_task = _chat_task_for(target_name, routed_message)
-        task = _capability_task_for(agent, routed_message, fallback_task)
-        ctx = {
-            "query": routed_message,
-            "prompt": routed_message,
-            "_sender": "ecosystem",
-            "topics": [routed_message] if routed_message else [],
-        }
-        symbol = _extract_symbol_from_text(routed_message)
-        if symbol:
-            ctx["symbol"] = symbol
-        try:
-            result = await run_in_threadpool(
-                _call_agent,
-                agent,
-                task,
-                ctx,
-                f"{target_name.title()} received your message.",
-            )
-            normalized = _normalize_agent_response(target_name, task, result)
-            normalized["via"] = "ecosystem.direct_agent"
-            return normalized
-        except Exception as exc:
-            add_log(target_name, "error", str(exc))
-            return {
-                "agent": target_name,
-                "task": task,
-                "status": "error",
-                "response": f"{target_name.title()} encountered an error: {str(exc)[:200]}",
-                "confidence": None,
-                "evidence": [],
-                "data": {"status": "error", "message": str(exc)},
-                "via": "ecosystem.direct_agent",
-            }
-
-    nexus = AGENTS.get("nexus")
-    if not nexus:
-        return {
-            "agent": "ecosystem",
-            "task": "ecosystem.route",
-            "status": "error",
-            "response": "The ecosystem router is not available yet.",
-            "confidence": None,
-            "evidence": [],
-            "data": {"status": "error", "message": "nexus unavailable"},
-        }
-    ctx = {"query": message, "prompt": message, "_sender": "ecosystem", "topics": [message] if message else []}
-    symbol = _extract_symbol_from_text(message)
-    if symbol:
-        ctx["symbol"] = symbol
+    chosen = target_name if (target_name and target_name in AGENTS) else "nexus"
+    q_msg = routed_message if (target_name and target_name in AGENTS) else message
     try:
-        result = await run_in_threadpool(_call_agent, nexus, "ecosystem.route", ctx, "The ecosystem received your message.")
-        return _normalize_agent_response("ecosystem", "ecosystem.route", result)
+        res = await run_in_threadpool(_build_fastapi_human_agent_reply, chosen, q_msg, mode)
+        res["via"] = "ecosystem.direct_agent" if chosen != "nexus" else "ecosystem.nexus_dag"
+        return res
     except Exception as exc:
         add_log("ecosystem", "error", str(exc))
         return {
@@ -1084,6 +1166,7 @@ async def ecosystem_chat(request: Request):
             "task": "ecosystem.route",
             "status": "error",
             "response": f"The ecosystem encountered an error: {str(exc)[:200]}",
+            "reply": f"The ecosystem encountered an error: {str(exc)[:200]}",
             "confidence": None,
             "evidence": [],
             "data": {"status": "error", "message": str(exc)},

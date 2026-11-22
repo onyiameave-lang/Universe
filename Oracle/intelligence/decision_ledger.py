@@ -389,10 +389,12 @@ class OracleDecisionLedger:
         counterfactual_r: float,
         classification: str,  # "AVOIDED_LOSS" | "MISSED_WINNER" | "NEUTRAL"
         learning_adjustments: Dict[str, Any],
+        strategy_id: Optional[str] = None,
+        shadow_observation: Optional[bool] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         event_id = self._make_event_id("CF_REPLAY", symbol, now)
-        record = {
+        record: Dict[str, Any] = {
             "schema": "oracle.v2.decision_ledger.v1",
             "event_type": "COUNTERFACTUAL_REPLAY",
             "event_id": event_id,
@@ -407,6 +409,10 @@ class OracleDecisionLedger:
             "classification": classification,
             "learning_adjustments": learning_adjustments,
         }
+        if strategy_id is not None:
+            record["strategy_id"] = strategy_id
+        if shadow_observation is not None:
+            record["shadow_observation"] = bool(shadow_observation)
         summary = (
             f"COUNTERFACTUAL {classification} on {symbol.upper()} ({original_event_id}): "
             f"would have realized {counterfactual_r:+.2f}R after {stage_rejected}:{reason_code}"
@@ -414,6 +420,35 @@ class OracleDecisionLedger:
         return self._append_record(
             record,
             tags=["oracle_v2", "counterfactual_replay", classification.lower(), symbol.upper()],
+            summary=summary,
+        )
+
+    def record_counterfactual_replay_invalidated(
+        self,
+        *,
+        original_event_id: str,
+        symbol: str,
+        reason_code: str = "price_scale_mismatch",
+        details: str = "",
+    ) -> Dict[str, Any]:
+        now = time.time()
+        event_id = self._make_event_id("CF_INVALIDATED", symbol, now)
+        record = {
+            "schema": "oracle.v2.decision_ledger.v1",
+            "event_type": "COUNTERFACTUAL_REPLAY_INVALIDATED",
+            "event_id": event_id,
+            "original_event_id": str(original_event_id),
+            "timestamp": now,
+            "symbol": symbol.upper(),
+            "reason_code": str(reason_code),
+            "details": str(details),
+        }
+        summary = (
+            f"COUNTERFACTUAL INVALIDATED on {symbol.upper()} ({original_event_id}): {reason_code}"
+        )
+        return self._append_record(
+            record,
+            tags=["oracle_v2", "counterfactual_invalidated", symbol.upper()],
             summary=summary,
         )
 
