@@ -1,4 +1,6 @@
 from Oracle.agents.oracle_agent import OracleAgent
+from types import SimpleNamespace
+import threading
 
 
 class _Evolution:
@@ -55,3 +57,15 @@ def test_forge_owned_research_does_not_fetch_oracle_market_data(monkeypatch):
     assert request["regime"] == "trending_up"
     assert "bars" not in request
     assert "bars_by_timeframe" not in request
+
+
+def test_ctrader_research_reuses_the_traders_authenticated_broker():
+    agent = OracleAgent.__new__(OracleAgent)
+    broker = SimpleNamespace(status=SimpleNamespace(connected=True))
+    agent._forge_ctrader_broker = broker
+    agent._forge_ctrader_history_lock = threading.Lock()
+
+    result = agent._ensure_ctrader_research_broker()
+
+    assert result["status"] == "complete"
+    assert result["broker"] is broker

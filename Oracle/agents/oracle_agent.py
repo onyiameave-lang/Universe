@@ -476,13 +476,16 @@ class OracleAgent(BaseAgent):
         use_demo = os.getenv("CTRADER_USE_DEMO", "true").strip().lower() not in {"0", "false", "no"}
         with self._forge_ctrader_history_lock:
             if self._forge_ctrader_broker is None:
-                broker = CTraderBroker(use_demo=use_demo)
+                # Store before connecting so concurrent research requests share
+                # one client/reactor even if authentication fails.
+                self._forge_ctrader_broker = CTraderBroker(use_demo=use_demo)
+            broker = self._forge_ctrader_broker
+            if not getattr(getattr(broker, "status", None), "connected", False):
                 connection = broker.connect()
                 if not isinstance(connection, dict) or not connection.get("connected"):
                     reason = connection.get("reason", "cTrader authentication failed") if isinstance(connection, dict) else "cTrader authentication failed"
                     return {"status": "error", "message": f"cTrader research connection failed: {reason}"}
-                self._forge_ctrader_broker = broker
-            return {"status": "complete", "broker": self._forge_ctrader_broker}
+            return {"status": "complete", "broker": broker}
 
     def collect_ctrader_cost_observations(self, symbols: List[str]) -> Dict[str, Any]:
         """Build research-only cost profiles from recent broker tick/deal data."""

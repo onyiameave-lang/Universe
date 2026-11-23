@@ -517,6 +517,11 @@ class CTraderDemoTrader:
         log.info("CTraderDemoTrader: TRADER_ID=%r", _TRADER_ID)
 
     def connect(self):
+        # Oracle's research and fill-observation paths use the same account.
+        # Share this authenticated client instead of constructing a second
+        # CTraderBroker, which would attempt to start Twisted's global reactor
+        # in another thread and duplicate application/account authorization.
+        self.oracle._forge_ctrader_broker = self.broker
         status = self.broker.connect()
         if status.get("connected"):
             starting_equity = status.get("equity") or status.get("balance")
