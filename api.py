@@ -786,11 +786,11 @@ async def oracle_forge_training_status(request: Request):
 
 ALL_UNIVERSE_AGENTS = ("nexus", "oracle", "atlas", "sentinel", "pulse", "forge", "aegis", "chronicle", "genesis")
 
-def _get_rich_or_fallback_dashboard(name: str) -> Dict[str, Any]:
+def _get_rich_or_fallback_dashboard(name: str, broker: str = "all") -> Dict[str, Any]:
     name_low = name.strip().lower()
     try:
         from Nexus.api.coordination_bridge import build_rich_agent_dashboard_data
-        rich = build_rich_agent_dashboard_data(name_low)
+        rich = build_rich_agent_dashboard_data(name_low, broker=broker)
         if name_low in AGENTS:
             agent = AGENTS[name_low]
             try:
@@ -836,11 +836,11 @@ async def list_agents():
     return results
 
 @app.get("/agents/{name}/data")
-async def agent_data(name: str):
+async def agent_data(name: str, broker: str = "all"):
     name_low = name.strip().lower()
     if name_low not in AGENTS and name_low not in ALL_UNIVERSE_AGENTS:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
-    return await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
+    return await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low, broker)
 
 @app.get("/logs")
 async def get_logs(limit: int = 10):

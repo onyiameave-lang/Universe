@@ -26,9 +26,29 @@
         </div>
       </header>
       <main class="dashboard-content">
+        <!-- Interactive Broker Account Switcher: MetaTrader 5 (MT5) vs cTrader vs All Accounts -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.35);background:rgba(15,23,42,0.55)">
+          <div class="card-body" style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+              <div>
+                <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">Select Trading Broker Account to Inspect</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Switch between your MetaTrader 5 (MT5) account, your cTrader account, or view both combined in plain English</div>
+              </div>
+              <div id="brokerSwitcherBtns" style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="broker-tab-btn" data-broker="mt5" onclick="selectBroker('mt5')" style="padding:8px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">MetaTrader 5 (MT5)</button>
+                <button type="button" class="broker-tab-btn" data-broker="ctrader" onclick="selectBroker('ctrader')" style="padding:8px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.05);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer">cTrader Account</button>
+                <button type="button" class="broker-tab-btn" data-broker="all" onclick="selectBroker('all')" style="padding:8px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.05);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer">All Accounts (MT5 + cTrader)</button>
+              </div>
+            </div>
+            <div id="brokerPlainSummaryBox" style="padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.09);border-left:3px solid #10b981;font-size:13px;line-height:1.5;color:var(--text)">
+              Loading your MetaTrader 5 (MT5) and cTrader account summary…
+            </div>
+          </div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">PnL Today</div>
+            <div class="kpi-label">Net Profit / Loss</div>
             <div class="kpi-value" id="kpi_pnl_today">—</div>
             <div class="kpi-delta pos" id="kpid_pnl_today"></div>
           </div>
@@ -38,29 +58,29 @@
             <div class="kpi-delta neu" id="kpid_win_rate"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Open Trades</div>
+            <div class="kpi-label">Open &amp; Watching</div>
             <div class="kpi-value" id="kpi_open_trades">—</div>
             <div class="kpi-delta neu" id="kpid_open_trades"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Signals</div>
+            <div class="kpi-label">Trades &amp; Safety Filter</div>
             <div class="kpi-value" id="kpi_signals_today">—</div>
             <div class="kpi-delta neu" id="kpid_signals_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Portfolio</div>
+            <div class="kpi-label">Account Balance</div>
             <div class="kpi-value" id="kpi_portfolio_value">—</div>
             <div class="kpi-delta neu" id="kpid_portfolio_value"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Drawdown</div>
+            <div class="kpi-label">Safety &amp; Max Dip</div>
             <div class="kpi-value" id="kpi_max_drawdown">—</div>
             <div class="kpi-delta neg" id="kpid_max_drawdown"></div>
           </div>
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Open &amp; Executed Trades from Memory (Armed V2 Setups + C3/MT5 Ledger)</span>
+            <span class="card-title" id="primaryCardTitle">Completed Trades &amp; Active Watchlist (Plain-English Summary)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -73,7 +93,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Genuine Win Rate Breakdown by Symbol (Authoritative Memory Audit)</span>
+            <span class="card-title" id="secondaryCardTitle">Win Rate &amp; Profit Breakdown by Currency Pair</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -96,39 +116,63 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:oracle"></span></div>
       <div>
         <div class="chat-drawer-title">Oracle</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Trading Intelligence</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Trading Specialist (MT5 &amp; cTrader)</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Oracle. Ask me about our open trades, how many trade wins we have, or our genuine win rates from memory.</div>
+        <div class="chat-bubble">Hello! I am Oracle, your trading specialist. Ask me in plain English how much money we made today, or compare our MetaTrader 5 (MT5) and cTrader trades.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What are our open trades &amp; genuine win rates?</button>
-        <button class="chat-hint-chip">Break down win rate by symbol</button>
-        <button class="chat-hint-chip">What do you do?</button>
+        <button class="chat-hint-chip">How much money did we make today?</button>
+        <button class="chat-hint-chip">Compare our MT5 trades and cTrader results</button>
+        <button class="chat-hint-chip">What is our win rate by currency pair?</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Oracle…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Oracle in plain English…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'oracle';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+  let ACTIVE_BROKER = 'mt5';
+
+  function updateBrokerButtonsUI() {
+    document.querySelectorAll('.broker-tab-btn').forEach(btn => {
+      const b = btn.getAttribute('data-broker');
+      if (b === ACTIVE_BROKER) {
+        btn.style.border = '1px solid #10b981';
+        btn.style.background = 'rgba(16,185,129,0.24)';
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.border = '1px solid rgba(255,255,255,0.16)';
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = 'var(--text)';
+        btn.style.fontWeight = '600';
+      }
+    });
+  }
+
+  function selectBroker(brokerKey) {
+    ACTIVE_BROKER = brokerKey || 'mt5';
+    updateBrokerButtonsUI();
+    loadDashboard();
+  }
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -155,31 +199,67 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
   }
 
   async function loadDashboard() {
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data?broker=' + encodeURIComponent(ACTIVE_BROKER), { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
+
+      // Update Broker Plain-English Summary Box
+      const sumBox = document.getElementById('brokerPlainSummaryBox');
+      if (sumBox && d.brokers && d.brokers[ACTIVE_BROKER]) {
+        const bInfo = d.brokers[ACTIVE_BROKER];
+        sumBox.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">' +
+            '<strong style="color:#10b981;font-size:13.5px">Viewing: ' + (bInfo.name || ACTIVE_BROKER.toUpperCase()) + '</strong>' +
+            '<span style="font-size:11.5px;padding:2px 9px;border-radius:6px;background:rgba(16,185,129,0.16);color:#10b981;font-weight:700">' + (bInfo.account_mode || 'Connected') + '</span>' +
+          '</div>' +
+          '<div>' + (bInfo.plain_summary || d.overview || '') + '</div>';
+      } else if (sumBox && d.overview) {
+        sumBox.textContent = d.overview;
+      }
+
+      // Update section headers for active broker
+      const bTitle = ACTIVE_BROKER === 'mt5' ? 'MetaTrader 5 (MT5)' : (ACTIVE_BROKER === 'ctrader' ? 'cTrader Account' : 'All Accounts (MT5 + cTrader)');
+      const pTitle = document.getElementById('primaryCardTitle');
+      const sTitle = document.getElementById('secondaryCardTitle');
+      if (pTitle) pTitle.textContent = 'Completed Trades & Active Watchlist — ' + bTitle;
+      if (sTitle) sTitle.textContent = 'Win Rate & Profit Breakdown by Currency Pair — ' + bTitle;
+
       // KPIs
-            setKpi('pnl_today', d['pnl_today'] != null ? d['pnl_today'] : (d.metrics && d.metrics['pnl_today'] != null ? d.metrics['pnl_today'] : null), d.deltas && d.deltas['pnl_today']);
+      setKpi('pnl_today', d['pnl_today'] != null ? d['pnl_today'] : (d.metrics && d.metrics['pnl_today'] != null ? d.metrics['pnl_today'] : null), d.deltas && d.deltas['pnl_today']);
       setKpi('win_rate', d['win_rate'] != null ? d['win_rate'] : (d.metrics && d.metrics['win_rate'] != null ? d.metrics['win_rate'] : null), d.deltas && d.deltas['win_rate']);
       setKpi('open_trades', d['open_trades'] != null ? d['open_trades'] : (d.metrics && d.metrics['open_trades'] != null ? d.metrics['open_trades'] : null), d.deltas && d.deltas['open_trades']);
       setKpi('signals_today', d['signals_today'] != null ? d['signals_today'] : (d.metrics && d.metrics['signals_today'] != null ? d.metrics['signals_today'] : null), d.deltas && d.deltas['signals_today']);
       setKpi('portfolio_value', d['portfolio_value'] != null ? d['portfolio_value'] : (d.metrics && d.metrics['portfolio_value'] != null ? d.metrics['portfolio_value'] : null), d.deltas && d.deltas['portfolio_value']);
       setKpi('max_drawdown', d['max_drawdown'] != null ? d['max_drawdown'] : (d.metrics && d.metrics['max_drawdown'] != null ? d.metrics['max_drawdown'] : null), d.deltas && d.deltas['max_drawdown']);
-      // Primary section: first array found in data
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
+
+      const primaryArr = d.open_and_recent_trades || [];
+      const secondaryArr = d.win_rate_breakdown || [];
+      if (primaryArr.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
+        if (el) { el.innerHTML = primaryArr.slice(0, 12).map(renderFeedItem).join(''); }
+      } else {
+        const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
+        if (keys.length > 0) {
+          const el = document.getElementById('section_primary');
+          if (el) { el.innerHTML = d[keys[0]].slice(0, 10).map(renderFeedItem).join(''); }
+        } else { offlinePanel('section_primary'); }
+      }
+
+      if (secondaryArr.length > 0) {
         const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+        if (el2) { el2.innerHTML = secondaryArr.slice(0, 10).map(renderFeedItem).join(''); }
+      } else {
+        const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
+        if (keys.length > 1) {
+          const el2 = document.getElementById('section_secondary');
+          if (el2) { el2.innerHTML = d[keys[1]].slice(0, 8).map(renderFeedItem).join(''); }
+        } else { offlinePanel('section_secondary'); }
+      }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       offlinePanel('section_primary');
@@ -209,7 +289,10 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const html = (role === 'agent' && typeof window.formatReadableMarkdown === 'function')
+      ? window.formatReadableMarkdown(text)
+      : String(text || '').replace(/</g, '&lt;');
+    d.innerHTML='<div class="chat-bubble">'+html+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -230,10 +313,11 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+      addMsg('agent', data.response||data.reply||data.message||'Here is your latest trading update.');
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 
+  updateBrokerButtonsUI();
   checkConn();
   loadDashboard();
   setInterval(loadDashboard, 45000);

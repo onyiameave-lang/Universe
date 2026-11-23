@@ -50,7 +50,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Live Feed</span>
+            <span class="card-title">Saved System Records &amp; Trade Notes (Plain English)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -63,7 +63,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Secondary Data</span>
+            <span class="card-title">Recent Trading &amp; Research Sessions</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -86,20 +86,20 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:chronicle"></span></div>
       <div>
         <div class="chat-drawer-title">Chronicle</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">History & Logging</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">History &amp; Saved Records</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Greetings. I am Chronicle, the keeper of eternal records. How may I illuminate the path before you?</div>
+        <div class="chat-bubble">Hello! I am Chronicle, the system's memory bank. Ask me to look up our recent trades, research reports, or system notes.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What is your current status?</button>
-        <button class="chat-hint-chip">Show me the latest data</button>
-        <button class="chat-hint-chip">Explain your top signal</button>
+        <button class="chat-hint-chip">What did you save in memory today?</button>
+        <button class="chat-hint-chip">Show me our recent trade history</button>
+        <button class="chat-hint-chip">How many records are stored right now?</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Chronicle…"></textarea>
@@ -109,13 +109,13 @@
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'chronicle';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;

@@ -1202,10 +1202,19 @@ app.get("/agents/:name/status", (req, res) => {
   });
 });
 
-app.get("/agents/:name/data", (req, res) => {
+app.get("/agents/:name/data", async (req, res) => {
   const name = req.params.name.toLowerCase();
   if (!AGENT_MANIFESTS[name]) {
     return res.status(404).json({ error: `Unknown agent: ${name}` });
+  }
+  const broker = String(req.query.broker || "all").toLowerCase();
+  const pyRich = await runNexusCoordinationBridge({
+    action: "dashboard_data",
+    agent_id: name,
+    broker,
+  });
+  if (pyRich && pyRich.id) {
+    return res.json(pyRich);
   }
   res.json(buildDynamicAgentData(name));
 });

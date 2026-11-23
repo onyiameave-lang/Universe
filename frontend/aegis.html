@@ -60,7 +60,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Security &amp; Constitutional Risk Shield (SL &lt; TP Law &amp; Pre-Trade Vetoes)</span>
+            <span class="card-title">Active Safety Rules &amp; Blocked Risky Trades</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -73,7 +73,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">9-Agent Constitutional Compliance &amp; Threat Audit</span>
+            <span class="card-title">All 9 Agents Safety &amp; Health Status</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -96,20 +96,20 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:aegis"></span></div>
       <div>
         <div class="chat-drawer-title">Aegis</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Security Intelligence</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Security &amp; Safety Shield</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Aegis, your security &amp; constitutional risk-shield agent. Ask me about our SL &lt; TP risk law, blocked bad trades, or compliance status.</div>
+        <div class="chat-bubble">Hello! I am Aegis, your safety and risk protection assistant. Ask me how we protect your account from risky trades or check our system safety status.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">How does our SL &lt; TP risk law protect us?</button>
-        <button class="chat-hint-chip">How many bad trades did you block?</button>
-        <button class="chat-hint-chip">What do you do?</button>
+        <button class="chat-hint-chip">How do you protect our account from bad trades?</button>
+        <button class="chat-hint-chip">How many risky trades did you block?</button>
+        <button class="chat-hint-chip">Is the system safe right now?</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Aegis…"></textarea>
@@ -119,13 +119,13 @@
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'aegis';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
