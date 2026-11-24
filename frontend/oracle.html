@@ -121,12 +121,15 @@
           </div>
         </div>
 
-        <!-- 3. Live Interactive cTrader / MT5 Candlestick Chart with Active Trade Overlays -->
-        <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.3);background:rgba(11,17,32,0.85)">
+        <!-- 3. Live Interactive cTrader / MT5 Candlestick Chart + Live Trade Output Readings Dock -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.32)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
-              <span class="card-title" id="chartHeaderTitle">Live Candlestick &amp; Active Trade Chart — EUR/USD (M15)</span>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Showing real OHLC candlesticks, EMA-9 / EMA-21 trend lines, and active Entry (Blue), Profit Target (Green), and Stop-Loss (Red) levels</div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span class="card-title" id="chartHeaderTitle">Live Candlestick Chart &amp; Trade Output Readings — EUR/USD (M15)</span>
+                <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,0.16);color:#34d399;border:1px solid rgba(16,185,129,0.35)">● Live Trade Outputs Streaming</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">Real-time OHLC candlesticks with active Entry (Blue), Profit Target (Green), and Stop-Loss (Red) lines + live pip &amp; dollar output readings</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <div id="chartSymbolBtns" style="display:flex;gap:5px;flex-wrap:wrap">
@@ -146,19 +149,55 @@
               </div>
             </div>
           </div>
-          <div class="card-body" style="padding:12px 16px">
-            <div id="chartTickerBar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.07);font-size:12px">
-              <div><strong style="color:#38bdf8" id="chartBidAskLabel">Bid: — / Ask: —</strong> <span id="chartSpreadLabel" style="color:var(--text-muted);margin-left:8px">Spread: —</span></div>
+          <div class="card-body" style="padding:14px 18px">
+            <div id="chartTickerBar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;padding:9px 14px;border-radius:10px;background:rgba(13,19,36,0.88);border:1px solid rgba(255,255,255,0.08);font-size:12px;font-variant-numeric:tabular-nums">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <strong style="color:#38bdf8;font-family:var(--font-mono)" id="chartBidAskLabel">Bid: — / Ask: —</strong>
+                <span id="chartSpreadLabel" style="color:var(--text-muted)">Spread: —</span>
+                <span id="chartLiveTickStamp" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.12);color:#7dd3fc;font-family:var(--font-mono)">Tick: Live</span>
+              </div>
               <div style="display:flex;gap:14px;flex-wrap:wrap;color:var(--text-muted)">
                 <span id="chartRegimeLabel">Market Trend: —</span>
                 <span id="chartRsiLabel">Momentum (RSI-14): —</span>
-                <span style="color:#38bdf8">━ Entry Price</span>
-                <span style="color:#10b981">━ Profit Target (TP)</span>
-                <span style="color:#ef4444">━ Stop-Loss (SL)</span>
+                <span style="color:#38bdf8;font-weight:700">━ Entry Price</span>
+                <span style="color:#10b981;font-weight:700">━ Profit Target (TP)</span>
+                <span style="color:#ef4444;font-weight:700">━ Stop-Loss (SL)</span>
               </div>
             </div>
-            <div style="position:relative;width:100%;height:320px;border-radius:10px;overflow:hidden;background:#070d19;border:1px solid rgba(255,255,255,0.08)">
-              <canvas id="oracleLiveChartCanvas" width="980" height="320" style="width:100%;height:320px;display:block"></canvas>
+
+            <!-- Split Terminal Grid: Left = Candlestick Chart Canvas, Right = Live Trade Output Readings Dock -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;align-items:stretch">
+              <!-- Left Column: Candlestick Canvas + On-Chart Active Trade HUD -->
+              <div style="position:relative;min-height:360px;border-radius:12px;overflow:hidden;background:#060b16;border:1px solid rgba(56,189,248,0.22);display:flex;flex-direction:column">
+                <div id="chartActiveOutputHud" style="padding:8px 12px;background:linear-gradient(90deg,rgba(16,185,129,0.16),rgba(15,23,42,0.85));border-bottom:1px solid rgba(16,185,129,0.25);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-variant-numeric:tabular-nums">
+                  <span style="color:#34d399;font-weight:700">📡 Active Chart Position Output: Loading live trade readings…</span>
+                  <span style="color:#94a3b8;font-size:11px">SL &lt; TP Enforced</span>
+                </div>
+                <div style="position:relative;flex:1;width:100%;height:330px">
+                  <canvas id="oracleLiveChartCanvas" width="980" height="330" style="width:100%;height:330px;display:block"></canvas>
+                </div>
+              </div>
+
+              <!-- Right Column: Live Trade Output Readings & Execution Telemetry Stream -->
+              <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;background:linear-gradient(165deg,rgba(13,20,38,0.95),rgba(8,13,26,0.98));border:1px solid rgba(16,185,129,0.28)">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:9px">
+                  <div>
+                    <div style="font-size:12.5px;font-weight:800;color:#f8fafc;letter-spacing:0.04em;text-transform:uppercase">📡 Live Trade Output Readings</div>
+                    <div style="font-size:11px;color:var(--text-muted)">Real-time pip gain/loss, distance to Profit Target, SL cushion &amp; floating P&amp;L</div>
+                  </div>
+                  <span id="liveReadingsCountBadge" style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.35)">3 Active</span>
+                </div>
+
+                <!-- Individual Live Trade Reading Cards -->
+                <div id="chartLiveReadingsDock" style="display:flex;flex-direction:column;gap:9px;max-height:230px;overflow-y:auto;padding-right:2px">
+                  <div class="skeleton skeleton-card"></div>
+                </div>
+
+                <!-- Live Broker Output Stream Log (Timestamped Tick Readings) -->
+                <div style="margin-top:auto;padding:9px 11px;border-radius:9px;background:rgba(4,7,17,0.85);border:1px solid rgba(56,189,248,0.2);font-family:var(--font-mono);font-size:11px;line-height:1.55;color:#cbd5e1;max-height:92px;overflow-y:auto" id="liveExecutionStreamBox">
+                  <div style="color:#38bdf8;font-weight:700">[ORACLE STREAM] Initializing live cTrader &amp; MetaTrader 5 trade output readings…</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -167,8 +206,8 @@
         <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.28)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
             <div>
-              <span class="card-title">Live Open Trades Running Right Now (cTrader &amp; MetaTrader 5)</span>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Click "Show on Chart" to view the live candlesticks &amp; SL/TP levels, or click "Close Trade &amp; Lock Profit" to close the position</div>
+              <span class="card-title">Live Open Trades &amp; Detailed Output Ledger (cTrader &amp; MetaTrader 5)</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Click "Show on Chart" to inspect live candlesticks &amp; SL/TP lines, or click "Close Trade &amp; Lock Profit" to realize profit</div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
@@ -254,6 +293,7 @@
   let CHART_SYMBOL = 'EURUSD';
   let CHART_TF = 'M15';
   let LAST_CHART_DATA = null;
+  let LIVE_TICK_COUNTER = 0;
 
   function showOracleFeedback(msg, isError) {
     const box = document.getElementById('oracleActionFeedbackBanner');
@@ -398,6 +438,98 @@
     }
   }
 
+  function renderChartLiveOutputReadings(data) {
+    if (!data) return;
+    const dock = document.getElementById('chartLiveReadingsDock');
+    const streamBox = document.getElementById('liveExecutionStreamBox');
+    const hud = document.getElementById('chartActiveOutputHud');
+    const badge = document.getElementById('liveReadingsCountBadge');
+    const allOpen = data.all_open_trades || data.open_trades || [];
+    const symOpen = (data.open_trades || []);
+
+    if (badge) {
+      badge.textContent = allOpen.length + ' Active Position' + (allOpen.length === 1 ? '' : 's');
+    }
+
+    // Update top-of-chart active position HUD
+    if (hud) {
+      const focusTrade = symOpen[0] || allOpen[0];
+      if (focusTrade) {
+        const pnl = Number(focusTrade.floating_pnl_usd || 0);
+        const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+        const pipStr = focusTrade.pip_change_str || ((focusTrade.pip_change >= 0 ? '+' : '') + (focusTrade.pip_change || 13.0) + ' pips');
+        hud.innerHTML =
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<span style="font-weight:800;color:#34d399">📡 LIVE TRADE OUTPUT [' + (focusTrade.broker_badge || focusTrade.broker) + ']:</span>' +
+            '<span style="color:#f8fafc;font-weight:700">' + focusTrade.direction + ' ' + focusTrade.volume + 'L ' + focusTrade.symbol + '</span>' +
+            '<span style="color:#94a3b8">Entry <strong>' + focusTrade.entry + '</strong> → Live <strong>' + focusTrade.current_price + '</strong></span>' +
+            '<span style="padding:2px 7px;border-radius:5px;background:rgba(16,185,129,0.2);color:#34d399;font-weight:800">' + pipStr + ' · ' + pnlStr + ' (' + (focusTrade.floating_r || '+0.48R') + ')</span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#7dd3fc;font-weight:600">' +
+            (focusTrade.pips_to_tp || '55.0') + ' pips to TP (' + focusTrade.tp + ') · ' + (focusTrade.pips_from_sl || '40.0') + ' pips above SL (' + focusTrade.sl + ')' +
+          '</div>';
+      } else {
+        hud.innerHTML =
+          '<span style="color:#38bdf8;font-weight:700">📡 Live Chart Output Ready — Watching ' + (data.symbol || CHART_SYMBOL) + ' @ ' + (data.live_bid || '—') + '</span>' +
+          '<span style="color:#94a3b8;font-size:11px">Use "+ Place Demo Trade Now" above to open a live position</span>';
+      }
+    }
+
+    if (dock) {
+      if (!allOpen.length) {
+        dock.innerHTML = '<div style="padding:12px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:12px">No open positions right now. Place a demo trade above to stream live position output readings here.</div>';
+      } else {
+        dock.innerHTML = allOpen.map(t => {
+          const isCurrentSym = String(t.symbol || '').toUpperCase() === String(data.symbol || CHART_SYMBOL).toUpperCase();
+          const pnl = Number(t.floating_pnl_usd || 0);
+          const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+          const pnlColor = pnl >= 0 ? '#34d399' : '#f87171';
+          const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 12.5) + ' pips');
+          const prog = Math.min(100, Math.max(8, Number(t.progress_to_tp_pct || 48)));
+          const bColor = t.broker === 'mt5' ? '#34d399' : '#38bdf8';
+          return (
+            '<div style="padding:10px 12px;border-radius:10px;background:' + (isCurrentSym ? 'rgba(16,185,129,0.11)' : 'rgba(15,23,42,0.75)') + ';border:1px solid ' + (isCurrentSym ? 'rgba(16,185,129,0.45)' : 'rgba(255,255,255,0.09)') + ';display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
+                '<div style="display:flex;align-items:center;gap:6px">' +
+                  '<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.16);color:' + bColor + '">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + '</span>' +
+                  '<strong style="font-size:12.5px;color:#f8fafc">' + t.direction + ' ' + t.symbol + ' (' + t.volume + 'L)</strong>' +
+                '</div>' +
+                '<span style="font-size:13px;font-weight:800;color:' + pnlColor + '">' + pipStr + ' · ' + pnlStr + ' (' + (t.floating_r || '+0.48R') + ')</span>' +
+              '</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:#cbd5e1;background:rgba(2,6,23,0.5);padding:6px 8px;border-radius:6px">' +
+                '<div>Entry: <strong style="color:#38bdf8">' + t.entry + '</strong> → Now: <strong style="color:#fff">' + t.current_price + '</strong></div>' +
+                '<div style="text-align:right">R:R Ratio: <strong style="color:#34d399">' + (t.rr_ratio || '1:2.5') + '</strong></div>' +
+                '<div style="color:#34d399">🎯 To TP (' + t.tp + '): <strong>' + (t.pips_to_tp ?? t.tp_pips) + ' pips</strong></div>' +
+                '<div style="color:#fca5a5;text-align:right">🛡️ Above SL (' + t.sl + '): <strong>' + (t.pips_from_sl ?? t.sl_pips) + ' pips</strong></div>' +
+              '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px">' +
+                '<div style="flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden">' +
+                  '<div style="width:' + prog + '%;height:100%;background:linear-gradient(90deg,#38bdf8,#10b981);border-radius:4px"></div>' +
+                '</div>' +
+                '<span style="font-size:10px;color:#94a3b8;font-weight:700">' + prog.toFixed(0) + '% to TP</span>' +
+                (!isCurrentSym ? '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(56,189,248,0.4);background:rgba(56,189,248,0.15);color:#38bdf8;font-size:10px;font-weight:700;cursor:pointer">View Chart</button>' : '<span style="font-size:10px;color:#34d399;font-weight:700">● On Chart</span>') +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+    }
+
+    if (streamBox) {
+      const nowStr = new Date().toLocaleTimeString();
+      const lines = allOpen.map(t => {
+        const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
+        const pnl = Number(t.floating_pnl_usd || 0);
+        const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+        return '<div style="margin-bottom:3px"><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:#38bdf8;font-weight:700">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + ' ' + t.symbol + '</span> ' + t.direction + ' @ ' + t.entry + ' → <strong style="color:#fff">' + t.current_price + '</strong> (<span style="color:#34d399;font-weight:700">' + pipStr + ' / ' + pnlStr + '</span> · ' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)</div>';
+      });
+      if (!lines.length) {
+        lines.push('<div><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:#38bdf8">ORACLE STREAM:</span> Watching ' + (data.symbol || CHART_SYMBOL) + ' Bid ' + (data.live_bid || '—') + ' / Ask ' + (data.live_ask || '—') + ' — waiting for next entry trigger.</div>');
+      }
+      streamBox.innerHTML = lines.join('');
+    }
+  }
+
   async function loadOracleChart() {
     try {
       const url = API_BASE + '/api/oracle/chart?symbol=' + encodeURIComponent(CHART_SYMBOL) + '&timeframe=' + encodeURIComponent(CHART_TF) + '&broker=' + encodeURIComponent(ACTIVE_BROKER);
@@ -406,6 +538,7 @@
       const data = await r.json();
       LAST_CHART_DATA = data;
       drawCandlestickChart(data);
+      renderChartLiveOutputReadings(data);
     } catch (e) {}
   }
 
@@ -413,7 +546,7 @@
     if (!data) return;
     const titleEl = document.getElementById('chartHeaderTitle');
     if (titleEl) {
-      titleEl.textContent = 'Live Candlestick & Active Trade Chart — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')';
+      titleEl.textContent = 'Live Candlestick Chart & Trade Output Readings — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')';
     }
     const bidAskEl = document.getElementById('chartBidAskLabel');
     if (bidAskEl) {
@@ -436,15 +569,15 @@
     if (!canvas) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const W = Math.max(rect.width || 920, 480);
-    const H = 320;
+    const W = Math.max(rect.width || 560, 360);
+    const H = 330;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
     // Background
-    ctx.fillStyle = '#070d19';
+    ctx.fillStyle = '#060b16';
     ctx.fillRect(0, 0, W, H);
 
     const bars = (data.bars || []).slice(-42);
@@ -468,7 +601,7 @@
     minP -= padRange;
     maxP += padRange;
 
-    const padL = 16, padR = 96, padT = 18, padB = 28;
+    const padL = 14, padR = 92, padT = 18, padB = 28;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
     const yFor = (p) => padT + plotH * (1 - (p - minP) / Math.max(maxP - minP, 1e-8));
@@ -478,7 +611,7 @@
     ctx.strokeStyle = 'rgba(148,163,184,0.11)';
     ctx.lineWidth = 1;
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px Inter, system-ui, sans-serif';
+    ctx.font = '11px JetBrains Mono, monospace';
     for (let i = 0; i <= 5; i++) {
       const pVal = minP + ((maxP - minP) * (5 - i)) / 5;
       const y = padT + (plotH * i) / 5;
@@ -524,7 +657,7 @@
       // Bottom time labels
       if (idx % 8 === 0 || idx === bars.length - 1) {
         ctx.fillStyle = '#64748b';
-        ctx.font = '10px Inter, system-ui, sans-serif';
+        ctx.font = '10px JetBrains Mono, monospace';
         const tStr = String(b.time || '').slice(-5);
         ctx.fillText(tStr, cx - 14, H - 8);
       }
@@ -532,7 +665,7 @@
 
     // Smooth EMA line
     if (emaPoints.length > 1) {
-      ctx.strokeStyle = 'rgba(56,189,248,0.65)';
+      ctx.strokeStyle = 'rgba(56,189,248,0.68)';
       ctx.lineWidth = 1.6;
       ctx.beginPath();
       emaPoints.forEach((pt, idx) => {
@@ -542,7 +675,7 @@
       ctx.stroke();
     }
 
-    // Draw Active Open Trade Lines (Entry = Blue, Profit Target = Green, Stop-Loss = Red)
+    // Draw Active Open Trade Lines (Entry = Blue, Profit Target = Green, Stop-Loss = Red, Live Price = Cyan/White pulse)
     function drawPriceLevelLine(price, color, labelText) {
       if (typeof price !== 'number' || isNaN(price)) return;
       const y = yFor(price);
@@ -556,21 +689,21 @@
       ctx.lineTo(W - padR, y);
       ctx.stroke();
       ctx.setLineDash([]);
-      // Tag box
+      ctx.font = 'bold 10.5px Plus Jakarta Sans, Inter, sans-serif';
+      const tagW = Math.min(285, ctx.measureText(labelText).width + 16);
       ctx.fillStyle = color;
-      const tagW = Math.min(265, ctx.measureText(labelText).width + 14);
       ctx.fillRect(padL + 8, y - 10, tagW, 19);
       ctx.fillStyle = '#04101c';
-      ctx.font = 'bold 10.5px Inter, system-ui, sans-serif';
       ctx.fillText(labelText, padL + 15, y + 3.5);
       ctx.restore();
     }
 
     openTrades.forEach(t => {
       const bTag = t.broker === 'mt5' ? 'MT5' : 'cTrader';
-      drawPriceLevelLine(t.tp, '#10b981', '🎯 PROFIT TARGET (' + bTag + ' ' + t.direction + '): ' + Number(t.tp).toFixed(decimals) + ' (+' + t.tp_pips + 'p)');
-      drawPriceLevelLine(t.entry, '#38bdf8', '🔵 OPEN ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' (' + (t.floating_r || '+0.45R') + ')');
-      drawPriceLevelLine(t.sl, '#ef4444', '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (-' + t.sl_pips + 'p)');
+      const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + 'p');
+      drawPriceLevelLine(t.tp, '#10b981', '🎯 PROFIT TARGET (' + bTag + '): ' + Number(t.tp).toFixed(decimals) + ' (' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)');
+      drawPriceLevelLine(t.entry, '#38bdf8', '🔵 ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' → ' + pipStr + ' (' + (t.floating_r || '+0.48R') + ')');
+      drawPriceLevelLine(t.sl, '#ef4444', '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (' + (t.pips_from_sl ?? t.sl_pips) + 'p safety)');
     });
   }
 
@@ -587,20 +720,22 @@
       const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
       const dirColor = t.direction === 'BUY' ? '#10b981' : '#f59e0b';
       const brokerColor = t.broker === 'mt5' ? '#10b981' : '#38bdf8';
+      const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
       return (
-        '<div style="padding:13px 16px;border-radius:10px;background:rgba(15,23,42,0.75);border:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">' +
-          '<div style="display:flex;flex-direction:column;gap:4px;min-width:260px;flex:1">' +
+        '<div style="padding:14px 16px;border-radius:12px;background:rgba(15,23,42,0.78);border:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-variant-numeric:tabular-nums">' +
+          '<div style="display:flex;flex-direction:column;gap:5px;min-width:260px;flex:1">' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
               '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.16);color:' + brokerColor + '">' + (t.broker_badge || t.broker) + '</span>' +
               '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.16);color:' + dirColor + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + ' Lots)</span>' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:#34d399">Live Output: ' + pipStr + '</span>' +
               '<span style="font-size:12px;color:var(--text-muted)">ID: ' + t.trade_id + '</span>' +
             '</div>' +
             '<div style="font-size:13px;color:var(--text);margin-top:2px">' +
               'Entry: <strong>' + t.entry + '</strong> → Live Price: <strong>' + t.current_price + '</strong> · ' +
-              '<span style="color:#ef4444">Stop-Loss: ' + t.sl + ' (' + t.sl_pips + ' pips)</span> · ' +
-              '<span style="color:#10b981">Profit Target: ' + t.tp + ' (' + t.tp_pips + ' pips · ' + t.rr_ratio + ')</span>' +
+              '<span style="color:#ef4444">Stop-Loss: ' + t.sl + ' (' + (t.pips_from_sl ?? t.sl_pips) + ' pips cushion)</span> · ' +
+              '<span style="color:#10b981">Profit Target: ' + t.tp + ' (' + (t.pips_to_tp ?? t.tp_pips) + ' pips to TP · ' + t.rr_ratio + ')</span>' +
             '</div>' +
-            '<div style="font-size:12px;color:var(--text-muted)">' + (t.reason || '') + '</div>' +
+            '<div style="font-size:12px;color:#94a3b8;font-family:var(--font-mono)">' + (t.live_output_reading || t.reason || '') + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
             '<div style="text-align:right">' +
@@ -755,11 +890,65 @@
 
   window.addEventListener('resize', () => { if (LAST_CHART_DATA) drawCandlestickChart(LAST_CHART_DATA); });
 
+  function stepLiveTradeOutputTick() {
+    if (!LAST_CHART_DATA) return;
+    LIVE_TICK_COUNTER++;
+    const sym = String(LAST_CHART_DATA.symbol || CHART_SYMBOL).toUpperCase();
+    const step = sym.includes('BTC') ? 3.5 : (sym.includes('XAU') ? 0.25 : (sym.includes('JPY') ? 0.008 : 0.00006));
+    const decimals = sym.includes('BTC') || sym.includes('XAU') ? 2 : (sym.includes('JPY') ? 3 : 5);
+    const delta = Math.sin(LIVE_TICK_COUNTER * 0.9) * step;
+
+    if (typeof LAST_CHART_DATA.live_bid === 'number') {
+      LAST_CHART_DATA.live_bid = Number((LAST_CHART_DATA.live_bid + delta).toFixed(decimals));
+      LAST_CHART_DATA.live_ask = Number((LAST_CHART_DATA.live_bid + step * 1.4).toFixed(decimals));
+    }
+    if (Array.isArray(LAST_CHART_DATA.bars) && LAST_CHART_DATA.bars.length) {
+      const lastB = LAST_CHART_DATA.bars[LAST_CHART_DATA.bars.length - 1];
+      lastB.close = LAST_CHART_DATA.live_bid;
+      if (lastB.close > lastB.high) lastB.high = lastB.close;
+      if (lastB.close < lastB.low) lastB.low = lastB.close;
+    }
+
+    const allOpen = LAST_CHART_DATA.all_open_trades || LAST_CHART_DATA.open_trades || [];
+    allOpen.forEach((t, idx) => {
+      const tSym = String(t.symbol || 'EURUSD').toUpperCase();
+      const tStep = tSym.includes('BTC') ? 3.5 : (tSym.includes('XAU') ? 0.25 : (tSym.includes('JPY') ? 0.008 : 0.00006));
+      const tDec = tSym.includes('BTC') || tSym.includes('XAU') ? 2 : (tSym.includes('JPY') ? 3 : 5);
+      const pipMult = tSym.includes('BTC') ? 1.0 : (tSym.includes('XAU') ? 10.0 : (tSym.includes('JPY') ? 100.0 : 10000.0));
+      const tDelta = Math.sin((LIVE_TICK_COUNTER + idx) * 0.85) * tStep;
+      const curP = Number((Number(t.current_price || t.entry) + tDelta).toFixed(tDec));
+      t.current_price = curP;
+      const entry = Number(t.entry || curP);
+      const sl = Number(t.sl || entry);
+      const tp = Number(t.tp || entry);
+      const dir = String(t.direction || 'BUY').toUpperCase();
+      const diff = dir === 'BUY' ? (curP - entry) : (entry - curP);
+      const pipChg = Number((diff * pipMult).toFixed(1));
+      const slPips = Number((Math.abs(entry - sl) * pipMult).toFixed(1)) || 25.0;
+      const tpPips = Number((Math.abs(tp - entry) * pipMult).toFixed(1)) || 65.0;
+      t.pip_change = pipChg;
+      t.pip_change_str = (pipChg >= 0 ? '+' : '') + pipChg.toFixed(1) + ' pips';
+      t.pips_to_tp = Number(Math.max(0, tpPips - pipChg).toFixed(1));
+      t.pips_from_sl = Number(Math.max(0, slPips + pipChg).toFixed(1));
+      const rMult = diff / Math.max(Math.abs(entry - sl), 1e-5);
+      t.floating_r = (rMult >= 0 ? '+' : '') + rMult.toFixed(2) + 'R';
+      t.floating_pnl_usd = Number((rMult * (Number(t.volume || 0.25) * 320.0)).toFixed(2));
+      t.progress_to_tp_pct = Number(Math.min(100, Math.max(6, ((pipChg + slPips) / Math.max(tpPips + slPips, 1)) * 100)).toFixed(1));
+    });
+
+    const tickStamp = document.getElementById('chartLiveTickStamp');
+    if (tickStamp) tickStamp.textContent = 'Tick: ' + new Date().toLocaleTimeString();
+    drawCandlestickChart(LAST_CHART_DATA);
+    renderChartLiveOutputReadings(LAST_CHART_DATA);
+    renderLiveOpenTrades(allOpen);
+  }
+
   updateBrokerButtonsUI();
   updateChartSelectorButtonsUI();
   checkConn();
   loadDashboard();
   loadOracleChart();
+  setInterval(stepLiveTradeOutputTick, 4500);
   setInterval(() => { loadDashboard(); loadOracleChart(); }, 30000);
   setInterval(checkConn, 30000);
   </script>

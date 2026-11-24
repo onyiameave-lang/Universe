@@ -2756,6 +2756,30 @@ app.post("/api/feeds/refresh", async (req, res) => {
   res.json(data || { status: "error", message: "Could not refresh live feeds" });
 });
 
+app.get("/api/sentinel/news", async (_req, res) => {
+  const pyRich = await runNexusCoordinationBridge({
+    action: "dashboard_data",
+    agent_id: "sentinel",
+    broker: "all",
+  });
+  res.json({
+    status: "ok",
+    news: pyRich?.news_articles || pyRich?.world_news_feed || [],
+  });
+});
+
+app.get("/api/pulse/social", async (_req, res) => {
+  const pyRich = await runNexusCoordinationBridge({
+    action: "dashboard_data",
+    agent_id: "pulse",
+    broker: "all",
+  });
+  res.json({
+    status: "ok",
+    posts: pyRich?.social_posts || pyRich?.social_posts_feed || [],
+  });
+});
+
 // ── Interactive Chronicle, Aegis & Genesis Specialist Action Route ──
 app.post("/api/specialist/action", async (req, res) => {
   const data = await runNexusCoordinationBridge({

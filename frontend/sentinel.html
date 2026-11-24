@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:sentinel"></span></div>
         <div>
           <div class="topbar-title">Sentinel</div>
-          <div class="topbar-subtitle">The Eternal Watcher — Global News &amp; Photo Article Reader</div>
+          <div class="topbar-subtitle">Global Newsroom &amp; Illustrated Journalism Desk</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -25,64 +25,85 @@
           <button class="icon-btn theme-toggle-btn" title="Toggle theme"><span data-icon="ui:theme" class="icon-md"></span></button>
         </div>
       </header>
+
       <main class="dashboard-content">
-        <!-- Interactive News Wire Scanner Control Bar -->
-        <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.35);background:rgba(15,23,42,0.65)">
-          <div class="card-body" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <!-- 1. Editorial Newsroom Masthead & Wire Scanner -->
+        <div class="card" style="border:1px solid rgba(245,158,11,0.38);background:radial-gradient(120% 120% at 0% 0%,rgba(245,158,11,0.16) 0%,rgba(56,189,248,0.06) 52%,rgba(11,16,30,0.96) 100%)">
+          <div class="card-body" style="padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
             <div>
-              <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">Live Global News Desk (BBC · CNBC · Al Jazeera · WSJ · MarketWatch · OilPrice)</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Click any headline or photo below to open the full article reader and see how it affects our currency, gold, and stock trades</div>
+              <div style="display:inline-flex;align-items:center;gap:8px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.38);color:#fbbf24;font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">
+                ● Live International Press Edition · BBC · CNBC · Al Jazeera · WSJ · MarketWatch · OilPrice
+              </div>
+              <div style="font-family:var(--font-mythic);font-size:19px;font-weight:700;color:#f8fafc;letter-spacing:0.03em">
+                The Sentinel Global Newsroom
+              </div>
+              <div style="font-size:12.5px;color:#cbd5e1;margin-top:3px">
+                Read today’s breaking world, technology, energy, and economic journalism. If you ever want to see how a story could affect markets or trades, click the optional <strong>“💡 Market &amp; Trade Impact”</strong> button on any article.
+              </div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <button type="button" id="btnScanNewsNow" onclick="triggerLiveNewsScan()" style="padding:9px 16px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.2);color:#38bdf8;font-weight:700;font-size:12.5px;cursor:pointer">
-                🔄 Scan Live World News Wires Now
+              <button type="button" id="btnScanNewsNow" onclick="triggerLiveNewsScan()" style="padding:10px 18px;border-radius:10px;border:1px solid #f59e0b;background:linear-gradient(135deg,rgba(245,158,11,0.28),rgba(234,88,12,0.2));color:#fde68a;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 4px 18px rgba(245,158,11,0.18)">
+                🔄 Fetch Latest Global News Edition
               </button>
             </div>
           </div>
-          <div id="sentinelScanBanner" style="display:none;margin:0 18px 14px 18px;padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.12);border-left:3px solid #10b981;font-size:13px;color:var(--text)"></div>
+          <div id="sentinelScanBanner" style="display:none;margin:0 22px 16px 22px;padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.12);border-left:3px solid #10b981;font-size:13px;color:var(--text)"></div>
         </div>
 
+        <!-- 2. Newsroom KPIs -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">News Stories Today</div>
+            <div class="kpi-label">Stories in Today's Edition</div>
             <div class="kpi-value" id="kpi_alerts_today">—</div>
-            <div class="kpi-delta neg" id="kpid_alerts_today"></div>
+            <div class="kpi-delta pos" id="kpid_alerts_today">Verified Reporting</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Global News Mood</div>
+            <div class="kpi-label">Editorial Edition</div>
             <div class="kpi-value" id="kpi_market_sentiment">—</div>
             <div class="kpi-delta neu" id="kpid_market_sentiment"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">News Outlets Watched</div>
+            <div class="kpi-label">Press Desks Monitored</div>
             <div class="kpi-value" id="kpi_sources_monitored">—</div>
             <div class="kpi-delta neu" id="kpid_sources_monitored"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Cautionary Alerts</div>
+            <div class="kpi-label">Developing Dispatches</div>
             <div class="kpi-value" id="kpi_threats_detected">—</div>
-            <div class="kpi-delta neg" id="kpid_threats_detected"></div>
+            <div class="kpi-delta neu" id="kpid_threats_detected"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Article Coverage</div>
+            <div class="kpi-label">Photo Journalism</div>
             <div class="kpi-value" id="kpi_coverage_pct">—</div>
-            <div class="kpi-delta neu" id="kpid_coverage_pct"></div>
+            <div class="kpi-delta pos" id="kpid_coverage_pct"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">News Watch Status</div>
+            <div class="kpi-label">Newsroom Wire</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
 
-        <!-- Photo News Grid -->
+        <!-- 3. Featured Lead Story Spotlight -->
+        <div id="sentinelLeadStoryContainer"></div>
+
+        <!-- 4. Illustrated Magazine Grid with Topic Filter Tabs -->
         <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">Breaking World &amp; Financial News Stories (Click Any Headline or Photo to Read Full Article)</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <span class="card-title">Today's Illustrated World &amp; Economic News Stories</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Click any photograph or headline to read the full story — or optionally expand the market &amp; trade perspective</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="newsTopicFilterBtns">
+              <button type="button" class="news-filter-btn" data-filter="ALL" onclick="filterNewsByTopic('ALL')" style="padding:6px 12px;border-radius:20px;border:1px solid #f59e0b;background:rgba(245,158,11,0.24);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer">All Desks</button>
+              <button type="button" class="news-filter-btn" data-filter="WORLD" onclick="filterNewsByTopic('WORLD')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:11.5px;font-weight:600;cursor:pointer">🌍 World &amp; Diplomacy</button>
+              <button type="button" class="news-filter-btn" data-filter="ECONOMY" onclick="filterNewsByTopic('ECONOMY')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:11.5px;font-weight:600;cursor:pointer">🏛️ Economy &amp; Business</button>
+              <button type="button" class="news-filter-btn" data-filter="ENERGY" onclick="filterNewsByTopic('ENERGY')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:11.5px;font-weight:600;cursor:pointer">⚡ Energy &amp; Resources</button>
+              <button type="button" class="news-filter-btn" data-filter="TECH" onclick="filterNewsByTopic('TECH')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#cbd5e1;font-size:11.5px;font-weight:600;cursor:pointer">💻 Tech &amp; Innovation</button>
+            </div>
           </div>
           <div class="card-body">
-            <div id="section_primary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+            <div id="section_primary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
               <div class="skeleton skeleton-card"></div>
               <div class="skeleton skeleton-card"></div>
               <div class="skeleton skeleton-card"></div>
@@ -90,9 +111,10 @@
           </div>
         </div>
 
+        <!-- 5. Newsroom Wire Index -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Global Geopolitical &amp; Market Impact Radar (Click Any Item to Read Details)</span>
+            <span class="card-title">International Wire Dispatches &amp; Press Briefings</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -106,27 +128,42 @@
     </div>
   </div>
 
-  <!-- Deep Article Reader Modal -->
-  <div id="articleReaderModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.82);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeArticleModal()">
-    <div style="max-width:740px;width:100%;max-height:90vh;overflow-y:auto;border-radius:16px;background:#0f172a;border:1px solid rgba(56,189,248,0.35);box-shadow:0 24px 60px rgba(0,0,0,0.65);color:var(--text)">
-      <div style="position:relative;width:100%;height:240px;background:#070d19;overflow:hidden">
+  <!-- Deep Magazine Article Reader Modal -->
+  <div id="articleReaderModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.84);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeArticleModal()">
+    <div style="max-width:760px;width:100%;max-height:90vh;overflow-y:auto;border-radius:18px;background:linear-gradient(170deg,#111827 0%,#090d18 100%);border:1px solid rgba(245,158,11,0.38);box-shadow:0 28px 70px rgba(0,0,0,0.75);color:var(--text)">
+      <div style="position:relative;width:100%;height:260px;background:#070d19;overflow:hidden">
         <img id="modalArticleImage" src="" alt="Article cover" style="width:100%;height:100%;object-fit:cover;display:block"/>
-        <button type="button" onclick="closeArticleModal()" style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(15,23,42,0.85);color:#fff;font-size:18px;font-weight:700;cursor:pointer">✕</button>
-        <div id="modalArticleBadges" style="position:absolute;bottom:14px;left:18px;display:flex;gap:8px;flex-wrap:wrap"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(9,13,24,0.92) 0%,transparent 60%)"></div>
+        <button type="button" onclick="closeArticleModal()" style="position:absolute;top:16px;right:16px;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(15,23,42,0.85);color:#fff;font-size:18px;font-weight:700;cursor:pointer">✕</button>
+        <div id="modalArticleBadges" style="position:absolute;bottom:16px;left:24px;display:flex;gap:8px;flex-wrap:wrap"></div>
       </div>
-      <div style="padding:22px 26px">
-        <h2 id="modalArticleHeadline" style="font-size:21px;font-weight:800;line-height:1.35;margin:0 0 14px 0;color:#f8fafc"></h2>
-        <div id="modalArticleBody" style="display:flex;flex-direction:column;gap:12px;font-size:14.5px;line-height:1.7;color:#cbd5e1"></div>
-        <div id="modalArticleImpactBox" style="margin-top:18px;padding:14px 16px;border-radius:10px;background:rgba(16,185,129,0.1);border-left:4px solid #10b981;font-size:13.5px;line-height:1.6;color:#e2e8f0"></div>
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-          <button type="button" id="modalAskSentinelBtn" style="padding:9px 16px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.18);color:#38bdf8;font-weight:700;font-size:13px;cursor:pointer">
-            💬 Ask Sentinel How This Affects Our Trades
+      <div style="padding:24px 28px">
+        <h2 id="modalArticleHeadline" style="font-family:var(--font-mythic);font-size:22px;font-weight:700;line-height:1.38;margin:0 0 16px 0;color:#f8fafc"></h2>
+        <div id="modalArticleBody" style="display:flex;flex-direction:column;gap:14px;font-size:15px;line-height:1.75;color:#e2e8f0"></div>
+
+        <!-- Optional Expandable Market & Trade Impact Section -->
+        <div style="margin-top:22px;padding-top:16px;border-top:1px dashed rgba(255,255,255,0.14)">
+          <button type="button" id="modalToggleTradeImpactBtn" onclick="toggleModalTradeImpact()" style="width:100%;padding:11px 16px;border-radius:10px;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.1);color:#7dd3fc;font-size:13px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+            <span>💡 Optional: Want to know how this story could affect markets &amp; trades?</span>
+            <span id="modalTradeImpactChevron">Show Market Impact ▾</span>
           </button>
+          <div id="modalArticleImpactBox" style="display:none;margin-top:10px;padding:15px 18px;border-radius:12px;background:rgba(16,185,129,0.11);border-left:4px solid #10b981;font-size:13.5px;line-height:1.65;color:#e2e8f0"></div>
+        </div>
+
+        <div style="margin-top:22px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" id="modalAskSentinelBtn" style="padding:9px 15px;border-radius:8px;border:1px solid #f59e0b;background:rgba(245,158,11,0.18);color:#fde68a;font-weight:700;font-size:12.5px;cursor:pointer">
+              💬 Discuss Story with Sentinel
+            </button>
+            <button type="button" id="modalAskTradeImpactBtn" style="padding:9px 15px;border-radius:8px;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.12);color:#7dd3fc;font-weight:700;font-size:12.5px;cursor:pointer">
+              📈 Optional: Ask How It Affects Trades
+            </button>
+          </div>
           <div style="display:flex;gap:10px;align-items:center">
-            <a id="modalExternalUrlBtn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;padding:9px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#f8fafc;text-decoration:none;font-size:13px;font-weight:600">
-              Open Original News Source ↗
+            <a id="modalExternalUrlBtn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;padding:9px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#f8fafc;text-decoration:none;font-size:12.5px;font-weight:600">
+              Open Original Press Source ↗
             </a>
-            <button type="button" onclick="closeArticleModal()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Close Reader</button>
+            <button type="button" onclick="closeArticleModal()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer">Close Reader</button>
           </div>
         </div>
       </div>
@@ -142,23 +179,23 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:sentinel"></span></div>
       <div>
         <div class="chat-drawer-title">Sentinel</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">World &amp; Financial News Monitor</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Global Newsroom &amp; Journalism Specialist</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Sentinel. Ask me what is happening in the news in the world today across our 6 international news wires, or click any photo headline to read the full story!</div>
+        <div class="chat-bubble">Hello! I am Sentinel, your global news correspondent. Ask me what is happening in the world today across BBC, CNBC, Al Jazeera, WSJ, MarketWatch, and OilPrice — or if you'd like, ask how any story could affect global markets.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
         <button class="chat-hint-chip">What's happening in the news in the world today?</button>
-        <button class="chat-hint-chip">Show geopolitical &amp; inflation alerts</button>
-        <button class="chat-hint-chip">How does today's news affect EUR/USD and Gold?</button>
+        <button class="chat-hint-chip">Summarize today's top world &amp; tech stories</button>
+        <button class="chat-hint-chip">Optional: Could today's news affect EUR/USD or Gold?</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Sentinel in plain English…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Sentinel about today's news…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
@@ -176,12 +213,13 @@
   const AGENT_ID = 'sentinel';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
   let NEWS_ITEMS_STORE = [];
+  let ACTIVE_NEWS_FILTER = 'ALL';
 
   async function triggerLiveNewsScan() {
     const btn = document.getElementById('btnScanNewsNow');
     const banner = document.getElementById('sentinelScanBanner');
     const orig = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning Global News Wires…'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Fetching Global Press Wires…'; }
     try {
       const r = await fetch(API_BASE + '/api/feeds/refresh', {
         method: 'POST',
@@ -191,7 +229,7 @@
       const res = await r.json();
       if (banner) {
         banner.style.display = 'block';
-        banner.textContent = res.human_summary || 'Refreshed live global news stories and photos.';
+        banner.textContent = res.human_summary || 'Refreshed live global news stories and editorial photography.';
       }
       await loadDashboard();
     } catch (e) {
@@ -204,7 +242,23 @@
     }
   }
 
-  function openArticleModal(idx) {
+  function toggleModalTradeImpact() {
+    const box = document.getElementById('modalArticleImpactBox');
+    const chev = document.getElementById('modalTradeImpactChevron');
+    if (!box) return;
+    const isHidden = box.style.display === 'none';
+    box.style.display = isHidden ? 'block' : 'none';
+    if (chev) chev.textContent = isHidden ? 'Hide Market Impact ▴' : 'Show Market Impact ▾';
+  }
+
+  function toggleCardTradeImpact(event, idx) {
+    event.stopPropagation();
+    const el = document.getElementById('cardOptionalImpact_' + idx);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function openArticleModal(idx, autoExpandImpact) {
     const item = NEWS_ITEMS_STORE[idx];
     if (!item) return;
     const modal = document.getElementById('articleReaderModal');
@@ -213,25 +267,28 @@
     const head = document.getElementById('modalArticleHeadline');
     const body = document.getElementById('modalArticleBody');
     const impact = document.getElementById('modalArticleImpactBox');
+    const chev = document.getElementById('modalTradeImpactChevron');
     const extBtn = document.getElementById('modalExternalUrlBtn');
     const askBtn = document.getElementById('modalAskSentinelBtn');
+    const askTradeBtn = document.getElementById('modalAskTradeImpactBtn');
 
     img.onerror = function() { if (item.fallback_image_url && this.src !== item.fallback_image_url) this.src = item.fallback_image_url; };
-    img.src = item.image_url || item.fallback_image_url || '';
+    img.src = item.image_url || item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
 
-    const sent = String(item.sentiment || 'NEUTRAL').toUpperCase();
-    const sentColor = sent.includes('BULL') || sent.includes('POS') ? '#10b981' : (sent.includes('BEAR') || sent.includes('CAUT') ? '#f59e0b' : '#38bdf8');
     badges.innerHTML =
-      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;font-size:11.5px;font-weight:700">' + (item.outlet || 'Global News Wire') + '</span>' +
-      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.2);color:#e2e8f0;font-size:11.5px;font-weight:600">' + (item.category || 'Macro & Markets') + '</span>' +
-      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid ' + sentColor + ';color:' + sentColor + ';font-size:11.5px;font-weight:700">' + sent + '</span>';
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(245,158,11,0.92);color:#090d16;font-size:11px;font-weight:800;letter-spacing:0.04em">' + (item.outlet || 'Global News Desk') + '</span>' +
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.2);color:#f8fafc;font-size:11px;font-weight:600">' + (item.category || 'World Report') + '</span>' +
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px">' + (item.reading_time || '3 min read') + '</span>';
 
-    head.textContent = item.headline || item.title || 'Global Market Story';
+    head.textContent = item.headline || item.title || 'Global Editorial Report';
     const paras = Array.isArray(item.full_article_paragraphs) && item.full_article_paragraphs.length
       ? item.full_article_paragraphs
       : [item.summary || item.source || item.headline];
     body.innerHTML = paras.map(p => '<p style="margin:0">' + String(p).replace(/</g, '&lt;') + '</p>').join('');
-    impact.textContent = item.market_impact_plain || 'Sentinel cross-checks this headline with Oracle and Aegis before any trade is placed.';
+
+    impact.textContent = item.optional_trade_impact || item.market_impact_plain || 'Optional Market Perspective: You can ask Sentinel or Oracle how this story could influence major currencies or commodities.';
+    impact.style.display = autoExpandImpact ? 'block' : 'none';
+    if (chev) chev.textContent = autoExpandImpact ? 'Hide Market Impact ▴' : 'Show Market Impact ▾';
 
     if (item.url && item.url.startsWith('http')) {
       extBtn.style.display = 'inline-block';
@@ -248,7 +305,20 @@
       const chatSnd = document.getElementById('chatSend');
       drawer.classList.add('open');
       overlay.classList.add('visible');
-      chatIn.value = 'Explain this news story and how it affects our trades: "' + (item.headline || item.title) + '"';
+      chatIn.value = 'Tell me more about this news story: "' + (item.headline || item.title) + '"';
+      chatIn.dispatchEvent(new Event('input'));
+      chatSnd.click();
+    };
+
+    askTradeBtn.onclick = function() {
+      closeArticleModal();
+      const drawer = document.getElementById('chatDrawer');
+      const overlay = document.getElementById('chatOverlay');
+      const chatIn = document.getElementById('chatInput');
+      const chatSnd = document.getElementById('chatSend');
+      drawer.classList.add('open');
+      overlay.classList.add('visible');
+      chatIn.value = 'How could this news story affect markets or our trades: "' + (item.headline || item.title) + '"?';
       chatIn.dispatchEvent(new Event('input'));
       chatSnd.click();
     };
@@ -261,40 +331,129 @@
     if (modal) modal.style.display = 'none';
   }
 
+  function matchesTopicFilter(item, filterKey) {
+    if (!filterKey || filterKey === 'ALL') return true;
+    const text = ((item.headline || '') + ' ' + (item.category || '') + ' ' + (item.outlet || '') + ' ' + (item.summary || '')).toLowerCase();
+    if (filterKey === 'ENERGY') return /oil|energy|gold|commodity|gas|shipping|metal|opec|crude/.test(text);
+    if (filterKey === 'TECH') return /tech|ai|chip|software|cyber|science|compute|digital|apple|nvidia/.test(text);
+    if (filterKey === 'ECONOMY') return /economy|bank|fed|inflation|rate|market|wsj|cnbc|marketwatch|trade|business|gdp/.test(text);
+    if (filterKey === 'WORLD') return /world|bbc|al jazeera|geopolit|summit|minister|diplomat|nation|europe|asia|middle east/.test(text);
+    return true;
+  }
+
+  function filterNewsByTopic(filterKey) {
+    ACTIVE_NEWS_FILTER = filterKey || 'ALL';
+    document.querySelectorAll('.news-filter-btn').forEach(btn => {
+      const f = btn.getAttribute('data-filter');
+      if (f === ACTIVE_NEWS_FILTER) {
+        btn.style.border = '1px solid #f59e0b';
+        btn.style.background = 'rgba(245,158,11,0.24)';
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.border = '1px solid rgba(255,255,255,0.14)';
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = '#cbd5e1';
+        btn.style.fontWeight = '600';
+      }
+    });
+    renderNewsroomViews();
+  }
+
+  function renderLeadStoryHero(item, idx) {
+    const container = document.getElementById('sentinelLeadStoryContainer');
+    if (!container) return;
+    if (!item) { container.innerHTML = ''; return; }
+    const imgSrc = item.image_url || item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
+    const fallbackSrc = item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
+    const headline = item.headline || item.title || 'Lead Global Report';
+    const summary = item.summary || (Array.isArray(item.full_article_paragraphs) ? item.full_article_paragraphs[0] : '');
+
+    container.innerHTML =
+      '<div class="card" style="margin-bottom:16px;border:1px solid rgba(245,158,11,0.35);overflow:hidden">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:stretch">' +
+          '<div style="position:relative;min-height:250px;background:#070d19;cursor:pointer;overflow:hidden" onclick="openArticleModal(' + idx + ', false)">' +
+            '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="Lead story photo" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.35s ease" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'"/>' +
+            '<div style="position:absolute;top:14px;left:14px;display:flex;gap:8px;flex-wrap:wrap">' +
+              '<span style="padding:4px 11px;border-radius:20px;background:#f59e0b;color:#090d16;font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase">★ Lead Cover Story</span>' +
+              '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);color:#f8fafc;font-size:11px;font-weight:700">' + (item.outlet || 'Global Wire') + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:22px 26px;display:flex;flex-direction:column;justify-content:space-between;gap:14px">' +
+            '<div>' +
+              '<div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#fbbf24;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">' +
+                '<span>' + (item.category || 'World & Economy') + '</span>' +
+                '<span>•</span>' +
+                '<span style="color:var(--text-muted)">' + (item.reading_time || '3 min read') + '</span>' +
+              '</div>' +
+              '<h3 onclick="openArticleModal(' + idx + ', false)" style="cursor:pointer;font-family:var(--font-mythic);font-size:21px;font-weight:700;line-height:1.36;color:#f8fafc;margin-bottom:10px">' + headline + '</h3>' +
+              '<p style="font-size:13.5px;line-height:1.65;color:#cbd5e1">' + String(summary).slice(0, 240) + (String(summary).length > 240 ? '…' : '') + '</p>' +
+            '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">' +
+              '<button type="button" onclick="openArticleModal(' + idx + ', false)" style="padding:9px 16px;border-radius:9px;border:1px solid #f59e0b;background:rgba(245,158,11,0.22);color:#fde68a;font-size:12.5px;font-weight:700;cursor:pointer">📖 Read Full Cover Story →</button>' +
+              '<button type="button" onclick="openArticleModal(' + idx + ', true)" style="padding:9px 14px;border-radius:9px;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.1);color:#7dd3fc;font-size:12px;font-weight:700;cursor:pointer">💡 Optional: How Could This Affect Markets?</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
   function renderPhotoNewsCard(item, idx) {
     const headline = item.headline || item.title || 'Global News Update';
     const outlet = item.outlet || 'Global News';
-    const category = item.category || 'World & Markets';
+    const category = item.category || 'World Desk';
     const summary = item.summary || item.source || '';
-    const sent = String(item.sentiment || 'NEUTRAL').toUpperCase();
-    const sentColor = sent.includes('BULL') || sent.includes('POS') ? '#10b981' : (sent.includes('BEAR') || sent.includes('CAUT') ? '#f59e0b' : '#38bdf8');
-    const imgSrc = item.image_url || item.fallback_image_url || '';
-    const fallbackSrc = item.fallback_image_url || '';
+    const imgSrc = item.image_url || item.fallback_image_url || 'assets/editorial/global_economy.jpg';
+    const fallbackSrc = item.fallback_image_url || 'assets/editorial/global_economy.jpg';
+    const optImpact = item.optional_trade_impact || item.market_impact_plain || '';
 
     return (
-      '<div onclick="openArticleModal(' + idx + ')" style="cursor:pointer;border-radius:12px;overflow:hidden;background:rgba(15,23,42,0.75);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;transition:transform 0.15s ease,border-color 0.15s ease" onmouseover="this.style.borderColor=\'#38bdf8\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.1)\';this.style.transform=\'none\'">' +
-        '<div style="position:relative;width:100%;height:165px;background:#070d19;overflow:hidden">' +
-          '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="News photo" style="width:100%;height:100%;object-fit:cover;display:block"/>' +
-          '<div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap">' +
-            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#38bdf8;font-size:11px;font-weight:700">' + outlet + '</span>' +
-            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#cbd5e1;font-size:11px;font-weight:600">' + category + '</span>' +
+      '<div onclick="openArticleModal(' + idx + ', false)" style="cursor:pointer;border-radius:14px;overflow:hidden;background:linear-gradient(170deg,rgba(22,30,54,0.86),rgba(11,16,30,0.95));border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;box-shadow:0 12px 28px -10px rgba(0,0,0,0.65);transition:transform 0.2s ease,border-color 0.2s ease" onmouseover="this.style.borderColor=\'rgba(245,158,11,0.55)\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.1)\';this.style.transform=\'none\'">' +
+        '<div style="position:relative;width:100%;height:180px;background:#070d19;overflow:hidden">' +
+          '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="Editorial news photograph" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.35s ease" onmouseover="this.style.transform=\'scale(1.04)\'" onmouseout="this.style.transform=\'scale(1)\'"/>' +
+          '<div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(11,16,30,0.82) 0%,transparent 55%)"></div>' +
+          '<div style="position:absolute;top:11px;left:11px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.9);border:1px solid rgba(245,158,11,0.45);color:#fbbf24;font-size:10.5px;font-weight:800">' + outlet + '</span>' +
+            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.88);color:#e2e8f0;font-size:10.5px;font-weight:600">' + category + '</span>' +
           '</div>' +
-          '<span style="position:absolute;top:10px;right:10px;padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.9);color:' + sentColor + ';font-size:10.5px;font-weight:800">' + sent + '</span>' +
+          '<span style="position:absolute;bottom:10px;right:12px;font-size:10.5px;color:#cbd5e1;font-weight:600">' + (item.reading_time || '3 min read') + '</span>' +
         '</div>' +
-        '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1">' +
-          '<div style="font-size:15px;font-weight:700;line-height:1.4;color:#f8fafc">' + headline + '</div>' +
-          '<div style="font-size:12.5px;line-height:1.55;color:var(--text-muted);flex:1">' + String(summary).slice(0, 145) + (String(summary).length > 145 ? '…' : '') + '</div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px">' +
-            '<span style="color:var(--text-muted)">' + (item.time || 'Live Wire') + '</span>' +
-            '<span style="color:#38bdf8;font-weight:700">Read Full Story →</span>' +
+        '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:9px;flex:1">' +
+          '<div style="font-size:15.5px;font-weight:700;line-height:1.42;color:#f8fafc">' + headline + '</div>' +
+          '<div style="font-size:12.5px;line-height:1.6;color:#94a3b8;flex:1">' + String(summary).slice(0, 150) + (String(summary).length > 150 ? '…' : '') + '</div>' +
+          '<div id="cardOptionalImpact_' + idx + '" style="display:none;padding:10px 12px;border-radius:9px;background:rgba(56,189,248,0.1);border-left:3px solid #38bdf8;font-size:11.5px;line-height:1.55;color:#e2e8f0">' +
+            optImpact +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;flex-wrap:wrap">' +
+            '<button type="button" onclick="toggleCardTradeImpact(event, ' + idx + ')" style="padding:4px 9px;border-radius:6px;border:1px solid rgba(56,189,248,0.3);background:rgba(56,189,248,0.08);color:#7dd3fc;font-size:11px;font-weight:700;cursor:pointer">💡 Optional: Market Impact</button>' +
+            '<span style="color:#fbbf24;font-weight:700">Read Story →</span>' +
           '</div>' +
         '</div>' +
       '</div>'
     );
   }
 
+  function renderNewsroomViews() {
+    const el = document.getElementById('section_primary');
+    if (!el) return;
+    if (!NEWS_ITEMS_STORE.length) {
+      offlinePanel('section_primary');
+      return;
+    }
+    renderLeadStoryHero(NEWS_ITEMS_STORE[0], 0);
+    const filtered = NEWS_ITEMS_STORE
+      .map((item, idx) => ({ item, idx }))
+      .filter(entry => matchesTopicFilter(entry.item, ACTIVE_NEWS_FILTER));
+
+    if (!filtered.length) {
+      el.innerHTML = '<div style="padding:18px;border-radius:12px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:13px">No stories matched that desk filter. Click "All Desks" to see all illustrated articles.</div>';
+      return;
+    }
+    el.innerHTML = filtered.map(entry => renderPhotoNewsCard(entry.item, entry.idx)).join('');
+  }
+
   function renderFeedItem(item, idx) {
-    return '<div class="feed-item" style="cursor:pointer" onclick="openArticleModal(' + idx + ')"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||'') + '</span><span style="color:#38bdf8;font-weight:600">Read Article →</span></div></div></div>';
+    return '<div class="feed-item" style="cursor:pointer" onclick="openArticleModal(' + idx + ', false)"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||'') + '</span><span style="color:#fbbf24;font-weight:600">Open Reader →</span></div></div></div>';
   }
 
   async function checkConn() {
@@ -338,8 +497,7 @@
       NEWS_ITEMS_STORE = primaryArr.slice(0, 14);
 
       if (NEWS_ITEMS_STORE.length > 0) {
-        const el = document.getElementById('section_primary');
-        if (el) el.innerHTML = NEWS_ITEMS_STORE.map((item, idx) => renderPhotoNewsCard(item, idx)).join('');
+        renderNewsroomViews();
       } else {
         offlinePanel('section_primary');
       }

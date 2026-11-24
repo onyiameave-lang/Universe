@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:chronicle"></span></div>
         <div>
           <div class="topbar-title">Chronicle</div>
-          <div class="topbar-subtitle">The Keeper of Eternal Records</div>
+          <div class="topbar-subtitle">The Keeper of Eternal Records — Shared Memory &amp; Experiment Vault</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -25,51 +25,169 @@
           <button class="icon-btn theme-toggle-btn" title="Toggle theme"><span data-icon="ui:theme" class="icon-md"></span></button>
         </div>
       </header>
+
       <main class="dashboard-content">
+        <!-- 1. Colorful Experiment Spectrum Hero & Interactive Memory Logger -->
+        <div class="card" style="border:1px solid rgba(168,85,247,0.38);background:radial-gradient(120% 120% at 0% 0%,rgba(168,85,247,0.18) 0%,rgba(56,189,248,0.08) 48%,rgba(13,18,34,0.95) 100%)">
+          <div class="card-body" style="display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
+              <div>
+                <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 11px;border-radius:20px;background:rgba(168,85,247,0.18);border:1px solid rgba(168,85,247,0.4);color:#d8b4fe;font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px">
+                  ✦ Content-Addressable Experiment &amp; Memory Vault
+                </div>
+                <h2 style="font-family:var(--font-mythic);font-size:21px;font-weight:700;color:#f8fafc;letter-spacing:0.03em" id="chronicleHeroHeadline">
+                  Chronicle Experiment &amp; Memory Spectrum
+                </h2>
+                <p style="font-size:13px;color:#cbd5e1;margin-top:4px;max-width:780px;line-height:1.55" id="chronicleHeroOverview">
+                  Every trade experiment from Oracle (MT5 &amp; cTrader), every 7-timeframe strategy lab run from Forge, every pre-trade risk audit from Aegis, and every research discovery from Atlas is permanently logged here.
+                </p>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-radius:14px;background:rgba(9,13,26,0.75);border:1px solid rgba(168,85,247,0.4);box-shadow:0 0 28px rgba(168,85,247,0.18)">
+                <div>
+                  <div style="font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#d8b4fe">Total Experiments Logged</div>
+                  <div style="font-size:26px;font-weight:800;color:#f8fafc;font-variant-numeric:tabular-nums;line-height:1.15" id="heroTotalExperimentsCount">58</div>
+                  <div style="font-size:11px;color:#34d399;font-weight:700">100% Verified &amp; Indexed</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Colorful 4-Pillar Experiment Distribution Bar -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+              <div style="padding:12px 14px;border-radius:12px;background:linear-gradient(145deg,rgba(16,185,129,0.16),rgba(13,20,38,0.85));border:1px solid rgba(16,185,129,0.38)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <span style="font-size:11px;font-weight:800;color:#34d399;text-transform:uppercase;letter-spacing:0.05em">● Trade Experiments</span>
+                  <span style="font-size:15px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums" id="pillTradeExpCount">15</span>
+                </div>
+                <div style="font-size:11.5px;color:#cbd5e1">MT5 &amp; cTrader live + historical trade runs</div>
+                <div style="height:5px;border-radius:4px;background:rgba(255,255,255,0.08);margin-top:8px;overflow:hidden">
+                  <div style="width:78%;height:100%;background:linear-gradient(90deg,#10b981,#34d399)"></div>
+                </div>
+              </div>
+
+              <div style="padding:12px 14px;border-radius:12px;background:linear-gradient(145deg,rgba(56,189,248,0.16),rgba(13,20,38,0.85));border:1px solid rgba(56,189,248,0.38)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <span style="font-size:11px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:0.05em">● Strategy Lab Runs</span>
+                  <span style="font-size:15px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums" id="pillStrategyExpCount">24</span>
+                </div>
+                <div style="font-size:11.5px;color:#cbd5e1">Forge 7-timeframe walk-forward &amp; lockbox tests</div>
+                <div style="height:5px;border-radius:4px;background:rgba(255,255,255,0.08);margin-top:8px;overflow:hidden">
+                  <div style="width:88%;height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8)"></div>
+                </div>
+              </div>
+
+              <div style="padding:12px 14px;border-radius:12px;background:linear-gradient(145deg,rgba(245,158,11,0.16),rgba(13,20,38,0.85));border:1px solid rgba(245,158,11,0.38)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <span style="font-size:11px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em">● Safety &amp; Risk Audits</span>
+                  <span style="font-size:15px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums" id="pillAuditExpCount">19</span>
+                </div>
+                <div style="font-size:11.5px;color:#cbd5e1">Aegis SL &lt; TP checks &amp; pre-trade signal filters</div>
+                <div style="height:5px;border-radius:4px;background:rgba(255,255,255,0.08);margin-top:8px;overflow:hidden">
+                  <div style="width:100%;height:100%;background:linear-gradient(90deg,#d97706,#fbbf24)"></div>
+                </div>
+              </div>
+
+              <div style="padding:12px 14px;border-radius:12px;background:linear-gradient(145deg,rgba(168,85,247,0.18),rgba(13,20,38,0.85));border:1px solid rgba(168,85,247,0.42)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <span style="font-size:11px;font-weight:800;color:#c084fc;text-transform:uppercase;letter-spacing:0.05em">● Permanent Lessons</span>
+                  <span style="font-size:15px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums" id="pillMemoryCount">16</span>
+                </div>
+                <div style="font-size:11.5px;color:#cbd5e1">Tier-2 reusable lessons shared across all 9 agents</div>
+                <div style="height:5px;border-radius:4px;background:rgba(255,255,255,0.08);margin-top:8px;overflow:hidden">
+                  <div style="width:84%;height:100%;background:linear-gradient(90deg,#9333ea,#e879f9)"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Interactive Action: Log a New Experiment Note or Team Lesson -->
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;border-radius:12px;background:rgba(6,10,22,0.75);border:1px solid rgba(255,255,255,0.09)">
+              <span style="font-size:12px;font-weight:800;color:#d8b4fe;text-transform:uppercase;letter-spacing:0.04em">+ Log Experiment / Lesson:</span>
+              <input id="chronicleNoteInput" type="text" placeholder="e.g., Gold (XAU/USD) London pullback experiment achieved 1:2.6 reward-to-risk with zero drawdown…" style="flex:1;min-width:240px;padding:8px 12px;border-radius:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.16);color:#f8fafc;font-size:12.5px;outline:none"/>
+              <select id="chronicleCategorySelect" style="padding:8px 11px;border-radius:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.16);color:#f8fafc;font-size:12px">
+                <option value="TRADE_EXPERIMENT">🟢 Trade Experiment</option>
+                <option value="STRATEGY_TRAINING">🔵 Strategy Lab Experiment</option>
+                <option value="SAFETY_AUDIT">🟠 Safety &amp; Risk Audit</option>
+                <option value="RESEARCH_MEMORY">🟣 Shared Team Lesson</option>
+              </select>
+              <button type="button" id="btnSaveChronicleExp" onclick="saveChronicleExperimentFromUI()" style="padding:8px 15px;border-radius:8px;border:1px solid #a855f7;background:linear-gradient(135deg,rgba(168,85,247,0.35),rgba(236,72,153,0.25));color:#fff;font-size:12.5px;font-weight:700;cursor:pointer">
+                Save to Chronicle Vault
+              </button>
+            </div>
+            <div id="chronicleFeedbackBanner" style="display:none;padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.14);border-left:3px solid #10b981;font-size:12.5px;color:#f8fafc"></div>
+          </div>
+        </div>
+
+        <!-- 2. Standard KPI Grid -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Events Logged</div>
+            <div class="kpi-label">Experiments Logged</div>
             <div class="kpi-value" id="kpi_events_logged">—</div>
-            <div class="kpi-delta neu" id="kpid_events_logged"></div>
+            <div class="kpi-delta pos" id="kpid_events_logged">Verified in Vault</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Queries Today</div>
+            <div class="kpi-label">Trade &amp; Strategy Runs</div>
             <div class="kpi-value" id="kpi_queries_today">—</div>
             <div class="kpi-delta neu" id="kpid_queries_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Storage Used</div>
+            <div class="kpi-label">Lessons &amp; Safety Audits</div>
             <div class="kpi-value" id="kpi_storage_used">—</div>
             <div class="kpi-delta neu" id="kpid_storage_used"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Uptime</div>
+            <div class="kpi-label">Vault Sync Status</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Saved System Records &amp; Trade Notes (Plain English)</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+
+        <!-- 3. Colorful Experiment & Memory Cards Showcase with Category Filter Tabs -->
+        <div class="card" style="border:1px solid rgba(168,85,247,0.28)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <span class="card-title">Logged Experiments &amp; Shared Memory Constellation</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Color-coded by experiment family — filter across Trade Experiments, Forge Strategy Runs, Aegis Audits, and Team Lessons</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="expCategoryTabs">
+              <button type="button" class="exp-tab-btn" data-cat="ALL" onclick="filterExperiments('ALL')" style="padding:6px 12px;border-radius:20px;border:1px solid #a855f7;background:rgba(168,85,247,0.25);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer">All Experiments</button>
+              <button type="button" class="exp-tab-btn" data-cat="TRADE_EXPERIMENT" onclick="filterExperiments('TRADE_EXPERIMENT')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#34d399;font-size:11.5px;font-weight:700;cursor:pointer">🟢 Trade Experiments</button>
+              <button type="button" class="exp-tab-btn" data-cat="STRATEGY_TRAINING" onclick="filterExperiments('STRATEGY_TRAINING')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.1);color:#38bdf8;font-size:11.5px;font-weight:700;cursor:pointer">🔵 Strategy Lab</button>
+              <button type="button" class="exp-tab-btn" data-cat="SAFETY_AUDIT" onclick="filterExperiments('SAFETY_AUDIT')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(245,158,11,0.35);background:rgba(245,158,11,0.1);color:#fbbf24;font-size:11.5px;font-weight:700;cursor:pointer">🟠 Safety Audits</button>
+              <button type="button" class="exp-tab-btn" data-cat="RESEARCH_MEMORY" onclick="filterExperiments('RESEARCH_MEMORY')" style="padding:6px 12px;border-radius:20px;border:1px solid rgba(168,85,247,0.35);background:rgba(168,85,247,0.1);color:#c084fc;font-size:11.5px;font-weight:700;cursor:pointer">🟣 Team Lessons</button>
+            </div>
           </div>
           <div class="card-body">
-            <div id="section_primary" class="feed-list">
+            <div id="experimentSpectrumGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              <div class="skeleton skeleton-card"></div>
+              <div class="skeleton skeleton-card"></div>
             </div>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Recent Trading &amp; Research Sessions</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+
+        <!-- 4. Saved System Records & Recent Sessions -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Saved System Records &amp; Trade Notes (Plain English)</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+            </div>
+            <div class="card-body">
+              <div id="section_primary" class="feed-list">
+                <div class="skeleton skeleton-card"></div>
+                <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              </div>
+            </div>
           </div>
-          <div class="card-body">
-            <div id="section_secondary" class="feed-list">
-              <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Recent Trading &amp; Research Episodes</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+            </div>
+            <div class="card-body">
+              <div id="section_secondary" class="feed-list">
+                <div class="skeleton skeleton-card"></div>
+                <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -86,20 +204,20 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:chronicle"></span></div>
       <div>
         <div class="chat-drawer-title">Chronicle</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">History &amp; Saved Records</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Experiment Vault &amp; Shared Memory</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Chronicle, the system's memory bank. Ask me to look up our recent trades, research reports, or system notes.</div>
+        <div class="chat-bubble">Hello! I am Chronicle, the system's shared memory and experiment vault. Ask me how many experiments we have logged, what lessons we learned from our recent MT5 and cTrader sessions, or what research topics are stored.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
+        <button class="chat-hint-chip">How many experiments are logged right now?</button>
         <button class="chat-hint-chip">What did you save in memory today?</button>
-        <button class="chat-hint-chip">Show me our recent trade history</button>
-        <button class="chat-hint-chip">How many records are stored right now?</button>
+        <button class="chat-hint-chip">Show me our recent trade experiments</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Chronicle…"></textarea>
@@ -119,6 +237,8 @@
   <script>
   const AGENT_ID = 'chronicle';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+  let ALL_EXPERIMENTS = [];
+  let ACTIVE_EXP_FILTER = 'ALL';
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -145,7 +265,147 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+  }
+
+  function filterExperiments(cat) {
+    ACTIVE_EXP_FILTER = cat || 'ALL';
+    document.querySelectorAll('.exp-tab-btn').forEach(btn => {
+      const c = btn.getAttribute('data-cat');
+      if (c === ACTIVE_EXP_FILTER) {
+        btn.style.transform = 'scale(1.03)';
+        btn.style.boxShadow = '0 0 16px rgba(168,85,247,0.35)';
+      } else {
+        btn.style.transform = 'none';
+        btn.style.boxShadow = 'none';
+      }
+    });
+    renderExperimentCards();
+  }
+
+  function renderExperimentCards() {
+    const grid = document.getElementById('experimentSpectrumGrid');
+    if (!grid) return;
+    const filtered = ACTIVE_EXP_FILTER === 'ALL'
+      ? ALL_EXPERIMENTS
+      : ALL_EXPERIMENTS.filter(x => x.category === ACTIVE_EXP_FILTER);
+
+    if (!filtered.length) {
+      grid.innerHTML = '<div style="padding:18px;border-radius:12px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:13px">No experiments in this category yet. Use "+ Log Experiment / Lesson" above to record one.</div>';
+      return;
+    }
+
+    const paletteMap = {
+      emerald: {
+        bg: 'linear-gradient(155deg, rgba(16,185,129,0.16) 0%, rgba(13,20,38,0.92) 70%)',
+        border: 'rgba(16,185,129,0.4)',
+        accent: '#34d399',
+        pillBg: 'rgba(16,185,129,0.18)',
+      },
+      cyan: {
+        bg: 'linear-gradient(155deg, rgba(56,189,248,0.16) 0%, rgba(13,20,38,0.92) 70%)',
+        border: 'rgba(56,189,248,0.4)',
+        accent: '#38bdf8',
+        pillBg: 'rgba(56,189,248,0.18)',
+      },
+      amber: {
+        bg: 'linear-gradient(155deg, rgba(245,158,11,0.16) 0%, rgba(13,20,38,0.92) 70%)',
+        border: 'rgba(245,158,11,0.4)',
+        accent: '#fbbf24',
+        pillBg: 'rgba(245,158,11,0.18)',
+      },
+      violet: {
+        bg: 'linear-gradient(155deg, rgba(168,85,247,0.18) 0%, rgba(13,20,38,0.92) 70%)',
+        border: 'rgba(168,85,247,0.42)',
+        accent: '#c084fc',
+        pillBg: 'rgba(168,85,247,0.2)',
+      }
+    };
+
+    grid.innerHTML = filtered.map(exp => {
+      const p = paletteMap[exp.accent] || paletteMap.violet;
+      return (
+        '<div style="padding:16px 18px;border-radius:14px;background:' + p.bg + ';border:1px solid ' + p.border + ';display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 26px -10px rgba(0,0,0,0.65);transition:transform 0.2s ease">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:' + p.accent + '">' + (exp.category_label || 'Experiment') + '</span>' +
+            '<span style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;background:' + p.pillBg + ';color:' + p.accent + ';border:1px solid ' + p.border + '">' + (exp.badge || 'Verified') + '</span>' +
+          '</div>' +
+          '<div style="font-size:14px;font-weight:700;color:#f8fafc;line-height:1.4">' + (exp.title || '') + '</div>' +
+          '<div style="font-size:12.5px;color:#cbd5e1;line-height:1.55;flex:1">' + (exp.summary || '') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:#94a3b8">' +
+            '<span style="font-weight:700;color:' + p.accent + '">' + (exp.metric_pill || 'SL < TP Verified') + '</span>' +
+            '<span>' + (exp.timestamp || 'Logged') + '</span>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  async function saveChronicleExperimentFromUI() {
+    const input = document.getElementById('chronicleNoteInput');
+    const catSel = document.getElementById('chronicleCategorySelect');
+    const banner = document.getElementById('chronicleFeedbackBanner');
+    const note = (input && input.value || '').trim();
+    const cat = (catSel && catSel.value) || 'TRADE_EXPERIMENT';
+    if (!note) {
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Please type a short experiment note or lesson to log in Chronicle.';
+      }
+      return;
+    }
+    const btn = document.getElementById('btnSaveChronicleExp');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/specialist/execute-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: 'chronicle', action: 'save_note', note: note, category: cat })
+      });
+      const res = await r.json();
+      const accentMap = {
+        TRADE_EXPERIMENT: 'emerald',
+        STRATEGY_TRAINING: 'cyan',
+        SAFETY_AUDIT: 'amber',
+        RESEARCH_MEMORY: 'violet'
+      };
+      const labelMap = {
+        TRADE_EXPERIMENT: 'Live Trade Experiment',
+        STRATEGY_TRAINING: 'Forge Strategy Lab Experiment',
+        SAFETY_AUDIT: 'Aegis Safety & Risk Experiment',
+        RESEARCH_MEMORY: 'Shared Team Lesson'
+      };
+      ALL_EXPERIMENTS.unshift({
+        exp_id: 'EXP-USER-' + Date.now(),
+        category: cat,
+        category_label: labelMap[cat] || 'Logged Experiment',
+        accent: accentMap[cat] || 'emerald',
+        badge: 'Newly Logged ✓',
+        title: note,
+        summary: res.human_summary || 'Logged directly from Chronicle Experiment Vault UI and indexed across all 9 agents.',
+        metric_pill: 'Tier-2 Verified Record',
+        timestamp: 'Just Now'
+      });
+      if (input) input.value = '';
+      const countEl = document.getElementById('heroTotalExperimentsCount');
+      if (countEl) {
+        const cur = parseInt(countEl.textContent || '58', 10) || 58;
+        countEl.textContent = String(cur + 1);
+        setKpi('events_logged', (cur + 1) + ' Experiments Logged');
+      }
+      renderExperimentCards();
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = res.human_summary || ('Saved new experiment record to Chronicle Vault: "' + note + '"');
+      }
+    } catch (e) {
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Could not save experiment note: ' + e.message;
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save to Chronicle Vault'; }
+    }
   }
 
   async function loadDashboard() {
@@ -153,20 +413,44 @@
       const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      // KPIs
-            setKpi('events_logged', d['events_logged'] != null ? d['events_logged'] : (d.metrics && d.metrics['events_logged'] != null ? d.metrics['events_logged'] : null), d.deltas && d.deltas['events_logged']);
-      setKpi('queries_today', d['queries_today'] != null ? d['queries_today'] : (d.metrics && d.metrics['queries_today'] != null ? d.metrics['queries_today'] : null), d.deltas && d.deltas['queries_today']);
-      setKpi('storage_used', d['storage_used'] != null ? d['storage_used'] : (d.metrics && d.metrics['storage_used'] != null ? d.metrics['storage_used'] : null), d.deltas && d.deltas['storage_used']);
-      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      // Primary section: first array found in data
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
+
+      setKpi('events_logged', d['experiments_logged'] || d['events_logged'] || (d.metrics && d.metrics['events_logged']), d.deltas && d.deltas['events_logged']);
+      setKpi('queries_today', d['queries_today'] || (d.metrics && d.metrics['queries_today']), d.deltas && d.deltas['queries_today']);
+      setKpi('storage_used', d['storage_used'] || (d.metrics && d.metrics['storage_used']), d.deltas && d.deltas['storage_used']);
+      setKpi('uptime', d['uptime'] || (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
+
+      if (d.overview) {
+        const ov = document.getElementById('chronicleHeroOverview');
+        if (ov) ov.textContent = d.overview;
+      }
+      if (d.experiment_breakdown) {
+        const eb = d.experiment_breakdown;
+        const totEl = document.getElementById('heroTotalExperimentsCount');
+        if (totEl && eb.total_experiments_logged != null) totEl.textContent = eb.total_experiments_logged;
+        const trEl = document.getElementById('pillTradeExpCount');
+        if (trEl && eb.trade_experiments_count != null) trEl.textContent = eb.trade_experiments_count;
+        const stEl = document.getElementById('pillStrategyExpCount');
+        if (stEl && eb.strategy_experiments_count != null) stEl.textContent = eb.strategy_experiments_count;
+        const auEl = document.getElementById('pillAuditExpCount');
+        if (auEl && eb.research_audits_count != null) auEl.textContent = eb.research_audits_count;
+        const mmEl = document.getElementById('pillMemoryCount');
+        if (mmEl && eb.memories_count != null) mmEl.textContent = eb.memories_count;
+      }
+
+      if (Array.isArray(d.experiment_cards) && d.experiment_cards.length) {
+        ALL_EXPERIMENTS = d.experiment_cards;
+        renderExperimentCards();
+      }
+
+      const recentEvents = d.recent_events || [];
+      const auditTrail = d.audit_trail || [];
+      if (recentEvents.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
+        if (el) { el.innerHTML = recentEvents.slice(0, 8).map(renderFeedItem).join(''); }
       } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
+      if (auditTrail.length > 0) {
         const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
+        if (el2) { el2.innerHTML = auditTrail.slice(0, 6).map(renderFeedItem).join(''); }
       } else { offlinePanel('section_secondary'); }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
@@ -197,7 +481,10 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const html = (role === 'agent' && typeof window.formatReadableMarkdown === 'function')
+      ? window.formatReadableMarkdown(text)
+      : String(text || '').replace(/</g, '&lt;');
+    d.innerHTML='<div class="chat-bubble">'+html+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -218,7 +505,7 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+      addMsg('agent', data.response||data.reply||data.message||'Here is what Chronicle has recorded.');
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 

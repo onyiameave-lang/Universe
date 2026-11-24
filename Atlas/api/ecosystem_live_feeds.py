@@ -213,10 +213,29 @@ def _fetch_hackernews_posts(limit: int = 4) -> List[Dict[str, Any]]:
     return out
 
 
+def _extract_rss_image(it: ET.Element, raw_desc: str) -> str:
+    """Extract media:content, media:thumbnail, enclosure, or <img src> from an RSS item."""
+    for child in it.iter():
+        tag_lower = child.tag.lower()
+        if tag_lower.endswith("thumbnail") or tag_lower.endswith("content") or tag_lower.endswith("enclosure"):
+            u = str(child.attrib.get("url") or "").strip()
+            t = str(child.attrib.get("type") or "").lower()
+            m = str(child.attrib.get("medium") or "").lower()
+            if u.startswith("http") and (
+                "image" in t or m == "image" or tag_lower.endswith("thumbnail")
+                or any(ext in u.lower() for ext in (".jpg", ".jpeg", ".png", ".webp"))
+            ):
+                return u
+    m_img = re.search(r'<img[^>]+src=["\'](https?://[^"\']+)["\']', raw_desc or "", re.IGNORECASE)
+    if m_img:
+        return m_img.group(1).strip()
+    return ""
+
+
 def _fetch_rss_feed(name: str, url: str, category: str, limit: int = 4) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     try:
-        raw = _http_get(url, timeout=4.0)
+        raw = _http_get(url, timeout=4.5)
         root = ET.fromstring(raw)
         items = root.findall(".//item")
         if not items:
@@ -231,11 +250,21 @@ def _fetch_rss_feed(name: str, url: str, category: str, limit: int = 4) -> List[
             pub_el = it.find("pubDate")
             if pub_el is None:
                 pub_el = it.find("{http://www.w3.org/2005/Atom}updated")
+            link_el = it.find("link")
+            article_url = ""
+            if link_el is not None:
+                article_url = (link_el.text or link_el.attrib.get("href") or "").strip()
+            else:
+                atom_link = it.find("{http://www.w3.org/2005/Atom}link")
+                if atom_link is not None:
+                    article_url = (atom_link.attrib.get("href") or atom_link.text or "").strip()
 
+            raw_desc = desc_el.text if desc_el is not None and desc_el.text else ""
             title = _clean_html(title_el.text if title_el is not None and title_el.text else "")
             if not title:
                 continue
-            clean_desc = _clean_html(desc_el.text if desc_el is not None and desc_el.text else "")[:175]
+            clean_desc = _clean_html(raw_desc)[:420]
+            img_url = _extract_rss_image(it, raw_desc)
             pub_str = (pub_el.text if pub_el is not None and pub_el.text else "").strip()
             short_time = pub_str[:22] if pub_str else "Today"
             sent = _score_sentiment(f"{title} {clean_desc}")
@@ -244,10 +273,12 @@ def _fetch_rss_feed(name: str, url: str, category: str, limit: int = 4) -> List[
                 "category": category,
                 "headline": title,
                 "summary": clean_desc,
+                "url": article_url,
+                "image_url": img_url,
                 "sentiment": sent["label"],
                 "time": short_time,
                 "title": f"[{name} · {category}] {title}" + (f" — {clean_desc}" if clean_desc and clean_desc.lower() != title.lower() else ""),
-                "source": f"{name} ({sent['label']})",
+                "source": f"{name} · {category}",
             })
     except Exception:
         pass
