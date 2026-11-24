@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import json
+import math
 import os
 import sys
 import time
@@ -241,6 +242,7 @@ class OracleAgent(BaseAgent):
         self.data = MarketData()
         self._forge_ctrader_broker = None
         self._forge_ctrader_history_lock = threading.Lock()
+        self._ctrader_signal_cache: Dict[str, Dict[str, Any]] = {}
         self._research_bundle_cache: Dict[str, Any] = {}
         self.risk = RiskManager(equity=equity)
         # Lazy-loaded legacy V1 strategy-training/lab engines:
@@ -376,7 +378,7 @@ class OracleAgent(BaseAgent):
                 pass
         return None, "evolution_library"
 
-    def _streams(self, symbol: str, technicals: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def _streams(self, symbol: str, technicals: Dict[str, Any], series=None) -> Dict[str, Dict[str, Any]]:
         """Build evidence streams for fusion.
 
         FIX O-3: Use SignalFusion to build the stream dicts. SignalFusion
@@ -391,10 +393,8 @@ class OracleAgent(BaseAgent):
         champ, champion_source = self._lightweight_champion_lookup(symbol, regime)
 
         if champ:
-            md = self.data.get(symbol)
-            if md["status"] == "complete":
-                s = md["series"]
-                vote = champ.vote(s)
+            if series is not None:
+                vote = champ.vote(series)
                 tech = {"direction": vote, "confidence": 0.75, "source": "evolved_champion",
                         "champion_source": champion_source, "regime": regime, "genome": champ.genome_id}
             else:
@@ -432,23 +432,131 @@ class OracleAgent(BaseAgent):
 
     # ---- market view + signal ----
 
-    def analyze_market(self, symbol):
-        md = self.data.get(symbol)
+    def _get_ctrader_execution_series(self, symbol: str) -> Dict[str, Any]:
+        """Fetch fresh cTrader intraday bars and a live quote from the trader session.
+
+        A daily candle can be several days old over a weekend or when no new
+        daily trendbar has been emitted, so it must not be used as an execution
+        price. Live proposals require recent M15 bars plus a fresh broker quote
+        from the already-authenticated session.
+        """
+        broker = self._forge_ctrader_broker
+        if not getattr(getattr(broker, "status", None), "connected", False):
+            return {"status": "error", "series": None,
+                    "message": "cTrader execution market data is unavailable: shared broker is disconnected"}
+
+        key = str(symbol).strip().upper()
+        cached = self._ctrader_signal_cache.get(key)
+        now = datetime.now(timezone.utc)
+        if isinstance(cached, dict) and (now - cached["fetched_at"]).total_seconds() < 30:
+            return cached["result"]
+
+        broker_symbol = _ctrader_research_aliases().get(key, key)
+        end = now
+        start = end - timedelta(days=20)
+        try:
+            with self._forge_ctrader_history_lock:
+                history = broker.historical_bars(
+                    symbol=broker_symbol,
+                    from_timestamp_ms=int(start.timestamp() * 1000),
+                    to_timestamp_ms=int(end.timestamp() * 1000),
+                    period="M15",
+                    count=1500,
+                    timeout=12.0,
+                )
+        except Exception as exc:
+            return {"status": "error", "series": None,
+                    "message": f"cTrader historical bars failed: {type(exc).__name__}"}
+
+        if not isinstance(history, dict) or history.get("status") != "complete":
+            detail = history.get("message", "no historical bars returned") if isinstance(history, dict) else "invalid historical-bar response"
+            return {"status": "error", "series": None,
+                    "message": f"cTrader execution market data unavailable for {key}: {detail}"}
+        try:
+            bars = [Bar(
+                ts=str(item["timestamp"]), open=float(item["open"]),
+                high=float(item["high"]), low=float(item["low"]),
+                close=float(item["close"]), volume=float(item.get("volume", 0.0)),
+            ) for item in history.get("bars", [])]
+            series = Series(key, bars, "ctrader_open_api_bid")
+            invalid = self.data._series_validation_error(series)
+            if invalid:
+                raise ValueError(invalid)
+            if len(bars) < 75:
+                raise ValueError(f"only {len(bars)} M15 bars returned; 75 required")
+            latest = datetime.fromisoformat(bars[-1].ts.replace("Z", "+00:00"))
+            if latest.tzinfo is None:
+                latest = latest.replace(tzinfo=timezone.utc)
+            age_minutes = (now - latest.astimezone(timezone.utc)).total_seconds() / 60.0
+            if age_minutes < -5.0 or age_minutes > 60.0:
+                raise ValueError(f"latest cTrader M15 bar is stale or future-dated ({age_minutes:.1f}m old)")
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            return {"status": "error", "series": None,
+                    "message": f"invalid cTrader execution bars for {key}: {exc}"}
+
+        # A fresh bar is necessary but not sufficient: use an actual cTrader
+        # quote for the current market price. This method subscribes and
+        # unsubscribes through the existing broker session; it never opens a
+        # second authenticated connection.
+        try:
+            quote_result = broker.execution_cost_observation(broker_symbol, timeout=5.0)
+        except Exception as exc:
+            return {"status": "error", "series": None,
+                    "message": f"cTrader live quote failed for {key}: {type(exc).__name__}"}
+        quote = quote_result.get("quote") if isinstance(quote_result, dict) else None
+        if not isinstance(quote, dict) or quote_result.get("status") != "complete":
+            detail = quote_result.get("message", "no complete live quote") if isinstance(quote_result, dict) else "invalid quote response"
+            return {"status": "error", "series": None,
+                    "message": f"cTrader live quote unavailable for {key}: {detail}"}
+        try:
+            bid = float(quote["bid"])
+            ask = float(quote["ask"])
+            observed_at = datetime.fromisoformat(str(quote["observed_at"]).replace("Z", "+00:00"))
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+            quote_age = (now - observed_at.astimezone(timezone.utc)).total_seconds()
+            if not math.isfinite(bid) or not math.isfinite(ask) or bid <= 0 or ask < bid:
+                raise ValueError("invalid bid/ask values")
+            if quote_age < -5.0 or quote_age > 30.0:
+                raise ValueError(f"quote is stale or future-dated ({quote_age:.1f}s old)")
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            return {"status": "error", "series": None,
+                    "message": f"invalid cTrader live quote for {key}: {exc}"}
+
+        result = {"status": "complete", "series": series,
+                  "source": "ctrader_open_api_m15+live_quote",
+                  "bars": len(series.bars), "price_basis": "bid_bars_live_mid_quote",
+                  "live_bid": bid, "live_ask": ask, "last": (bid + ask) / 2.0,
+                  "quote_observed_at": quote["observed_at"],
+                  "broker_symbol": broker_symbol}
+        self._ctrader_signal_cache[key] = {"fetched_at": now, "result": result}
+        return result
+
+    def analyze_market(self, symbol, *, allow_cache_fallback=True, require_ctrader=False):
+        md = (self._get_ctrader_execution_series(symbol) if require_ctrader
+              else self.data.get(symbol, allow_cache_fallback=allow_cache_fallback))
         if md["status"] != "complete":
             return {"status": "error", "message": md.get("message"), "symbol": symbol}
         return {"status": "complete", "symbol": symbol, "source": md["source"],
-                "last": md["series"].last, "technicals": analyze(md["series"])}
+                "last": md.get("last", md["series"].last), "technicals": analyze(md["series"]),
+                "series": md["series"],
+                "live_bid": md.get("live_bid"), "live_ask": md.get("live_ask"),
+                "quote_observed_at": md.get("quote_observed_at")}
 
-    def signal(self, symbol):
+    def signal(self, symbol, *, allow_cache_fallback=True, require_ctrader=False):
         started = time.monotonic()
-        market = self.analyze_market(symbol)
+        market = self.analyze_market(
+            symbol, allow_cache_fallback=allow_cache_fallback,
+            require_ctrader=require_ctrader,
+        )
         market_elapsed = time.monotonic() - started
         if market_elapsed >= 5.0:
             log.warning("[%s] proposal stage market_data took %.1fs", symbol, market_elapsed)
         if market["status"] != "complete":
             return market
+        log.info("[%s] signal bars source=%s", symbol, market.get("source", "unknown"))
         streams_started = time.monotonic()
-        streams = self._streams(symbol, market["technicals"])
+        streams = self._streams(symbol, market["technicals"], series=market.get("series"))
         streams_elapsed = time.monotonic() - streams_started
         if streams_elapsed >= 5.0:
             log.warning("[%s] proposal stage evidence_streams took %.1fs", symbol, streams_elapsed)
@@ -463,6 +571,9 @@ class OracleAgent(BaseAgent):
         atr = market["technicals"].get("atr_14") or (market["last"] * 0.01)
         return {"status": "complete", "symbol": symbol, "signal": fused,
                 "last": market["last"], "regime": (market["technicals"].get("regime") or {}).get("regime"),
+                "market_data_source": market.get("source"),
+                "live_bid": market.get("live_bid"), "live_ask": market.get("live_ask"),
+                "quote_observed_at": market.get("quote_observed_at"),
                 "using_evolved_champion": streams["technical"].get("source") == "evolved_champion",
                 "atr": atr,
                 "_technicals": market["technicals"]}
@@ -1389,7 +1500,10 @@ class OracleAgent(BaseAgent):
         if task == "market.analyze":
             return self.analyze_market(symbol)
         if task == "trade.signal":
-            out = self.signal(symbol)
+            # Signals used for open-position management or execution must not
+            # silently fall back to hours-old disk history.
+            require_ctrader = str(ctx.get("_sender") or "").startswith("ctrader_demo")
+            out = self.signal(allow_cache_fallback=False, require_ctrader=require_ctrader, symbol=symbol)
             if out.get("status") == "complete":
                 self._preserve(symbol, out)
                 streams = (out.get("signal") or {}).get("streams", {})
@@ -1532,7 +1646,9 @@ class OracleAgent(BaseAgent):
             }
         if task == "trade.propose":
             propose_started = time.monotonic()
-            sig = self.signal(symbol)
+            # A proposal is an execution decision: require a valid live source.
+            require_ctrader = str(ctx.get("_sender") or "").startswith("ctrader_demo")
+            sig = self.signal(symbol, allow_cache_fallback=False, require_ctrader=require_ctrader)
             signal_elapsed = time.monotonic() - propose_started
             if signal_elapsed >= 5.0:
                 log.warning("[%s] trade.propose signal phase took %.1fs", symbol, signal_elapsed)
@@ -1708,8 +1824,10 @@ class OracleAgent(BaseAgent):
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason,
                         "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                        "market_data_source": sig.get("market_data_source"),
                         "shadow_candidate": shadow_candidate}
             return {"status": "complete", "plan": plan, "signal": s,
+                    "market_data_source": sig.get("market_data_source"),
                     "effective_confidence": effective_confidence,
                     "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
                     "learned_conviction_floor": (
