@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:pulse"></span></div>
         <div>
           <div class="topbar-title">Pulse</div>
-          <div class="topbar-subtitle">The Heartbeat of the Cosmos</div>
+          <div class="topbar-subtitle">The Heartbeat of the Cosmos — Live Social Media &amp; Visual Post Reader</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -26,9 +26,23 @@
         </div>
       </header>
       <main class="dashboard-content">
+        <!-- Interactive Social Feed Scanner Bar -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(236,72,153,0.35);background:rgba(15,23,42,0.65)">
+          <div class="card-body" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">Live Social Media &amp; Trader Sentiment Desk (Mastodon · Bluesky · HackerNews)</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Click any social post or photo card below to open the full discussion reader and see what it means for our trades</div>
+            </div>
+            <button type="button" id="btnScanSocialNow" onclick="triggerLiveSocialScan()" style="padding:9px 16px;border-radius:8px;border:1px solid #f472b6;background:rgba(244,114,182,0.18);color:#f472b6;font-weight:700;font-size:12.5px;cursor:pointer">
+              🔄 Scan Live Social Posts Now
+            </button>
+          </div>
+          <div id="pulseScanBanner" style="display:none;margin:0 18px 14px 18px;padding:10px 14px;border-radius:8px;background:rgba(244,114,182,0.12);border-left:3px solid #f472b6;font-size:13px;color:var(--text)"></div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Overall Sentiment</div>
+            <div class="kpi-label">Crowd Mood</div>
             <div class="kpi-value" id="kpi_overall_sentiment">—</div>
             <div class="kpi-delta neu" id="kpid_overall_sentiment"></div>
           </div>
@@ -43,37 +57,40 @@
             <div class="kpi-delta neu" id="kpid_trending_topics"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Sentiment Score</div>
+            <div class="kpi-label">Optimism Score</div>
             <div class="kpi-value" id="kpi_sentiment_score">—</div>
             <div class="kpi-delta pos" id="kpid_sentiment_score"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Influencers</div>
+            <div class="kpi-label">Accounts Tracked</div>
             <div class="kpi-value" id="kpi_influencers_tracked">—</div>
             <div class="kpi-delta neu" id="kpid_influencers_tracked"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Uptime</div>
+            <div class="kpi-label">Feed Status</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
-        <div class="card">
+
+        <!-- Visual Social Posts Grid -->
+        <div class="card" style="margin-bottom:16px">
           <div class="card-header">
-            <span class="card-title">Live Social Media Accounts — Who Posted What (Mastodon · Bluesky · HackerNews)</span>
+            <span class="card-title">Live Social Media Posts &amp; Visual Cards (Click Any Post or Photo to Read Full Discussion)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
-            <div id="section_primary" class="feed-list">
+            <div id="section_primary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              <div class="skeleton skeleton-card"></div>
+              <div class="skeleton skeleton-card"></div>
             </div>
           </div>
         </div>
+
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Tracked Social Accounts &amp; Crowd Sentiment Breakdown</span>
+            <span class="card-title">Tracked Social Voices &amp; Plain-English Crowd Sentiment Impact</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -87,6 +104,33 @@
     </div>
   </div>
 
+  <!-- Deep Social Post Reader Modal -->
+  <div id="postReaderModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.82);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closePostModal()">
+    <div style="max-width:720px;width:100%;max-height:90vh;overflow-y:auto;border-radius:16px;background:#0f172a;border:1px solid rgba(244,114,182,0.35);box-shadow:0 24px 60px rgba(0,0,0,0.65);color:var(--text)">
+      <div style="position:relative;width:100%;height:230px;background:#070d19;overflow:hidden">
+        <img id="modalPostImage" src="" alt="Social post visual" style="width:100%;height:100%;object-fit:cover;display:block"/>
+        <button type="button" onclick="closePostModal()" style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(15,23,42,0.85);color:#fff;font-size:18px;font-weight:700;cursor:pointer">✕</button>
+        <div id="modalPostBadges" style="position:absolute;bottom:14px;left:18px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+      <div style="padding:22px 26px">
+        <h2 id="modalPostHeadline" style="font-size:20px;font-weight:800;line-height:1.35;margin:0 0 14px 0;color:#f8fafc"></h2>
+        <div id="modalPostBody" style="display:flex;flex-direction:column;gap:12px;font-size:14.5px;line-height:1.7;color:#cbd5e1"></div>
+        <div id="modalPostImpactBox" style="margin-top:18px;padding:14px 16px;border-radius:10px;background:rgba(244,114,182,0.1);border-left:4px solid #f472b6;font-size:13.5px;line-height:1.6;color:#e2e8f0"></div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <button type="button" id="modalAskPulseBtn" style="padding:9px 16px;border-radius:8px;border:1px solid #f472b6;background:rgba(244,114,182,0.18);color:#f472b6;font-weight:700;font-size:13px;cursor:pointer">
+            💬 Ask Pulse About This Social Trend
+          </button>
+          <div style="display:flex;gap:10px;align-items:center">
+            <a id="modalPostExternalUrlBtn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;padding:9px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#f8fafc;text-decoration:none;font-size:13px;font-weight:600">
+              Open Original Social Post ↗
+            </a>
+            <button type="button" onclick="closePostModal()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Close Reader</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <button class="chat-fab" id="chatFab" title="Ask Pulse">
     <span data-icon="ui:chat" class="icon-lg"></span>
   </button>
@@ -96,39 +140,160 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:pulse"></span></div>
       <div>
         <div class="chat-drawer-title">Pulse</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Social Sentiment</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">What Traders Are Saying on Social Media</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Pulse. Ask me who posted what on social media accounts right now or what the crowd sentiment is!</div>
+        <div class="chat-bubble">Hello! I am Pulse. Ask me who posted what on social media accounts right now, or click any social card to read the full crowd sentiment analysis!</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
         <button class="chat-hint-chip">Who posted what on social media today?</button>
         <button class="chat-hint-chip">What is the crowd sentiment right now?</button>
-        <button class="chat-hint-chip">What do you do?</button>
+        <button class="chat-hint-chip">What are traders saying about Bitcoin and Gold?</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Pulse…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Pulse in plain English…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'pulse';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+  let SOCIAL_POSTS_STORE = [];
+
+  async function triggerLiveSocialScan() {
+    const btn = document.getElementById('btnScanSocialNow');
+    const banner = document.getElementById('pulseScanBanner');
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning Social Media Feeds…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/feeds/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: 'pulse' })
+      });
+      const res = await r.json();
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = res.human_summary || 'Refreshed live social posts and crowd sentiment.';
+      }
+      await loadDashboard();
+    } catch (e) {
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Could not scan social feeds: ' + e.message;
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = orig; }
+    }
+  }
+
+  function openPostModal(idx) {
+    const item = SOCIAL_POSTS_STORE[idx];
+    if (!item) return;
+    const modal = document.getElementById('postReaderModal');
+    const img = document.getElementById('modalPostImage');
+    const badges = document.getElementById('modalPostBadges');
+    const head = document.getElementById('modalPostHeadline');
+    const body = document.getElementById('modalPostBody');
+    const impact = document.getElementById('modalPostImpactBox');
+    const extBtn = document.getElementById('modalPostExternalUrlBtn');
+    const askBtn = document.getElementById('modalAskPulseBtn');
+
+    img.onerror = function() { if (item.fallback_image_url && this.src !== item.fallback_image_url) this.src = item.fallback_image_url; };
+    img.src = item.image_url || item.fallback_image_url || '';
+
+    const sent = String(item.sentiment || 'BULLISH').toUpperCase();
+    const sentColor = sent.includes('BULL') ? '#10b981' : (sent.includes('BEAR') ? '#f59e0b' : '#38bdf8');
+    badges.innerHTML =
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(244,114,182,0.45);color:#f472b6;font-size:11.5px;font-weight:700">' + (item.platform || 'Social Media') + '</span>' +
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.2);color:#e2e8f0;font-size:11.5px;font-weight:600">' + (item.handle || '@trader') + '</span>' +
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid ' + sentColor + ';color:' + sentColor + ';font-size:11.5px;font-weight:700">' + sent + '</span>';
+
+    head.textContent = (item.handle || '@trader') + ' on ' + (item.platform || 'Social Wire') + ' — ' + (item.topic || 'Market Discussion');
+    const paras = Array.isArray(item.full_article_paragraphs) && item.full_article_paragraphs.length
+      ? item.full_article_paragraphs
+      : [item.post || item.title];
+    body.innerHTML = paras.map(p => '<p style="margin:0">' + String(p).replace(/</g, '&lt;') + '</p>').join('');
+    impact.textContent = item.market_impact_plain || 'Pulse compares retail trader sentiment against institutional order flow so Oracle never buys at the top of a crowd frenzy.';
+
+    if (item.url && item.url.startsWith('http')) {
+      extBtn.style.display = 'inline-block';
+      extBtn.href = item.url;
+    } else {
+      extBtn.style.display = 'none';
+    }
+
+    askBtn.onclick = function() {
+      closePostModal();
+      const drawer = document.getElementById('chatDrawer');
+      const overlay = document.getElementById('chatOverlay');
+      const chatIn = document.getElementById('chatInput');
+      const chatSnd = document.getElementById('chatSend');
+      drawer.classList.add('open');
+      overlay.classList.add('visible');
+      chatIn.value = 'What are traders saying about "' + (item.topic || item.post || '').slice(0, 80) + '" and how does it affect our trades?';
+      chatIn.dispatchEvent(new Event('input'));
+      chatSnd.click();
+    };
+
+    modal.style.display = 'flex';
+  }
+
+  function closePostModal() {
+    const modal = document.getElementById('postReaderModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function renderVisualSocialCard(item, idx) {
+    const handle = item.handle || '@trader';
+    const platform = item.platform || 'Social Stream';
+    const topic = item.topic || 'Market Crowd';
+    const postText = item.post || item.title || '';
+    const sent = String(item.sentiment || 'BULLISH').toUpperCase();
+    const sentColor = sent.includes('BULL') ? '#10b981' : (sent.includes('BEAR') ? '#f59e0b' : '#38bdf8');
+    const imgSrc = item.image_url || item.fallback_image_url || '';
+    const fallbackSrc = item.fallback_image_url || '';
+
+    return (
+      '<div onclick="openPostModal(' + idx + ')" style="cursor:pointer;border-radius:12px;overflow:hidden;background:rgba(15,23,42,0.75);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;transition:transform 0.15s ease,border-color 0.15s ease" onmouseover="this.style.borderColor=\'#f472b6\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.1)\';this.style.transform=\'none\'">' +
+        '<div style="position:relative;width:100%;height:155px;background:#070d19;overflow:hidden">' +
+          '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="Social card" style="width:100%;height:100%;object-fit:cover;display:block"/>' +
+          '<div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#f472b6;font-size:11px;font-weight:700">' + platform + '</span>' +
+            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#e2e8f0;font-size:11px;font-weight:600">' + handle + '</span>' +
+          '</div>' +
+          '<span style="position:absolute;top:10px;right:10px;padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.9);color:' + sentColor + ';font-size:10.5px;font-weight:800">' + sent + '</span>' +
+        '</div>' +
+        '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1">' +
+          '<div style="font-size:12px;font-weight:700;color:#38bdf8;text-transform:uppercase;letter-spacing:0.04em">' + topic + '</div>' +
+          '<div style="font-size:14px;font-weight:600;line-height:1.45;color:#f8fafc;flex:1">“' + String(postText).slice(0, 150) + (String(postText).length > 150 ? '…”' : '”') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px">' +
+            '<span style="color:var(--text-muted)">' + (item.engagement || item.time || 'Live') + '</span>' +
+            '<span style="color:#f472b6;font-weight:700">Read Full Context →</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderFeedItem(item, idx) {
+    return '<div class="feed-item" style="cursor:pointer" onclick="openPostModal(' + idx + ')"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.post||'') + '</div><div class="feed-meta"><span>' + (item.source||'') + '</span><span style="color:#f472b6;font-weight:600">View Post →</span></div></div></div>';
+  }
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -154,32 +319,35 @@
     if (typeof injectIcons === 'function') injectIcons();
   }
 
-  function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
-  }
-
   async function loadDashboard() {
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      // KPIs
-            setKpi('overall_sentiment', d['overall_sentiment'] != null ? d['overall_sentiment'] : (d.metrics && d.metrics['overall_sentiment'] != null ? d.metrics['overall_sentiment'] : null), d.deltas && d.deltas['overall_sentiment']);
-      setKpi('posts_analyzed', d['posts_analyzed'] != null ? d['posts_analyzed'] : (d.metrics && d.metrics['posts_analyzed'] != null ? d.metrics['posts_analyzed'] : null), d.deltas && d.deltas['posts_analyzed']);
-      setKpi('trending_topics', d['trending_topics'] != null ? d['trending_topics'] : (d.metrics && d.metrics['trending_topics'] != null ? d.metrics['trending_topics'] : null), d.deltas && d.deltas['trending_topics']);
-      setKpi('sentiment_score', d['sentiment_score'] != null ? d['sentiment_score'] : (d.metrics && d.metrics['sentiment_score'] != null ? d.metrics['sentiment_score'] : null), d.deltas && d.deltas['sentiment_score']);
-      setKpi('influencers_tracked', d['influencers_tracked'] != null ? d['influencers_tracked'] : (d.metrics && d.metrics['influencers_tracked'] != null ? d.metrics['influencers_tracked'] : null), d.deltas && d.deltas['influencers_tracked']);
-      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      // Primary section: first array found in data
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
+      setKpi('overall_sentiment', d['overall_sentiment'] != null ? d['overall_sentiment'] : (d.metrics && d.metrics['overall_sentiment']), d.deltas && d.deltas['overall_sentiment']);
+      setKpi('posts_analyzed', d['posts_analyzed'] != null ? d['posts_analyzed'] : (d.metrics && d.metrics['posts_analyzed']), d.deltas && d.deltas['posts_analyzed']);
+      setKpi('trending_topics', d['trending_topics'] != null ? d['trending_topics'] : (d.metrics && d.metrics['trending_topics']), d.deltas && d.deltas['trending_topics']);
+      setKpi('sentiment_score', d['sentiment_score'] != null ? d['sentiment_score'] : (d.metrics && d.metrics['sentiment_score']), d.deltas && d.deltas['sentiment_score']);
+      setKpi('influencers_tracked', d['influencers_tracked'] != null ? d['influencers_tracked'] : (d.metrics && d.metrics['influencers_tracked']), d.deltas && d.deltas['influencers_tracked']);
+      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
+
+      const primaryArr = d.social_posts_feed || [];
+      const secondaryArr = d.influencer_sentiment_feed || [];
+      SOCIAL_POSTS_STORE = primaryArr.slice(0, 12);
+
+      if (SOCIAL_POSTS_STORE.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
+        if (el) el.innerHTML = SOCIAL_POSTS_STORE.map((item, idx) => renderVisualSocialCard(item, idx)).join('');
+      } else {
+        offlinePanel('section_primary');
+      }
+
+      if (secondaryArr.length > 0) {
         const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+        if (el2) el2.innerHTML = secondaryArr.slice(0, 8).map((item, idx) => renderFeedItem(item, idx)).join('');
+      } else {
+        offlinePanel('section_secondary');
+      }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       offlinePanel('section_primary');
@@ -209,7 +377,10 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const html = (role === 'agent' && typeof window.formatReadableMarkdown === 'function')
+      ? window.formatReadableMarkdown(text)
+      : String(text || '').replace(/</g, '&lt;');
+    d.innerHTML='<div class="chat-bubble">'+html+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -230,7 +401,7 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+      addMsg('agent', data.response||data.reply||data.message||'Here is what people are posting on social media.');
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 

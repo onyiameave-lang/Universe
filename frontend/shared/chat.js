@@ -8,10 +8,21 @@
    ChatDrawer — slide-in from right, overlays dashboard
 ═══════════════════════════════════════════════════════════════════ */
 function formatReadableMarkdown(raw) {
-  const esc = String(raw || '')
+  let text = String(raw || '');
+  // Pre-convert multi-line or inline **bold** markers before splitting lines
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '[[B]]$1[[/B]]');
+  text = text.replace(/\*([^*\n]+)\*/g, '[[I]]$1[[/I]]');
+  // Strip any leftover unmatched ** asterisks so raw asterisks never appear in chat
+  text = text.replace(/\*\*+/g, '');
+
+  const esc = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/\[\[B\]\]/g, '<strong>')
+    .replace(/\[\[\/B\]\]/g, '</strong>')
+    .replace(/\[\[I\]\]/g, '<em>')
+    .replace(/\[\[\/I\]\]/g, '</em>');
 
   const lines = esc.split('\n');
   const out = [];
@@ -24,16 +35,14 @@ function formatReadableMarkdown(raw) {
       continue;
     }
 
-    // Inline formatting: links, bold, italic, code
+    // Inline formatting: links and code
     line = line
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--agent-color,#0ea5e9);text-decoration:underline">$1</a>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code style="background:rgba(14,165,233,0.12);padding:1px 5px;border-radius:4px;font-size:0.92em">$1</code>');
 
     if (line.startsWith('#### ')) {
       if (inList) { out.push('</ul>'); inList = false; }
-      out.push('<div style="font-weight:700;font-size:13px;color:var(--text);margin:12px 0 6px;letter-spacing:0.01em">' + line.slice(5) + '</div>');
+      out.push('<div style="font-weight:700;font-size:13.5px;color:var(--text);margin:12px 0 6px;letter-spacing:0.01em">' + line.slice(5) + '</div>');
     } else if (line.startsWith('### ')) {
       if (inList) { out.push('</ul>'); inList = false; }
       out.push('<div style="font-weight:800;font-size:14.5px;color:var(--agent-color,#0ea5e9);margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">' + line.slice(4) + '</div>');
@@ -41,12 +50,12 @@ function formatReadableMarkdown(raw) {
       if (inList) { out.push('</ul>'); inList = false; }
       const txt = line.replace(/^#+\s*/, '');
       out.push('<div style="font-weight:800;font-size:15px;color:var(--text);margin:14px 0 6px">' + txt + '</div>');
-    } else if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+    } else if (/^[-•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
       if (!inList) {
         out.push('<ul style="margin:6px 0 10px 18px;padding:0;display:flex;flex-direction:column;gap:6px">');
         inList = true;
       }
-      const itemTxt = line.replace(/^([-*]|\d+\.)\s+/, '');
+      const itemTxt = line.replace(/^([-•]|\d+\.)\s+/, '');
       out.push('<li style="line-height:1.5">' + itemTxt + '</li>');
     } else {
       if (inList) { out.push('</ul>'); inList = false; }
@@ -524,9 +533,8 @@ function initAgentPageStudio() {
     (document.body && document.body.getAttribute('data-agent')) ||
     (typeof AGENT_ID !== 'undefined' ? String(AGENT_ID) : '')
   ).toLowerCase();
-  if (!agentId || agentId === 'atlas' || agentId === 'nexus') return; // atlas.html and nexus.html have dedicated custom institutional studios
 
-  // 1. Format any new agent messages added to #chatMessages drawer with Markdown
+  // 1. Format any new agent messages added to #chatMessages drawer with Markdown on ALL pages
   const chatMsgEl = document.getElementById('chatMessages');
   if (chatMsgEl && typeof MutationObserver !== 'undefined') {
     const obs = new MutationObserver((mutations) => {
@@ -544,6 +552,8 @@ function initAgentPageStudio() {
     });
     obs.observe(chatMsgEl, { childList: true });
   }
+
+  if (!agentId || agentId === 'atlas' || agentId === 'nexus') return; // atlas.html and nexus.html have dedicated custom institutional studios
 
   // 2. Mount an interactive On-Page Chat Studio right below .kpi-grid so users can chat directly on the page
   const kpiGrid = document.querySelector('.kpi-grid');

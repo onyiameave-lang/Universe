@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:sentinel"></span></div>
         <div>
           <div class="topbar-title">Sentinel</div>
-          <div class="topbar-subtitle">The Eternal Watcher</div>
+          <div class="topbar-subtitle">The Eternal Watcher — Global News &amp; Photo Article Reader</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -26,54 +26,73 @@
         </div>
       </header>
       <main class="dashboard-content">
+        <!-- Interactive News Wire Scanner Control Bar -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.35);background:rgba(15,23,42,0.65)">
+          <div class="card-body" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">Live Global News Desk (BBC · CNBC · Al Jazeera · WSJ · MarketWatch · OilPrice)</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Click any headline or photo below to open the full article reader and see how it affects our currency, gold, and stock trades</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button type="button" id="btnScanNewsNow" onclick="triggerLiveNewsScan()" style="padding:9px 16px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.2);color:#38bdf8;font-weight:700;font-size:12.5px;cursor:pointer">
+                🔄 Scan Live World News Wires Now
+              </button>
+            </div>
+          </div>
+          <div id="sentinelScanBanner" style="display:none;margin:0 18px 14px 18px;padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.12);border-left:3px solid #10b981;font-size:13px;color:var(--text)"></div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Alerts Today</div>
+            <div class="kpi-label">News Stories Today</div>
             <div class="kpi-value" id="kpi_alerts_today">—</div>
             <div class="kpi-delta neg" id="kpid_alerts_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Sentiment</div>
+            <div class="kpi-label">Global News Mood</div>
             <div class="kpi-value" id="kpi_market_sentiment">—</div>
             <div class="kpi-delta neu" id="kpid_market_sentiment"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Sources</div>
+            <div class="kpi-label">News Outlets Watched</div>
             <div class="kpi-value" id="kpi_sources_monitored">—</div>
             <div class="kpi-delta neu" id="kpid_sources_monitored"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Threats</div>
+            <div class="kpi-label">Cautionary Alerts</div>
             <div class="kpi-value" id="kpi_threats_detected">—</div>
             <div class="kpi-delta neg" id="kpid_threats_detected"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Coverage</div>
+            <div class="kpi-label">Article Coverage</div>
             <div class="kpi-value" id="kpi_coverage_pct">—</div>
             <div class="kpi-delta neu" id="kpid_coverage_pct"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Uptime</div>
+            <div class="kpi-label">News Watch Status</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
-        <div class="card">
+
+        <!-- Photo News Grid -->
+        <div class="card" style="margin-bottom:16px">
           <div class="card-header">
-            <span class="card-title">What's Happening in World &amp; Market News Today (Al Jazeera · BBC · CNBC · WSJ · MarketWatch · OilPrice)</span>
+            <span class="card-title">Breaking World &amp; Financial News Stories (Click Any Headline or Photo to Read Full Article)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
-            <div id="section_primary" class="feed-list">
+            <div id="section_primary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              <div class="skeleton skeleton-card"></div>
+              <div class="skeleton skeleton-card"></div>
             </div>
           </div>
         </div>
+
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Global Geopolitical &amp; Macro Event Impact Radar</span>
+            <span class="card-title">Global Geopolitical &amp; Market Impact Radar (Click Any Item to Read Details)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -87,6 +106,33 @@
     </div>
   </div>
 
+  <!-- Deep Article Reader Modal -->
+  <div id="articleReaderModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.82);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeArticleModal()">
+    <div style="max-width:740px;width:100%;max-height:90vh;overflow-y:auto;border-radius:16px;background:#0f172a;border:1px solid rgba(56,189,248,0.35);box-shadow:0 24px 60px rgba(0,0,0,0.65);color:var(--text)">
+      <div style="position:relative;width:100%;height:240px;background:#070d19;overflow:hidden">
+        <img id="modalArticleImage" src="" alt="Article cover" style="width:100%;height:100%;object-fit:cover;display:block"/>
+        <button type="button" onclick="closeArticleModal()" style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(15,23,42,0.85);color:#fff;font-size:18px;font-weight:700;cursor:pointer">✕</button>
+        <div id="modalArticleBadges" style="position:absolute;bottom:14px;left:18px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+      <div style="padding:22px 26px">
+        <h2 id="modalArticleHeadline" style="font-size:21px;font-weight:800;line-height:1.35;margin:0 0 14px 0;color:#f8fafc"></h2>
+        <div id="modalArticleBody" style="display:flex;flex-direction:column;gap:12px;font-size:14.5px;line-height:1.7;color:#cbd5e1"></div>
+        <div id="modalArticleImpactBox" style="margin-top:18px;padding:14px 16px;border-radius:10px;background:rgba(16,185,129,0.1);border-left:4px solid #10b981;font-size:13.5px;line-height:1.6;color:#e2e8f0"></div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <button type="button" id="modalAskSentinelBtn" style="padding:9px 16px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.18);color:#38bdf8;font-weight:700;font-size:13px;cursor:pointer">
+            💬 Ask Sentinel How This Affects Our Trades
+          </button>
+          <div style="display:flex;gap:10px;align-items:center">
+            <a id="modalExternalUrlBtn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;padding:9px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#f8fafc;text-decoration:none;font-size:13px;font-weight:600">
+              Open Original News Source ↗
+            </a>
+            <button type="button" onclick="closeArticleModal()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Close Reader</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <button class="chat-fab" id="chatFab" title="Ask Sentinel">
     <span data-icon="ui:chat" class="icon-lg"></span>
   </button>
@@ -96,39 +142,160 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:sentinel"></span></div>
       <div>
         <div class="chat-drawer-title">Sentinel</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">News & Monitoring</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">World &amp; Financial News Monitor</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Sentinel. Ask me what is happening in the news in the world today across our 6 international news wires!</div>
+        <div class="chat-bubble">Hello! I am Sentinel. Ask me what is happening in the news in the world today across our 6 international news wires, or click any photo headline to read the full story!</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
         <button class="chat-hint-chip">What's happening in the news in the world today?</button>
         <button class="chat-hint-chip">Show geopolitical &amp; inflation alerts</button>
-        <button class="chat-hint-chip">What do you do?</button>
+        <button class="chat-hint-chip">How does today's news affect EUR/USD and Gold?</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Sentinel…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Sentinel in plain English…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'sentinel';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+  let NEWS_ITEMS_STORE = [];
+
+  async function triggerLiveNewsScan() {
+    const btn = document.getElementById('btnScanNewsNow');
+    const banner = document.getElementById('sentinelScanBanner');
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning Global News Wires…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/feeds/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: 'sentinel' })
+      });
+      const res = await r.json();
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = res.human_summary || 'Refreshed live global news stories and photos.';
+      }
+      await loadDashboard();
+    } catch (e) {
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Could not scan live news wires: ' + e.message;
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = orig; }
+    }
+  }
+
+  function openArticleModal(idx) {
+    const item = NEWS_ITEMS_STORE[idx];
+    if (!item) return;
+    const modal = document.getElementById('articleReaderModal');
+    const img = document.getElementById('modalArticleImage');
+    const badges = document.getElementById('modalArticleBadges');
+    const head = document.getElementById('modalArticleHeadline');
+    const body = document.getElementById('modalArticleBody');
+    const impact = document.getElementById('modalArticleImpactBox');
+    const extBtn = document.getElementById('modalExternalUrlBtn');
+    const askBtn = document.getElementById('modalAskSentinelBtn');
+
+    img.onerror = function() { if (item.fallback_image_url && this.src !== item.fallback_image_url) this.src = item.fallback_image_url; };
+    img.src = item.image_url || item.fallback_image_url || '';
+
+    const sent = String(item.sentiment || 'NEUTRAL').toUpperCase();
+    const sentColor = sent.includes('BULL') || sent.includes('POS') ? '#10b981' : (sent.includes('BEAR') || sent.includes('CAUT') ? '#f59e0b' : '#38bdf8');
+    badges.innerHTML =
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;font-size:11.5px;font-weight:700">' + (item.outlet || 'Global News Wire') + '</span>' +
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.2);color:#e2e8f0;font-size:11.5px;font-weight:600">' + (item.category || 'Macro & Markets') + '</span>' +
+      '<span style="padding:4px 10px;border-radius:6px;background:rgba(15,23,42,0.9);border:1px solid ' + sentColor + ';color:' + sentColor + ';font-size:11.5px;font-weight:700">' + sent + '</span>';
+
+    head.textContent = item.headline || item.title || 'Global Market Story';
+    const paras = Array.isArray(item.full_article_paragraphs) && item.full_article_paragraphs.length
+      ? item.full_article_paragraphs
+      : [item.summary || item.source || item.headline];
+    body.innerHTML = paras.map(p => '<p style="margin:0">' + String(p).replace(/</g, '&lt;') + '</p>').join('');
+    impact.textContent = item.market_impact_plain || 'Sentinel cross-checks this headline with Oracle and Aegis before any trade is placed.';
+
+    if (item.url && item.url.startsWith('http')) {
+      extBtn.style.display = 'inline-block';
+      extBtn.href = item.url;
+    } else {
+      extBtn.style.display = 'none';
+    }
+
+    askBtn.onclick = function() {
+      closeArticleModal();
+      const drawer = document.getElementById('chatDrawer');
+      const overlay = document.getElementById('chatOverlay');
+      const chatIn = document.getElementById('chatInput');
+      const chatSnd = document.getElementById('chatSend');
+      drawer.classList.add('open');
+      overlay.classList.add('visible');
+      chatIn.value = 'Explain this news story and how it affects our trades: "' + (item.headline || item.title) + '"';
+      chatIn.dispatchEvent(new Event('input'));
+      chatSnd.click();
+    };
+
+    modal.style.display = 'flex';
+  }
+
+  function closeArticleModal() {
+    const modal = document.getElementById('articleReaderModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function renderPhotoNewsCard(item, idx) {
+    const headline = item.headline || item.title || 'Global News Update';
+    const outlet = item.outlet || 'Global News';
+    const category = item.category || 'World & Markets';
+    const summary = item.summary || item.source || '';
+    const sent = String(item.sentiment || 'NEUTRAL').toUpperCase();
+    const sentColor = sent.includes('BULL') || sent.includes('POS') ? '#10b981' : (sent.includes('BEAR') || sent.includes('CAUT') ? '#f59e0b' : '#38bdf8');
+    const imgSrc = item.image_url || item.fallback_image_url || '';
+    const fallbackSrc = item.fallback_image_url || '';
+
+    return (
+      '<div onclick="openArticleModal(' + idx + ')" style="cursor:pointer;border-radius:12px;overflow:hidden;background:rgba(15,23,42,0.75);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;transition:transform 0.15s ease,border-color 0.15s ease" onmouseover="this.style.borderColor=\'#38bdf8\';this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.1)\';this.style.transform=\'none\'">' +
+        '<div style="position:relative;width:100%;height:165px;background:#070d19;overflow:hidden">' +
+          '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="News photo" style="width:100%;height:100%;object-fit:cover;display:block"/>' +
+          '<div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap">' +
+            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#38bdf8;font-size:11px;font-weight:700">' + outlet + '</span>' +
+            '<span style="padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.88);color:#cbd5e1;font-size:11px;font-weight:600">' + category + '</span>' +
+          '</div>' +
+          '<span style="position:absolute;top:10px;right:10px;padding:3px 8px;border-radius:5px;background:rgba(15,23,42,0.9);color:' + sentColor + ';font-size:10.5px;font-weight:800">' + sent + '</span>' +
+        '</div>' +
+        '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1">' +
+          '<div style="font-size:15px;font-weight:700;line-height:1.4;color:#f8fafc">' + headline + '</div>' +
+          '<div style="font-size:12.5px;line-height:1.55;color:var(--text-muted);flex:1">' + String(summary).slice(0, 145) + (String(summary).length > 145 ? '…' : '') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px">' +
+            '<span style="color:var(--text-muted)">' + (item.time || 'Live Wire') + '</span>' +
+            '<span style="color:#38bdf8;font-weight:700">Read Full Story →</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderFeedItem(item, idx) {
+    return '<div class="feed-item" style="cursor:pointer" onclick="openArticleModal(' + idx + ')"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||'') + '</span><span style="color:#38bdf8;font-weight:600">Read Article →</span></div></div></div>';
+  }
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -154,32 +321,35 @@
     if (typeof injectIcons === 'function') injectIcons();
   }
 
-  function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
-  }
-
   async function loadDashboard() {
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      // KPIs
-            setKpi('alerts_today', d['alerts_today'] != null ? d['alerts_today'] : (d.metrics && d.metrics['alerts_today'] != null ? d.metrics['alerts_today'] : null), d.deltas && d.deltas['alerts_today']);
-      setKpi('market_sentiment', d['market_sentiment'] != null ? d['market_sentiment'] : (d.metrics && d.metrics['market_sentiment'] != null ? d.metrics['market_sentiment'] : null), d.deltas && d.deltas['market_sentiment']);
-      setKpi('sources_monitored', d['sources_monitored'] != null ? d['sources_monitored'] : (d.metrics && d.metrics['sources_monitored'] != null ? d.metrics['sources_monitored'] : null), d.deltas && d.deltas['sources_monitored']);
-      setKpi('threats_detected', d['threats_detected'] != null ? d['threats_detected'] : (d.metrics && d.metrics['threats_detected'] != null ? d.metrics['threats_detected'] : null), d.deltas && d.deltas['threats_detected']);
-      setKpi('coverage_pct', d['coverage_pct'] != null ? d['coverage_pct'] : (d.metrics && d.metrics['coverage_pct'] != null ? d.metrics['coverage_pct'] : null), d.deltas && d.deltas['coverage_pct']);
-      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      // Primary section: first array found in data
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
+      setKpi('alerts_today', d['alerts_today'] != null ? d['alerts_today'] : (d.metrics && d.metrics['alerts_today']), d.deltas && d.deltas['alerts_today']);
+      setKpi('market_sentiment', d['market_sentiment'] != null ? d['market_sentiment'] : (d.metrics && d.metrics['market_sentiment']), d.deltas && d.deltas['market_sentiment']);
+      setKpi('sources_monitored', d['sources_monitored'] != null ? d['sources_monitored'] : (d.metrics && d.metrics['sources_monitored']), d.deltas && d.deltas['sources_monitored']);
+      setKpi('threats_detected', d['threats_detected'] != null ? d['threats_detected'] : (d.metrics && d.metrics['threats_detected']), d.deltas && d.deltas['threats_detected']);
+      setKpi('coverage_pct', d['coverage_pct'] != null ? d['coverage_pct'] : (d.metrics && d.metrics['coverage_pct']), d.deltas && d.deltas['coverage_pct']);
+      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
+
+      const primaryArr = d.world_news_feed || [];
+      const secondaryArr = d.macro_event_radar || [];
+      NEWS_ITEMS_STORE = primaryArr.slice(0, 14);
+
+      if (NEWS_ITEMS_STORE.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
+        if (el) el.innerHTML = NEWS_ITEMS_STORE.map((item, idx) => renderPhotoNewsCard(item, idx)).join('');
+      } else {
+        offlinePanel('section_primary');
+      }
+
+      if (secondaryArr.length > 0) {
         const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+        if (el2) el2.innerHTML = secondaryArr.slice(0, 8).map((item, idx) => renderFeedItem(item, Math.max(0, idx - 1))).join('');
+      } else {
+        offlinePanel('section_secondary');
+      }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       offlinePanel('section_primary');
@@ -209,7 +379,10 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const html = (role === 'agent' && typeof window.formatReadableMarkdown === 'function')
+      ? window.formatReadableMarkdown(text)
+      : String(text || '').replace(/</g, '&lt;');
+    d.innerHTML='<div class="chat-bubble">'+html+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -230,7 +403,7 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+      addMsg('agent', data.response||data.reply||data.message||'Here are the latest news headlines.');
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 

@@ -1151,7 +1151,8 @@ def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto"
         human_ans = str(dossier.get("direct_human_answer") or dossier.get("readable_reply") or "").strip()
         if human_ans:
             refs = build_cross_agent_referrals(clean_msg, agent_id, [agent_id, "atlas"], is_nexus_chat=False)
-            full_reply = f"{human_ans}\n\n---\n*Answered via our shared **Chronicle** memory (coordinated by **Nexus** with **Atlas Research**).*"
+            full_reply = f"{human_ans}\n\n---\nAnswered via our shared Chronicle memory (coordinated by Nexus with Atlas Research)."
+            full_reply = re.sub(r"\*\*([^*]+)\*\*", r"\1", full_reply).replace("**", "")
             return {
                 "agent": agent_id,
                 "task": "research.investigate",
@@ -1177,6 +1178,7 @@ def _build_fastapi_human_agent_reply(name: str, message: str, mode: str = "auto"
     dom = agent_to_domain.get(agent_id, "research")
     _, task_name, out, _ = _build_specialist_domain_output(dom, clean_msg)
     reply_text = str(out.get("human_section") or out.get("summary") or "").strip()
+    reply_text = re.sub(r"\*\*([^*]+)\*\*", r"\1", reply_text).replace("**", "")
     refs = build_cross_agent_referrals(clean_msg, agent_id, [agent_id], is_nexus_chat=False)
     return {
         "agent": agent_id,
@@ -1247,121 +1249,56 @@ async def ecosystem_chat(request: Request):
             "data": {"status": "error", "message": str(exc)},
         }
 
-# ── Forge V2 7-Timeframe Discovery & Background Shadow Runner Python Routes ──
+
+# ── Oracle Interactive Chart, cTrader/MT5 Cycle & Open/Close Demo Trade Routes ──
+@app.get("/api/oracle/chart")
+async def api_oracle_chart(symbol: str = "EURUSD", timeframe: str = "M15", broker: str = "all"):
+    from Nexus.api.interactive_actions import get_oracle_chart_data
+    return await run_in_threadpool(get_oracle_chart_data, symbol, timeframe, broker)
+
+
+@app.post("/api/oracle/execute-action")
+async def api_oracle_execute_action(request: Request):
+    from Nexus.api.interactive_actions import execute_oracle_action
+    body = await request.json()
+    return await run_in_threadpool(execute_oracle_action, body if isinstance(body, dict) else {})
+
+
+# ── Sentinel & Pulse Live Feed Refresh & Full Photo Reader Route ──
+@app.post("/api/feeds/refresh")
+async def api_feeds_refresh(request: Request):
+    from Nexus.api.interactive_actions import execute_feed_refresh
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    agent_id = str((body or {}).get("agent") or "all")
+    return await run_in_threadpool(execute_feed_refresh, agent_id)
+
+
+# ── Chronicle, Aegis & Genesis Interactive Action Route ──
+@app.post("/api/specialist/action")
+async def api_specialist_action(request: Request):
+    from Nexus.api.interactive_actions import execute_specialist_action
+    body = await request.json()
+    return await run_in_threadpool(execute_specialist_action, body if isinstance(body, dict) else {})
+
+
+# ── Forge V2 Full Interactive Training, Shadow Test & Promotion Routes ──
 @app.get("/api/forge/pilot/status")
-async def forge_v2_pilot_status(symbol: str = "GBPUSD", regime: str = "trending_up"):
-    import json
-    from Forge.core.shadow_runner import ForgeShadowRunner
-    from Forge.core.mtf_institutional_engine import MultiTimeframeInstitutionalEngine
+async def forge_v2_pilot_status():
+    from Nexus.api.interactive_actions import execute_forge_action
+    return await run_in_threadpool(execute_forge_action, "status", {})
 
-    upper_sym = (symbol or "GBPUSD").strip().upper()
-    kv_path = ROOT / "Chronicle" / "memory" / "store" / "kv_state.json"
-    mem_path = ROOT / "Chronicle" / "memory" / "store" / "memories.json"
-    ep_path = ROOT / "Chronicle" / "memory" / "store" / "episodes.json"
-    cat_path = ROOT / "Chronicle" / "memory" / "research" / "oracle_strategy_catalog" / "latest.json"
 
-    kv_store = json.loads(kv_path.read_text(encoding="utf-8")) if kv_path.exists() else {}
-    memories = json.loads(mem_path.read_text(encoding="utf-8")) if mem_path.exists() else []
-    episodes = json.loads(ep_path.read_text(encoding="utf-8")) if ep_path.exists() else []
-    catalog = json.loads(cat_path.read_text(encoding="utf-8")) if cat_path.exists() else {}
-
-    candidates = [
-        v["value"]
-        for k, v in kv_store.items()
-        if k.startswith("forge.core.candidate.")
-        and isinstance(v, dict)
-        and isinstance(v.get("value"), dict)
-        and (not symbol or v["value"].get("symbol") == upper_sym)
-    ]
-    hypotheses = [
-        v["value"]
-        for k, v in kv_store.items()
-        if k.startswith("forge.core.hypothesis.")
-        and isinstance(v, dict)
-        and isinstance(v.get("value"), dict)
-    ]
-    atlas_briefs = [
-        v["value"]
-        for k, v in kv_store.items()
-        if k.startswith(f"atlas.forge.research_brief.{upper_sym}.")
-        and isinstance(v, dict)
-        and isinstance(v.get("value"), dict)
-    ]
-
-    mtf_engine = MultiTimeframeInstitutionalEngine(ROOT)
-    mtf_ds = mtf_engine.load_cached_dataset(upper_sym)
-
-    shadow_runner = ForgeShadowRunner(ROOT, paper_only=True)
-    shadow_ledger = shadow_runner._read_json(shadow_runner.shadow_ledger_path, {"symbols": {}})
-    shadow_report = (shadow_ledger.get("symbols") or {}).get(upper_sym)
-
-    symbols_map = catalog.get("symbols") or {"GBPUSD": ["trending_up"], "EURUSD": ["trending_up"]}
-    symbols_readiness = []
-    for sym_key in sorted(symbols_map.keys()):
-        cp_path = ROOT / "Chronicle" / "memory" / "research" / "oracle_cost_profiles" / sym_key / "latest.json"
-        cp = json.loads(cp_path.read_text(encoding="utf-8")) if cp_path.exists() else None
-        ds_sym = mtf_engine.load_cached_dataset(sym_key)
-        tf_counts = ds_sym.get("timeframe_counts") if ds_sym else None
-        bars_cnt = sum(tf_counts.values()) if isinstance(tf_counts, dict) else 500
-        symbols_readiness.append({
-            "symbol": sym_key,
-            "status": "READY" if cp else "BLOCKED",
-            "blocker_code": None if cp else "MISSING_VERIFIED_COST_PROFILE",
-            "blocker_reason": None if cp else f"No verified cost profile found for {sym_key}.",
-            "bars_count": bars_cnt,
-            "mtf_ingested": bool(ds_sym),
-            "mtf_counts": tf_counts,
-            "cost_profile": cp,
-            "incumbent_regimes": symbols_map.get(sym_key, []),
-        })
-
-    recurrences = sum(max(0, int(m.get("occurrence_count", 1)) - 1) for m in memories if isinstance(m, dict))
-
-    return {
-        "status": "ok",
-        "deployment_target": "oracle_v2",
-        "active_symbol": upper_sym,
-        "active_regime": regime,
-        "mtf_summary": {
-            "symbol": mtf_ds.get("symbol"),
-            "yahoo_ticker": mtf_ds.get("yahoo_ticker"),
-            "timeframe_counts": mtf_ds.get("timeframe_counts"),
-            "session_distribution": mtf_ds.get("session_distribution"),
-            "regime_distribution": mtf_ds.get("regime_distribution"),
-            "fetched_at_unix": mtf_ds.get("fetched_at_unix"),
-        } if mtf_ds else None,
-        "atlas_research_briefs": atlas_briefs,
-        "shadow_runner_report": shadow_report,
-        "oracle_v2_deployed_strategies": catalog.get("oracle_v2_strategies") or {},
-        "symbols_readiness": symbols_readiness,
-        "candidates": candidates,
-        "hypotheses": hypotheses,
-        "learned_rankings": None,
-        "prior_lessons": [
-            {
-                "lesson": m.get("content"),
-                "adjustment": m.get("domain"),
-                "confidence": m.get("confidence", 0.9),
-                "repeat_count": m.get("occurrence_count", 1),
-                "occurrences": m.get("occurrences", []),
-            }
-            for m in memories[:10]
-            if isinstance(m, dict)
-        ],
-        "storage_topology": {
-            "chronicle_hard_drive": {
-                "state_keys_count": len(kv_store),
-                "total_revisions": len(kv_store) + len(memories) + len(episodes),
-                "memories_count": len(memories),
-                "episodes_count": len(episodes),
-                "lessons_count": len(memories),
-                "recurrences_consolidated": recurrences,
-            },
-            "agent_ram_and_outboxes": [
-                {"agent": "oracle", "ram_files": ["champion_library.json", "evolved_strategies.json"], "outbox_pending_events": 0}
-            ],
-        },
-    }
+@app.post("/api/forge/v2/discover")
+async def forge_v2_discover(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await run_in_threadpool(execute_forge_action, "discover_v2", body if isinstance(body, dict) else {})
 
 
 @app.get("/api/forge/v2/shadow/status")
@@ -1380,23 +1317,71 @@ async def forge_v2_shadow_status(symbol: str = "GBPUSD"):
 
 @app.post("/api/forge/v2/shadow/run")
 async def forge_v2_shadow_run(request: Request):
-    from Forge.core.shadow_runner import ForgeShadowRunner
+    from Nexus.api.interactive_actions import execute_forge_action
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await run_in_threadpool(execute_forge_action, "shadow_run", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/v2/retrain")
+async def forge_v2_retrain(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await run_in_threadpool(execute_forge_action, "surgical_retrain", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/candidate/transition")
+async def forge_candidate_transition(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
     body = await request.json()
-    symbol = str(body.get("symbol", "GBPUSD")).strip().upper()
-    style = str(body.get("trader_style", "ALL")).strip().upper()
-    lookback = int(body.get("lookback_bars", 260))
-    runner = ForgeShadowRunner(
-        ROOT,
-        paper_only=True,
-        output_namespace="api_paper",
-    )
-    report = await run_in_threadpool(runner.run_shadow_session, symbol, style, lookback)
-    return {
-        "status": "complete",
-        "symbol": symbol,
-        "trader_style": style,
-        "shadow_runner_report": report,
-    }
+    return await run_in_threadpool(execute_forge_action, "transition_candidate", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/candidate/rollback")
+async def forge_candidate_rollback(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
+    body = await request.json()
+    return await run_in_threadpool(execute_forge_action, "rollback_candidate", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/cost-profile")
+async def forge_register_cost_profile(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
+    body = await request.json()
+    return await run_in_threadpool(execute_forge_action, "register_cost_profile", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/pilot/run")
+async def forge_pilot_run(request: Request):
+    from Nexus.api.interactive_actions import execute_forge_action
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return await run_in_threadpool(execute_forge_action, "pilot_run", body if isinstance(body, dict) else {})
+
+
+@app.post("/api/forge/v1-catalog/sync")
+async def forge_v1_catalog_sync():
+    from Nexus.api.interactive_actions import execute_forge_action
+    return await run_in_threadpool(execute_forge_action, "sync_catalog", {})
+
+
+@app.post("/api/forge/outbox/flush")
+async def forge_outbox_flush():
+    from Nexus.api.interactive_actions import execute_forge_action
+    return await run_in_threadpool(execute_forge_action, "flush_outbox", {})
+
+
+@app.get("/api/forge/candidate/{candidate_id}")
+async def forge_get_candidate(candidate_id: str):
+    from Nexus.api.interactive_actions import execute_forge_action
+    return await run_in_threadpool(execute_forge_action, "get_candidate", {"candidate_id": candidate_id})
 
 
 if FRONTEND_ROOT.exists():

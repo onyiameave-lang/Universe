@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Genesis — Universe</title>
-  <link rel="stylesheet" href="shared/shared.css"/>
-  <link rel="stylesheet" href="shared/components.css"/>
-  <script src="shared/theme.js"></script>
+  <title>Genesis — Strategy Architect &amp; Blueprint Stress-Test Lab</title>
+  <link rel="stylesheet" href="shared/shared.css?v=5"/>
+  <link rel="stylesheet" href="shared/components.css?v=5"/>
+  <script src="shared/theme.js?v=5"></script>
 </head>
 <body data-agent="genesis">
   <canvas id="cosmos-canvas"></canvas>
@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:genesis"></span></div>
         <div>
           <div class="topbar-title">Genesis</div>
-          <div class="topbar-subtitle">The Architect of Destiny</div>
+          <div class="topbar-subtitle">The Strategy Architect · Plain-English Strategy Blueprint Designer &amp; Stress-Tester</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -58,28 +58,42 @@
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
+
+        <!-- Interactive Strategy Blueprint Designer Bar -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.34);background:linear-gradient(180deg,rgba(16,185,129,0.08) 0%,rgba(15,23,42,0.5) 100%)">
+          <div class="card-body" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13.5px;font-weight:800;color:var(--text)">Interactive Strategy Blueprint Designer</div>
+              <div id="genesisActionBanner" style="font-size:12px;color:var(--text-muted);margin-top:3px">
+                Tap the button on the right to have Genesis design a brand-new trading blueprint, stress-test its risk-to-reward rule, and post the plain-English blueprint below.
+              </div>
+            </div>
+            <button id="btnGenesisDesign" type="button" onclick="runGenesisBlueprint()" style="padding:9px 16px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">
+              + Design &amp; Stress-Test New Strategy Blueprint
+            </button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Live Feed</span>
+            <span class="card-title">Certified Strategy Blueprints (Plain-English Summary)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
             <div id="section_primary" class="feed-list">
               <div class="skeleton skeleton-card"></div>
               <div class="skeleton skeleton-card" style="margin-top:8px"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
             </div>
           </div>
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Secondary Data</span>
+            <span class="card-title">Stress-Test Audit &amp; Forge Promotion Pipeline</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
             <div id="section_secondary" class="feed-list">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
             </div>
           </div>
         </div>
@@ -102,33 +116,37 @@
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Greetings. I am Genesis, the architect of destiny. How may I illuminate the path before you?</div>
+        <div class="chat-bubble">Hello! I am Genesis, our strategy architect. Ask me about our trading blueprints, how we design strategies before sending them to Forge, or what your trading goals are.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What is your current status?</button>
-        <button class="chat-hint-chip">Show me the latest data</button>
-        <button class="chat-hint-chip">Explain your top signal</button>
+        <button class="chat-hint-chip">What trading blueprints are active?</button>
+        <button class="chat-hint-chip">How do you work with Forge and Oracle?</button>
+        <button class="chat-hint-chip">Explain our best performing blueprint</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Genesis…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Genesis in plain English…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
-  <script src="shared/chat.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'genesis';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
@@ -155,7 +173,41 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    const title = item.title || item.name || item.text || item.headline || 'Strategy Blueprint';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escHtml(title) + '</div><div class="feed-meta"><span>' + escHtml(item.source || item.agent || 'Genesis Strategy Architect') + '</span><span>' + escHtml(item.time || item.timestamp || 'Active') + '</span></div></div></div>';
+  }
+
+  async function runGenesisBlueprint() {
+    const btn = document.getElementById('btnGenesisDesign');
+    const banner = document.getElementById('genesisActionBanner');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Designing & Stress-Testing Blueprint…';
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/specialist/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: 'genesis', action: 'design_blueprint', payload: { style: 'Trend Continuation & Pullback' } }),
+      });
+      const d = await r.json();
+      if (banner) {
+        banner.style.color = '#10b981';
+        banner.style.fontWeight = '700';
+        banner.textContent = d.human_summary || 'New strategy blueprint designed and stress-tested.';
+      }
+      await loadDashboard();
+    } catch (e) {
+      if (banner) {
+        banner.style.color = '#f59e0b';
+        banner.textContent = 'Blueprint designer encountered an error: ' + (e.message || e);
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '+ Design & Stress-Test New Strategy Blueprint';
+      }
+    }
   }
 
   async function loadDashboard() {
@@ -163,14 +215,13 @@
       const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      // KPIs
-            setKpi('active_strategies', d['active_strategies'] != null ? d['active_strategies'] : (d.metrics && d.metrics['active_strategies'] != null ? d.metrics['active_strategies'] : null), d.deltas && d.deltas['active_strategies']);
+      setKpi('active_strategies', d['active_strategies'] != null ? d['active_strategies'] : (d.metrics && d.metrics['active_strategies'] != null ? d.metrics['active_strategies'] : null), d.deltas && d.deltas['active_strategies']);
       setKpi('avg_return', d['avg_return'] != null ? d['avg_return'] : (d.metrics && d.metrics['avg_return'] != null ? d.metrics['avg_return'] : null), d.deltas && d.deltas['avg_return']);
       setKpi('goals_met', d['goals_met'] != null ? d['goals_met'] : (d.metrics && d.metrics['goals_met'] != null ? d.metrics['goals_met'] : null), d.deltas && d.deltas['goals_met']);
       setKpi('backtests_run', d['backtests_run'] != null ? d['backtests_run'] : (d.metrics && d.metrics['backtests_run'] != null ? d.metrics['backtests_run'] : null), d.deltas && d.deltas['backtests_run']);
       setKpi('best_strategy_return', d['best_strategy_return'] != null ? d['best_strategy_return'] : (d.metrics && d.metrics['best_strategy_return'] != null ? d.metrics['best_strategy_return'] : null), d.deltas && d.deltas['best_strategy_return']);
       setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      // Primary section: first array found in data
+
       const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
       if (keys.length > 0) {
         const el = document.getElementById('section_primary');
@@ -207,9 +258,10 @@
     c.addEventListener('click', () => { chatIn.value=c.textContent; chatIn.dispatchEvent(new Event('input')); chatSnd.click(); });
   });
 
-  function addMsg(role, text) {
+  function addMsg(role, text, isHtml) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const inner = isHtml ? text : (typeof window.formatReadableMarkdown === 'function' ? window.formatReadableMarkdown(text) : escHtml(text));
+    d.innerHTML='<div class="chat-bubble">'+inner+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -221,7 +273,7 @@
   chatSnd.addEventListener('click', async () => {
     const text=chatIn.value.trim(); if(!text) return;
     chatIn.value=''; chatIn.style.height='auto'; chatSnd.disabled=true;
-    addMsg('user', text);
+    addMsg('user', text, false);
     const t=addTyping();
     try {
       const r=await fetch(API_BASE+'/agents/'+AGENT_ID+'/chat', {
@@ -230,8 +282,12 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
-    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
+      const rawReply = (data.response||data.message||'Genesis is ready.').replace(/\*\*/g, '');
+      const formatted = typeof window.formatReadableMarkdown === 'function'
+        ? window.formatReadableMarkdown(rawReply)
+        : escHtml(rawReply);
+      addMsg('agent', formatted, true);
+    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.', false); }
   });
 
   checkConn();

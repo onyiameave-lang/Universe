@@ -1435,11 +1435,20 @@ def _build_readable_reply(
     return "\n".join(lines).strip()
 
 
+def _clean_asterisks_for_human(text: str) -> str:
+    """Remove raw ** and * markdown asterisks so chat answers never display ugly asterisks."""
+    s = str(text or "")
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
+    s = re.sub(r"\*([^*\n]+)\*", r"\1", s)
+    s = s.replace("**", "")
+    return s.strip()
+
+
 def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str, Any]:
     """
     Execute an Atlas research or conversational request and return a dictionary containing:
-      - direct_human_answer: Clean, friendly, plain-English answer for normal users.
-      - readable_reply: Full formatted markdown answer with sources.
+      - direct_human_answer: Clean, friendly, plain-English answer for normal users (zero asterisks).
+      - readable_reply: Full formatted plain-English answer with sources (zero asterisks).
       - sources, desk_summary, symbol_context, chronicle_status, etc.
     """
     clean_query = str(query or "How good is Atlas research right now?").strip()
@@ -1450,7 +1459,7 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
     # 1. Fast path for casual greetings, small talk, and capability check-ins
     casual_intent = _classify_casual_intent(clean_query)
     if casual_intent is not None:
-        readable_reply = _build_casual_reply(casual_intent, desk_summary)
+        readable_reply = _clean_asterisks_for_human(_build_casual_reply(casual_intent, desk_summary))
         return {
             "status": "complete",
             "query": clean_query,
@@ -1521,15 +1530,18 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
     # 5. Save newly researched or upgraded answers to Chronicle
     saved_memory_id: Optional[str] = None
     subject_terms = _extract_subject_terms(clean_query)
-    synthesized_answer = _synthesize_direct_human_answer(clean_query, relevant_live_sources, chronicle_hit)
+    synthesized_answer = _clean_asterisks_for_human(
+        _synthesize_direct_human_answer(clean_query, relevant_live_sources, chronicle_hit)
+    )
     old_cached_ans = str((chronicle_hit or {}).get("direct_answer", ""))
     if (
         not chronicle_hit
         or _is_pop_culture_or_offtopic_noise(old_cached_ans, old_cached_ans, clean_query)
         or old_cached_ans.endswith("...")
-        or ("**Key Takeaways & Context**:" in synthesized_answer and "**Key Takeaways & Context**:" not in old_cached_ans)
-        or ("**Formula**:" in synthesized_answer and "**Formula**:" not in old_cached_ans)
-    ) and (relevant_live_sources or "**Formula**:" in synthesized_answer):
+        or "**" in old_cached_ans
+        or ("Key Takeaways & Context" in synthesized_answer and "Key Takeaways & Context" not in old_cached_ans)
+        or ("Formula:" in synthesized_answer and "Formula:" not in old_cached_ans)
+    ) and (relevant_live_sources or "Formula:" in synthesized_answer):
         saved_memory_id = _save_to_chronicle_memory(
             query=clean_query,
             subject_terms=subject_terms,
@@ -1541,16 +1553,18 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
             chronicle_hit["direct_answer"] = synthesized_answer
             chronicle_hit["sources"] = relevant_live_sources[:5]
 
-    readable_reply = _build_readable_reply(
-        query=clean_query,
-        domain=domain,
-        mode=mode,
-        v2_result=v2_result,
-        desk_summary=desk_summary,
-        symbol_context=symbol_context,
-        chronicle_hit=chronicle_hit,
-        relevant_live_sources=relevant_live_sources,
-        saved_memory_id=saved_memory_id,
+    readable_reply = _clean_asterisks_for_human(
+        _build_readable_reply(
+            query=clean_query,
+            domain=domain,
+            mode=mode,
+            v2_result=v2_result,
+            desk_summary=desk_summary,
+            symbol_context=symbol_context,
+            chronicle_hit=chronicle_hit,
+            relevant_live_sources=relevant_live_sources,
+            saved_memory_id=saved_memory_id,
+        )
     )
 
     pkg = v2_result.get("research_package") or {}

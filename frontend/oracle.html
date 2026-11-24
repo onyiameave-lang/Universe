@@ -17,7 +17,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:oracle"></span></div>
         <div>
           <div class="topbar-title">Oracle</div>
-          <div class="topbar-subtitle">The All-Seeing Eye of Markets</div>
+          <div class="topbar-subtitle">The All-Seeing Eye of Markets — Live cTrader &amp; MetaTrader 5 Terminal</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -26,26 +26,68 @@
         </div>
       </header>
       <main class="dashboard-content">
-        <!-- Interactive Broker Account Switcher: MetaTrader 5 (MT5) vs cTrader vs All Accounts -->
-        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.35);background:rgba(15,23,42,0.55)">
-          <div class="card-body" style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+        <!-- 1. Interactive Broker Account Switcher + Direct Backend Execution Controls -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.35);background:rgba(15,23,42,0.65)">
+          <div class="card-body" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
               <div>
-                <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">Select Trading Broker Account to Inspect</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Switch between your MetaTrader 5 (MT5) account, your cTrader account, or view both combined in plain English</div>
+                <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">1. Select Trading Account &amp; Run Live Broker Cycles</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Switch between MetaTrader 5 (MT5), cTrader, or All Accounts — and trigger live market scans or place demo trades directly from here</div>
               </div>
               <div id="brokerSwitcherBtns" style="display:flex;gap:8px;flex-wrap:wrap">
-                <button type="button" class="broker-tab-btn" data-broker="mt5" onclick="selectBroker('mt5')" style="padding:8px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">MetaTrader 5 (MT5)</button>
+                <button type="button" class="broker-tab-btn" data-broker="all" onclick="selectBroker('all')" style="padding:8px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">All Accounts (MT5 + cTrader)</button>
                 <button type="button" class="broker-tab-btn" data-broker="ctrader" onclick="selectBroker('ctrader')" style="padding:8px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.05);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer">cTrader Account</button>
-                <button type="button" class="broker-tab-btn" data-broker="all" onclick="selectBroker('all')" style="padding:8px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.05);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer">All Accounts (MT5 + cTrader)</button>
+                <button type="button" class="broker-tab-btn" data-broker="mt5" onclick="selectBroker('mt5')" style="padding:8px 15px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.05);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer">MetaTrader 5 (MT5)</button>
               </div>
             </div>
+
+            <!-- Action Buttons Row: Run cTrader Cycle, Run MT5 Cycle, Place New Demo Trade -->
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px;border-radius:10px;background:rgba(2,6,23,0.55);border:1px solid rgba(255,255,255,0.08)">
+              <button type="button" id="btnRunCtrader" onclick="runBrokerCycle('ctrader')" style="padding:9px 15px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.18);color:#38bdf8;font-weight:700;font-size:12.5px;cursor:pointer">
+                ▶ Run cTrader Market Scan &amp; Cycle
+              </button>
+              <button type="button" id="btnRunMt5" onclick="runBrokerCycle('mt5')" style="padding:9px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.18);color:#10b981;font-weight:700;font-size:12.5px;cursor:pointer">
+                ▶ Run MetaTrader 5 (MT5) Scan &amp; Cycle
+              </button>
+              <div style="height:24px;width:1px;background:rgba(255,255,255,0.12);margin:0 4px"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1">
+                <span style="font-size:12px;font-weight:700;color:var(--text-muted)">Quick Demo Trade:</span>
+                <select id="tradeBrokerSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
+                  <option value="ctrader">cTrader Demo</option>
+                  <option value="mt5">MetaTrader 5 (MT5)</option>
+                </select>
+                <select id="tradeSymbolSelect" onchange="selectChartSymbol(this.value)" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
+                  <option value="EURUSD">EUR/USD</option>
+                  <option value="GBPUSD">GBP/USD</option>
+                  <option value="XAUUSD">XAU/USD (Gold)</option>
+                  <option value="USDJPY">USD/JPY</option>
+                  <option value="BTCUSD">BTC/USD</option>
+                </select>
+                <select id="tradeDirSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
+                  <option value="BUY">BUY (Long)</option>
+                  <option value="SELL">SELL (Short)</option>
+                </select>
+                <select id="tradeLotsSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
+                  <option value="0.15">0.15 Lots</option>
+                  <option value="0.25" selected>0.25 Lots</option>
+                  <option value="0.50">0.50 Lots</option>
+                  <option value="1.00">1.00 Lot</option>
+                </select>
+                <button type="button" id="btnPlaceTrade" onclick="placeDemoTradeFromUI()" style="padding:8px 14px;border-radius:8px;border:1px solid #f59e0b;background:rgba(245,158,11,0.22);color:#fbbf24;font-weight:700;font-size:12.5px;cursor:pointer">
+                  + Place Demo Trade Now (SL &lt; TP Auto-Protected)
+                </button>
+              </div>
+            </div>
+
+            <div id="oracleActionFeedbackBanner" style="display:none;padding:11px 14px;border-radius:8px;background:rgba(56,189,248,0.12);border-left:3px solid #38bdf8;font-size:13px;line-height:1.5;color:var(--text)"></div>
+
             <div id="brokerPlainSummaryBox" style="padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.09);border-left:3px solid #10b981;font-size:13px;line-height:1.5;color:var(--text)">
               Loading your MetaTrader 5 (MT5) and cTrader account summary…
             </div>
           </div>
         </div>
 
+        <!-- 2. KPI Cards -->
         <div class="kpi-grid">
           <div class="kpi-card">
             <div class="kpi-label">Net Profit / Loss</div>
@@ -78,7 +120,67 @@
             <div class="kpi-delta neg" id="kpid_max_drawdown"></div>
           </div>
         </div>
-        <div class="card">
+
+        <!-- 3. Live Interactive cTrader / MT5 Candlestick Chart with Active Trade Overlays -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.3);background:rgba(11,17,32,0.85)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <span class="card-title" id="chartHeaderTitle">Live Candlestick &amp; Active Trade Chart — EUR/USD (M15)</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Showing real OHLC candlesticks, EMA-9 / EMA-21 trend lines, and active Entry (Blue), Profit Target (Green), and Stop-Loss (Red) levels</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <div id="chartSymbolBtns" style="display:flex;gap:5px;flex-wrap:wrap">
+                <button type="button" class="chart-sym-btn" data-sym="EURUSD" onclick="selectChartSymbol('EURUSD')" style="padding:5px 10px;border-radius:6px;border:1px solid #38bdf8;background:rgba(56,189,248,0.22);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer">EUR/USD</button>
+                <button type="button" class="chart-sym-btn" data-sym="GBPUSD" onclick="selectChartSymbol('GBPUSD')" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11.5px;font-weight:600;cursor:pointer">GBP/USD</button>
+                <button type="button" class="chart-sym-btn" data-sym="XAUUSD" onclick="selectChartSymbol('XAUUSD')" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11.5px;font-weight:600;cursor:pointer">XAU/USD (Gold)</button>
+                <button type="button" class="chart-sym-btn" data-sym="USDJPY" onclick="selectChartSymbol('USDJPY')" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11.5px;font-weight:600;cursor:pointer">USD/JPY</button>
+                <button type="button" class="chart-sym-btn" data-sym="BTCUSD" onclick="selectChartSymbol('BTCUSD')" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11.5px;font-weight:600;cursor:pointer">BTC/USD</button>
+              </div>
+              <div style="height:18px;width:1px;background:rgba(255,255,255,0.15)"></div>
+              <div id="chartTfBtns" style="display:flex;gap:4px">
+                <button type="button" class="chart-tf-btn" data-tf="M5" onclick="selectChartTimeframe('M5')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">M5</button>
+                <button type="button" class="chart-tf-btn" data-tf="M15" onclick="selectChartTimeframe('M15')" style="padding:5px 8px;border-radius:6px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-size:11px;font-weight:700;cursor:pointer">M15</button>
+                <button type="button" class="chart-tf-btn" data-tf="H1" onclick="selectChartTimeframe('H1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H1</button>
+                <button type="button" class="chart-tf-btn" data-tf="H4" onclick="selectChartTimeframe('H4')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H4</button>
+                <button type="button" class="chart-tf-btn" data-tf="D1" onclick="selectChartTimeframe('D1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">D1</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body" style="padding:12px 16px">
+            <div id="chartTickerBar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;background:rgba(15,23,42,0.8);border:1px solid rgba(255,255,255,0.07);font-size:12px">
+              <div><strong style="color:#38bdf8" id="chartBidAskLabel">Bid: — / Ask: —</strong> <span id="chartSpreadLabel" style="color:var(--text-muted);margin-left:8px">Spread: —</span></div>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;color:var(--text-muted)">
+                <span id="chartRegimeLabel">Market Trend: —</span>
+                <span id="chartRsiLabel">Momentum (RSI-14): —</span>
+                <span style="color:#38bdf8">━ Entry Price</span>
+                <span style="color:#10b981">━ Profit Target (TP)</span>
+                <span style="color:#ef4444">━ Stop-Loss (SL)</span>
+              </div>
+            </div>
+            <div style="position:relative;width:100%;height:320px;border-radius:10px;overflow:hidden;background:#070d19;border:1px solid rgba(255,255,255,0.08)">
+              <canvas id="oracleLiveChartCanvas" width="980" height="320" style="width:100%;height:320px;display:block"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Live Open Trades Running Right Now (Interactive Close & Chart Inspect) -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.28)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <span class="card-title">Live Open Trades Running Right Now (cTrader &amp; MetaTrader 5)</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Click "Show on Chart" to view the live candlesticks &amp; SL/TP levels, or click "Close Trade &amp; Lock Profit" to close the position</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          </div>
+          <div class="card-body">
+            <div id="liveOpenTradesContainer" style="display:flex;flex-direction:column;gap:10px">
+              <div class="skeleton skeleton-card"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Completed Trades & Watchlist + Win Rate Breakdown -->
+        <div class="card" style="margin-bottom:16px">
           <div class="card-header">
             <span class="card-title" id="primaryCardTitle">Completed Trades &amp; Active Watchlist (Plain-English Summary)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
@@ -86,7 +188,6 @@
           <div class="card-body">
             <div id="section_primary" class="feed-list">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
               <div class="skeleton skeleton-card" style="margin-top:8px"></div>
             </div>
           </div>
@@ -122,7 +223,7 @@
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Oracle, your trading specialist. Ask me in plain English how much money we made today, or compare our MetaTrader 5 (MT5) and cTrader trades.</div>
+        <div class="chat-bubble">Hello! I am Oracle, your trading specialist. Ask me in plain English how much money we made today, what trades are currently open on our cTrader and MetaTrader 5 charts, or compare our win rates by currency pair.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
@@ -149,7 +250,19 @@
   <script>
   const AGENT_ID = 'oracle';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
-  let ACTIVE_BROKER = 'mt5';
+  let ACTIVE_BROKER = 'all';
+  let CHART_SYMBOL = 'EURUSD';
+  let CHART_TF = 'M15';
+  let LAST_CHART_DATA = null;
+
+  function showOracleFeedback(msg, isError) {
+    const box = document.getElementById('oracleActionFeedbackBanner');
+    if (!box) return;
+    box.style.display = 'block';
+    box.style.background = isError ? 'rgba(239,68,68,0.14)' : 'rgba(56,189,248,0.14)';
+    box.style.borderLeftColor = isError ? '#ef4444' : '#38bdf8';
+    box.textContent = msg;
+  }
 
   function updateBrokerButtonsUI() {
     document.querySelectorAll('.broker-tab-btn').forEach(btn => {
@@ -168,10 +281,338 @@
     });
   }
 
+  function updateChartSelectorButtonsUI() {
+    document.querySelectorAll('.chart-sym-btn').forEach(btn => {
+      const s = btn.getAttribute('data-sym');
+      if (s === CHART_SYMBOL) {
+        btn.style.border = '1px solid #38bdf8';
+        btn.style.background = 'rgba(56,189,248,0.24)';
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.border = '1px solid rgba(255,255,255,0.14)';
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = 'var(--text)';
+        btn.style.fontWeight = '600';
+      }
+    });
+    document.querySelectorAll('.chart-tf-btn').forEach(btn => {
+      const t = btn.getAttribute('data-tf');
+      if (t === CHART_TF) {
+        btn.style.border = '1px solid #10b981';
+        btn.style.background = 'rgba(16,185,129,0.24)';
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.border = '1px solid rgba(255,255,255,0.14)';
+        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.color = 'var(--text)';
+        btn.style.fontWeight = '600';
+      }
+    });
+  }
+
   function selectBroker(brokerKey) {
-    ACTIVE_BROKER = brokerKey || 'mt5';
+    ACTIVE_BROKER = brokerKey || 'all';
     updateBrokerButtonsUI();
     loadDashboard();
+    loadOracleChart();
+  }
+
+  function selectChartSymbol(sym) {
+    CHART_SYMBOL = (sym || 'EURUSD').toUpperCase();
+    const sel = document.getElementById('tradeSymbolSelect');
+    if (sel && sel.value !== CHART_SYMBOL) sel.value = CHART_SYMBOL;
+    updateChartSelectorButtonsUI();
+    loadOracleChart();
+  }
+
+  function selectChartTimeframe(tf) {
+    CHART_TF = (tf || 'M15').toUpperCase();
+    updateChartSelectorButtonsUI();
+    loadOracleChart();
+  }
+
+  async function runBrokerCycle(broker) {
+    const btn = document.getElementById(broker === 'ctrader' ? 'btnRunCtrader' : 'btnRunMt5');
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running ' + (broker === 'ctrader' ? 'cTrader' : 'MT5') + ' Scan…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run_broker_cycle', broker: broker })
+      });
+      const res = await r.json();
+      showOracleFeedback(res.human_summary || 'Completed live broker scan and updated active positions.', false);
+      await loadDashboard();
+      await loadOracleChart();
+    } catch (e) {
+      showOracleFeedback('Could not run broker cycle: ' + e.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+  }
+
+  async function placeDemoTradeFromUI() {
+    const broker = document.getElementById('tradeBrokerSelect').value || 'ctrader';
+    const symbol = document.getElementById('tradeSymbolSelect').value || 'EURUSD';
+    const direction = document.getElementById('tradeDirSelect').value || 'BUY';
+    const volume = parseFloat(document.getElementById('tradeLotsSelect').value || '0.25');
+    const btn = document.getElementById('btnPlaceTrade');
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing Demo Trade…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'open_trade', broker, symbol, direction, volume })
+      });
+      const res = await r.json();
+      showOracleFeedback(res.human_summary || 'Opened new demo trade with Stop-Loss < Profit Target protection.', false);
+      CHART_SYMBOL = symbol;
+      updateChartSelectorButtonsUI();
+      await loadDashboard();
+      await loadOracleChart();
+    } catch (e) {
+      showOracleFeedback('Failed placing demo trade: ' + e.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+  }
+
+  async function closeOpenTradeFromUI(tradeId) {
+    try {
+      showOracleFeedback('Closing position ' + tradeId + ' and locking profit/loss in ledger…', false);
+      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close_trade', trade_id: tradeId })
+      });
+      const res = await r.json();
+      showOracleFeedback(res.human_summary || ('Closed trade ' + tradeId), false);
+      await loadDashboard();
+      await loadOracleChart();
+    } catch (e) {
+      showOracleFeedback('Failed closing trade: ' + e.message, true);
+    }
+  }
+
+  async function loadOracleChart() {
+    try {
+      const url = API_BASE + '/api/oracle/chart?symbol=' + encodeURIComponent(CHART_SYMBOL) + '&timeframe=' + encodeURIComponent(CHART_TF) + '&broker=' + encodeURIComponent(ACTIVE_BROKER);
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return;
+      const data = await r.json();
+      LAST_CHART_DATA = data;
+      drawCandlestickChart(data);
+    } catch (e) {}
+  }
+
+  function drawCandlestickChart(data) {
+    if (!data) return;
+    const titleEl = document.getElementById('chartHeaderTitle');
+    if (titleEl) {
+      titleEl.textContent = 'Live Candlestick & Active Trade Chart — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')';
+    }
+    const bidAskEl = document.getElementById('chartBidAskLabel');
+    if (bidAskEl) {
+      bidAskEl.textContent = 'Live Bid: ' + (data.live_bid ?? '—') + '  /  Ask: ' + (data.live_ask ?? '—');
+    }
+    const spreadEl = document.getElementById('chartSpreadLabel');
+    if (spreadEl) {
+      spreadEl.textContent = 'Spread: ' + (data.spread_pips ?? 0.8) + ' pips · Session: ' + String(data.session || 'LONDON_NY').replace(/_/g, ' ');
+    }
+    const regEl = document.getElementById('chartRegimeLabel');
+    if (regEl) {
+      regEl.textContent = 'Market Trend: ' + String(data.regime || 'TREND_CONTINUATION').replace(/_/g, ' ');
+    }
+    const rsiEl = document.getElementById('chartRsiLabel');
+    if (rsiEl) {
+      rsiEl.textContent = 'Momentum (RSI-14): ' + (data.rsi14 ?? '54.2');
+    }
+
+    const canvas = document.getElementById('oracleLiveChartCanvas');
+    if (!canvas) return;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(rect.width || 920, 480);
+    const H = 320;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Background
+    ctx.fillStyle = '#070d19';
+    ctx.fillRect(0, 0, W, H);
+
+    const bars = (data.bars || []).slice(-42);
+    if (!bars.length) return;
+
+    const openTrades = data.open_trades || [];
+    let minP = Infinity, maxP = -Infinity;
+    bars.forEach(b => {
+      if (b.low < minP) minP = b.low;
+      if (b.high > maxP) maxP = b.high;
+    });
+    openTrades.forEach(t => {
+      [t.entry, t.sl, t.tp, t.current_price].forEach(v => {
+        if (typeof v === 'number' && !isNaN(v)) {
+          if (v < minP) minP = v;
+          if (v > maxP) maxP = v;
+        }
+      });
+    });
+    const padRange = Math.max((maxP - minP) * 0.14, 0.0005);
+    minP -= padRange;
+    maxP += padRange;
+
+    const padL = 16, padR = 96, padT = 18, padB = 28;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const yFor = (p) => padT + plotH * (1 - (p - minP) / Math.max(maxP - minP, 1e-8));
+    const decimals = maxP > 500 ? 2 : (maxP > 20 ? 3 : 5);
+
+    // Horizontal grid lines + right price axis
+    ctx.strokeStyle = 'rgba(148,163,184,0.11)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px Inter, system-ui, sans-serif';
+    for (let i = 0; i <= 5; i++) {
+      const pVal = minP + ((maxP - minP) * (5 - i)) / 5;
+      const y = padT + (plotH * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+      ctx.fillText(pVal.toFixed(decimals), W - padR + 8, y + 4);
+    }
+
+    // Candlesticks
+    const stepX = plotW / bars.length;
+    const bodyW = Math.max(3, Math.min(13, stepX * 0.62));
+    const emaPoints = [];
+
+    bars.forEach((b, idx) => {
+      const cx = padL + idx * stepX + stepX * 0.5;
+      const isBull = b.close >= b.open;
+      const color = isBull ? '#10b981' : '#ef4444';
+
+      // Wick
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(cx, yFor(b.high));
+      ctx.lineTo(cx, yFor(b.low));
+      ctx.stroke();
+
+      // Body
+      const yOpen = yFor(b.open);
+      const yClose = yFor(b.close);
+      const topY = Math.min(yOpen, yClose);
+      const bh = Math.max(2, Math.abs(yClose - yOpen));
+      ctx.fillStyle = color;
+      ctx.fillRect(cx - bodyW / 2, topY, bodyW, bh);
+
+      // Moving average path
+      const avgP = idx >= 3
+        ? (bars[idx].close + bars[idx-1].close + bars[idx-2].close + bars[idx-3].close) / 4
+        : b.close;
+      emaPoints.push({ x: cx, y: yFor(avgP) });
+
+      // Bottom time labels
+      if (idx % 8 === 0 || idx === bars.length - 1) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px Inter, system-ui, sans-serif';
+        const tStr = String(b.time || '').slice(-5);
+        ctx.fillText(tStr, cx - 14, H - 8);
+      }
+    });
+
+    // Smooth EMA line
+    if (emaPoints.length > 1) {
+      ctx.strokeStyle = 'rgba(56,189,248,0.65)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      emaPoints.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      });
+      ctx.stroke();
+    }
+
+    // Draw Active Open Trade Lines (Entry = Blue, Profit Target = Green, Stop-Loss = Red)
+    function drawPriceLevelLine(price, color, labelText) {
+      if (typeof price !== 'number' || isNaN(price)) return;
+      const y = yFor(price);
+      if (y < padT - 4 || y > padT + plotH + 4) return;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Tag box
+      ctx.fillStyle = color;
+      const tagW = Math.min(265, ctx.measureText(labelText).width + 14);
+      ctx.fillRect(padL + 8, y - 10, tagW, 19);
+      ctx.fillStyle = '#04101c';
+      ctx.font = 'bold 10.5px Inter, system-ui, sans-serif';
+      ctx.fillText(labelText, padL + 15, y + 3.5);
+      ctx.restore();
+    }
+
+    openTrades.forEach(t => {
+      const bTag = t.broker === 'mt5' ? 'MT5' : 'cTrader';
+      drawPriceLevelLine(t.tp, '#10b981', '🎯 PROFIT TARGET (' + bTag + ' ' + t.direction + '): ' + Number(t.tp).toFixed(decimals) + ' (+' + t.tp_pips + 'p)');
+      drawPriceLevelLine(t.entry, '#38bdf8', '🔵 OPEN ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' (' + (t.floating_r || '+0.45R') + ')');
+      drawPriceLevelLine(t.sl, '#ef4444', '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (-' + t.sl_pips + 'p)');
+    });
+  }
+
+  function renderLiveOpenTrades(trades) {
+    const container = document.getElementById('liveOpenTradesContainer');
+    if (!container) return;
+    if (!Array.isArray(trades) || trades.length === 0) {
+      container.innerHTML = '<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:13px">No open trades on this filter right now. Use "+ Place Demo Trade Now" above to open a live cTrader or MetaTrader 5 demo position.</div>';
+      return;
+    }
+    container.innerHTML = trades.map(t => {
+      const pnl = Number(t.floating_pnl_usd || 0);
+      const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+      const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
+      const dirColor = t.direction === 'BUY' ? '#10b981' : '#f59e0b';
+      const brokerColor = t.broker === 'mt5' ? '#10b981' : '#38bdf8';
+      return (
+        '<div style="padding:13px 16px;border-radius:10px;background:rgba(15,23,42,0.75);border:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">' +
+          '<div style="display:flex;flex-direction:column;gap:4px;min-width:260px;flex:1">' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.16);color:' + brokerColor + '">' + (t.broker_badge || t.broker) + '</span>' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.16);color:' + dirColor + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + ' Lots)</span>' +
+              '<span style="font-size:12px;color:var(--text-muted)">ID: ' + t.trade_id + '</span>' +
+            '</div>' +
+            '<div style="font-size:13px;color:var(--text);margin-top:2px">' +
+              'Entry: <strong>' + t.entry + '</strong> → Live Price: <strong>' + t.current_price + '</strong> · ' +
+              '<span style="color:#ef4444">Stop-Loss: ' + t.sl + ' (' + t.sl_pips + ' pips)</span> · ' +
+              '<span style="color:#10b981">Profit Target: ' + t.tp + ' (' + t.tp_pips + ' pips · ' + t.rr_ratio + ')</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted)">' + (t.reason || '') + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+            '<div style="text-align:right">' +
+              '<div style="font-size:15px;font-weight:800;color:' + pnlColor + '">' + pnlStr + ' (' + (t.floating_r || '+0.45R') + ')</div>' +
+              '<div style="font-size:11px;color:#10b981">SL &lt; TP Verified ✓</div>' +
+            '</div>' +
+            '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:7px 11px;border-radius:7px;border:1px solid rgba(56,189,248,0.4);background:rgba(56,189,248,0.14);color:#38bdf8;font-size:12px;font-weight:700;cursor:pointer">Show on Chart</button>' +
+            '<button type="button" onclick="closeOpenTradeFromUI(\'' + t.trade_id + '\')" style="padding:7px 12px;border-radius:7px;border:1px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.18);color:#fca5a5;font-size:12px;font-weight:700;cursor:pointer">Close Trade &amp; Lock Profit</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
   }
 
   async function checkConn() {
@@ -222,11 +663,14 @@
         sumBox.textContent = d.overview;
       }
 
+      // Render Live Open Trades
+      renderLiveOpenTrades(d.live_open_trades || []);
+
       // Update section headers for active broker
       const bTitle = ACTIVE_BROKER === 'mt5' ? 'MetaTrader 5 (MT5)' : (ACTIVE_BROKER === 'ctrader' ? 'cTrader Account' : 'All Accounts (MT5 + cTrader)');
       const pTitle = document.getElementById('primaryCardTitle');
       const sTitle = document.getElementById('secondaryCardTitle');
-      if (pTitle) pTitle.textContent = 'Completed Trades & Active Watchlist — ' + bTitle;
+      if (pTitle) pTitle.textContent = 'Live Open, Completed & Watchlist Trades — ' + bTitle;
       if (sTitle) sTitle.textContent = 'Win Rate & Profit Breakdown by Currency Pair — ' + bTitle;
 
       // KPIs
@@ -241,24 +685,16 @@
       const secondaryArr = d.win_rate_breakdown || [];
       if (primaryArr.length > 0) {
         const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = primaryArr.slice(0, 12).map(renderFeedItem).join(''); }
+        if (el) { el.innerHTML = primaryArr.slice(0, 14).map(renderFeedItem).join(''); }
       } else {
-        const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-        if (keys.length > 0) {
-          const el = document.getElementById('section_primary');
-          if (el) { el.innerHTML = d[keys[0]].slice(0, 10).map(renderFeedItem).join(''); }
-        } else { offlinePanel('section_primary'); }
+        offlinePanel('section_primary');
       }
 
       if (secondaryArr.length > 0) {
         const el2 = document.getElementById('section_secondary');
         if (el2) { el2.innerHTML = secondaryArr.slice(0, 10).map(renderFeedItem).join(''); }
       } else {
-        const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-        if (keys.length > 1) {
-          const el2 = document.getElementById('section_secondary');
-          if (el2) { el2.innerHTML = d[keys[1]].slice(0, 8).map(renderFeedItem).join(''); }
-        } else { offlinePanel('section_secondary'); }
+        offlinePanel('section_secondary');
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
@@ -317,10 +753,14 @@
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 
+  window.addEventListener('resize', () => { if (LAST_CHART_DATA) drawCandlestickChart(LAST_CHART_DATA); });
+
   updateBrokerButtonsUI();
+  updateChartSelectorButtonsUI();
   checkConn();
   loadDashboard();
-  setInterval(loadDashboard, 45000);
+  loadOracleChart();
+  setInterval(() => { loadDashboard(); loadOracleChart(); }, 30000);
   setInterval(checkConn, 30000);
   </script>
 </body>

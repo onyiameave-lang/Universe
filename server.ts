@@ -1260,7 +1260,15 @@ app.get("/internal/oracle/forge/incumbent", (req, res) => {
   });
 });
 
-app.get("/api/forge/pilot/status", (req, res) => {
+app.get("/api/forge/pilot/status", async (req, res) => {
+  const pyStatus = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "status",
+    params: {},
+  });
+  if (pyStatus && pyStatus.candidates) {
+    return res.json(pyStatus);
+  }
   const symbolFilter = req.query.symbol
     ? String(req.query.symbol).toUpperCase()
     : undefined;
@@ -1313,6 +1321,14 @@ app.get("/api/forge/pilot/status", (req, res) => {
  */
 app.post("/api/forge/v2/discover", async (req, res) => {
   try {
+    const pyRes = await runNexusCoordinationBridge({
+      action: "forge_action",
+      forge_action: "discover_v2",
+      params: req.body || {},
+    });
+    if (pyRes && (pyRes.human_summary || pyRes.discovered || pyRes.plain_english_report)) {
+      return res.json(pyRes);
+    }
     const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
     const traderStyle = String(
       req.body?.trader_style || "ALL"
@@ -1504,8 +1520,16 @@ app.get("/api/forge/v2/shadow/status", (req, res) => {
   });
 });
 
-app.post("/api/forge/v2/shadow/run", (req, res) => {
+app.post("/api/forge/v2/shadow/run", async (req, res) => {
   try {
+    const pyRes = await runNexusCoordinationBridge({
+      action: "forge_action",
+      forge_action: "shadow_run",
+      params: req.body || {},
+    });
+    if (pyRes && (pyRes.human_summary || pyRes.shadow_batch || pyRes.plain_english_report)) {
+      return res.json(pyRes);
+    }
     const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
     const traderStyle = String(req.body?.trader_style || "ALL").toUpperCase();
     const lookbackBars = Number(req.body?.lookback_bars || 260);
@@ -2627,6 +2651,11 @@ async function handleAgentChat(
 
   // When talking to Nexus, execute the full Python multi-agent DAG coordination session
   // (which now also runs the Dual-LLM semantic intent classifier in Python)
+  const stripAsterisks = (s: string) =>
+    String(s || "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*\*/g, "");
+
   if (id === "nexus") {
     const trace = await runNexusCoordinationBridge({
       action: "coordinate",
@@ -2634,15 +2663,16 @@ async function handleAgentChat(
       target_agent: "nexus",
     });
     if (trace && trace.human_synthesis) {
+      const cleanSyn = stripAsterisks(trace.human_synthesis);
       appendChatHistoryLog(
         id,
         userMessage,
         mode,
-        trace.human_synthesis,
+        cleanSyn,
         trace
       );
       return {
-        reply: trace.human_synthesis,
+        reply: cleanSyn,
         dossier: trace,
         trace,
         referrals: trace.referrals || [],
@@ -2664,8 +2694,9 @@ async function handleAgentChat(
         primary_agent: "atlas",
         participating_agents: ["atlas", "chronicle"],
       });
-      const finalReply =
-        pyDossier.readable_reply + (referral ? `\n\n---\n${referral}` : "");
+      const finalReply = stripAsterisks(
+        pyDossier.readable_reply + (referral ? `\n\n---\n${referral}` : "")
+      );
       appendChatHistoryLog(id, userMessage, mode, finalReply, pyDossier);
       return {
         reply: finalReply,
@@ -2677,19 +2708,126 @@ async function handleAgentChat(
   }
 
   const res = await buildHumanAgentReply(id, userMessage, mode);
+  const cleanReply = stripAsterisks(res.reply);
   const refRes = await runNexusCoordinationBridge({
     action: "referrals",
     query: userMessage,
     primary_agent: id,
     participating_agents: [id, "chronicle"],
   });
-  appendChatHistoryLog(id, userMessage, mode, res.reply, res.dossier);
+  appendChatHistoryLog(id, userMessage, mode, cleanReply, res.dossier);
   return {
     ...res,
+    reply: cleanReply,
     referrals: refRes?.referrals || [],
     llm_layer: llmStatus,
   };
 }
+
+// ── Interactive Oracle Chart, Broker Cycle & Open/Close Demo Trade Routes ──
+app.get("/api/oracle/chart", async (req, res) => {
+  const symbol = String(req.query.symbol || "EURUSD");
+  const timeframe = String(req.query.timeframe || "M15");
+  const broker = String(req.query.broker || "all");
+  const data = await runNexusCoordinationBridge({
+    action: "oracle_chart",
+    symbol,
+    timeframe,
+    broker,
+  });
+  res.json(data || { status: "error", message: "Could not load chart data" });
+});
+
+app.post("/api/oracle/execute-action", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "oracle_action",
+    params: req.body || {},
+  });
+  res.json(data || { status: "error", message: "Could not execute Oracle action" });
+});
+
+// ── Interactive Sentinel & Pulse Live Feed Refresh Route ──
+app.post("/api/feeds/refresh", async (req, res) => {
+  const agent = String(req.body?.agent || "all");
+  const data = await runNexusCoordinationBridge({
+    action: "feeds_refresh",
+    agent,
+  });
+  res.json(data || { status: "error", message: "Could not refresh live feeds" });
+});
+
+// ── Interactive Chronicle, Aegis & Genesis Specialist Action Route ──
+app.post("/api/specialist/action", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "specialist_action",
+    params: req.body || {},
+  });
+  res.json(data || { status: "error", message: "Could not execute specialist action" });
+});
+
+// ── Interactive Plain-English Forge Training Routes (Missing V2 Endpoints) ──
+app.get("/api/forge/pilot/status", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "status",
+    params: req.query || {},
+  });
+  res.json(data || { status: "ok", candidates: [] });
+});
+
+app.post("/api/forge/v2/retrain", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "surgical_retrain",
+    params: req.body || {},
+  });
+  res.json(data || { status: "error", message: "Retrain failed" });
+});
+
+app.post("/api/forge/candidate/transition", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "transition_candidate",
+    params: req.body || {},
+  });
+  res.json(data || { status: "error", message: "Transition failed" });
+});
+
+app.post("/api/forge/candidate/rollback", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "rollback_candidate",
+    params: req.body || {},
+  });
+  res.json(data || { status: "error", message: "Rollback failed" });
+});
+
+app.post("/api/forge/v1-catalog/sync", async (_req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "sync_catalog",
+    params: {},
+  });
+  res.json(data || { status: "error", message: "Sync failed" });
+});
+
+app.post("/api/forge/outbox/flush", async (_req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "flush_outbox",
+    params: {},
+  });
+  res.json(data || { status: "error", message: "Outbox flush failed" });
+});
+
+app.get("/api/forge/candidate/:id", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "forge_action",
+    forge_action: "get_candidate",
+    params: { candidate_id: req.params.id },
+  });
+  res.json(data || { status: "error", message: "Candidate not found" });
+});
 
 app.get("/api/llm/status", async (req, res) => {
   const force = req.query.refresh === "true";

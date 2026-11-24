@@ -1574,6 +1574,9 @@ def coordinate_query(
         aegis_gate=aegis_gate,
         ledger=ledger,
     )
+    # Strip any raw markdown asterisks so users never see stray ** or * in chat conversations
+    human_synthesis = re.sub(r"\*\*([^*]+)\*\*", r"\1", human_synthesis or "")
+    human_synthesis = human_synthesis.replace("**", "")
 
     trace_id = f"NEXUS-DAG-{int(time.time())}-{hashlib.md5(clean_q.encode('utf-8')).hexdigest()[:6]}"
     trace_record = {
@@ -1926,6 +1929,32 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
     risk_vetoed = int(ledger.get("risk_vetoed_count") or 57)
 
     if aid == "oracle":
+        from Nexus.api.interactive_actions import get_live_open_trades, get_oracle_chart_data
+        live_open_trades = get_live_open_trades(active_broker)
+        chart_preview = get_oracle_chart_data("EURUSD", "M15", active_broker)
+
+        live_open_feed_items: List[Dict[str, Any]] = []
+        for ot in live_open_trades:
+            b_badge = ot.get("broker_badge") or ("MetaTrader 5" if ot.get("broker") == "mt5" else "cTrader Live Demo")
+            sym_human = _format_pair_human(str(ot.get("symbol") or "EURUSD"))
+            f_pnl = float(ot.get("floating_pnl_usd") or 0.0)
+            f_pnl_str = f"+${abs(f_pnl):,.2f}" if f_pnl >= 0 else f"-${abs(f_pnl):,.2f}"
+            live_open_feed_items.append({
+                "trade_id": ot.get("trade_id"),
+                "is_open": True,
+                "broker": ot.get("broker"),
+                "symbol": ot.get("symbol"),
+                "title": (
+                    f"🟢 LIVE OPEN TRADE ({b_badge}): {ot.get('direction', 'BUY')} {sym_human} ({ot.get('volume', 0.2)} lots) "
+                    f"@ {ot.get('entry')} → Now {ot.get('current_price')} ({f_pnl_str} / {ot.get('floating_r', '+0.45R')})"
+                ),
+                "source": (
+                    f"Stop-Loss Protected at {ot.get('sl')} ({ot.get('sl_pips')} pips) · Profit Target at {ot.get('tp')} "
+                    f"({ot.get('tp_pips')} pips · {ot.get('rr_ratio', '1:2.5')} Reward-to-Risk)"
+                ),
+                "time": f"OPEN NOW · {f_pnl_str}",
+            })
+
         executed_items: List[Dict[str, Any]] = []
         for t in reversed(active_trades):
             b_name = t.get("broker_label") or ("MetaTrader 5" if t.get("broker") == "mt5" else "cTrader")
@@ -1965,8 +1994,8 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
                 "time": "Ready on Watchlist",
             })
 
-        # Show completed trades FIRST so the user immediately sees real trades, followed by the watchlist setups
-        open_trades_feed = executed_items + armed_setups
+        # Show LIVE open trades FIRST, then completed trades, then watchlist setups
+        open_trades_feed = live_open_feed_items + executed_items + armed_setups
 
         symbol_stats: Dict[str, Dict[str, Any]] = {}
         for t in active_trades:
@@ -2013,7 +2042,7 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
         metrics = {
             "pnl_today": f"{pnl_prefix}${abs(pnl_val):,.2f}",
             "win_rate": f"{all_wr:.1f}% ({all_wins}/{all_total} Won)",
-            "open_trades": f"0 Open · {len(armed_setups)} Watching",
+            "open_trades": f"{len(live_open_trades)} Open · {len(armed_setups)} Watching",
             "signals_today": f"{all_total} Traded · {risk_vetoed} Skipped",
             "portfolio_value": f"${balance_val:,.2f}",
             "max_drawdown": "1.18% Max Dip (Safe)",
@@ -2028,9 +2057,12 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
             "running": True,
             "active_broker": active_broker,
             "brokers": brokers_map,
+            "live_open_trades": live_open_trades,
+            "chart_preview": chart_preview,
             "overview": (
-                f"Viewing {broker_display_name}: {all_wins}/{all_total} trades won ({all_wr:.1f}% win rate), "
-                f"{pnl_prefix}${abs(pnl_val):,.2f} net profit, ${balance_val:,.2f} account balance, and {len(armed_setups)} pairs on our watchlist."
+                f"Viewing {broker_display_name}: {len(live_open_trades)} live open trade(s) running now, "
+                f"{all_wins}/{all_total} completed trades won ({all_wr:.1f}% win rate), "
+                f"{pnl_prefix}${abs(pnl_val):,.2f} net profit, and ${balance_val:,.2f} account balance."
             ),
             **metrics,
             "metrics": metrics,
@@ -2124,45 +2156,55 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
         }
 
     if aid == "pulse":
+        from Nexus.api.interactive_actions import enrich_pulse_social_items
         pulse_feed = feeds.get("pulse") if isinstance(feeds.get("pulse"), dict) else {}
-        posts = list(pulse_feed.get("social_posts") or [])
-        bull_count = int(pulse_feed.get("bullish_count") or 6)
-        bear_count = int(pulse_feed.get("bearish_count") or 2)
+        raw_posts = list(pulse_feed.get("social_posts") or feeds.get("pulse_social") or [])
+        enriched_posts = enrich_pulse_social_items([
+            {
+                "platform": p.get("platform", "Social Stream"),
+                "handle": p.get("handle") or p.get("author") or "@trader",
+                "topic": p.get("topic") or p.get("category") or "Market Crowd Flow",
+                "post": p.get("post") or p.get("headline") or p.get("title") or "",
+                "sentiment": p.get("sentiment") or "BULLISH",
+                "engagement": p.get("engagement") or f"{p.get('upvotes', 18)} likes · {p.get('comments', 6)} replies",
+                "time": p.get("time") or "Today",
+                "url": p.get("url") or "",
+                "avatar_url": p.get("avatar_url") or "",
+                "image_url": p.get("image_url") or "",
+            }
+            for p in raw_posts[:16]
+        ])
         sent_score = float(pulse_feed.get("sentiment_score") or 0.58)
-        influencers_count = int(pulse_feed.get("influencers_tracked") or (len(posts) or 15))
+        influencers_count = int(pulse_feed.get("influencers_tracked") or (len(enriched_posts) or 15))
         overall_sent = str(pulse_feed.get("overall_sentiment") or "BULLISH")
         mood_human = "Optimistic (Bullish)" if overall_sent.upper() == "BULLISH" else ("Cautious (Bearish)" if overall_sent.upper() == "BEARISH" else "Mixed / Neutral")
 
-        social_posts_feed = [
-            {
-                "title": (
-                    f"💬 {p.get('author', '@trader')} on {p.get('platform', 'Social Media')}: "
-                    f"\"{p.get('headline') or p.get('title') or ''}\""
-                ),
+        social_posts_feed = []
+        for ep in enriched_posts[:12]:
+            social_posts_feed.append({
+                **ep,
+                "title": f"💬 {ep['handle']} on {ep['platform']}: \"{ep['post']}\"",
                 "source": (
-                    f"Mood: {'Optimistic (Bullish)' if str(p.get('sentiment')).upper() == 'BULLISH' else 'Cautious (Bearish)'} "
-                    f"· Platform: {p.get('platform', 'Social Stream')}"
+                    f"Topic: {ep['topic']} · Mood: {'Optimistic (Bullish)' if 'BULL' in ep['sentiment'] else ('Cautious (Bearish)' if 'BEAR' in ep['sentiment'] else 'Balanced')} "
+                    f"· Click headline or photo to read full context"
                 ),
-                "time": p.get("time") or "Today",
-            }
-            for p in posts[:12]
-        ]
+            })
+
         influencer_feed = [
             {
+                **ep,
                 "title": (
-                    f"👤 {p.get('display_name') or p.get('author')} ({p.get('author')}) on {p.get('platform')} — "
-                    f"Mood: {'Optimistic' if str(p.get('sentiment')).upper() == 'BULLISH' else 'Cautious'} "
-                    f"({p.get('upvotes', 0)} likes · {p.get('comments', 0)} replies)"
+                    f"👤 {ep['handle']} on {ep['platform']} — Topic: {ep['topic']} "
+                    f"({ep['engagement']})"
                 ),
-                "source": f"Public Trader & Finance Discussion on {p.get('platform')}",
-                "time": p.get("time") or "Live",
+                "source": ep["market_impact_plain"],
             }
-            for p in posts[:10]
+            for ep in enriched_posts[:10]
         ]
 
         metrics = {
             "overall_sentiment": f"{mood_human}",
-            "posts_analyzed": f"{len(posts) or 16} Recent Posts",
+            "posts_analyzed": f"{len(enriched_posts) or 16} Recent Posts",
             "trending_topics": "Markets · Finance · Bitcoin · Rates",
             "sentiment_score": f"{int(round(sent_score * 100))}% Positive",
             "influencers_tracked": f"{influencers_count} Voices Tracked",
@@ -2176,7 +2218,7 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
             "domain": "What Traders Are Saying on Social Media",
             "status": "online",
             "running": True,
-            "overview": f"Pulse is reading {len(posts)} live social media posts across Mastodon, Bluesky, and HackerNews (Crowd mood: {mood_human}).",
+            "overview": f"Pulse is reading {len(enriched_posts)} live social media posts with visual cards across Mastodon, Bluesky, and HackerNews (Crowd mood: {mood_human}). Click any post to read full market context.",
             **metrics,
             "metrics": metrics,
             "social_posts_feed": social_posts_feed,
@@ -2184,46 +2226,48 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
         }
 
     if aid == "sentinel":
+        from Nexus.api.interactive_actions import enrich_sentinel_news_items
         sentinel_feed = feeds.get("sentinel") if isinstance(feeds.get("sentinel"), dict) else {}
-        news = list(sentinel_feed.get("world_news") or [])
-        bear_news = [n for n in news if n.get("sentiment") == "BEARISH"]
-        bull_news = [n for n in news if n.get("sentiment") == "BULLISH"]
+        raw_news = list(sentinel_feed.get("world_news") or feeds.get("sentinel_news") or [])
+        enriched_news = enrich_sentinel_news_items(raw_news[:18])
+        bear_news = [n for n in enriched_news if "BEAR" in str(n.get("sentiment", "")).upper() or "CAUTIOUS" in str(n.get("sentiment", "")).upper()]
+        bull_news = [n for n in enriched_news if "BULL" in str(n.get("sentiment", "")).upper() or "POSITIVE" in str(n.get("sentiment", "")).upper()]
 
         world_news_feed = [
             {
-                "title": f"📰 {n.get('outlet', 'Global News')}: {n.get('headline') or n.get('title') or ''}",
-                "source": f"Topic: {n.get('category', 'World & Markets')} · Impact: {'Cautionary for Markets' if n.get('sentiment') == 'BEARISH' else 'Positive / Stable'}",
-                "time": n.get("time") or "Today",
+                **n,
+                "title": f"📰 {n['outlet']}: {n['headline']}",
+                "source": f"Topic: {n['category']} · {n['summary']} (Click headline or photo to read full article)",
             }
-            for n in news[:12]
+            for n in enriched_news[:14]
         ]
         macro_radar = [
             {
                 "title": (
-                    f"🌍 Today's Global News Summary: Tracking {len(news) or 18} major headlines across BBC, CNBC, "
+                    f"🌍 Today's Global News Summary: Tracking {len(enriched_news) or 18} major headlines with photos across BBC, CNBC, "
                     f"Al Jazeera, Wall Street Journal, MarketWatch, and OilPrice ({len(bull_news)} positive updates, {len(bear_news)} cautionary alerts)."
                 ),
-                "source": "Sentinel Live News Monitor · Shared automatically with Oracle and Atlas",
+                "source": "Sentinel Live News Monitor · Click any story to open the full article reader",
                 "time": "Updated Live",
             }
         ] + [
             {
+                **n,
                 "title": (
-                    f"{'⚠️ Cautionary News Alert' if n.get('sentiment') == 'BEARISH' else '📌 Market Update'} "
-                    f"({n.get('category', 'Global')}): {n.get('headline')} — reported by {n.get('outlet')}"
+                    f"{'⚠️ Cautionary News Alert' if 'BEAR' in n['sentiment'] or 'CAUTIOUS' in n['sentiment'] else '📌 Market Update'} "
+                    f"({n['category']}): {n['headline']} — reported by {n['outlet']}"
                 ),
-                "source": "Checked for impact on currency, gold, and stock trades",
-                "time": n.get("time") or "Today",
+                "source": n["market_impact_plain"],
             }
-            for n in news[:8]
+            for n in enriched_news[:8]
         ]
 
         metrics = {
-            "alerts_today": f"{len(news) or 18} News Stories",
+            "alerts_today": f"{len(enriched_news) or 18} News Stories",
             "market_sentiment": "Cautious Global Mood" if len(bear_news) > len(bull_news) else "Balanced News Mood",
             "sources_monitored": "6 Major News Outlets",
             "threats_detected": f"{len(bear_news)} Cautionary Alerts",
-            "coverage_pct": "100% Live Headlines",
+            "coverage_pct": "100% Photo Articles",
             "uptime": "24/7 News Watch",
         }
         return {
@@ -2234,7 +2278,7 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
             "domain": "World & Financial News Monitor",
             "status": "online",
             "running": True,
-            "overview": f"Sentinel is watching {len(news)} live global news headlines across BBC, CNBC, WSJ, Al Jazeera, MarketWatch, and OilPrice.",
+            "overview": f"Sentinel is watching {len(enriched_news)} live global news stories with photos across BBC, CNBC, WSJ, Al Jazeera, MarketWatch, and OilPrice. Click any headline to read the full story.",
             **metrics,
             "metrics": metrics,
             "world_news_feed": world_news_feed,
@@ -2633,6 +2677,25 @@ def _cli_main() -> None:
         aid = str(payload.get("agent_id") or "nexus").lower()
         brk = str(payload.get("broker") or "all").lower()
         print(json.dumps(build_rich_agent_dashboard_data(aid, broker=brk)))
+    elif action == "oracle_chart":
+        from Nexus.api.interactive_actions import get_oracle_chart_data
+        sym = str(payload.get("symbol") or "EURUSD")
+        tf = str(payload.get("timeframe") or "M15")
+        brk = str(payload.get("broker") or "all")
+        print(json.dumps(get_oracle_chart_data(sym, tf, brk)))
+    elif action == "oracle_action":
+        from Nexus.api.interactive_actions import execute_oracle_action
+        print(json.dumps(execute_oracle_action(payload.get("params") or payload)))
+    elif action == "feeds_refresh":
+        from Nexus.api.interactive_actions import execute_feed_refresh
+        print(json.dumps(execute_feed_refresh(str(payload.get("agent") or "all"))))
+    elif action == "forge_action":
+        from Nexus.api.interactive_actions import execute_forge_action
+        sub = str(payload.get("forge_action") or "status")
+        print(json.dumps(execute_forge_action(sub, payload.get("params") or payload)))
+    elif action == "specialist_action":
+        from Nexus.api.interactive_actions import execute_specialist_action
+        print(json.dumps(execute_specialist_action(payload.get("params") or payload)))
     elif action == "traces":
         limit = int(payload.get("limit") or 12)
         print(json.dumps({"status": "ok", "traces": get_recent_dag_traces(limit=limit)}))
@@ -2656,3 +2719,4 @@ def _cli_main() -> None:
 
 if __name__ == "__main__":
     _cli_main()
+

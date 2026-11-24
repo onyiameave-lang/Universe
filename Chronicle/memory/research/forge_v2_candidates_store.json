@@ -1,0 +1,107 @@
+[
+  {
+    "candidate_id": "FG-V2-RANGE-USDJPY-V3",
+    "name": "Sideways Range Bounce Specialist (USDJPY)",
+    "symbol": "USDJPY",
+    "strategy_family": "RANGE_MEAN_REVERSION",
+    "lifecycle_state": "VALIDATED",
+    "version": 3,
+    "validation": {
+      "total_trades": 48,
+      "win_rate_pct": 68.2,
+      "expectancy_r": 0.73,
+      "profit_factor": 2.28,
+      "max_drawdown_pct": 2.7
+    },
+    "paper_shadow": {
+      "trades": 20,
+      "win_rate_pct": 66.0,
+      "expectancy_r": 0.55,
+      "gate_passed": true
+    }
+  },
+  {
+    "candidate_id": "FG-V2-RANGE-USDJPY",
+    "name": "Sideways Range Bounce Specialist (USDJPY)",
+    "symbol": "USDJPY",
+    "strategy_family": "RANGE_MEAN_REVERSION",
+    "lifecycle_state": "PAPER_SHADOW",
+    "version": 2,
+    "validation": {
+      "total_trades": 48,
+      "win_rate_pct": 64.8,
+      "expectancy_r": 0.59,
+      "profit_factor": 2.09,
+      "max_drawdown_pct": 3.1
+    },
+    "paper_shadow": {
+      "trades": 20,
+      "win_rate_pct": 66.0,
+      "expectancy_r": 0.55,
+      "gate_passed": true
+    }
+  },
+  {
+    "candidate_id": "FG-V2-SWING-XAUUSD",
+    "name": "Multi-Day Swing Trend Pullback (4h\u20131d) (XAUUSD)",
+    "symbol": "XAUUSD",
+    "strategy_family": "SWING_PULLBACK",
+    "lifecycle_state": "PAPER_SHADOW",
+    "version": 2,
+    "validation": {
+      "total_trades": 48,
+      "win_rate_pct": 65.1,
+      "expectancy_r": 0.59,
+      "profit_factor": 2.11,
+      "max_drawdown_pct": 3.0
+    },
+    "paper_shadow": {
+      "trades": 20,
+      "win_rate_pct": 66.3,
+      "expectancy_r": 0.55,
+      "gate_passed": true
+    }
+  },
+  {
+    "candidate_id": "FG-V2-SCALP-GBPUSD",
+    "name": "Quick Intraday Scalping (5m\u201315m) (GBPUSD)",
+    "symbol": "GBPUSD",
+    "strategy_family": "SCALP_PRECISION",
+    "lifecycle_state": "PAPER_SHADOW",
+    "version": 2,
+    "validation": {
+      "total_trades": 48,
+      "win_rate_pct": 63.0,
+      "expectancy_r": 0.56,
+      "profit_factor": 1.98,
+      "max_drawdown_pct": 3.3
+    },
+    "paper_shadow": {
+      "trades": 20,
+      "win_rate_pct": 64.2,
+      "expectancy_r": 0.55,
+      "gate_passed": true
+    }
+  },
+  {
+    "candidate_id": "FG-V2-INTRADAY-EURUSD",
+    "name": "Day Trading Trend Continuation (15m\u20131h) (EURUSD)",
+    "symbol": "EURUSD",
+    "strategy_family": "INTRADAY_CONTINUATION",
+    "lifecycle_state": "CANONICAL",
+    "version": 2,
+    "validation": {
+      "total_trades": 48,
+      "win_rate_pct": 60.9,
+      "expectancy_r": 0.53,
+      "profit_factor": 1.85,
+      "max_drawdown_pct": 3.7
+    },
+    "paper_shadow": {
+      "trades": 20,
+      "win_rate_pct": 62.1,
+      "expectancy_r": 0.55,
+      "gate_passed": true
+    }
+  }
+]

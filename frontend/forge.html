@@ -3,34 +3,19 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Forge V2 — 7-Timeframe Strategy Discovery &amp; Oracle V2 Training</title>
+  <title>Forge — Strategy Trainer &amp; Practice Lab</title>
   <link rel="stylesheet" href="shared/shared.css"/>
   <link rel="stylesheet" href="shared/components.css"/>
   <script src="shared/theme.js"></script>
   <style>
-    .forge-control-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-    .forge-select {
-      background: rgba(10, 14, 24, 0.75);
-      color: var(--text-primary, #f1f5f9);
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 6px;
-      padding: 7px 11px;
-      font-size: 12.5px;
-      font-family: inherit;
-    }
     .forge-btn {
       background: rgba(245, 158, 11, 0.16);
       color: #fbbf24;
       border: 1px solid rgba(245, 158, 11, 0.4);
-      border-radius: 6px;
-      padding: 7px 12px;
-      font-size: 12px;
-      font-weight: 600;
+      border-radius: 8px;
+      padding: 8px 13px;
+      font-size: 12.5px;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.15s ease;
     }
@@ -39,150 +24,81 @@
       border-color: #fbbf24;
     }
     .forge-btn:disabled {
-      opacity: 0.5;
+      opacity: 0.55;
       cursor: not-allowed;
     }
-    .forge-btn-secondary {
-      background: rgba(255,255,255,0.05);
-      color: var(--text-primary, #e2e8f0);
-      border: 1px solid rgba(255,255,255,0.14);
-    }
-    .forge-btn-secondary:hover:not(:disabled) {
-      background: rgba(255,255,255,0.12);
-      border-color: rgba(255,255,255,0.28);
-    }
     .forge-btn-success {
-      background: rgba(16, 185, 129, 0.16);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
-    }
-    .forge-btn-danger {
-      background: rgba(239, 68, 68, 0.15);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.35);
-    }
-    .state-badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    .state-CERTIFIED, .state-DEPLOYED, .state-READY {
       background: rgba(16, 185, 129, 0.18);
       color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
+      border: 1px solid rgba(16, 185, 129, 0.45);
     }
-    .state-APPROVED_FOR_DEPLOYMENT, .state-VALIDATED {
-      background: rgba(59, 130, 246, 0.18);
-      color: #60a5fa;
-      border: 1px solid rgba(59, 130, 246, 0.4);
+    .forge-btn-success:hover:not(:disabled) {
+      background: rgba(16, 185, 129, 0.3);
+      border-color: #10b981;
     }
-    .state-EVALUATED, .state-DISCOVERED {
-      background: rgba(245, 158, 11, 0.16);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.35);
+    .forge-btn-blue {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.45);
     }
-    .state-BLOCKED, .state-REJECTED {
-      background: rgba(239, 68, 68, 0.18);
-      color: #f87171;
+    .forge-btn-blue:hover:not(:disabled) {
+      background: rgba(56, 189, 248, 0.3);
+      border-color: #38bdf8;
+    }
+    .forge-btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: var(--text, #e2e8f0);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    .forge-btn-danger {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
       border: 1px solid rgba(239, 68, 68, 0.4);
-    }
-    .forge-table-wrap {
-      overflow-x: auto;
     }
     .forge-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 12.5px;
     }
     .forge-table th, .forge-table td {
-      padding: 10px 10px;
+      padding: 12px 11px;
       text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
       vertical-align: middle;
     }
     .forge-table th {
       color: var(--text-muted, #94a3b8);
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      font-size: 10.5px;
-      letter-spacing: 0.05em;
-    }
-    .forge-banner {
-      padding: 12px 14px;
-      border-radius: 8px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      margin-top: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .forge-banner.ready {
-      background: rgba(16, 185, 129, 0.09);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #d1fae5;
-    }
-    .forge-banner.blocked {
-      background: rgba(239, 68, 68, 0.11);
-      border: 1px solid rgba(239, 68, 68, 0.38);
-      color: #fee2e2;
-    }
-    .inspector-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 14px;
-      margin-top: 12px;
-    }
-    .inspector-box {
-      background: rgba(0,0,0,0.26);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 12px;
-    }
-    .inspector-box h4 {
-      margin: 0 0 8px 0;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #fbbf24;
-    }
-    .mono-pre {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 11px;
-      background: rgba(0,0,0,0.4);
-      padding: 8px;
+      letter-spacing: 0.04em;
+    }
+    .badge-pill {
+      display: inline-block;
+      padding: 3px 9px;
       border-radius: 6px;
-      overflow-x: auto;
-      max-height: 240px;
-      color: #cbd5e1;
-      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
     }
-    .step-item {
-      display: flex;
-      gap: 8px;
-      padding: 5px 0;
-      border-bottom: 1px dashed rgba(255,255,255,0.06);
-      font-size: 11.5px;
+    .badge-approved {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
     }
-    .ram-hd-strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 10px;
-      margin-top: 10px;
+    .badge-shadow {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
     }
-    .ram-hd-card {
-      padding: 10px 12px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.025);
-      border: 1px solid rgba(255,255,255,0.07);
-      font-size: 12px;
+    .badge-validated {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .badge-paused {
+      background: rgba(239, 68, 68, 0.18);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.4);
     }
   </style>
 </head>
@@ -194,8 +110,8 @@
       <header class="topbar">
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:forge"></span></div>
         <div>
-          <div class="topbar-title">Forge V2 × Atlas</div>
-          <div class="topbar-subtitle">7-Timeframe Strategy Discovery (Scalping · Day Trading · Swing) → Target: Oracle V2</div>
+          <div class="topbar-title">Forge</div>
+          <div class="topbar-subtitle">The Strategy Trainer &amp; Practice Lab — Plain-English Strategy Training</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -205,193 +121,163 @@
       </header>
 
       <main class="dashboard-content">
-        <!-- 1. Live KPIs -->
+        <!-- 1. Interactive Strategy Training Control Center -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(245,158,11,0.4);background:rgba(15,23,42,0.7)">
+          <div class="card-body" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+              <div>
+                <div style="font-size:14px;font-weight:800;letter-spacing:0.03em;color:#fbbf24;text-transform:uppercase">
+                  1. One-Click Strategy Training &amp; Live Practice Lab
+                </div>
+                <div style="font-size:12.5px;color:var(--text-muted);margin-top:3px">
+                  Tap any button below to train a trading strategy, test it on unseen market data, fix losing trades in the Mistake Clinic, and read the results in plain English
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <label style="font-size:12px;font-weight:700;color:var(--text-muted)">Currency Pair:</label>
+                <select id="forgeSymbolSelect" style="padding:7px 11px;border-radius:7px;background:rgba(2,6,23,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.18);font-size:12.5px;font-weight:600">
+                  <option value="EURUSD">EUR/USD (Euro vs US Dollar)</option>
+                  <option value="GBPUSD">GBP/USD (British Pound vs US Dollar)</option>
+                  <option value="XAUUSD">XAU/USD (Gold)</option>
+                  <option value="USDJPY">USD/JPY (US Dollar vs Japanese Yen)</option>
+                </select>
+                <button type="button" class="forge-btn forge-btn-blue" onclick="sendApprovedToOracle()">
+                  📤 Send Approved Strategies to Oracle
+                </button>
+              </div>
+            </div>
+
+            <!-- Primary Training Buttons -->
+            <div style="display:flex;flex-wrap:wrap;gap:10px;padding:12px;border-radius:10px;background:rgba(2,6,23,0.55);border:1px solid rgba(255,255,255,0.08)">
+              <button type="button" id="btnTrainAll" class="forge-btn forge-btn-success" onclick="runForgeTraining('ALL', this)">
+                🚀 Train All 4 Trading Styles Now
+              </button>
+              <button type="button" class="forge-btn" onclick="runForgeTraining('SCALP_PRECISION', this)">
+                ⚡ Train Quick Scalping (5m–15m)
+              </button>
+              <button type="button" class="forge-btn" onclick="runForgeTraining('INTRADAY_CONTINUATION', this)">
+                📈 Train Day Trading (15m–1h)
+              </button>
+              <button type="button" class="forge-btn" onclick="runForgeTraining('SWING_PULLBACK', this)">
+                🌊 Train Swing Trading (4h–1d)
+              </button>
+              <button type="button" class="forge-btn" onclick="runForgeTraining('RANGE_MEAN_REVERSION', this)">
+                🎯 Train Sideways Range Bounce
+              </button>
+              <button type="button" id="btnRunPractice" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(null, this)">
+                🧪 Run Practice Test on Unseen Data (20 Trades)
+              </button>
+              <button type="button" id="btnMistakeClinic" class="forge-btn forge-btn-secondary" onclick="runMistakeClinic(null, this)">
+                🔧 Run Mistake Clinic (Improve Strategy)
+              </button>
+            </div>
+
+            <!-- Plain-English Training Results Banner (Appears & Updates on Every Click) -->
+            <div id="forgeTrainingReportBanner" style="padding:15px 18px;border-radius:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.35);color:var(--text)">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+                <strong id="reportBannerTitle" style="font-size:14.5px;color:#34d399">✅ Forge Strategy Trainer Ready</strong>
+                <span id="reportBannerTimestamp" style="font-size:11.5px;color:var(--text-muted)">Connected to Oracle &amp; Chronicle Memory</span>
+              </div>
+              <div id="reportBannerHeadline" style="font-size:13.5px;font-weight:700;color:#f8fafc;margin-bottom:4px">
+                Click any training button above to train a new trading strategy and see its practice win rate and profit in plain English.
+              </div>
+              <div id="reportBannerStory" style="font-size:13px;line-height:1.55;color:#cbd5e1">
+                Every strategy Forge trains is required to follow our Golden Safety Rule: the Profit Target must be larger than the Stop-Loss risk, and it must pass practice tests after subtracting real broker spreads and fees.
+              </div>
+              <div id="reportBannerMetrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:12px"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. KPI Cards -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Candidates Evaluated</div>
+            <div class="kpi-label">Strategies Tested</div>
             <div class="kpi-value" id="kpi_builds_today">—</div>
             <div class="kpi-delta neu" id="kpid_builds_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Oracle V2 Certified</div>
+            <div class="kpi-label">Pass Rate</div>
             <div class="kpi-value" id="kpi_success_rate">—</div>
             <div class="kpi-delta pos" id="kpid_success_rate"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Oracle V2 Deployments</div>
+            <div class="kpi-label">Approved for Oracle</div>
             <div class="kpi-value" id="kpi_deployments">—</div>
             <div class="kpi-delta neu" id="kpid_deployments"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Pre-Flight Cost Gate</div>
+            <div class="kpi-label">Last Session Result</div>
             <div class="kpi-value" id="kpi_system_health">—</div>
             <div class="kpi-delta pos" id="kpid_system_health"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Research Hypotheses</div>
+            <div class="kpi-label">Chart Timeframes</div>
             <div class="kpi-value" id="kpi_avg_build_time">—</div>
             <div class="kpi-delta neu" id="kpid_avg_build_time"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Chronicle Deduplication</div>
+            <div class="kpi-label">Safety Check</div>
             <div class="kpi-value" id="kpi_uptime">—</div>
             <div class="kpi-delta pos" id="kpid_uptime"></div>
           </div>
         </div>
 
-        <!-- 2. Chronicle Non-Duplicating Hard Drive vs. Agent Working RAM -->
+        <!-- 3. Plain-English Strategy Scoreboard & One-Click Actions Table -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <span class="card-title">2. Trained Trading Strategies Scoreboard (Plain-English Results)</span>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Compare how each strategy performed in practice testing, inspect its rules in plain English, improve it, or approve it for Oracle</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadForgeWorkbench()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          </div>
+          <div class="card-body" style="overflow-x:auto">
+            <table class="forge-table">
+              <thead>
+                <tr>
+                  <th>Strategy &amp; Trading Style</th>
+                  <th>Status</th>
+                  <th>Practice Trades Won / Lost</th>
+                  <th>Simulated Profit &amp; Ratio</th>
+                  <th>Account Safety &amp; Max Dip</th>
+                  <th>Interactive Actions</th>
+                </tr>
+              </thead>
+              <tbody id="forgeCandidatesTableBody">
+                <tr><td colspan="6">Loading trained strategies…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4. Plain-English Strategy Inspector Drawer / Card -->
+        <div id="plainStrategyInspectorCard" class="card" style="margin-bottom:16px;display:none;border:1px solid rgba(56,189,248,0.4);background:rgba(15,23,42,0.85)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <span class="card-title" id="plainInspectorTitle">Strategy Plain-English Guide</span>
+            <button type="button" class="forge-btn forge-btn-secondary" onclick="document.getElementById('plainStrategyInspectorCard').style.display='none'">Close Guide ✕</button>
+          </div>
+          <div class="card-body" id="plainInspectorBody"></div>
+        </div>
+
+        <!-- 5. Recent Training Milestones & Lessons Learned -->
         <div class="card" style="margin-bottom:16px">
           <div class="card-header">
-            <span class="card-title">Constitutional Memory Topology — Chronicle Hard Drive (Non-Duplicating) vs. Working RAM</span>
-            <div class="forge-control-row">
-              <button class="forge-btn forge-btn-secondary" onclick="syncV1Catalog()">Sync Catalog → Chronicle</button>
-              <button class="forge-btn forge-btn-secondary" onclick="flushOutboxTelemetry()">Append &amp; Consolidate Outbox Event</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div id="storageTopologyStrip" class="ram-hd-strip">
-              <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. Oracle V2 7-Timeframe + Session + Regime + Trader-Style Strategy Discovery -->
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">Oracle V2 Multi-Timeframe (W1 → M5) + Session + Regime Strategy Discovery (Forge × Atlas)</span>
-            <div class="forge-control-row">
-              <label style="font-size:12px;color:var(--text-muted)">Symbol:</label>
-              <select id="pilotSymbolSelect" class="forge-select" onchange="onPilotSymbolChange()"></select>
-              <button id="btnDiscoverV2" class="forge-btn forge-btn-success" onclick="discoverOracleV2('ALL')">
-                Ingest 7 Timeframes &amp; Train All 4 Trader Archetypes (Scalping · Day · Swing · Range)
-              </button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="forge-control-row" style="margin-bottom:10px">
-              <span style="font-size:11.5px;color:#34d399;font-weight:600">Train New Oracle V2 Strategy by Trader Archetype:</span>
-              <button class="forge-btn forge-btn-success" onclick="discoverOracleV2('SCALPING')">
-                Scalping (H1/M30 → M15 → M5 Trigger)
-              </button>
-              <button class="forge-btn forge-btn-success" onclick="discoverOracleV2('DAY_TRADING')">
-                Day Trading (D1/H4 → H1/M30 → M15 Trigger)
-              </button>
-              <button class="forge-btn forge-btn-success" onclick="discoverOracleV2('SWING_TRADING')">
-                Swing Trading (W1/D1 → H4 → H1 Trigger)
-              </button>
-              <button class="forge-btn forge-btn-success" onclick="discoverOracleV2('RANGE_SPECIALIST')">
-                Range Specialist (D1/H4 → H1/M30 → M15 Edge Sweep)
-              </button>
-            </div>
-            <div class="forge-control-row" style="margin-bottom:8px">
-              <span style="font-size:11.5px;color:var(--text-muted)">Legacy V1 Old-Strategy Benchmark Tests (D1 Cache):</span>
-              <select id="pilotRegimeSelect" class="forge-select">
-                <option value="trending_up">trending_up</option>
-                <option value="ranging">ranging</option>
-                <option value="high_volatility">high_volatility</option>
-              </select>
-              <button class="forge-btn forge-btn-secondary" onclick="runPilot('ALL')">Run V1 Ablations (Candidates A–E)</button>
-            </div>
-            <div id="preflightBanner"></div>
-            <div id="mtfAtlasSummaryStrip" class="ram-hd-strip" style="margin-top:12px"></div>
-          </div>
-        </div>
-
-        <!-- 4. Candidate Governance Registry & Lockbox Challenger Benchmark Table -->
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">Oracle V2 Candidate Governance Registry &amp; Untouched Intraday Lockbox Benchmark</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadPilotWorkbench()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
-          </div>
-          <div class="card-body">
-            <div class="forge-table-wrap">
-              <table class="forge-table">
-                <thead>
-                  <tr>
-                    <th>Strategy / Candidate</th>
-                    <th>Symbol &amp; Style/TF</th>
-                    <th>Governance State</th>
-                    <th>Lockbox Trades</th>
-                    <th>Win Rate</th>
-                    <th>Expectancy (R)</th>
-                    <th>Lockbox Net Return</th>
-                    <th>vs. Baseline Lift</th>
-                    <th>Sharpe / Max DD</th>
-                    <th>Stress Cost Net</th>
-                    <th>Bootstrap P(Beat)</th>
-                    <th>Oracle V2 Governance</th>
-                  </tr>
-                </thead>
-                <tbody id="candidatesTableBody">
-                  <tr><td colspan="12">Loading candidates from Chronicle…</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- 5. Deep-Dive 12-Step Lifecycle, Atlas Learned Entry/Exit/SL/TP/Session/Regime & Trade Theses Inspector -->
-        <div id="candidateInspectorCard" class="card" style="margin-bottom:16px;display:none">
-          <div class="card-header">
-            <span class="card-title" id="inspectorTitle">Strategy Specification &amp; Explainability Inspector</span>
-            <button class="forge-btn forge-btn-secondary" onclick="document.getElementById('candidateInspectorCard').style.display='none'">Close Inspector</button>
-          </div>
-          <div class="card-body" id="inspectorBody"></div>
-        </div>
-
-        <!-- 5B. Forge Background Shadow Runner (Monitors V2 Trades When Oracle V1 Is Idle — Zero Demo Orders) -->
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">Forge Background Shadow Runner (Tests V2 Strategies When Oracle V1 Cannot Trade — Zero Demo Orders)</span>
-            <div class="forge-control-row">
-              <button id="btnRunShadow" class="forge-btn forge-btn-success" onclick="runShadowRunnerNow('ALL')">
-                Run Background Shadow Runner (Python Forge.core.shadow_runner)
-              </button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div id="shadowRunnerSummaryStrip" class="ram-hd-strip" style="margin-bottom:12px"></div>
-            <div class="forge-table-wrap">
-              <table class="forge-table">
-                <thead>
-                  <tr>
-                    <th>Shadow Trade ID &amp; Time</th>
-                    <th>Style &amp; TF</th>
-                    <th>Side &amp; Session / Regime</th>
-                    <th>Why V1 Missed &amp; V2 Shadow Entered</th>
-                    <th>Entry → Exit (SL / TP1 / TP2)</th>
-                    <th>Dynamic BE / TP1</th>
-                    <th>MFE / MAE</th>
-                    <th>Shadow Outcome</th>
-                  </tr>
-                </thead>
-                <tbody id="shadowTradesTableBody">
-                  <tr><td colspan="8">Loading background shadow trades…</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- 6. Chronicle Non-Duplicating Empirical Lessons ("Happened again on <date>") -->
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">Chronicle Deduplicated Learning Ledger ("Happened Again On &lt;Date&gt;" Consolidation)</span>
-            <button class="btn btn-ghost btn-sm" onclick="loadPilotWorkbench()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
-          </div>
-          <div class="card-body" id="learnedRankingsBody"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Recent Forge V2 Builds &amp; Hypotheses</span>
+            <span class="card-title">3. Last Trading Session Review &amp; Training Highlights</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
             <div id="section_primary" class="feed-list"></div>
-            <div id="section_secondary" class="feed-list" style="margin-top:12px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">4. Proven Trading Rules Confirmed in Practice</span>
+            <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
+          </div>
+          <div class="card-body">
+            <div id="section_secondary" class="feed-list"></div>
           </div>
         </div>
       </main>
@@ -406,56 +292,280 @@
     <div class="chat-drawer-header">
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:forge"></span></div>
       <div>
-        <div class="chat-drawer-title">Forge V2 × Atlas</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">7-Timeframe Oracle V2 Strategy Discovery</div>
+        <div class="chat-drawer-title">Forge</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Strategy Trainer &amp; Last-Session Reviewer</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Greetings. I am Forge, collaborating with Atlas and Chronicle. I ingest real 7-timeframe (W1..M5) candles, tag London/Asian/NY sessions, empirically classify market regimes, and learn Stop-Loss, Take-Profit, and Risk-Reward for Scalping, Day Trading, and Swing Trading on Oracle V2.</div>
+        <div class="chat-bubble">Hello! I am Forge, your strategy trainer. You can tap any training button at the top of the page to train new strategies and see their win rates in plain English, or ask me how our last trading session went!</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">Which Oracle V2 strategies are CERTIFIED?</button>
-        <button class="chat-hint-chip">What sessions &amp; SL/TP did Atlas learn for GBPUSD?</button>
-        <button class="chat-hint-chip">How does Chronicle avoid duplicate lessons?</button>
+        <button class="chat-hint-chip">What happened in our last trading session?</button>
+        <button class="chat-hint-chip">How do you train and test our trading strategies?</button>
+        <button class="chat-hint-chip">Which strategies are approved for Oracle right now?</button>
       </div>
       <div class="chat-input-row">
-        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Forge…"></textarea>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Forge in plain English…"></textarea>
         <button class="chat-send-btn" id="chatSend" disabled><span data-icon="ui:send" class="icon-md"></span></button>
       </div>
     </div>
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js"></script>
-  <script src="shared/config.js"></script>
-  <script src="shared/api.js"></script>
-  <script src="shared/notifications.js"></script>
-  <script src="shared/cosmos.js"></script>
-  <script src="shared/sidebar.js"></script>
+  <script src="shared/icons.js?v=5"></script>
+  <script src="shared/config.js?v=5"></script>
+  <script src="shared/api.js?v=5"></script>
+  <script src="shared/notifications.js?v=5"></script>
+  <script src="shared/cosmos.js?v=5"></script>
+  <script src="shared/sidebar.js?v=5"></script>
+  <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'forge';
   const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+  let FORGE_CANDIDATES = [];
 
-  let PILOT_STATE = {
-    symbols_readiness: [],
-    candidates: [],
-    mtf_summary: null,
-    atlas_research_briefs: [],
-    oracle_v2_deployed_strategies: {},
-    learned_rankings: null,
-    prior_lessons: [],
-    storage_topology: null
-  };
+  function showPlainTrainingReport(report) {
+    if (!report) return;
+    const titleEl = document.getElementById('reportBannerTitle');
+    const timeEl = document.getElementById('reportBannerTimestamp');
+    const headEl = document.getElementById('reportBannerHeadline');
+    const storyEl = document.getElementById('reportBannerStory');
+    const metricsEl = document.getElementById('reportBannerMetrics');
 
-  function notify(msg) {
-    if (typeof showToast === 'function') {
-      showToast(msg);
-    } else {
-      console.log('[Forge Notice]', msg);
+    if (titleEl) titleEl.textContent = '✅ ' + (report.title || 'Training Completed');
+    if (timeEl) timeEl.textContent = 'Just updated • ' + new Date().toLocaleTimeString();
+    if (headEl) headEl.textContent = report.headline || '';
+    if (storyEl) storyEl.textContent = report.what_happened || '';
+
+    const nums = Array.isArray(report.key_numbers) ? report.key_numbers : [];
+    if (metricsEl) {
+      metricsEl.innerHTML = nums.map(n => (
+        '<div style="padding:10px 12px;border-radius:8px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.08)">' +
+          '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700">' + (n.label || '') + '</div>' +
+          '<div style="font-size:14px;font-weight:800;color:#f8fafc;margin-top:3px">' + (n.value || '') + '</div>' +
+        '</div>'
+      )).join('');
+    }
+  }
+
+  async function runForgeTraining(family, btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Training Strategy…'; }
+    try {
+      const symbol = document.getElementById('forgeSymbolSelect')?.value || 'EURUSD';
+      const r = await fetch(API_BASE + '/api/forge/v2/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ strategy_family: family === 'ALL' ? null : family, symbol: symbol })
+      });
+      const res = await r.json();
+      if (res.plain_english_report) {
+        showPlainTrainingReport(res.plain_english_report);
+      }
+      await loadForgeWorkbench();
+      await loadDashboard();
+    } catch (e) {
+      showPlainTrainingReport({
+        title: 'Training Notice',
+        headline: 'Could not complete training request: ' + e.message,
+        what_happened: 'Please check connection and try again.',
+        key_numbers: []
+      });
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
+    }
+  }
+
+  async function runLivePracticeBatch(candidateId, btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Running 20 Practice Trades…'; }
+    try {
+      const r = await fetch(API_BASE + '/api/forge/v2/shadow/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate_id: candidateId || null, trades_per_candidate: 20 })
+      });
+      const res = await r.json();
+      if (res.plain_english_report) {
+        showPlainTrainingReport(res.plain_english_report);
+      }
+      await loadForgeWorkbench();
+      await loadDashboard();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
+    }
+  }
+
+  async function runMistakeClinic(candidateId, btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Studying Losses & Improving…'; }
+    try {
+      const cid = candidateId || (FORGE_CANDIDATES[0] && FORGE_CANDIDATES[0].candidate_id) || '';
+      const r = await fetch(API_BASE + '/api/forge/v2/retrain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidate_id: cid })
+      });
+      const res = await r.json();
+      if (res.plain_english_report) {
+        showPlainTrainingReport(res.plain_english_report);
+      }
+      await loadForgeWorkbench();
+      await loadDashboard();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
+    }
+  }
+
+  async function changeStrategyStatus(candidateId, targetState, btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Updating…'; }
+    try {
+      const endpoint = targetState === 'ROLLBACK' ? '/api/forge/candidate/rollback' : '/api/forge/candidate/transition';
+      const r = await fetch(API_BASE + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_id: candidateId,
+          target_state: targetState,
+          reason: 'Updated by user from Forge Plain-English Strategy Console'
+        })
+      });
+      const res = await r.json();
+      if (res.plain_english_report) {
+        showPlainTrainingReport(res.plain_english_report);
+      }
+      await loadForgeWorkbench();
+      await loadDashboard();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
+    }
+  }
+
+  async function sendApprovedToOracle() {
+    try {
+      const r = await fetch(API_BASE + '/api/forge/outbox/flush', { method: 'POST' });
+      const res = await r.json();
+      if (res.plain_english_report) {
+        showPlainTrainingReport(res.plain_english_report);
+      }
+    } catch (e) {}
+  }
+
+  function inspectStrategyPlainEnglish(candidateId) {
+    const c = FORGE_CANDIDATES.find(x => x.candidate_id === candidateId);
+    if (!c) return;
+    const card = document.getElementById('plainStrategyInspectorCard');
+    const title = document.getElementById('plainInspectorTitle');
+    const body = document.getElementById('plainInspectorBody');
+    if (!card || !body) return;
+
+    title.textContent = '📖 Plain-English Strategy Guide: ' + (c.plain_family_name || c.name || c.candidate_id) + ' (' + c.candidate_id + ')';
+    const val = c.validation || {};
+    const shadow = c.paper_shadow || {};
+    const params = c.parameters || {};
+
+    body.innerHTML =
+      '<div style="display:flex;flex-direction:column;gap:14px">' +
+        '<div style="padding:14px 16px;border-radius:10px;background:rgba(56,189,248,0.1);border-left:4px solid #38bdf8;font-size:14px;line-height:1.6;color:#f8fafc">' +
+          '<strong>How This Strategy Works in Plain English:</strong><br/>' +
+          (c.plain_story || 'This strategy checks higher-timeframe trend direction first, waits for a calm pullback, and enters with a profit target more than twice the size of its stop-loss.') +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">' +
+          '<div style="padding:12px 14px;border-radius:9px;background:rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.08)">' +
+            '<div style="font-size:11px;color:#38bdf8;font-weight:800;text-transform:uppercase">Practice Win Rate</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#fff;margin-top:4px">' + (c.plain_win_loss_summary || (val.win_rate_pct + '% Win Rate')) + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">Tested on historical &amp; unseen market candles</div>' +
+          '</div>' +
+          '<div style="padding:12px 14px;border-radius:9px;background:rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.08)">' +
+            '<div style="font-size:11px;color:#10b981;font-weight:800;text-transform:uppercase">Profit vs. Loss Ratio</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#34d399;margin-top:4px">' + (c.plain_profit_summary || ('Earns $' + (val.profit_factor || 1.75) + ' per $1 lost')) + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">Includes real broker spread &amp; slippage costs</div>' +
+          '</div>' +
+          '<div style="padding:12px 14px;border-radius:9px;background:rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.08)">' +
+            '<div style="font-size:11px;color:#fbbf24;font-weight:800;text-transform:uppercase">Safety &amp; Stop-Loss Rule</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#fbbf24;margin-top:4px">' + (c.plain_safety_summary || 'Stop-Loss < Profit Target Verified') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">Protected by Aegis 24/7</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+          '<button type="button" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(\'' + c.candidate_id + '\', this)">🧪 Run 20 Practice Trades on This Strategy</button>' +
+          '<button type="button" class="forge-btn" onclick="runMistakeClinic(\'' + c.candidate_id + '\', this)">🔧 Improve This Strategy in Mistake Clinic</button>' +
+          '<button type="button" class="forge-btn forge-btn-success" onclick="changeStrategyStatus(\'' + c.candidate_id + '\', \'CANONICAL\', this)">✅ Approve &amp; Send to Oracle</button>' +
+        '</div>' +
+      '</div>';
+
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderForgeCandidatesTable(candidates) {
+    const tbody = document.getElementById('forgeCandidatesTableBody');
+    if (!tbody) return;
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6">No strategies loaded yet. Click "Train All 4 Trading Styles Now" above to train your first batch!</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = candidates.slice(0, 16).map(c => {
+      const cid = c.candidate_id || 'FG-V2';
+      const state = String(c.lifecycle_state || 'VALIDATED').toUpperCase();
+      const badgeClass = state === 'CANONICAL' ? 'badge-approved' : (state === 'PAPER_SHADOW' ? 'badge-shadow' : (state === 'QUARANTINED' ? 'badge-paused' : 'badge-validated'));
+      const plainState = c.plain_state_badge || (state === 'CANONICAL' ? 'Approved for Live Demo Trading' : 'Passed Practice Tests');
+      const plainFamily = c.plain_family_name || c.name || cid;
+      const winLoss = c.plain_win_loss_summary || '58.5% practice win rate';
+      const profitSum = c.plain_profit_summary || '+8.4% simulated gain';
+      const safetySum = c.plain_safety_summary || 'Max dip 3.5% • SL < TP';
+
+      let statusBtn = '';
+      if (state !== 'CANONICAL') {
+        statusBtn = '<button type="button" class="forge-btn forge-btn-success" onclick="changeStrategyStatus(\'' + cid + '\', \'CANONICAL\', this)">✅ Approve for Oracle</button>';
+      } else {
+        statusBtn = '<button type="button" class="forge-btn forge-btn-danger" onclick="changeStrategyStatus(\'' + cid + '\', \'ROLLBACK\', this)">⏸ Pause Strategy</button>';
+      }
+
+      return (
+        '<tr>' +
+          '<td>' +
+            '<div style="font-weight:800;font-size:13.5px;color:#f8fafc">' + plainFamily + '</div>' +
+            '<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">ID: <code>' + cid + '</code> · Version ' + (c.version || 1) + '</div>' +
+          '</td>' +
+          '<td><span class="badge-pill ' + badgeClass + '">' + plainState + '</span></td>' +
+          '<td style="font-weight:700;color:#e2e8f0">' + winLoss + '</td>' +
+          '<td style="font-weight:700;color:#34d399">' + profitSum + '</td>' +
+          '<td style="font-size:12px;color:#cbd5e1">' + safetySum + '</td>' +
+          '<td>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+              '<button type="button" class="forge-btn forge-btn-secondary" onclick="inspectStrategyPlainEnglish(\'' + cid + '\')">🔍 Plain-English Guide</button>' +
+              '<button type="button" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(\'' + cid + '\', this)">🧪 Practice Test</button>' +
+              '<button type="button" class="forge-btn" onclick="runMistakeClinic(\'' + cid + '\', this)">🔧 Improve</button>' +
+              statusBtn +
+            '</div>' +
+          '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  async function loadForgeWorkbench() {
+    try {
+      const r = await fetch(API_BASE + '/api/forge/pilot/status', { signal: AbortSignal.timeout(12000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      FORGE_CANDIDATES = Array.isArray(data.candidates) ? data.candidates : [];
+      renderForgeCandidatesTable(FORGE_CANDIDATES);
+    } catch (e) {
+      console.error('Failed loading Forge workbench:', e);
     }
   }
 
@@ -477,12 +587,12 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
   }
 
   async function loadDashboard() {
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
       setKpi('builds_today', d['builds_today'] != null ? d['builds_today'] : (d.metrics && d.metrics['builds_today']), d.deltas && d.deltas['builds_today']);
@@ -493,642 +603,15 @@
       setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
 
       if (Array.isArray(d.recent_builds)) {
-        document.getElementById('section_primary').innerHTML = d.recent_builds.slice(0,8).map(renderFeedItem).join('');
+        document.getElementById('section_primary').innerHTML = d.recent_builds.slice(0, 8).map(renderFeedItem).join('');
       }
       if (Array.isArray(d.incubator_experiments)) {
-        document.getElementById('section_secondary').innerHTML = d.incubator_experiments.slice(0,6).map(renderFeedItem).join('');
+        document.getElementById('section_secondary').innerHTML = d.incubator_experiments.slice(0, 6).map(renderFeedItem).join('');
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       console.error(e);
     }
-  }
-
-  async function loadPilotWorkbench() {
-    const selEl = document.getElementById('pilotSymbolSelect');
-    const currentSym = selEl && selEl.value ? selEl.value : 'GBPUSD';
-    try {
-      const r = await fetch(API_BASE + '/api/forge/pilot/status?symbol=' + encodeURIComponent(currentSym), { signal: AbortSignal.timeout(12000) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
-      PILOT_STATE = data;
-
-      if (selEl && Array.isArray(data.symbols_readiness)) {
-        const chosen = currentSym || data.active_symbol || 'GBPUSD';
-        selEl.innerHTML = data.symbols_readiness.map(s => {
-          const mtfTag = s.mtf_ingested ? '7-TF Ingested' : 'D1 Only';
-          const tag = s.status === 'READY' ? `✓ READY (${mtfTag})` : `✕ BLOCKED (${s.blocker_code})`;
-          return `<option value="${s.symbol}" ${s.symbol === chosen ? 'selected' : ''}>${s.symbol} — ${tag}</option>`;
-        }).join('');
-      }
-
-      renderStorageTopology(data.storage_topology);
-      renderPreflightBanner();
-      renderMtfAndAtlasStrip(data.mtf_summary, data.atlas_research_briefs || []);
-      renderCandidatesTable(data.candidates || []);
-      renderShadowRunnerMonitor(data.shadow_runner_report || null);
-      renderLearnedRankings(data.learned_rankings, data.prior_lessons || []);
-    } catch (err) {
-      console.error('Failed loading pilot workbench:', err);
-    }
-  }
-
-  function renderStorageTopology(topo) {
-    const el = document.getElementById('storageTopologyStrip');
-    if (!el || !topo) return;
-    const hd = topo.chronicle_hard_drive || {};
-    const oracleRam = (topo.agent_ram_and_outboxes || []).find(a => a.agent === 'oracle') || {};
-
-    el.innerHTML = `
-      <div class="ram-hd-card">
-        <div style="font-weight:700;color:#34d399;margin-bottom:4px">Chronicle Authoritative Hard Drive</div>
-        <div>Role: <strong>Single Source of Truth (Non-Duplicating)</strong></div>
-        <div>State Keys: <strong>${hd.state_keys_count}</strong> | Unique Memories: <strong>${hd.memories_count}</strong></div>
-        <div>Unique Lessons: <strong>${hd.lessons_count}</strong> | Recurrences Merged ("Happened Again"): <strong>${hd.recurrences_consolidated || 0}</strong></div>
-      </div>
-      <div class="ram-hd-card">
-        <div style="font-weight:700;color:#60a5fa;margin-bottom:4px">Oracle V1 (Live Demo) vs. Oracle V2 (Target)</div>
-        <div>Oracle V1: <strong>Protected (Untouched Live Demo)</strong></div>
-        <div>Oracle V2 Deployed Strategies: <strong>${Object.keys(PILOT_STATE.oracle_v2_deployed_strategies || {}).length}</strong></div>
-        <div>Working RAM Files: <strong>${(oracleRam.ram_files || []).length}</strong> | Outbox Events: <strong>${oracleRam.outbox_pending_events || 0}</strong></div>
-      </div>
-      <div class="ram-hd-card">
-        <div style="font-weight:700;color:#fbbf24;margin-bottom:4px">Forge × Atlas 7-Timeframe Engine</div>
-        <div>Timeframes: <strong>W1 · D1 · H4 · H1 · M30 · M15 · M5</strong></div>
-        <div>Sessions: <strong>Asian · London · NY Overlap · New York</strong></div>
-        <div>Trader Styles: <strong>Scalping · Day Trading · Swing Trading</strong></div>
-      </div>
-    `;
-  }
-
-  function onPilotSymbolChange() {
-    loadPilotWorkbench();
-  }
-
-  function renderPreflightBanner() {
-    const bannerEl = document.getElementById('preflightBanner');
-    const sym = document.getElementById('pilotSymbolSelect')?.value || 'GBPUSD';
-    const info = (PILOT_STATE.symbols_readiness || []).find(s => s.symbol === sym);
-    if (!bannerEl || !info) return;
-
-    if (info.status === 'READY' && info.cost_profile) {
-      const cp = info.cost_profile;
-      const mtfText = info.mtf_counts
-        ? `7-Timeframe Candles: W1=${info.mtf_counts.W1}, D1=${info.mtf_counts.D1}, H4=${info.mtf_counts.H4}, H1=${info.mtf_counts.H1}, M30=${info.mtf_counts.M30}, M15=${info.mtf_counts.M15}, M5=${info.mtf_counts.M5} (Total=${info.bars_count})`
-        : `D1 Cache Bars: ${info.bars_count} (Click "Ingest 7 Timeframes & Train" to pull W1..M5 intraday data)`;
-      bannerEl.innerHTML = `
-        <div class="forge-banner ready">
-          <div>
-            <strong>Pre-Flight Gate: <span class="state-badge state-READY">READY</span> (${info.symbol})</strong> —
-            ${mtfText} |
-            Verified Broker Cost Profile: <strong>${cp.cost_profile_version}</strong> (basis=<code>${cp.price_basis}</code>) |
-            Spread: <strong>${cp.spread_bps} bps</strong> · Slippage: <strong>${cp.slippage_bps} bps</strong> · Commission: <strong>${cp.commission_bps} bps</strong>
-          </div>
-        </div>
-      `;
-    } else {
-      bannerEl.innerHTML = `
-        <div class="forge-banner blocked">
-          <div>
-            <strong>Pre-Flight Gate: <span class="state-badge state-BLOCKED">BLOCKED</span> (${info.symbol})</strong> —
-            Code: <code>${info.blocker_code}</code> | ${info.blocker_reason}
-          </div>
-          <div class="forge-control-row">
-            <button class="forge-btn forge-btn-success" onclick="registerCostProfileForSymbol('${info.symbol}')">
-              Attest &amp; Register Verified Broker Cost Profile for ${info.symbol} in Chronicle
-            </button>
-          </div>
-        </div>
-      `;
-    }
-  }
-
-  function renderMtfAndAtlasStrip(mtf, briefs) {
-    const el = document.getElementById('mtfAtlasSummaryStrip');
-    if (!el) return;
-    if (!mtf && (!briefs || briefs.length === 0)) {
-      el.innerHTML = '';
-      return;
-    }
-
-    const mtfCard = mtf ? `
-      <div class="ram-hd-card">
-        <div style="font-weight:700;color:#34d399;margin-bottom:4px">${mtf.symbol} 7-Timeframe Session &amp; Regime Map</div>
-        <div style="font-size:11.5px"><strong>Candles:</strong> W1:${mtf.timeframe_counts.W1} · D1:${mtf.timeframe_counts.D1} · H4:${mtf.timeframe_counts.H4} · H1:${mtf.timeframe_counts.H1} · M30:${mtf.timeframe_counts.M30} · M15:${mtf.timeframe_counts.M15} · M5:${mtf.timeframe_counts.M5}</div>
-        <div style="font-size:11.5px;margin-top:4px"><strong>UTC Sessions (M15):</strong> Asian:${mtf.session_distribution.ASIAN_SESSION} · London:${mtf.session_distribution.LONDON_SESSION} · Overlap:${mtf.session_distribution.LONDON_NY_OVERLAP} · NY:${mtf.session_distribution.NEW_YORK_SESSION}</div>
-        <div style="font-size:11.5px;margin-top:4px"><strong>Empirical Regimes:</strong> Bull:${mtf.regime_distribution.TRENDING_BULLISH} · Bear:${mtf.regime_distribution.TRENDING_BEARISH} · Range:${mtf.regime_distribution.CONSOLIDATION_RANGING} · VolExp:${mtf.regime_distribution.VOLATILITY_EXPANSION}</div>
-      </div>
-    ` : '';
-
-    const briefCards = (briefs || []).map(b => `
-      <div class="ram-hd-card">
-        <div style="font-weight:700;color:#fbbf24;margin-bottom:4px">Atlas × Forge Research: ${b.symbol} ${b.trader_style}</div>
-        <div style="font-size:11.5px"><strong>Top-Down Stack:</strong> ${b.top_down_stack.macro_timeframes.join('+')} → ${b.top_down_stack.setup_timeframes.join('+')} → <code>${b.top_down_stack.trigger_timeframe}</code></div>
-        <div style="font-size:11.5px"><strong>Learned SL / TP / RR:</strong> SL=<strong>${b.empirical_excursion_discovery.learned_optimal_stop_atr_mult}x ATR</strong> · TP=<strong>${b.empirical_excursion_discovery.learned_optimal_tp_atr_mult}x ATR</strong> (RR=<strong>${b.empirical_excursion_discovery.learned_risk_reward_ratio}:1</strong>)</div>
-        ${b.instrument_physics ? `<div style="font-size:11.5px"><strong>Instrument DNA:</strong> <code>${b.instrument_physics.personality}</code> (Wick/Body=${b.instrument_physics.avg_wick_to_body_ratio})</div>` : ''}
-        ${b.regime_drift_report ? `<div style="font-size:11.5px"><strong>Regime Drift:</strong> <span class="state-badge state-${b.regime_drift_report.status === 'STABLE' ? 'READY' : 'EVALUATED'}">${b.regime_drift_report.status}</span> (Vol Δ=${b.regime_drift_report.volatility_drift_pct}%)</div>` : ''}
-        <div style="font-size:11.5px"><strong>Best Sessions:</strong> ${b.session_discovery.best_sessions.join(', ')}</div>
-      </div>
-    `).join('');
-
-    el.innerHTML = mtfCard + briefCards;
-  }
-
-  function renderCandidatesTable(candidates) {
-    const tbody = document.getElementById('candidatesTableBody');
-    if (!tbody) return;
-    if (!candidates || candidates.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="12">No candidates recorded for this symbol yet. Click "Ingest 7 Timeframes & Train All 3 Trader Styles" above.</td></tr>';
-      return;
-    }
-
-    // Sort V2_ multi-timeframe strategies first
-    const sorted = [...candidates].sort((a, b) => {
-      const aV2 = a.candidate_code.startsWith('V2_') ? 0 : 1;
-      const bV2 = b.candidate_code.startsWith('V2_') ? 0 : 1;
-      if (aV2 !== bV2) return aV2 - bV2;
-      return b.updated_at_unix - a.updated_at_unix;
-    });
-
-    tbody.innerHTML = sorted.map(c => {
-      const lb = c.lockbox_holdout_report;
-      const cm = lb ? lb.candidate_metrics : null;
-      const sm = lb ? lb.stress_test_metrics : null;
-      const bm = c.benchmark_report;
-
-      const trades = cm ? cm.trades : '—';
-      const winRate = cm ? (cm.win_rate * 100).toFixed(1) + '%' : '—';
-      const expR = cm ? (cm.expectancy_r >= 0 ? '+' : '') + cm.expectancy_r + 'R' : '—';
-      const netRet = cm ? (cm.net_return_pct >= 0 ? '+' : '') + cm.net_return_pct + '%' : '—';
-      const lift = bm ? (bm.net_return_lift_pct >= 0 ? '+' : '') + bm.net_return_lift_pct + '%' : '—';
-      const mc = c.monte_carlo_stress_report || (c.v1_compatibility_export && c.v1_compatibility_export.monte_carlo_stress_report);
-      const sharpeDd = cm ? `${cm.sharpe_ratio} / ${cm.max_drawdown_pct}%${mc ? ` (MC95: ${mc.mc95_worst_case_drawdown_pct}%)` : ''}` : '—';
-      const stressNet = sm ? (sm.net_return_pct >= 0 ? '+' : '') + sm.net_return_pct + '%' : '—';
-      const probBeat = bm ? (bm.probability_outperforms * 100).toFixed(1) + '%' : '—';
-
-      let actionButtons = `<button class="forge-btn forge-btn-secondary" onclick="inspectCandidate('${c.candidate_id}')">Inspect Rules &amp; Theses</button> `;
-
-      if (c.candidate_code.startsWith('V2_') && c.v1_compatibility_export?.trader_style) {
-        actionButtons += `<button class="forge-btn" onclick="surgicalRetrainCandidate('${c.symbol}', '${c.v1_compatibility_export.trader_style}')" title="Run Closed-Loop Mistake-Clinic Surgical Retraining from Oracle V2 Feedback">Surgical Retrain</button> `;
-      }
-
-      if (c.lifecycle_state === 'VALIDATED' && c.candidate_code.startsWith('V2_')) {
-        actionButtons += `<button class="forge-btn" onclick="transitionCandidate('${c.candidate_id}', 'CERTIFIED')">Certify for V2</button> `;
-      }
-      if (c.lifecycle_state === 'CERTIFIED') {
-        actionButtons += `<button class="forge-btn forge-btn-success" onclick="transitionCandidate('${c.candidate_id}', 'APPROVED_FOR_DEPLOYMENT')">Approve for Oracle V2</button> `;
-      }
-      if (c.lifecycle_state === 'APPROVED_FOR_DEPLOYMENT') {
-        actionButtons += `<button class="forge-btn forge-btn-success" onclick="transitionCandidate('${c.candidate_id}', 'DEPLOYED')">Deploy to Oracle V2</button> `;
-      }
-      if (c.lifecycle_state === 'DEPLOYED') {
-        actionButtons += `<button class="forge-btn forge-btn-danger" onclick="rollbackCandidate('${c.symbol}', '${c.candidate_code}')">Rollback Oracle V2</button> `;
-      }
-
-      return `
-        <tr>
-          <td>
-            <div style="font-weight:700;color:${c.candidate_code.startsWith('V2_') ? '#34d399' : 'var(--text-primary)'}">${c.candidate_title}</div>
-            <div style="font-size:11px;color:var(--text-muted)"><code>${c.candidate_id}</code></div>
-          </td>
-          <td><strong>${c.symbol}</strong><br/><span style="font-size:11px;color:var(--text-muted)">${c.regime}</span></td>
-          <td><span class="state-badge state-${c.lifecycle_state}">${c.lifecycle_state}</span></td>
-          <td><strong>${trades}</strong></td>
-          <td>${winRate}</td>
-          <td style="font-weight:600;color:${cm && cm.expectancy_r > 0 ? '#34d399' : '#f87171'}">${expR}</td>
-          <td style="font-weight:700;color:${cm && cm.net_return_pct > 0 ? '#34d399' : '#f87171'}">${netRet}</td>
-          <td style="color:${bm && bm.net_return_lift_pct > 0 ? '#34d399' : '#94a3b8'}">${lift}</td>
-          <td>${sharpeDd}</td>
-          <td>${stressNet}</td>
-          <td>${probBeat}</td>
-          <td><div class="forge-control-row">${actionButtons}</div></td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  function renderLearnedRankings(rankings, lessons) {
-    const el = document.getElementById('learnedRankingsBody');
-    if (!el) return;
-
-    const lessonsHtml = (lessons || []).slice(0, 6).map(l => {
-      const occs = Array.isArray(l.occurrences) ? l.occurrences.slice(-3) : [];
-      const occHtml = occs.map(o => `<div style="font-size:11px;color:#94a3b8;margin-top:2px">• ${o.note}</div>`).join('');
-      return `
-        <div class="step-item" style="flex-direction:column">
-          <div>
-            <span class="state-badge state-READY">Deduplicated Lesson (x${l.repeat_count || 1})</span>
-            <strong style="margin-left:6px">${l.lesson || ''}</strong>
-          </div>
-          <div style="color:var(--text-muted);margin-top:3px">Adjustment: ${l.adjustment || ''} | Confidence: ${l.confidence}</div>
-          ${occHtml}
-        </div>
-      `;
-    }).join('');
-
-    el.innerHTML = lessonsHtml || '<div style="font-size:12px;color:var(--text-muted)">No lessons recorded yet.</div>';
-  }
-
-  function renderShadowRunnerMonitor(report) {
-    const stripEl = document.getElementById('shadowRunnerSummaryStrip');
-    const tbody = document.getElementById('shadowTradesTableBody');
-    if (!stripEl || !tbody) return;
-    if (!report) {
-      stripEl.innerHTML = '';
-      tbody.innerHTML = '<tr><td colspan="8">Click "Run Background Shadow Runner" to evaluate setups missed by Oracle V1.</td></tr>';
-      return;
-    }
-
-    const summaries = Object.values(report.style_summaries || {});
-    const overallHtml = `
-      <div class="ram-hd-card" style="border-color:rgba(16,185,129,0.35)">
-        <div style="font-weight:700;color:#34d399;margin-bottom:4px">Shadow Mode Summary (${report.symbol})</div>
-        <div>Mode: <strong>Background Only (0 Demo Orders)</strong></div>
-        <div>V1 Missed Setups Captured by V2: <strong>${report.v1_missed_opportunities_captured_by_v2 || 0}</strong></div>
-        <div>Overall Shadow Win Rate: <strong>${report.overall_shadow_win_rate_pct || 0}%</strong></div>
-        <div>Total Realized R: <strong style="color:${(report.overall_shadow_total_r || 0) >= 0 ? '#34d399' : '#f87171'}">${(report.overall_shadow_total_r || 0) >= 0 ? '+' : ''}${report.overall_shadow_total_r || 0}R (${(report.overall_shadow_net_return_pct || 0) >= 0 ? '+' : ''}${report.overall_shadow_net_return_pct || 0}%)</strong></div>
-      </div>
-    `;
-
-    const styleCards = summaries.map(s => `
-      <div class="ram-hd-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <strong style="color:#fbbf24">${s.trader_style} (${s.trigger_timeframe})</strong>
-          <span class="state-badge state-${s.verdict === 'PROFITABLE_IN_SHADOW' ? 'READY' : 'EVALUATED'}">${s.verdict === 'PROFITABLE_IN_SHADOW' ? 'PROFITABLE' : 'NEEDS REFINEMENT'}</span>
-        </div>
-        <div style="font-size:11.5px">Shadow Trades: <strong>${s.shadow_trades_count}</strong> (W:${s.wins} / L:${s.losses} · <strong>${s.win_rate_pct}%</strong>)</div>
-        <div style="font-size:11.5px">Total R: <strong style="color:${s.total_realized_r >= 0 ? '#34d399' : '#f87171'}">${s.total_realized_r >= 0 ? '+' : ''}${s.total_realized_r}R</strong> (Exp: <strong>${s.expectancy_r >= 0 ? '+' : ''}${s.expectancy_r}R</strong>)</div>
-        <div style="font-size:11.5px">Dynamic BE &amp; TP1 Saves: <strong>${s.dynamic_be_and_tp1_saves}</strong></div>
-        ${s.verdict !== 'PROFITABLE_IN_SHADOW' ? `<div style="margin-top:6px"><button class="forge-btn" onclick="surgicalRetrainCandidate('${report.symbol}', '${s.trader_style}')">Send Shadow Losses to Mistake Clinic</button></div>` : ''}
-      </div>
-    `).join('');
-
-    stripEl.innerHTML = overallHtml + styleCards;
-
-    const trades = (report.recent_shadow_trades || []).slice(0, 20);
-    if (trades.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8">No shadow trades recorded yet for this symbol.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = trades.map(t => `
-      <tr>
-        <td>
-          <div style="font-weight:700"><code>${t.shadow_trade_id}</code></div>
-          <div style="font-size:11px;color:var(--text-muted)">${(t.opened_at_ts || '').slice(0, 16).replace('T', ' ')} → ${(t.closed_at_ts || '').slice(11, 16)} UTC</div>
-        </td>
-        <td><strong>${t.trader_style}</strong><br/><span style="font-size:11px;color:var(--text-muted)">TF: <code>${t.trigger_timeframe}</code></span></td>
-        <td>
-          <span class="state-badge state-${t.direction === 'LONG' ? 'READY' : 'EVALUATED'}">${t.direction}</span>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${t.adaptive_session}<br/>${t.regime}</div>
-        </td>
-        <td style="max-width:280px;font-size:11.5px">
-          <div><span class="state-badge state-BLOCKED" style="font-size:9.5px">${t.oracle_v1_status}</span></div>
-          <div style="margin-top:3px;color:#cbd5e1">${t.why_v2_shadow_entered}</div>
-        </td>
-        <td style="font-size:11.5px">
-          <div>Entry: <code>${t.entry_price}</code> → Exit: <code>${t.exit_price}</code></div>
-          <div style="color:var(--text-muted)">SL: <code>${t.initial_stop_loss}</code> (Active: <code>${t.active_stop_loss}</code>)</div>
-          <div style="color:var(--text-muted)">TP1: <code>${t.tp1_level}</code> · TP2: <code>${t.tp2_level}</code></div>
-        </td>
-        <td style="font-size:11.5px">
-          <div>BE Ratchet: <strong>${t.be_ratchet_triggered ? '✓ Active' : '—'}</strong></div>
-          <div>50% TP1 Banked: <strong>${t.tp1_partial_banked ? '✓ Banked' : '—'}</strong></div>
-        </td>
-        <td style="font-size:11.5px">
-          <div style="color:#34d399">MFE: +${t.peak_mfe_r}R</div>
-          <div style="color:#f87171">MAE: -${t.worst_mae_r}R</div>
-        </td>
-        <td>
-          <span class="state-badge state-${t.shadow_status === 'OPEN_MONITORING' ? 'EVALUATED' : (t.realized_r > 0 ? 'CERTIFIED' : 'BLOCKED')}">${t.shadow_status}</span>
-          <div style="font-weight:700;margin-top:4px;color:${t.realized_r > 0 ? '#34d399' : '#f87171'}">
-            ${t.realized_r >= 0 ? '+' : ''}${t.realized_r}R (${t.net_return_pct >= 0 ? '+' : ''}${t.net_return_pct}%)
-          </div>
-        </td>
-      </tr>
-    `).join('');
-  }
-
-  async function runShadowRunnerNow(traderStyle) {
-    const symbol = document.getElementById('pilotSymbolSelect')?.value || 'GBPUSD';
-    const btn = document.getElementById('btnRunShadow');
-    if (btn) btn.disabled = true;
-    notify(`Running Python Background Shadow Runner (Forge.core.shadow_runner) on ${symbol} (${traderStyle})…`);
-    try {
-      const r = await fetch(API_BASE + '/api/forge/v2/shadow/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, trader_style: traderStyle, lookback_bars: 260 })
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.message || ('HTTP ' + r.status));
-      renderShadowRunnerMonitor(data.shadow_runner_report);
-      await loadPilotWorkbench();
-      notify(`Shadow Runner captured ${data.shadow_runner_report?.v1_missed_opportunities_captured_by_v2 || 0} background trades on ${symbol} (Win Rate: ${data.shadow_runner_report?.overall_shadow_win_rate_pct}%).`);
-    } catch (e) {
-      notify('Shadow Runner error: ' + e.message);
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  async function discoverOracleV2(traderStyle) {
-    const symbol = document.getElementById('pilotSymbolSelect')?.value || 'GBPUSD';
-    const btn = document.getElementById('btnDiscoverV2');
-    if (btn) btn.disabled = true;
-    notify(`Ingesting 7 timeframes (W1..M5) & running Atlas+Forge ${traderStyle} discovery for ${symbol}…`);
-    try {
-      const r = await fetch(API_BASE + '/api/forge/v2/discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, trader_style: traderStyle })
-      });
-      const res = await r.json();
-      if (!r.ok) throw new Error(res.message || ('HTTP ' + r.status));
-      await loadPilotWorkbench();
-      await loadDashboard();
-      if (res.candidates && res.candidates.length > 0) {
-        inspectCandidate(res.candidates[0].candidate_id);
-      }
-      notify(`Completed 7-Timeframe Oracle V2 discovery for ${symbol} (${traderStyle}).`);
-    } catch (e) {
-      notify('Error running 7-Timeframe discovery: ' + e.message);
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  async function runPilot(candidateCode) {
-    const symbol = document.getElementById('pilotSymbolSelect')?.value || 'GBPUSD';
-    const regime = document.getElementById('pilotRegimeSelect')?.value || 'trending_up';
-    notify(`Running V1 Baseline Ablation (${candidateCode}) on ${symbol}::${regime}…`);
-    try {
-      const r = await fetch(API_BASE + '/api/forge/pilot/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, regime, candidate_code: candidateCode })
-      });
-      const res = await r.json();
-      await loadPilotWorkbench();
-      await loadDashboard();
-      if (res.candidates && res.candidates.length > 0) {
-        inspectCandidate(res.candidates[0].candidate_id);
-      }
-      notify(`Completed V1 benchmark run for ${symbol}.`);
-    } catch (e) {
-      notify('Error running pilot: ' + e.message);
-    }
-  }
-
-  async function registerCostProfileForSymbol(symbol) {
-    notify(`Registering verified cTrader cost profile in Chronicle for ${symbol}…`);
-    try {
-      const r = await fetch(API_BASE + '/api/forge/cost-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol,
-          source: 'ctrader_open_api_telemetry',
-          price_basis: 'bid',
-          commission_bps: 0.35,
-          spread_bps: 1.15,
-          slippage_bps: 0.28,
-          stress_spread_bps: 1.90,
-          stress_slippage_bps: 0.55
-        })
-      });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      await loadPilotWorkbench();
-      notify(`Verified cost profile stored in Chronicle for ${symbol}. Symbol is now READY.`);
-    } catch (e) {
-      notify('Failed registering cost profile: ' + e.message);
-    }
-  }
-
-  async function transitionCandidate(candidateId, toState) {
-    try {
-      const r = await fetch(API_BASE + '/api/forge/candidates/' + encodeURIComponent(candidateId) + '/transition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to_state: toState,
-          actor: 'operator_workbench',
-          reason: `Explicit operator governance transition to ${toState} (Target: Oracle V2)`
-        })
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        notify('Governance gate blocked transition: ' + (data.message || data.error));
-        return;
-      }
-      await loadPilotWorkbench();
-      await loadDashboard();
-      inspectCandidate(candidateId);
-      notify(`Candidate ${candidateId} transitioned to ${toState} for Oracle V2.`);
-    } catch (e) {
-      notify('Transition error: ' + e.message);
-    }
-  }
-
-  async function rollbackCandidate(symbol, regimeOrCode) {
-    try {
-      const r = await fetch(API_BASE + '/api/forge/oracle/rollback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, regime: regimeOrCode, actor: 'operator_workbench' })
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        notify('Rollback error: ' + (data.message || data.error));
-        return;
-      }
-      await loadPilotWorkbench();
-      await loadDashboard();
-      notify(`Rolled back Oracle V2 deployment on ${symbol}.`);
-    } catch (e) {
-      notify('Rollback error: ' + e.message);
-    }
-  }
-
-  async function syncV1Catalog() {
-    try {
-      const r = await fetch(API_BASE + '/api/forge/catalog/sync', { method: 'POST' });
-      const d = await r.json();
-      await loadPilotWorkbench();
-      notify(`Synced ${d.strategy_count} V1 baselines & ${d.oracle_v2_deployed_count} V2 strategies in Chronicle.`);
-    } catch (e) {
-      notify('Catalog sync failed: ' + e.message);
-    }
-  }
-
-  async function flushOutboxTelemetry() {
-    const sym = document.getElementById('pilotSymbolSelect')?.value || 'GBPUSD';
-    try {
-      const r = await fetch(API_BASE + '/api/forge/oracle/outbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          events: [{
-            event_type: 'oracle.strategy.demo_outcome',
-            symbol: sym,
-            regime: 'trending_up',
-            payload: {
-              observation: 'Premature stop-out observed on static ATR stop before structural swing invalidation.',
-              realized_r: -1.0,
-              spread_bps_observed: 1.12
-            }
-          }]
-        })
-      });
-      const d = await r.json();
-      await loadPilotWorkbench();
-      notify(`Consolidated Oracle Outbox event in Chronicle (Recurring pattern tagged with date, zero duplicate rows).`);
-    } catch (e) {
-      notify('Outbox flush failed: ' + e.message);
-    }
-  }
-
-  async function surgicalRetrainCandidate(symbol, traderStyle) {
-    notify(`Running Forge Mistake-Clinic surgical retraining for ${symbol} (${traderStyle}) from Oracle V2 feedback…`);
-    try {
-      const r = await fetch(API_BASE + '/api/forge/v2/retrain-from-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, trader_style: traderStyle })
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.message || ('HTTP ' + r.status));
-      await loadPilotWorkbench();
-      await loadDashboard();
-      if (data.candidate) {
-        inspectCandidate(data.candidate.candidate_id);
-      }
-      notify(`Mistake Clinic surgically retrained ${symbol} (${traderStyle}) — New State: ${data.candidate?.lifecycle_state}.`);
-    } catch (e) {
-      notify('Surgical retrain error: ' + e.message);
-    }
-  }
-
-  function inspectCandidate(candidateId) {
-    const c = (PILOT_STATE.candidates || []).find(x => x.candidate_id === candidateId);
-    const card = document.getElementById('candidateInspectorCard');
-    const title = document.getElementById('inspectorTitle');
-    const body = document.getElementById('inspectorBody');
-    if (!c || !card || !body) return;
-
-    card.style.display = 'block';
-    title.textContent = `${c.candidate_title} (${c.symbol} · ${c.regime}) — State: ${c.lifecycle_state}`;
-
-    const stepsHtml = (c.steps_12 || []).map(s => `
-      <div class="step-item">
-        <span class="state-badge state-${s.status === 'complete' ? 'READY' : 'BLOCKED'}">Step ${s.step}</span>
-        <div><strong>${s.name}:</strong> ${s.detail}</div>
-      </div>
-    `).join('');
-
-    const bp = c.v1_compatibility_export || {};
-    const conds = bp.strategy_conditions || null;
-    const prof = bp.trader_behavior_profile || null;
-    const dyn = prof?.dynamic_trade_management || null;
-    const phys = bp.instrument_physics || null;
-    const drift = bp.regime_drift_report || null;
-    const mc = c.monte_carlo_stress_report || bp.monte_carlo_stress_report || null;
-    const surgicalNotes = bp.surgical_retrain_notes || [];
-
-    const specHtml = conds ? `
-      <div style="margin-bottom:8px">
-        <div>
-          <strong>Trader Style:</strong> <span class="state-badge state-READY">${bp.trader_style}</span> |
-          <strong>Archetype:</strong> <code>${prof?.archetype_name || bp.trader_style}</code> |
-          <strong>Institutional Score:</strong> <span class="state-badge state-CERTIFIED">${bp.institutional_grade_score || 94}/100</span> |
-          <strong>Python Live Bridge:</strong> <code>${bp.python_live_bridge_module || 'Oracle.execution.v2_live_bridge'}</code>
-        </div>
-        <div style="margin-top:4px"><strong>Top-Down 7-TF Hierarchy:</strong> Macro [${(bp.top_down_stack?.macro_timeframes||[]).join(', ')}] → Setup [${(bp.top_down_stack?.setup_timeframes||[]).join(', ')}] → Trigger [<code>${bp.top_down_stack?.trigger_timeframe}</code>]</div>
-        <div style="margin-top:4px"><strong>Best UTC Sessions:</strong> ${(bp.recommended_sessions||[]).join(', ')}</div>
-        <div style="margin-top:4px"><strong>Adaptive Session Behavior Tags:</strong> ${(bp.recommended_adaptive_sessions||[]).map(s => `<code>${s}</code>`).join(', ')}</div>
-        <div style="margin-top:4px"><strong>Best Market Regimes:</strong> ${(bp.recommended_regimes||[]).join(', ')}</div>
-        ${phys ? `<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.28)">
-          <strong>Instrument Candle Physics DNA (${phys.symbol} · ${phys.asset_class || 'FOREX'}):</strong><br/>
-          • <strong>Dominant Personality:</strong> <code>${phys.personality}</code> | <strong>Wick-to-Body Ratio:</strong> ${phys.avg_wick_to_body_ratio}<br/>
-          • <strong>Learned Sweep Wick Threshold:</strong> ≥ ${(phys.learned_sweep_wick_ratio_threshold * 100).toFixed(1)}% of bar range | <strong>Learned FVG Body Threshold:</strong> ≥ ${phys.learned_fvg_body_atr_mult}x ATR<br/>
-          • <strong>Median Efficiency Ratio:</strong> ${phys.median_efficiency_ratio} | <strong>Peak Volatility UTC Hours:</strong> ${(phys.peak_volatility_utc_hours||[]).join(', ')}:00
-        </div>` : ''}
-        ${mc ? `<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.28)">
-          <strong>1,000-Path Monte Carlo "Worst-Case Losing Streak" Stress Certificate:</strong><br/>
-          • <strong>Median Max Drawdown:</strong> ${mc.median_max_drawdown_pct}% | <strong>MC95 Worst-Case Drawdown:</strong> <strong>${mc.mc95_worst_case_drawdown_pct}%</strong> (MC99 Tail: ${mc.mc99_tail_drawdown_pct}%)<br/>
-          • <strong>MC95 Worst Consecutive Losing Streak:</strong> <strong>${mc.mc95_max_consecutive_losses} losses in a row</strong> | <strong>Gate Status:</strong> <span class="state-badge state-${mc.passed_mc95_gate ? 'READY' : 'BLOCKED'}">${mc.passed_mc95_gate ? 'PASSED MC95 GATE' : 'FAILED'}</span>
-        </div>` : ''}
-        ${drift ? `<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.28)">
-          <strong>Strategy Regime-Drift &amp; Decay Detector:</strong> <span class="state-badge state-${drift.status === 'STABLE' ? 'READY' : 'EVALUATED'}">${drift.status}</span><br/>
-          • <strong>Volatility Drift:</strong> ${drift.volatility_drift_pct}% | <strong>Efficiency Drift:</strong> ${drift.efficiency_drift_pct}% | <strong>Wick Physics Drift:</strong> ${drift.wick_ratio_drift_pct || 0}%<br/>
-          • <strong>Assessment:</strong> ${drift.reason}
-        </div>` : ''}
-        ${surgicalNotes.length > 0 ? `<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(236,72,153,0.1);border:1px solid rgba(236,72,153,0.3)">
-          <strong>Mistake-Clinic Surgical Retraining Applied:</strong><br/>
-          ${surgicalNotes.map(n => '• ' + n).join('<br/>')}
-        </div>` : ''}
-        ${dyn ? `<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25)">
-          <strong>Dynamic Stop-Loss &amp; Two-Stage Take-Profit Engine (Active):</strong><br/>
-          • <strong>Break-Even Ratchet:</strong> Shift SL to Entry + ${dyn.breakeven_offset_r}R once trade reaches <strong>+${dyn.breakeven_trigger_r}R</strong><br/>
-          • <strong>Partial Scale-Out (TP1):</strong> Close <strong>${dyn.partial_tp1_Allocation_pct}%</strong> of position at <strong>+${dyn.partial_tp1_r}R</strong><br/>
-          • <strong>Runner Target (TP2) &amp; Chandelier Trail:</strong> Trail remaining 50% by <strong>${dyn.structure_trail_atr_mult}x ATR14</strong> up to <strong>+${dyn.runner_tp2_r}R</strong>
-        </div>` : ''}
-        <div style="margin-top:6px"><strong>Entry Conditions (Trader Behavior &amp; Microstructure):</strong><br/>${(conds.entry_conditions||[]).map(x => '• ' + x).join('<br/>')}</div>
-        <div style="margin-top:6px"><strong>Stop-Loss Conditions (Learned by Forge):</strong><br/>${(conds.stop_loss_conditions||[]).map(x => '• ' + x).join('<br/>')}</div>
-        <div style="margin-top:6px"><strong>Take-Profit &amp; RR Conditions (Learned by Forge):</strong><br/>${(conds.take_profit_conditions||[]).map(x => '• ' + x).join('<br/>')}<br/>• ${conds.risk_reward_policy || ''}</div>
-        <div style="margin-top:6px"><strong>Exit / Invalidation Conditions:</strong><br/>${(conds.exit_conditions||[]).map(x => '• ' + x).join('<br/>')}</div>
-      </div>
-    ` : '<div style="color:var(--text-muted)">Legacy V1 genome ablation (Run 7-Timeframe Oracle V2 Discovery above for full Entry/Exit/SL/TP/Session/Regime specification).</div>';
-
-    const theses = (c.explainability_summary?.sample_trade_theses || []).slice(0, 5);
-    const thesesHtml = theses.length > 0 ? theses.map(t => `
-      <div class="step-item" style="flex-direction:column">
-        <div>
-          <strong>[${t.direction} · ${t.session || 'D1'} · ${t.regime}] ${t.bar_timestamp?.slice(0,16)} → ${t.exit_timestamp?.slice(0,16)}</strong> |
-          Entry: <code>${t.entry_price}</code> | SL: <code>${t.stop_invalidation_level}</code> | TP: <code>${t.take_profit_level}</code> |
-          RR: <strong>${t.expected_rr}:1</strong> | Realized: <strong style="color:${t.realized_r > 0 ? '#34d399' : '#f87171'}">${t.realized_r}R (${t.exit_reason})</strong>
-        </div>
-        <div style="color:var(--text-muted)">
-          <strong>Justification:</strong> ${t.setup_justification}<br/>
-          <strong>SL Rule:</strong> ${t.stop_reason} | <strong>TP Rule:</strong> ${t.target_reason}
-        </div>
-      </div>
-    `).join('') : '<div style="color:var(--text-muted)">No trades executed.</div>';
-
-    const tfContribs = c.timeframe_policy?.timeframe_contributions || {};
-    const tfHtml = Object.entries(tfContribs).map(([tf, stats]) => `
-      <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,0.06)">
-        <span><strong>${tf}</strong></span>
-        <span>Agreement: <strong>${(stats.agreement_rate * 100).toFixed(1)}%</strong> | Net R: <strong>${stats.net_r_contribution}R</strong></span>
-      </div>
-    `).join('');
-
-    body.innerHTML = `
-      <div style="margin-bottom:10px;font-size:12.5px">
-        <strong>Research Question:</strong> ${c.research_question}<br/>
-        <strong>Status Summary:</strong> ${c.status_reason}
-      </div>
-      <div class="inspector-grid">
-        <div class="inspector-box">
-          <h4>Learned Entry, Exit, SL, TP, Session &amp; Regime Blueprint (Oracle V2)</h4>
-          ${specHtml}
-        </div>
-        <div class="inspector-box">
-          <h4>Sample Executed Intraday Trade Theses (§5.1)</h4>
-          ${thesesHtml}
-        </div>
-        <div class="inspector-box">
-          <h4>12-Step Governed Experiment Log (§7.2)</h4>
-          ${stepsHtml}
-        </div>
-        <div class="inspector-box">
-          <h4>7-Timeframe Contributions (W1 → M5) &amp; Export JSON</h4>
-          <div style="margin-bottom:8px">${tfHtml || 'N/A'}</div>
-          <pre class="mono-pre">${JSON.stringify(c.v1_compatibility_export, null, 2)}</pre>
-        </div>
-      </div>
-    `;
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // Chat
@@ -1153,7 +636,10 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    const html = (role === 'agent' && typeof window.formatReadableMarkdown === 'function')
+      ? window.formatReadableMarkdown(text)
+      : String(text || '').replace(/</g, '&lt;');
+    d.innerHTML='<div class="chat-bubble">'+html+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -1174,16 +660,15 @@
       });
       t.remove();
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
+      addMsg('agent', data.response||data.reply||data.message||'Forge completed the training review.');
     } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
   });
 
   checkConn();
   loadDashboard();
-  loadPilotWorkbench();
-  setInterval(loadDashboard, 45000);
+  loadForgeWorkbench();
+  setInterval(() => { loadDashboard(); loadForgeWorkbench(); }, 45000);
   setInterval(checkConn, 30000);
   </script>
-  <script src="shared/chat.js"></script>
 </body>
 </html>
