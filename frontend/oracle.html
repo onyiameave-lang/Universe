@@ -304,17 +304,22 @@
     box.textContent = msg;
   }
 
+  function isLightTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light';
+  }
+
   function updateBrokerButtonsUI() {
+    const isLight = isLightTheme();
     document.querySelectorAll('.broker-tab-btn').forEach(btn => {
       const b = btn.getAttribute('data-broker');
       if (b === ACTIVE_BROKER) {
-        btn.style.border = '1px solid #10b981';
-        btn.style.background = 'rgba(16,185,129,0.24)';
-        btn.style.color = '#fff';
+        btn.style.border = isLight ? '1px solid #059669' : '1px solid #10b981';
+        btn.style.background = isLight ? 'rgba(5,150,105,0.16)' : 'rgba(16,185,129,0.24)';
+        btn.style.color = isLight ? '#065f46' : '#fff';
         btn.style.fontWeight = '700';
       } else {
-        btn.style.border = '1px solid rgba(255,255,255,0.16)';
-        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.border = isLight ? '1px solid rgba(140,108,45,0.28)' : '1px solid rgba(255,255,255,0.16)';
+        btn.style.background = isLight ? '#f5f0e2' : 'rgba(255,255,255,0.05)';
         btn.style.color = 'var(--text)';
         btn.style.fontWeight = '600';
       }
@@ -322,16 +327,17 @@
   }
 
   function updateChartSelectorButtonsUI() {
+    const isLight = isLightTheme();
     document.querySelectorAll('.chart-sym-btn').forEach(btn => {
       const s = btn.getAttribute('data-sym');
       if (s === CHART_SYMBOL) {
-        btn.style.border = '1px solid #38bdf8';
-        btn.style.background = 'rgba(56,189,248,0.24)';
-        btn.style.color = '#fff';
+        btn.style.border = isLight ? '1px solid #0284c7' : '1px solid #38bdf8';
+        btn.style.background = isLight ? 'rgba(2,132,199,0.16)' : 'rgba(56,189,248,0.24)';
+        btn.style.color = isLight ? '#075985' : '#fff';
         btn.style.fontWeight = '700';
       } else {
-        btn.style.border = '1px solid rgba(255,255,255,0.14)';
-        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.border = isLight ? '1px solid rgba(140,108,45,0.26)' : '1px solid rgba(255,255,255,0.14)';
+        btn.style.background = isLight ? '#f5f0e2' : 'rgba(255,255,255,0.05)';
         btn.style.color = 'var(--text)';
         btn.style.fontWeight = '600';
       }
@@ -339,13 +345,13 @@
     document.querySelectorAll('.chart-tf-btn').forEach(btn => {
       const t = btn.getAttribute('data-tf');
       if (t === CHART_TF) {
-        btn.style.border = '1px solid #10b981';
-        btn.style.background = 'rgba(16,185,129,0.24)';
-        btn.style.color = '#fff';
+        btn.style.border = isLight ? '1px solid #059669' : '1px solid #10b981';
+        btn.style.background = isLight ? 'rgba(5,150,105,0.16)' : 'rgba(16,185,129,0.24)';
+        btn.style.color = isLight ? '#065f46' : '#fff';
         btn.style.fontWeight = '700';
       } else {
-        btn.style.border = '1px solid rgba(255,255,255,0.14)';
-        btn.style.background = 'rgba(255,255,255,0.05)';
+        btn.style.border = isLight ? '1px solid rgba(140,108,45,0.26)' : '1px solid rgba(255,255,255,0.14)';
+        btn.style.background = isLight ? '#f5f0e2' : 'rgba(255,255,255,0.05)';
         btn.style.color = 'var(--text)';
         btn.style.fontWeight = '600';
       }
@@ -440,6 +446,7 @@
 
   function renderChartLiveOutputReadings(data) {
     if (!data) return;
+    const isLight = isLightTheme();
     const dock = document.getElementById('chartLiveReadingsDock');
     const streamBox = document.getElementById('liveExecutionStreamBox');
     const hud = document.getElementById('chartActiveOutputHud');
@@ -447,12 +454,23 @@
     const allOpen = data.all_open_trades || data.open_trades || [];
     const symOpen = (data.open_trades || []);
 
+    const emeraldTxt = isLight ? '#047857' : '#34d399';
+    const cyanTxt = isLight ? '#0369a1' : '#38bdf8';
+    const coralTxt = isLight ? '#b91c1c' : '#fca5a5';
+    const primaryTxt = isLight ? '#0f172a' : '#f8fafc';
+    const mutedTxt = isLight ? '#475569' : '#94a3b8';
+
     if (badge) {
       badge.textContent = allOpen.length + ' Active Position' + (allOpen.length === 1 ? '' : 's');
+      badge.style.color = emeraldTxt;
+      badge.style.background = isLight ? 'rgba(5,150,105,0.14)' : 'rgba(16,185,129,0.18)';
     }
 
     // Update top-of-chart active position HUD
     if (hud) {
+      hud.style.background = isLight
+        ? 'linear-gradient(90deg, rgba(5,150,105,0.14), rgba(250,247,239,0.96))'
+        : 'linear-gradient(90deg, rgba(16,185,129,0.16), rgba(15,23,42,0.85))';
       const focusTrade = symOpen[0] || allOpen[0];
       if (focusTrade) {
         const pnl = Number(focusTrade.floating_pnl_usd || 0);
@@ -460,54 +478,61 @@
         const pipStr = focusTrade.pip_change_str || ((focusTrade.pip_change >= 0 ? '+' : '') + (focusTrade.pip_change || 13.0) + ' pips');
         hud.innerHTML =
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-            '<span style="font-weight:800;color:#34d399">📡 LIVE TRADE OUTPUT [' + (focusTrade.broker_badge || focusTrade.broker) + ']:</span>' +
-            '<span style="color:#f8fafc;font-weight:700">' + focusTrade.direction + ' ' + focusTrade.volume + 'L ' + focusTrade.symbol + '</span>' +
-            '<span style="color:#94a3b8">Entry <strong>' + focusTrade.entry + '</strong> → Live <strong>' + focusTrade.current_price + '</strong></span>' +
-            '<span style="padding:2px 7px;border-radius:5px;background:rgba(16,185,129,0.2);color:#34d399;font-weight:800">' + pipStr + ' · ' + pnlStr + ' (' + (focusTrade.floating_r || '+0.48R') + ')</span>' +
+            '<span style="font-weight:800;color:' + emeraldTxt + '">📡 LIVE TRADE OUTPUT [' + (focusTrade.broker_badge || focusTrade.broker) + ']:</span>' +
+            '<span style="color:' + primaryTxt + ';font-weight:700">' + focusTrade.direction + ' ' + focusTrade.volume + 'L ' + focusTrade.symbol + '</span>' +
+            '<span style="color:' + mutedTxt + '">Entry <strong>' + focusTrade.entry + '</strong> → Live <strong>' + focusTrade.current_price + '</strong></span>' +
+            '<span style="padding:2px 7px;border-radius:5px;background:rgba(16,185,129,0.16);color:' + emeraldTxt + ';font-weight:800">' + pipStr + ' · ' + pnlStr + ' (' + (focusTrade.floating_r || '+0.48R') + ')</span>' +
           '</div>' +
-          '<div style="font-size:11px;color:#7dd3fc;font-weight:600">' +
+          '<div style="font-size:11px;color:' + cyanTxt + ';font-weight:700">' +
             (focusTrade.pips_to_tp || '55.0') + ' pips to TP (' + focusTrade.tp + ') · ' + (focusTrade.pips_from_sl || '40.0') + ' pips above SL (' + focusTrade.sl + ')' +
           '</div>';
       } else {
         hud.innerHTML =
-          '<span style="color:#38bdf8;font-weight:700">📡 Live Chart Output Ready — Watching ' + (data.symbol || CHART_SYMBOL) + ' @ ' + (data.live_bid || '—') + '</span>' +
-          '<span style="color:#94a3b8;font-size:11px">Use "+ Place Demo Trade Now" above to open a live position</span>';
+          '<span style="color:' + cyanTxt + ';font-weight:700">📡 Live Chart Output Ready — Watching ' + (data.symbol || CHART_SYMBOL) + ' @ ' + (data.live_bid || '—') + '</span>' +
+          '<span style="color:' + mutedTxt + ';font-size:11px">Use "+ Place Demo Trade Now" above to open a live position</span>';
       }
     }
 
     if (dock) {
       if (!allOpen.length) {
-        dock.innerHTML = '<div style="padding:12px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:12px">No open positions right now. Place a demo trade above to stream live position output readings here.</div>';
+        dock.innerHTML = '<div style="padding:12px;border-radius:8px;background:var(--bg-well);color:var(--text-muted);font-size:12px">No open positions right now. Place a demo trade above to stream live position output readings here.</div>';
       } else {
         dock.innerHTML = allOpen.map(t => {
           const isCurrentSym = String(t.symbol || '').toUpperCase() === String(data.symbol || CHART_SYMBOL).toUpperCase();
           const pnl = Number(t.floating_pnl_usd || 0);
           const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-          const pnlColor = pnl >= 0 ? '#34d399' : '#f87171';
+          const pnlColor = pnl >= 0 ? emeraldTxt : (isLight ? '#dc2626' : '#f87171');
           const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 12.5) + ' pips');
           const prog = Math.min(100, Math.max(8, Number(t.progress_to_tp_pct || 48)));
-          const bColor = t.broker === 'mt5' ? '#34d399' : '#38bdf8';
+          const bColor = t.broker === 'mt5' ? emeraldTxt : cyanTxt;
+          const cardBg = isCurrentSym
+            ? (isLight ? 'rgba(5,150,105,0.10)' : 'rgba(16,185,129,0.11)')
+            : (isLight ? '#ffffff' : 'rgba(15,23,42,0.75)');
+          const cardBorder = isCurrentSym
+            ? (isLight ? 'rgba(5,150,105,0.45)' : 'rgba(16,185,129,0.45)')
+            : (isLight ? 'rgba(140,108,45,0.24)' : 'rgba(255,255,255,0.09)');
+          const innerGridBg = isLight ? '#f4f0e4' : 'rgba(2,6,23,0.5)';
           return (
-            '<div style="padding:10px 12px;border-radius:10px;background:' + (isCurrentSym ? 'rgba(16,185,129,0.11)' : 'rgba(15,23,42,0.75)') + ';border:1px solid ' + (isCurrentSym ? 'rgba(16,185,129,0.45)' : 'rgba(255,255,255,0.09)') + ';display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums">' +
+            '<div style="padding:10px 12px;border-radius:10px;background:' + cardBg + ';border:1px solid ' + cardBorder + ';display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
                 '<div style="display:flex;align-items:center;gap:6px">' +
-                  '<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.16);color:' + bColor + '">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + '</span>' +
-                  '<strong style="font-size:12.5px;color:#f8fafc">' + t.direction + ' ' + t.symbol + ' (' + t.volume + 'L)</strong>' +
+                  '<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.15);color:' + bColor + '">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + '</span>' +
+                  '<strong style="font-size:12.5px;color:' + primaryTxt + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + 'L)</strong>' +
                 '</div>' +
                 '<span style="font-size:13px;font-weight:800;color:' + pnlColor + '">' + pipStr + ' · ' + pnlStr + ' (' + (t.floating_r || '+0.48R') + ')</span>' +
               '</div>' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:#cbd5e1;background:rgba(2,6,23,0.5);padding:6px 8px;border-radius:6px">' +
-                '<div>Entry: <strong style="color:#38bdf8">' + t.entry + '</strong> → Now: <strong style="color:#fff">' + t.current_price + '</strong></div>' +
-                '<div style="text-align:right">R:R Ratio: <strong style="color:#34d399">' + (t.rr_ratio || '1:2.5') + '</strong></div>' +
-                '<div style="color:#34d399">🎯 To TP (' + t.tp + '): <strong>' + (t.pips_to_tp ?? t.tp_pips) + ' pips</strong></div>' +
-                '<div style="color:#fca5a5;text-align:right">🛡️ Above SL (' + t.sl + '): <strong>' + (t.pips_from_sl ?? t.sl_pips) + ' pips</strong></div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:' + mutedTxt + ';background:' + innerGridBg + ';padding:6px 8px;border-radius:6px">' +
+                '<div>Entry: <strong style="color:' + cyanTxt + '">' + t.entry + '</strong> → Now: <strong style="color:' + primaryTxt + '">' + t.current_price + '</strong></div>' +
+                '<div style="text-align:right">R:R Ratio: <strong style="color:' + emeraldTxt + '">' + (t.rr_ratio || '1:2.5') + '</strong></div>' +
+                '<div style="color:' + emeraldTxt + '">🎯 To TP (' + t.tp + '): <strong>' + (t.pips_to_tp ?? t.tp_pips) + ' pips</strong></div>' +
+                '<div style="color:' + coralTxt + ';text-align:right">🛡️ Above SL (' + t.sl + '): <strong>' + (t.pips_from_sl ?? t.sl_pips) + ' pips</strong></div>' +
               '</div>' +
               '<div style="display:flex;align-items:center;gap:8px">' +
-                '<div style="flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden">' +
-                  '<div style="width:' + prog + '%;height:100%;background:linear-gradient(90deg,#38bdf8,#10b981);border-radius:4px"></div>' +
+                '<div style="flex:1;height:6px;border-radius:4px;background:' + (isLight ? 'rgba(140,108,45,0.18)' : 'rgba(255,255,255,0.08)') + ';overflow:hidden">' +
+                  '<div style="width:' + prog + '%;height:100%;background:linear-gradient(90deg,#0ea5e9,#10b981);border-radius:4px"></div>' +
                 '</div>' +
-                '<span style="font-size:10px;color:#94a3b8;font-weight:700">' + prog.toFixed(0) + '% to TP</span>' +
-                (!isCurrentSym ? '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(56,189,248,0.4);background:rgba(56,189,248,0.15);color:#38bdf8;font-size:10px;font-weight:700;cursor:pointer">View Chart</button>' : '<span style="font-size:10px;color:#34d399;font-weight:700">● On Chart</span>') +
+                '<span style="font-size:10px;color:' + mutedTxt + ';font-weight:700">' + prog.toFixed(0) + '% to TP</span>' +
+                (!isCurrentSym ? '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(2,132,199,0.4);background:rgba(2,132,199,0.12);color:' + cyanTxt + ';font-size:10px;font-weight:700;cursor:pointer">View Chart</button>' : '<span style="font-size:10px;color:' + emeraldTxt + ';font-weight:700">● On Chart</span>') +
               '</div>' +
             '</div>'
           );
@@ -516,15 +541,17 @@
     }
 
     if (streamBox) {
+      streamBox.style.background = isLight ? '#f4f0e4' : 'rgba(4,7,17,0.85)';
+      streamBox.style.color = isLight ? '#1e293b' : '#cbd5e1';
       const nowStr = new Date().toLocaleTimeString();
       const lines = allOpen.map(t => {
         const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
         const pnl = Number(t.floating_pnl_usd || 0);
         const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-        return '<div style="margin-bottom:3px"><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:#38bdf8;font-weight:700">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + ' ' + t.symbol + '</span> ' + t.direction + ' @ ' + t.entry + ' → <strong style="color:#fff">' + t.current_price + '</strong> (<span style="color:#34d399;font-weight:700">' + pipStr + ' / ' + pnlStr + '</span> · ' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)</div>';
+        return '<div style="margin-bottom:3px"><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:' + cyanTxt + ';font-weight:700">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + ' ' + t.symbol + '</span> ' + t.direction + ' @ ' + t.entry + ' → <strong style="color:' + primaryTxt + '">' + t.current_price + '</strong> (<span style="color:' + emeraldTxt + ';font-weight:700">' + pipStr + ' / ' + pnlStr + '</span> · ' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)</div>';
       });
       if (!lines.length) {
-        lines.push('<div><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:#38bdf8">ORACLE STREAM:</span> Watching ' + (data.symbol || CHART_SYMBOL) + ' Bid ' + (data.live_bid || '—') + ' / Ask ' + (data.live_ask || '—') + ' — waiting for next entry trigger.</div>');
+        lines.push('<div><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:' + cyanTxt + '">ORACLE STREAM:</span> Watching ' + (data.symbol || CHART_SYMBOL) + ' Bid ' + (data.live_bid || '—') + ' / Ask ' + (data.live_ask || '—') + ' — waiting for next entry trigger.</div>');
       }
       streamBox.innerHTML = lines.join('');
     }
@@ -544,6 +571,7 @@
 
   function drawCandlestickChart(data) {
     if (!data) return;
+    const isLight = isLightTheme();
     const titleEl = document.getElementById('chartHeaderTitle');
     if (titleEl) {
       titleEl.textContent = 'Live Candlestick Chart & Trade Output Readings — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')';
@@ -551,6 +579,7 @@
     const bidAskEl = document.getElementById('chartBidAskLabel');
     if (bidAskEl) {
       bidAskEl.textContent = 'Live Bid: ' + (data.live_bid ?? '—') + '  /  Ask: ' + (data.live_ask ?? '—');
+      bidAskEl.style.color = isLight ? '#0369a1' : '#38bdf8';
     }
     const spreadEl = document.getElementById('chartSpreadLabel');
     if (spreadEl) {
@@ -576,8 +605,8 @@
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    // Background
-    ctx.fillStyle = '#060b16';
+    // Theme-aware chart canvas background
+    ctx.fillStyle = isLight ? '#faf7ef' : '#060b16';
     ctx.fillRect(0, 0, W, H);
 
     const bars = (data.bars || []).slice(-42);
@@ -608,9 +637,9 @@
     const decimals = maxP > 500 ? 2 : (maxP > 20 ? 3 : 5);
 
     // Horizontal grid lines + right price axis
-    ctx.strokeStyle = 'rgba(148,163,184,0.11)';
+    ctx.strokeStyle = isLight ? 'rgba(140, 108, 45, 0.18)' : 'rgba(148, 163, 184, 0.11)';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
     ctx.font = '11px JetBrains Mono, monospace';
     for (let i = 0; i <= 5; i++) {
       const pVal = minP + ((maxP - minP) * (5 - i)) / 5;
@@ -626,15 +655,17 @@
     const stepX = plotW / bars.length;
     const bodyW = Math.max(3, Math.min(13, stepX * 0.62));
     const emaPoints = [];
+    const bullColor = isLight ? '#059669' : '#10b981';
+    const bearColor = isLight ? '#dc2626' : '#ef4444';
 
     bars.forEach((b, idx) => {
       const cx = padL + idx * stepX + stepX * 0.5;
       const isBull = b.close >= b.open;
-      const color = isBull ? '#10b981' : '#ef4444';
+      const color = isBull ? bullColor : bearColor;
 
       // Wick
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.35;
       ctx.beginPath();
       ctx.moveTo(cx, yFor(b.high));
       ctx.lineTo(cx, yFor(b.low));
@@ -656,7 +687,7 @@
 
       // Bottom time labels
       if (idx % 8 === 0 || idx === bars.length - 1) {
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = isLight ? '#64748b' : '#64748b';
         ctx.font = '10px JetBrains Mono, monospace';
         const tStr = String(b.time || '').slice(-5);
         ctx.fillText(tStr, cx - 14, H - 8);
@@ -665,8 +696,8 @@
 
     // Smooth EMA line
     if (emaPoints.length > 1) {
-      ctx.strokeStyle = 'rgba(56,189,248,0.68)';
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = isLight ? 'rgba(2, 132, 199, 0.78)' : 'rgba(56, 189, 248, 0.68)';
+      ctx.lineWidth = 1.75;
       ctx.beginPath();
       emaPoints.forEach((pt, idx) => {
         if (idx === 0) ctx.moveTo(pt.x, pt.y);
@@ -675,14 +706,14 @@
       ctx.stroke();
     }
 
-    // Draw Active Open Trade Lines (Entry = Blue, Profit Target = Green, Stop-Loss = Red, Live Price = Cyan/White pulse)
-    function drawPriceLevelLine(price, color, labelText) {
+    // Draw Active Open Trade Lines (Entry = Blue, Profit Target = Green, Stop-Loss = Red)
+    function drawPriceLevelLine(price, color, labelText, textColor) {
       if (typeof price !== 'number' || isNaN(price)) return;
       const y = yFor(price);
       if (y < padT - 4 || y > padT + plotH + 4) return;
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = 1.65;
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
       ctx.moveTo(padL, y);
@@ -690,60 +721,72 @@
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.font = 'bold 10.5px Plus Jakarta Sans, Inter, sans-serif';
-      const tagW = Math.min(285, ctx.measureText(labelText).width + 16);
+      const tagW = Math.min(295, ctx.measureText(labelText).width + 16);
       ctx.fillStyle = color;
       ctx.fillRect(padL + 8, y - 10, tagW, 19);
-      ctx.fillStyle = '#04101c';
+      ctx.fillStyle = textColor || '#ffffff';
       ctx.fillText(labelText, padL + 15, y + 3.5);
       ctx.restore();
     }
 
+    const tpTagColor = isLight ? '#059669' : '#10b981';
+    const entryTagColor = isLight ? '#0284c7' : '#38bdf8';
+    const slTagColor = isLight ? '#dc2626' : '#ef4444';
+    const tagTxt = isLight ? '#ffffff' : '#04101c';
+
     openTrades.forEach(t => {
       const bTag = t.broker === 'mt5' ? 'MT5' : 'cTrader';
       const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + 'p');
-      drawPriceLevelLine(t.tp, '#10b981', '🎯 PROFIT TARGET (' + bTag + '): ' + Number(t.tp).toFixed(decimals) + ' (' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)');
-      drawPriceLevelLine(t.entry, '#38bdf8', '🔵 ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' → ' + pipStr + ' (' + (t.floating_r || '+0.48R') + ')');
-      drawPriceLevelLine(t.sl, '#ef4444', '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (' + (t.pips_from_sl ?? t.sl_pips) + 'p safety)');
+      drawPriceLevelLine(t.tp, tpTagColor, '🎯 PROFIT TARGET (' + bTag + '): ' + Number(t.tp).toFixed(decimals) + ' (' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)', tagTxt);
+      drawPriceLevelLine(t.entry, entryTagColor, '🔵 ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' → ' + pipStr + ' (' + (t.floating_r || '+0.48R') + ')', tagTxt);
+      drawPriceLevelLine(t.sl, slTagColor, '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (' + (t.pips_from_sl ?? t.sl_pips) + 'p safety)', '#ffffff');
     });
   }
 
   function renderLiveOpenTrades(trades) {
     const container = document.getElementById('liveOpenTradesContainer');
     if (!container) return;
+    const isLight = isLightTheme();
     if (!Array.isArray(trades) || trades.length === 0) {
-      container.innerHTML = '<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:13px">No open trades on this filter right now. Use "+ Place Demo Trade Now" above to open a live cTrader or MetaTrader 5 demo position.</div>';
+      container.innerHTML = '<div style="padding:14px;border-radius:8px;background:var(--bg-well);color:var(--text-muted);font-size:13px">No open trades on this filter right now. Use "+ Place Demo Trade Now" above to open a live cTrader or MetaTrader 5 demo position.</div>';
       return;
     }
+    const emeraldTxt = isLight ? '#047857' : '#10b981';
+    const cyanTxt = isLight ? '#0369a1' : '#38bdf8';
+    const redTxt = isLight ? '#b91c1c' : '#ef4444';
+
     container.innerHTML = trades.map(t => {
       const pnl = Number(t.floating_pnl_usd || 0);
       const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-      const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
-      const dirColor = t.direction === 'BUY' ? '#10b981' : '#f59e0b';
-      const brokerColor = t.broker === 'mt5' ? '#10b981' : '#38bdf8';
+      const pnlColor = pnl >= 0 ? emeraldTxt : redTxt;
+      const dirColor = t.direction === 'BUY' ? emeraldTxt : (isLight ? '#b45309' : '#f59e0b');
+      const brokerColor = t.broker === 'mt5' ? emeraldTxt : cyanTxt;
       const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
+      const rowBg = isLight ? '#faf7ef' : 'rgba(15,23,42,0.78)';
+      const rowBorder = isLight ? 'rgba(140,108,45,0.24)' : 'rgba(255,255,255,0.1)';
       return (
-        '<div style="padding:14px 16px;border-radius:12px;background:rgba(15,23,42,0.78);border:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-variant-numeric:tabular-nums">' +
+        '<div style="padding:14px 16px;border-radius:12px;background:' + rowBg + ';border:1px solid ' + rowBorder + ';display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-variant-numeric:tabular-nums">' +
           '<div style="display:flex;flex-direction:column;gap:5px;min-width:260px;flex:1">' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.16);color:' + brokerColor + '">' + (t.broker_badge || t.broker) + '</span>' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.16);color:' + dirColor + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + ' Lots)</span>' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:#34d399">Live Output: ' + pipStr + '</span>' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.15);color:' + brokerColor + '">' + (t.broker_badge || t.broker) + '</span>' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:' + dirColor + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + ' Lots)</span>' +
+              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:' + emeraldTxt + '">Live Output: ' + pipStr + '</span>' +
               '<span style="font-size:12px;color:var(--text-muted)">ID: ' + t.trade_id + '</span>' +
             '</div>' +
             '<div style="font-size:13px;color:var(--text);margin-top:2px">' +
               'Entry: <strong>' + t.entry + '</strong> → Live Price: <strong>' + t.current_price + '</strong> · ' +
-              '<span style="color:#ef4444">Stop-Loss: ' + t.sl + ' (' + (t.pips_from_sl ?? t.sl_pips) + ' pips cushion)</span> · ' +
-              '<span style="color:#10b981">Profit Target: ' + t.tp + ' (' + (t.pips_to_tp ?? t.tp_pips) + ' pips to TP · ' + t.rr_ratio + ')</span>' +
+              '<span style="color:' + redTxt + ';font-weight:600">Stop-Loss: ' + t.sl + ' (' + (t.pips_from_sl ?? t.sl_pips) + ' pips cushion)</span> · ' +
+              '<span style="color:' + emeraldTxt + ';font-weight:600">Profit Target: ' + t.tp + ' (' + (t.pips_to_tp ?? t.tp_pips) + ' pips to TP · ' + t.rr_ratio + ')</span>' +
             '</div>' +
-            '<div style="font-size:12px;color:#94a3b8;font-family:var(--font-mono)">' + (t.live_output_reading || t.reason || '') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">' + (t.live_output_reading || t.reason || '') + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
             '<div style="text-align:right">' +
               '<div style="font-size:15px;font-weight:800;color:' + pnlColor + '">' + pnlStr + ' (' + (t.floating_r || '+0.45R') + ')</div>' +
-              '<div style="font-size:11px;color:#10b981">SL &lt; TP Verified ✓</div>' +
+              '<div style="font-size:11px;color:' + emeraldTxt + ';font-weight:700">SL &lt; TP Verified ✓</div>' +
             '</div>' +
-            '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:7px 11px;border-radius:7px;border:1px solid rgba(56,189,248,0.4);background:rgba(56,189,248,0.14);color:#38bdf8;font-size:12px;font-weight:700;cursor:pointer">Show on Chart</button>' +
-            '<button type="button" onclick="closeOpenTradeFromUI(\'' + t.trade_id + '\')" style="padding:7px 12px;border-radius:7px;border:1px solid rgba(239,68,68,0.45);background:rgba(239,68,68,0.18);color:#fca5a5;font-size:12px;font-weight:700;cursor:pointer">Close Trade &amp; Lock Profit</button>' +
+            '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:7px 11px;border-radius:7px;border:1px solid rgba(2,132,199,0.4);background:rgba(2,132,199,0.12);color:' + cyanTxt + ';font-size:12px;font-weight:700;cursor:pointer">Show on Chart</button>' +
+            '<button type="button" onclick="closeOpenTradeFromUI(\'' + t.trade_id + '\')" style="padding:7px 12px;border-radius:7px;border:1px solid rgba(220,38,38,0.42);background:rgba(220,38,38,0.14);color:' + redTxt + ';font-size:12px;font-weight:700;cursor:pointer">Close Trade &amp; Lock Profit</button>' +
           '</div>' +
         '</div>'
       );
@@ -790,8 +833,8 @@
         const bInfo = d.brokers[ACTIVE_BROKER];
         sumBox.innerHTML =
           '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">' +
-            '<strong style="color:#10b981;font-size:13.5px">Viewing: ' + (bInfo.name || ACTIVE_BROKER.toUpperCase()) + '</strong>' +
-            '<span style="font-size:11.5px;padding:2px 9px;border-radius:6px;background:rgba(16,185,129,0.16);color:#10b981;font-weight:700">' + (bInfo.account_mode || 'Connected') + '</span>' +
+            '<strong style="color:var(--agent-color);font-size:13.5px">Viewing: ' + (bInfo.name || ACTIVE_BROKER.toUpperCase()) + '</strong>' +
+            '<span style="font-size:11.5px;padding:2px 9px;border-radius:6px;background:rgba(16,185,129,0.16);color:var(--agent-color);font-weight:700">' + (bInfo.account_mode || 'Connected') + '</span>' +
           '</div>' +
           '<div>' + (bInfo.plain_summary || d.overview || '') + '</div>';
       } else if (sumBox && d.overview) {
@@ -889,6 +932,15 @@
   });
 
   window.addEventListener('resize', () => { if (LAST_CHART_DATA) drawCandlestickChart(LAST_CHART_DATA); });
+  window.addEventListener('universe:theme-changed', () => {
+    updateBrokerButtonsUI();
+    updateChartSelectorButtonsUI();
+    if (LAST_CHART_DATA) {
+      drawCandlestickChart(LAST_CHART_DATA);
+      renderChartLiveOutputReadings(LAST_CHART_DATA);
+      renderLiveOpenTrades(LAST_CHART_DATA.all_open_trades || LAST_CHART_DATA.open_trades || []);
+    }
+  });
 
   function stepLiveTradeOutputTick() {
     if (!LAST_CHART_DATA) return;

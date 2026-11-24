@@ -420,17 +420,26 @@
   }
 
   function getPlatformBadgeStyle(platform) {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     const p = String(platform || '').toLowerCase();
     if (p.includes('mastodon')) {
-      return { icon: '🐘', bg: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', border: 'rgba(99, 102, 241, 0.4)' };
+      return isLight
+        ? { icon: '🐘', bg: 'rgba(79, 70, 229, 0.14)', color: '#4338ca', border: 'rgba(79, 70, 229, 0.35)' }
+        : { icon: '🐘', bg: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', border: 'rgba(99, 102, 241, 0.4)' };
     }
     if (p.includes('bluesky')) {
-      return { icon: '🦋', bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc', border: 'rgba(56, 189, 248, 0.4)' };
+      return isLight
+        ? { icon: '🦋', bg: 'rgba(2, 132, 199, 0.14)', color: '#0369a1', border: 'rgba(2, 132, 199, 0.35)' }
+        : { icon: '🦋', bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc', border: 'rgba(56, 189, 248, 0.4)' };
     }
     if (p.includes('hacker')) {
-      return { icon: '🟧', bg: 'rgba(249, 115, 22, 0.18)', color: '#fdba74', border: 'rgba(249, 115, 22, 0.4)' };
+      return isLight
+        ? { icon: '🟧', bg: 'rgba(234, 88, 12, 0.14)', color: '#c2410c', border: 'rgba(234, 88, 12, 0.35)' }
+        : { icon: '🟧', bg: 'rgba(249, 115, 22, 0.18)', color: '#fdba74', border: 'rgba(249, 115, 22, 0.4)' };
     }
-    return { icon: '💬', bg: 'rgba(236, 72, 153, 0.18)', color: '#f472b6', border: 'rgba(236, 72, 153, 0.4)' };
+    return isLight
+      ? { icon: '💬', bg: 'rgba(219, 39, 119, 0.14)', color: '#be185d', border: 'rgba(219, 39, 119, 0.35)' }
+      : { icon: '💬', bg: 'rgba(236, 72, 153, 0.18)', color: '#f472b6', border: 'rgba(236, 72, 153, 0.4)' };
   }
 
   function getFallbackEditorialPhoto(index, title) {
@@ -463,6 +472,7 @@
   }
 
   function renderSocialCards() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     const featuredBox = document.getElementById('pulseFeaturedContainer');
     const grid = document.getElementById('pulseSocialGrid');
     const badge = document.getElementById('pulseFeedCountBadge');
@@ -479,9 +489,19 @@
 
     if (!filtered.length) {
       if (featuredBox) featuredBox.innerHTML = '';
-      grid.innerHTML = '<div style="padding:24px;color:#94a3b8">No community discussions found for this filter.</div>';
+      grid.innerHTML = '<div style="padding:24px;color:var(--text-muted)">No community discussions found for this filter.</div>';
       return;
     }
+
+    const headTxt = isLight ? '#0f172a' : '#f8fafc';
+    const bodyTxt = isLight ? '#334155' : '#cbd5e1';
+    const metaTxt = isLight ? '#64748b' : '#94a3b8';
+    const roseTxt = isLight ? '#be185d' : '#f472b6';
+    const impactBtnBg = isLight ? '#f4f0e4' : 'rgba(15,23,42,0.88)';
+    const impactBtnColor = isLight ? '#334155' : '#cbd5e1';
+    const impactBtnBorder = isLight ? 'rgba(140,108,45,0.28)' : 'rgba(148,163,184,0.28)';
+    const impactBoxBg = isLight ? 'rgba(219,39,119,0.08)' : 'rgba(236,72,153,0.09)';
+    const impactBoxColor = isLight ? '#831843' : '#fce7f3';
 
     const lead = filtered[0];
     const leadIdx = currentSocialPosts.indexOf(lead);
@@ -509,23 +529,23 @@
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
                 <div class="pulse-creator-avatar">${escapeHtml(leadInitial)}</div>
                 <div>
-                  <div style="font-size:13px;font-weight:800;color:#f8fafc">${escapeHtml(leadAuthor)}</div>
-                  <div style="font-size:11px;color:#94a3b8">${escapeHtml(lead.time || 'Live')} · ${escapeHtml(leadTopic)}</div>
+                  <div style="font-size:13px;font-weight:800;color:${headTxt}">${escapeHtml(leadAuthor)}</div>
+                  <div style="font-size:11px;color:${metaTxt}">${escapeHtml(lead.time || 'Live')} · ${escapeHtml(leadTopic)}</div>
                 </div>
                 <span style="margin-left:auto;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:800;background:${leadStyle.bg};color:${leadStyle.color};border:1px solid ${leadStyle.border}">
                   ${leadStyle.icon} ${escapeHtml(lead.platform || 'Social')}
                 </span>
               </div>
-              <h3 style="margin:0 0 10px;font-size:19px;font-weight:800;line-height:1.38;color:#f8fafc">${escapeHtml(leadHeadline)}</h3>
-              <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;color:#cbd5e1">${escapeHtml(leadSummary)}</p>
+              <h3 style="margin:0 0 10px;font-size:19px;font-weight:800;line-height:1.38;color:${headTxt}">${escapeHtml(leadHeadline)}</h3>
+              <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;color:${bodyTxt}">${escapeHtml(leadSummary)}</p>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.14)">
-              <span style="font-size:12px;font-weight:700;color:#f472b6">Read full community conversation →</span>
-              <button type="button" onclick="toggleCardTradeImpact(event, 'lead')" style="background:rgba(15,23,42,0.9);border:1px solid rgba(148,163,184,0.28);color:#cbd5e1;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--border)">
+              <span style="font-size:12px;font-weight:700;color:${roseTxt}">Read full community conversation →</span>
+              <button type="button" onclick="toggleCardTradeImpact(event, 'lead')" style="background:${impactBtnBg};border:1px solid ${impactBtnBorder};color:${impactBtnColor};border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">
                 💡 Optional: Market Impact
               </button>
             </div>
-            <div id="pulseTradeImpact-lead" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;background:rgba(236,72,153,0.09);border:1px solid rgba(236,72,153,0.28);font-size:12px;line-height:1.55;color:#fce7f3">
+            <div id="pulseTradeImpact-lead" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;background:${impactBoxBg};border:1px solid rgba(219,39,119,0.28);font-size:12px;line-height:1.55;color:${impactBoxColor}">
               ${escapeHtml(lead.optional_trade_impact || 'Optional Market Context: Community discussions on this topic are informational and help gauge public sentiment.')}
             </div>
           </div>
@@ -549,10 +569,10 @@
         <article class="pulse-social-card" onclick="openPostModal(${globalIdx})">
           <div class="pulse-card-media">
             <img src="${imgSrc}" alt="${escapeHtml(headline)}" onerror="this.src='assets/editorial/social_community.jpg'" />
-            <span style="position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(10,14,26,0.86);color:${pStyle.color};border:1px solid ${pStyle.border};backdrop-filter:blur(6px)">
+            <span style="position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(10,14,26,0.88);color:#f8fafc;border:1px solid rgba(255,255,255,0.24);backdrop-filter:blur(6px)">
               ${pStyle.icon} ${escapeHtml(item.platform || 'Social')}
             </span>
-            <span style="position:absolute;top:10px;right:10px;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:700;background:rgba(15,23,42,0.86);color:#e2e8f0;border:1px solid rgba(148,163,184,0.28)">
+            <span style="position:absolute;top:10px;right:10px;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:700;background:rgba(15,23,42,0.88);color:#ffffff;border:1px solid rgba(148,163,184,0.28)">
               ${escapeHtml(topic)}
             </span>
           </div>
@@ -561,21 +581,21 @@
               <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
                 <div class="pulse-creator-avatar" style="width:28px;height:28px;font-size:11.5px">${escapeHtml(initial)}</div>
                 <div style="min-width:0">
-                  <div style="font-size:12px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(author)}</div>
-                  <div style="font-size:10.5px;color:#94a3b8">${escapeHtml(item.time || 'Live')} · ${escapeHtml(item.engagement || 'Active Thread')}</div>
+                  <div style="font-size:12px;font-weight:700;color:${headTxt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(author)}</div>
+                  <div style="font-size:10.5px;color:${metaTxt}">${escapeHtml(item.time || 'Live')} · ${escapeHtml(item.engagement || 'Active Thread')}</div>
                 </div>
               </div>
-              <h3 style="margin:0 0 8px;font-size:15.5px;font-weight:800;line-height:1.42;color:#f8fafc">${escapeHtml(headline)}</h3>
-              <p style="margin:0 0 14px;font-size:12.5px;line-height:1.6;color:#94a3b8">${escapeHtml(String(summary).slice(0, 150))}${String(summary).length > 150 ? '…' : ''}</p>
+              <h3 style="margin:0 0 8px;font-size:15.5px;font-weight:800;line-height:1.42;color:${headTxt}">${escapeHtml(headline)}</h3>
+              <p style="margin:0 0 14px;font-size:12.5px;line-height:1.6;color:${bodyTxt}">${escapeHtml(String(summary).slice(0, 150))}${String(summary).length > 150 ? '…' : ''}</p>
             </div>
             <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.12)">
-                <span style="font-size:12px;font-weight:700;color:#f472b6">Read Thread →</span>
-                <button type="button" onclick="toggleCardTradeImpact(event, ${globalIdx})" style="background:rgba(15,23,42,0.85);border:1px solid rgba(148,163,184,0.24);color:#cbd5e1;border-radius:7px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid var(--border)">
+                <span style="font-size:12px;font-weight:700;color:${roseTxt}">Read Thread →</span>
+                <button type="button" onclick="toggleCardTradeImpact(event, ${globalIdx})" style="background:${impactBtnBg};border:1px solid ${impactBtnBorder};color:${impactBtnColor};border-radius:7px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer">
                   💡 Optional: Market Impact
                 </button>
               </div>
-              <div id="pulseTradeImpact-${globalIdx}" style="display:none;margin-top:9px;padding:9px 11px;border-radius:8px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.25);font-size:11.5px;line-height:1.5;color:#fce7f3">
+              <div id="pulseTradeImpact-${globalIdx}" style="display:none;margin-top:9px;padding:9px 11px;border-radius:8px;background:${impactBoxBg};border:1px solid rgba(219,39,119,0.25);font-size:11.5px;line-height:1.5;color:${impactBoxColor}">
                 ${escapeHtml(item.optional_trade_impact || 'Optional Market Context: Community discussions provide grassroots sentiment context.')}
               </div>
             </div>
@@ -584,6 +604,7 @@
       `;
     }).join('');
   }
+  window.addEventListener('universe:theme-changed', () => { renderSocialCards(); });
 
   function toggleModalPostTradeImpact() {
     const box = document.getElementById('modalPostTradeImpactBox');

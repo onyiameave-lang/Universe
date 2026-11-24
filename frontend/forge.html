@@ -778,10 +778,18 @@
   function renderForgeCandidatesTable(candidates) {
     const tbody = document.getElementById('forgeCandidatesTableBody');
     if (!tbody) return;
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     if (!Array.isArray(candidates) || candidates.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:26px;color:#94a3b8">No strategies loaded yet. Click "🚀 Train All 4 Styles Now" above to train your first batch!</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--text-muted)">No strategies loaded yet. Click "🚀 Train All 4 Styles Now" above to train your first batch!</td></tr>';
       return;
     }
+
+    const titleColor = isLight ? '#0f172a' : '#f8fafc';
+    const subColor = isLight ? '#475569' : '#94a3b8';
+    const amberColor = isLight ? '#b45309' : '#fbbf24';
+    const emeraldColor = isLight ? '#047857' : '#34d399';
+    const bodyColor = isLight ? '#1e293b' : '#e2e8f0';
+    const trackBg = isLight ? '#e8e2d2' : 'rgba(15,23,42,0.9)';
 
     tbody.innerHTML = candidates.slice(0, 16).map(c => {
       const cid = c.candidate_id || 'FG-V2';
@@ -804,18 +812,18 @@
       return (
         '<tr>' +
           '<td>' +
-            '<div style="font-weight:800;font-size:13.5px;color:#f8fafc">' + escapeHtml(plainFamily) + '</div>' +
-            '<div style="font-size:11px;color:#94a3b8;margin-top:3px;font-family:var(--font-mono)">ID: <span style="color:#fbbf24">' + escapeHtml(cid) + '</span> · v' + (c.version || 1) + ' · ' + escapeHtml(c.symbol || 'EURUSD') + '</div>' +
+            '<div style="font-weight:800;font-size:13.5px;color:' + titleColor + '">' + escapeHtml(plainFamily) + '</div>' +
+            '<div style="font-size:11px;color:' + subColor + ';margin-top:3px;font-family:var(--font-mono)">ID: <span style="color:' + amberColor + ';font-weight:700">' + escapeHtml(cid) + '</span> · v' + (c.version || 1) + ' · ' + escapeHtml(c.symbol || 'EURUSD') + '</div>' +
           '</td>' +
           '<td><span class="badge-pill ' + badgeClass + '">' + escapeHtml(plainState) + '</span></td>' +
           '<td>' +
-            '<div style="font-weight:700;color:#e2e8f0;font-size:12.5px;margin-bottom:5px">' + escapeHtml(winLoss) + '</div>' +
-            '<div style="width:140px;height:6px;background:rgba(15,23,42,0.9);border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.16)">' +
+            '<div style="font-weight:700;color:' + bodyColor + ';font-size:12.5px;margin-bottom:5px">' + escapeHtml(winLoss) + '</div>' +
+            '<div style="width:140px;height:6px;background:' + trackBg + ';border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.22)">' +
               '<div style="width:' + winPct + '%;height:100%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:999px"></div>' +
             '</div>' +
           '</td>' +
-          '<td style="font-weight:800;color:#34d399;font-family:var(--font-mono)">' + escapeHtml(profitSum) + '</td>' +
-          '<td style="font-size:12px;color:#cbd5e1">' + escapeHtml(safetySum) + '</td>' +
+          '<td style="font-weight:800;color:' + emeraldColor + ';font-family:var(--font-mono)">' + escapeHtml(profitSum) + '</td>' +
+          '<td style="font-size:12px;color:' + bodyColor + '">' + escapeHtml(safetySum) + '</td>' +
           '<td>' +
             '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
               '<button type="button" class="forge-btn forge-btn-secondary" onclick="inspectStrategyPlainEnglish(\'' + cid + '\')">📖 Guide</button>' +
@@ -828,6 +836,7 @@
       );
     }).join('');
   }
+  window.addEventListener('universe:theme-changed', () => { renderForgeCandidatesTable(FORGE_CANDIDATES); });
 
   async function loadForgeWorkbench() {
     try {

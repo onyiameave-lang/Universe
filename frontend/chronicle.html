@@ -286,16 +286,42 @@
   function renderExperimentCards() {
     const grid = document.getElementById('experimentSpectrumGrid');
     if (!grid) return;
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     const filtered = ACTIVE_EXP_FILTER === 'ALL'
       ? ALL_EXPERIMENTS
       : ALL_EXPERIMENTS.filter(x => x.category === ACTIVE_EXP_FILTER);
 
     if (!filtered.length) {
-      grid.innerHTML = '<div style="padding:18px;border-radius:12px;background:rgba(255,255,255,0.03);color:var(--text-muted);font-size:13px">No experiments in this category yet. Use "+ Log Experiment / Lesson" above to record one.</div>';
+      grid.innerHTML = '<div style="padding:18px;border-radius:12px;background:var(--bg-well);color:var(--text-muted);font-size:13px">No experiments in this category yet. Use "+ Log Experiment / Lesson" above to record one.</div>';
       return;
     }
 
-    const paletteMap = {
+    const paletteMap = isLight ? {
+      emerald: {
+        bg: 'linear-gradient(155deg, rgba(5,150,105,0.11) 0%, #ffffff 65%)',
+        border: 'rgba(5,150,105,0.38)',
+        accent: '#047857',
+        pillBg: 'rgba(5,150,105,0.14)',
+      },
+      cyan: {
+        bg: 'linear-gradient(155deg, rgba(2,132,199,0.11) 0%, #ffffff 65%)',
+        border: 'rgba(2,132,199,0.38)',
+        accent: '#0369a1',
+        pillBg: 'rgba(2,132,199,0.14)',
+      },
+      amber: {
+        bg: 'linear-gradient(155deg, rgba(217,119,6,0.12) 0%, #ffffff 65%)',
+        border: 'rgba(217,119,6,0.40)',
+        accent: '#b45309',
+        pillBg: 'rgba(217,119,6,0.15)',
+      },
+      violet: {
+        bg: 'linear-gradient(155deg, rgba(124,58,237,0.12) 0%, #ffffff 65%)',
+        border: 'rgba(124,58,237,0.40)',
+        accent: '#6d28d9',
+        pillBg: 'rgba(124,58,237,0.15)',
+      }
+    } : {
       emerald: {
         bg: 'linear-gradient(155deg, rgba(16,185,129,0.16) 0%, rgba(13,20,38,0.92) 70%)',
         border: 'rgba(16,185,129,0.4)',
@@ -322,17 +348,23 @@
       }
     };
 
+    const titleColor = isLight ? '#0f172a' : '#f8fafc';
+    const bodyColor = isLight ? '#334155' : '#cbd5e1';
+    const metaColor = isLight ? '#64748b' : '#94a3b8';
+    const dividerBorder = isLight ? 'rgba(140,108,45,0.16)' : 'rgba(255,255,255,0.08)';
+    const cardShadow = isLight ? '0 8px 24px -8px rgba(80,58,18,0.10)' : '0 10px 26px -10px rgba(0,0,0,0.65)';
+
     grid.innerHTML = filtered.map(exp => {
       const p = paletteMap[exp.accent] || paletteMap.violet;
       return (
-        '<div style="padding:16px 18px;border-radius:14px;background:' + p.bg + ';border:1px solid ' + p.border + ';display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 26px -10px rgba(0,0,0,0.65);transition:transform 0.2s ease">' +
+        '<div style="padding:16px 18px;border-radius:14px;background:' + p.bg + ';border:1px solid ' + p.border + ';display:flex;flex-direction:column;gap:10px;box-shadow:' + cardShadow + ';transition:transform 0.2s ease">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
             '<span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:' + p.accent + '">' + (exp.category_label || 'Experiment') + '</span>' +
             '<span style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;background:' + p.pillBg + ';color:' + p.accent + ';border:1px solid ' + p.border + '">' + (exp.badge || 'Verified') + '</span>' +
           '</div>' +
-          '<div style="font-size:14px;font-weight:700;color:#f8fafc;line-height:1.4">' + (exp.title || '') + '</div>' +
-          '<div style="font-size:12.5px;color:#cbd5e1;line-height:1.55;flex:1">' + (exp.summary || '') + '</div>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:#94a3b8">' +
+          '<div style="font-size:14px;font-weight:700;color:' + titleColor + ';line-height:1.4">' + (exp.title || '') + '</div>' +
+          '<div style="font-size:12.5px;color:' + bodyColor + ';line-height:1.55;flex:1">' + (exp.summary || '') + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid ' + dividerBorder + ';font-size:11px;color:' + metaColor + '">' +
             '<span style="font-weight:700;color:' + p.accent + '">' + (exp.metric_pill || 'SL < TP Verified') + '</span>' +
             '<span>' + (exp.timestamp || 'Logged') + '</span>' +
           '</div>' +
@@ -340,6 +372,7 @@
       );
     }).join('');
   }
+  window.addEventListener('universe:theme-changed', () => renderExperimentCards());
 
   async function saveChronicleExperimentFromUI() {
     const input = document.getElementById('chronicleNoteInput');

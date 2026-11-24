@@ -2,7 +2,7 @@
  * Universe v8 — Theme Engine
  * Runs immediately (before DOMContentLoaded) to prevent flash.
  * Supports dark/light with BroadcastChannel cross-tab sync.
- * Calls CosmosSetTheme() and injectIcons() on theme change.
+ * Calls CosmosSetTheme(), injectIcons(), and dispatches 'universe:theme-changed'.
  */
 (function() {
   const STORAGE_KEY = 'universe-theme';
@@ -37,7 +37,7 @@
       window.CosmosSetTheme(theme);
     }
 
-    // Re-inject icons (they use currentColor, no change needed, but call for completeness)
+    // Re-inject icons
     if (typeof window.injectIcons === 'function') {
       window.injectIcons();
     }
@@ -45,9 +45,14 @@
     // Update Chart.js defaults if present
     if (window.Chart) {
       const isDark = theme === 'dark';
-      Chart.defaults.color = isDark ? '#8892a4' : '#7a6540';
-      Chart.defaults.borderColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(180,130,30,0.15)';
+      Chart.defaults.color = isDark ? '#94a3b8' : '#475569';
+      Chart.defaults.borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.10)';
     }
+
+    // Notify any custom canvas charts (e.g., Oracle Candlestick Chart) to re-render immediately
+    try {
+      window.dispatchEvent(new CustomEvent('universe:theme-changed', { detail: { theme } }));
+    } catch (e) {}
 
     if (broadcast && bc) {
       bc.postMessage({ theme });
@@ -78,7 +83,6 @@
       btn.addEventListener('click', window.toggleTheme);
     });
 
-    // Cosmos: apply current theme (canvas may not exist yet at script load time)
     const theme = window.getTheme();
     if (typeof window.CosmosSetTheme === 'function') {
       window.CosmosSetTheme(theme);

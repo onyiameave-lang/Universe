@@ -12,24 +12,37 @@
   let isLight = document.documentElement.getAttribute('data-theme') === 'light';
   let paused = false;
 
-  // Config per theme
+  // Multi-tone jewel palettes per theme
   const DARK_CFG = {
-    starCount: 180,
-    starColor: 'rgba(255,255,255,',
-    starMinR: 0.4, starMaxR: 1.8,
-    lineColor: 'rgba(255,255,255,',
-    lineMaxDist: 120,
+    starCount: 165,
+    starColors: [
+      'rgba(248, 250, 252,', // astral white
+      'rgba(56, 189, 248,',  // celestial cyan
+      'rgba(16, 185, 129,',  // sovereign emerald
+      'rgba(168, 85, 247,',  // imperial amethyst
+      'rgba(245, 158, 11,',  // editorial amber
+      'rgba(236, 72, 153,'   // electric rose
+    ],
+    starMinR: 0.45, starMaxR: 1.9,
+    lineColor: 'rgba(148, 163, 184,',
+    lineMaxDist: 118,
     lineMaxAlpha: 0.08,
     bgAlpha: 0,
   };
 
   const LIGHT_CFG = {
-    starCount: 140,
-    starColor: 'rgba(200,150,30,',   // golden dust
-    starMinR: 0.5, starMaxR: 1.6,
-    lineColor: 'rgba(180,130,20,',   // warm amber lines
-    lineMaxDist: 110,
-    lineMaxAlpha: 0.12,
+    starCount: 125,
+    starColors: [
+      'rgba(180, 130, 35,',  // warm gold ink
+      'rgba(5, 150, 105,',   // deep emerald ink
+      'rgba(2, 132, 199,',   // deep sapphire ink
+      'rgba(124, 58, 237,',  // deep amethyst ink
+      'rgba(217, 119, 6,'    // amber ink
+    ],
+    starMinR: 0.55, starMaxR: 1.65,
+    lineColor: 'rgba(140, 108, 45,',
+    lineMaxDist: 108,
+    lineMaxAlpha: 0.10,
     bgAlpha: 0,
   };
 
@@ -42,16 +55,17 @@
 
   function initStars() {
     const c = cfg();
-    stars = Array.from({ length: c.starCount }, () => ({
+    stars = Array.from({ length: c.starCount }, (_, idx) => ({
       x: Math.random() * W,
       y: Math.random() * H,
       r: c.starMinR + Math.random() * (c.starMaxR - c.starMinR),
       vx: (Math.random() - 0.5) * 0.08,
       vy: (Math.random() - 0.5) * 0.08,
-      baseAlpha: 0.3 + Math.random() * 0.7,
+      baseAlpha: 0.28 + Math.random() * 0.65,
       alpha: 0,
       phase: Math.random() * Math.PI * 2,
       speed: 0.003 + Math.random() * 0.007,
+      colorPrefix: c.starColors[idx % c.starColors.length],
     }));
   }
 
@@ -75,7 +89,7 @@
 
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = c.starColor + s.alpha + ')';
+      ctx.fillStyle = (s.colorPrefix || c.starColors[0]) + s.alpha.toFixed(3) + ')';
       ctx.fill();
     }
 
@@ -90,8 +104,8 @@
           ctx.beginPath();
           ctx.moveTo(stars[i].x, stars[i].y);
           ctx.lineTo(stars[j].x, stars[j].y);
-          ctx.strokeStyle = c.lineColor + alpha + ')';
-          ctx.lineWidth = 0.5;
+          ctx.strokeStyle = c.lineColor + alpha.toFixed(3) + ')';
+          ctx.lineWidth = 0.55;
           ctx.stroke();
         }
       }
