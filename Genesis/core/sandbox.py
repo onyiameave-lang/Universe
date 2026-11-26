@@ -66,7 +66,7 @@ class Sandbox:
                 r2 = self._run([sys.executable, "-m", "pytest", "-q", test_file],
                               cwd=repo, env_paths=[str(self.eco_root), str(repo)])
                 # pytest may be absent; fall back to unittest
-                if r2.get("returncode") not in (0, 1, 5) and "No module named pytest" in r2.get("stderr", ""):
+                if "No module named pytest" in r2.get("stderr", ""):
                     r2 = self._run([sys.executable, "-m", "unittest",
                                   test_file.replace("/", ".").replace(".py", "")],
                                  cwd=repo, env_paths=[str(self.eco_root), str(repo)])

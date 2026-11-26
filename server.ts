@@ -1149,6 +1149,69 @@ app.post("/api/specialist/action", async (req, res) => {
   res.json(data);
 });
 
+// ── Genesis Durable Control-Plane Routes (/api/genesis/*) ──
+app.get("/api/genesis/cases", async (_req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "dashboard_data",
+    agent_id: "genesis",
+    broker: "all",
+  });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Genesis control-plane service did not respond." });
+  res.json(data);
+});
+
+app.post("/api/genesis/cases/open", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "specialist_action",
+    params: {
+      agent: "genesis",
+      action: "open_case",
+      payload: req.body || {},
+    },
+  });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Genesis control-plane service did not respond." });
+  res.json(data);
+});
+
+app.post("/api/genesis/cases/:case_id/advance", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "specialist_action",
+    params: {
+      agent: "genesis",
+      action: "advance_case",
+      payload: { ...(req.body || {}), case_id: req.params.case_id },
+    },
+  });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Genesis control-plane service did not respond." });
+  res.json(data);
+});
+
+app.post("/api/genesis/cases/:case_id/approve", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "specialist_action",
+    params: {
+      agent: "genesis",
+      action: "approve_release",
+      payload: { ...(req.body || {}), case_id: req.params.case_id },
+    },
+  });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Genesis control-plane service did not respond." });
+  res.json(data);
+});
+
+app.post("/api/genesis/cases/:case_id/rollback", async (req, res) => {
+  const data = await runNexusCoordinationBridge({
+    action: "specialist_action",
+    params: {
+      agent: "genesis",
+      action: "rollback_case",
+      payload: { ...(req.body || {}), case_id: req.params.case_id },
+    },
+  });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Genesis control-plane service did not respond." });
+  res.json(data);
+});
+
 // ── Interactive Plain-English Forge Training Routes (Missing V2 Endpoints) ──
 app.get("/api/forge/pilot/status", async (req, res) => {
   const data = await runNexusCoordinationBridge({

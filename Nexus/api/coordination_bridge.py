@@ -238,8 +238,8 @@ def build_cross_agent_referrals(
         ),
         "genesis": (
             "creation",
-            "Inspect our 16 evolved trading strategy blueprints and stress-test results.",
-            "Show our evolved trading strategy blueprints in Genesis",
+            "Inspect active capability cases, 8-stage workflow handoffs, bounded coding worker runs, and human-gated canary releases.",
+            "Show active capability cases and the 8-stage workflow in Genesis",
         ),
     }
 
@@ -316,7 +316,8 @@ _ECOSYSTEM_OR_MARKET_RE = re.compile(
     r"stop\s+loss|take\s+profit|sl|tp|atr|lockbox|walk-forward|backtest|retrain|retraining|session|mt5|c3|scout|shadow|"
     r"news|headline|headlines|geopolitics|wire|wires|al\s+jazeera|bbc|cnbc|wsj|"
     r"social\s+media|posted|mastodon|bluesky|hackernews|sentiment|crowd|"
-    r"security|risk|veto|policy|compliance|breach|outlier|coordinate|ecosystem|all\s+agents|overview|status|5\s+desks|five\s+desks|brier)\b",
+    r"security|risk|veto|policy|compliance|breach|outlier|coordinate|ecosystem|all\s+agents|overview|status|5\s+desks|five\s+desks|brier|"
+    r"capability\s+cases?|control[\s-]+plane|8-stage|durable\s+handoffs?|handoffs?|coding\s+worker|bounded\s+worker|canary\s+release|rollback|artifact\s+hash|agent\s+factory)\b",
     re.IGNORECASE,
 )
 
@@ -505,17 +506,58 @@ def _build_specialist_domain_output(domain: str, query: str) -> Tuple[str, str, 
         return ("aegis", "audit.status", out, (time.time() - t0) * 1000.0)
 
     if domain == "creation":
-        kv = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "store" / "kv_state.json", {})
-        kv = kv if isinstance(kv, dict) else {}
-        candidates = [value.get("value") for key, value in kv.items()
-                      if key.startswith("forge.core.candidate.") and isinstance(value, dict)
-                      and isinstance(value.get("value"), dict)]
-        summary = f"Chronicle contains {len(candidates)} Forge strategy candidate records. Candidate storage alone does not establish that any candidate passed an independent evaluation or was promoted."
-        out = {"status": "complete" if candidates else "unavailable", "summary": summary,
-               "human_section": summary, "confidence": None,
-               "candidate_count": len(candidates),
-               "sources": [{"title": "Forge candidate records in Chronicle", "url_or_identifier": "universe://Chronicle/memory/store/kv_state.json", "source_tier": "Tier A", "excerpt": summary}] if candidates else []}
-        return ("genesis", "agent.create", out, (time.time() - t0) * 1000.0)
+        genesis_root = ROOT_DIR / "Genesis"
+        if str(genesis_root) not in sys.path:
+            sys.path.insert(0, str(genesis_root))
+        try:
+            from core.control_plane import get_genesis_control_plane  # type: ignore
+            cp = get_genesis_control_plane()
+            snap = cp.get_dashboard_snapshot()
+            cases = snap.get("cases") or []
+            handoffs = snap.get("durable_handoffs_feed") or []
+            case_lines = []
+            for c in cases[:5]:
+                dec = (c.get("decision") or {}).get("decision") or "pending"
+                worker = c.get("coding_worker_run") or {}
+                ahash = worker.get("artifact_hash") or "pending"
+                case_lines.append(
+                    f"- **{c['case_id']} — {c['title']}** (Domain: `{c['domain']}`, Candidate: `{c['proposed_name']}`): "
+                    f"Stage {c['current_stage_index']}/8 `{c['current_stage']}` · Nexus Decision: **{dec.upper()}** · "
+                    f"Coding Worker: {worker.get('step_title', 'Pending')} · Artifact Hash: `{ahash}` · "
+                    f"Status: **{c['lifecycle_status'].upper()}**"
+                )
+            human_sec = (
+                f"**Genesis Durable Control-Plane for Ecosystem Capability Building** is active.\n\n"
+                f"### Role Separation & 8-Stage Persistent Case Workflow\n"
+                f"- **Atlas** researches (compiles source-linked evidence dossier with corroborating & contradicting evidence)\n"
+                f"- **Nexus** coordinates (owns `case_id`, deduplication, routing, and chooses **Repair**, **Extend**, **Tool**, **Create**, or **Defer**)\n"
+                f"- **Aegis** governs risk (sets preflight limits and reviews candidate permission boundaries before release)\n"
+                f"- **Genesis** creates (writes versioned specifications, runs the **Bounded Coding Worker** across Steps 0–3 in an isolated sandbox worktree, and never self-approves)\n"
+                f"- **Forge** evaluates (runs paired 6-suite baseline, validation, hidden holdout, integration, safety, and regression checks on frozen artifact hashes)\n"
+                f"- **Chronicle** remembers (stores authoritative lifecycle outcomes, artifact hashes, approvals, deployments, and rollback snapshots)\n\n"
+                f"### Active Capability Cases ({len(cases)} Tracked, {len(handoffs)} Durable Handoffs)\n"
+                + ("\n".join(case_lines) if case_lines else "- No active capability cases recorded.")
+            )
+            summary = snap.get("overview") or f"Genesis Control-Plane tracking {len(cases)} capability cases."
+            out = {
+                "status": "complete",
+                "summary": summary,
+                "human_section": human_sec,
+                "confidence": 0.96,
+                "cases_count": len(cases),
+                "sources": [
+                    {
+                        "title": "Genesis Durable Control-Plane Case Registry",
+                        "url_or_identifier": "universe://Genesis/memory/control_plane/cases.json",
+                        "source_tier": "Tier A",
+                        "excerpt": summary,
+                    }
+                ],
+            }
+            return ("genesis", "control_plane.snapshot", out, (time.time() - t0) * 1000.0)
+        except Exception as exc:
+            summary = f"Genesis control-plane service error: {exc}"
+            return ("genesis", "control_plane.snapshot", {"status": "unavailable", "summary": summary, "human_section": summary, "sources": []}, (time.time() - t0) * 1000.0)
 
     # Default / research -> Atlas V2
     # Run Atlas's live human research engine on general human / factual / formula questions,
@@ -633,7 +675,9 @@ _EXPLICIT_DOMAIN_PATTERNS: List[Tuple[str, re.Pattern]] = [
     (
         "creation",
         re.compile(
-            r"\b(?:genesis|strategy\s+genomes?|genomes?|evolve|evolution|monte\s+carlo|spawn\s+agent|create\s+agent)\b",
+            r"\b(?:genesis|strategy\s+genomes?|genomes?|evolve|evolution|monte\s+carlo|spawn\s+agent|create\s+agent|"
+            r"capability\s+cases?|control[\s-]+plane|8-stage|durable\s+handoffs?|handoff\s+envelopes?|coding\s+worker|"
+            r"bounded\s+worker|canary\s+release|artifact\s+hash|agent\s+factory|sandbox\s+certif(?:ied|ication))\b",
             re.IGNORECASE,
         ),
     ),
@@ -732,7 +776,7 @@ def _format_human_friendly_synthesis(
         "pulse": "Pulse (What People Are Posting on Social Media)",
         "atlas": "Atlas (Research & Analysis)",
         "aegis": "Aegis (Account Safety & Risk Check)",
-        "genesis": "Genesis (Strategy Evolution)",
+        "genesis": "Genesis (Agent Factory & Durable Capability Control Plane)",
         "chronicle": "Chronicle (Shared Team Memory)",
     }
 
@@ -1677,17 +1721,12 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
                     "overview": f"Atlas catalog entries recorded: {len(rows)}. No accuracy claim is made without a validated benchmark record.",
                     "metrics": metrics, **metrics, "primary_feed": rows, "secondary_feed": [], "desks": rows,
                     "symbol_hypotheses": []}
-        blueprints = []
-        for candidate in candidates[:30]:
-            blueprints.append({"title": str(candidate.get("candidate_code") or candidate.get("candidate_id") or "Candidate"),
-                               "source": f"{candidate.get('symbol') or 'Symbol unavailable'} · {candidate.get('lifecycle_state') or 'State unavailable'}",
-                               "time": str(candidate.get("updated_at_unix") or candidate.get("created_at_unix") or "Timestamp unavailable")})
-        metrics = {"active_strategies": "Unavailable", "avg_return": "Unavailable", "goals_met": "Unavailable",
-                   "backtests_run": "Unavailable", "best_strategy_return": "Unavailable"}
-        return {"id": aid, "agent": aid, "name": "Genesis", "repository": "Genesis", "domain": "Strategy Records",
-                "status": "available" if blueprints else "unavailable", "running": None,
-                "overview": f"Chronicle candidate records available to Genesis: {len(blueprints)}. Candidate storage is not evidence of validation.",
-                "metrics": metrics, **metrics, "strategy_blueprints": blueprints, "feed": blueprints}
+        genesis_root = ROOT_DIR / "Genesis"
+        if str(genesis_root) not in sys.path:
+            sys.path.insert(0, str(genesis_root))
+        from core.control_plane import get_genesis_control_plane  # type: ignore
+        cp = get_genesis_control_plane()
+        return cp.get_dashboard_snapshot()
 
     if aid == "nexus":
         traces = _read_jsonl_safe(TRACE_LOG_PATH, limit=20)

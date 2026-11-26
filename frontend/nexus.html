@@ -183,8 +183,8 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
-              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.14);color:#10b981;font-family:monospace">Aegis Gate: risk_policy.v2 (Non-Voting)</span>
-              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.15);color:#60a5fa;font-family:monospace" id="nexusBenchBadge">Benchmark: unavailable</span>
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.14);color:#047857;font-family:monospace">Aegis Gate: risk_policy.v2 (Non-Voting)</span>
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.15);color:#1d4ed8;font-family:monospace" id="nexusBenchBadge">Benchmark: unavailable</span>
             </div>
           </div>
           <div class="card-body" style="padding:16px 20px">
@@ -203,11 +203,11 @@
               </button>
             </div>
 
-            <div id="nexusConsoleStream" style="background:rgba(0,0,0,0.22);border:1px solid var(--border);border-radius:10px;padding:14px 16px;max-height:480px;overflow-y:auto;margin-bottom:14px;font-size:13.5px;line-height:1.58">
+            <div id="nexusConsoleStream" class="agent-studio-transcript" style="max-height:480px;margin-bottom:14px">
               <div>
-                <div style="font-weight:700;color:#60a5fa;margin-bottom:4px">Nexus Institutional Coordinator:</div>
-                <div>
-                  Welcome to the <strong>Nexus Multi-Agent DAG Coordination Workspace</strong>. Ask any question across <strong>Atlas</strong> (research/formulas), <strong>Oracle</strong> (open trades &amp; genuine win rates), <strong>Forge</strong> (last trading session &amp; 7-timeframe retraining), <strong>Sentinel</strong> (world news today), <strong>Pulse</strong> (social media accounts), <strong>Aegis</strong> (<code>risk_policy.v2</code> &amp; security), or <strong>Chronicle</strong> (collective memory).
+                <div style="font-weight:800;color:var(--agent-color,#2563eb);margin-bottom:4px">Nexus Institutional Coordinator:</div>
+                <div style="color:var(--text)">
+                  Welcome to the <strong>Nexus Multi-Agent DAG Coordination Workspace</strong>. Ask any question across <strong>Atlas</strong> (research/formulas), <strong>Oracle</strong> (open trades &amp; genuine win rates), <strong>Forge</strong> (last trading session &amp; 7-timeframe retraining), <strong>Sentinel</strong> (world news today), <strong>Pulse</strong> (social media accounts), <strong>Aegis</strong> (<code>risk_policy.v2</code> &amp; security), <strong>Genesis</strong> (8-stage durable capability control plane), or <strong>Chronicle</strong> (collective memory).
                   <br/><br/>
                   Every multi-agent query executes a live topological DAG, deduplicates shared evidence sources so duplicate citations are never double-counted, runs the independent <strong>Aegis Policy Gate</strong> on trading setups, and renders interactive <strong>Cross-Agent Referral Cards</strong> below.
                 </div>
@@ -215,7 +215,7 @@
             </div>
 
             <div style="display:flex;gap:10px">
-              <input id="nexusConsoleInput" type="text" placeholder="Ask Nexus to coordinate across any specialist agents (e.g. 'Coordinate EURUSD news, social sentiment, and Oracle win rate')…" style="flex:1;padding:11px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,0.25);color:var(--text);font-size:13.5px;font-family:inherit;outline:none"/>
+              <input id="nexusConsoleInput" class="agent-studio-input" type="text" placeholder="Ask Nexus to coordinate across any specialist agents (e.g. 'Coordinate EURUSD news, social sentiment, and Oracle win rate')…"/>
               <button id="nexusConsoleSend" type="button" onclick="runNexusCoordination()" style="padding:11px 20px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:13px;cursor:pointer">
                 Coordinate DAG →
               </button>

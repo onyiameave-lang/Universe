@@ -3,10 +3,252 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Genesis — Strategy Architect &amp; Blueprint Stress-Test Lab</title>
-  <link rel="stylesheet" href="shared/shared.css?v=5"/>
-  <link rel="stylesheet" href="shared/components.css?v=5"/>
-  <script src="shared/theme.js?v=5"></script>
+  <title>Genesis — Agent Factory &amp; Durable Capability Control Plane</title>
+  <link rel="stylesheet" href="shared/shared.css?v=6"/>
+  <link rel="stylesheet" href="shared/components.css?v=6"/>
+  <script src="shared/theme.js?v=6"></script>
+  <style>
+    .genesis-hero-card {
+      border: 1px solid rgba(20, 184, 166, 0.36);
+      background:
+        radial-gradient(120% 140% at 0% 0%, rgba(20, 184, 166, 0.14), transparent 55%),
+        radial-gradient(100% 120% at 100% 0%, rgba(56, 189, 248, 0.10), transparent 55%),
+        var(--bg-card);
+      border-radius: 16px;
+      padding: 20px 22px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow-md);
+    }
+    [data-theme="light"] .genesis-hero-card {
+      background:
+        radial-gradient(120% 140% at 0% 0%, rgba(13, 148, 136, 0.10), transparent 55%),
+        radial-gradient(100% 120% at 100% 0%, rgba(2, 132, 199, 0.08), transparent 55%),
+        #ffffff;
+      border-color: rgba(13, 148, 136, 0.34);
+    }
+    .genesis-roles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .genesis-role-pill {
+      padding: 10px 13px;
+      border-radius: 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .genesis-role-pill strong {
+      display: block;
+      font-size: 12.5px;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .genesis-stage-ribbon {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .genesis-stage-step {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .genesis-stage-step .step-num {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--agent-color);
+      text-transform: uppercase;
+    }
+    .genesis-form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .genesis-field label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+    }
+    .genesis-input,
+    .genesis-select,
+    .genesis-textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-input);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+    }
+    .genesis-input:focus,
+    .genesis-select:focus,
+    .genesis-textarea:focus {
+      border-color: var(--agent-color);
+    }
+    .genesis-case-card {
+      border-radius: 14px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-surface);
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+    .genesis-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+    .genesis-badge.awaiting_approval {
+      background: rgba(245, 158, 11, 0.16);
+      color: #d97706;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    [data-theme="dark"] .genesis-badge.awaiting_approval {
+      color: #fbbf24;
+    }
+    .genesis-badge.deployed,
+    .genesis-badge.complete {
+      background: rgba(16, 185, 129, 0.16);
+      color: #047857;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    [data-theme="dark"] .genesis-badge.deployed,
+    [data-theme="dark"] .genesis-badge.complete {
+      color: #34d399;
+    }
+    .genesis-badge.blocked,
+    .genesis-badge.rejected,
+    .genesis-badge.failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #b91c1c;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    [data-theme="dark"] .genesis-badge.blocked,
+    [data-theme="dark"] .genesis-badge.rejected,
+    [data-theme="dark"] .genesis-badge.failed {
+      color: #fca5a5;
+    }
+    .genesis-badge.rolled_back,
+    .genesis-badge.deferred,
+    .genesis-badge.spec_ready_step0 {
+      background: rgba(14, 165, 233, 0.15);
+      color: #0369a1;
+      border: 1px solid rgba(14, 165, 233, 0.38);
+    }
+    [data-theme="dark"] .genesis-badge.rolled_back,
+    [data-theme="dark"] .genesis-badge.deferred,
+    [data-theme="dark"] .genesis-badge.spec_ready_step0 {
+      color: #7dd3fc;
+    }
+    .genesis-progress-track {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 5px;
+      margin: 12px 0;
+    }
+    .genesis-progress-cell {
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .genesis-progress-cell.done {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(16, 185, 129, 0.42);
+      color: #047857;
+    }
+    [data-theme="dark"] .genesis-progress-cell.done {
+      color: #34d399;
+    }
+    .genesis-progress-cell.active {
+      background: rgba(20, 184, 166, 0.20);
+      border-color: var(--agent-color);
+      color: var(--text);
+      box-shadow: 0 0 0 1px var(--agent-color);
+    }
+    .genesis-progress-cell.halted {
+      background: rgba(239, 68, 68, 0.16);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #b91c1c;
+    }
+    [data-theme="dark"] .genesis-progress-cell.halted {
+      color: #fca5a5;
+    }
+    .genesis-suite-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .genesis-suite-box {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+    .genesis-code-preview {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.5;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--bg-well);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .genesis-preset-btn {
+      padding: 6px 11px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+      color: var(--text);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .genesis-preset-btn:hover {
+      border-color: var(--agent-color);
+      color: var(--agent-color);
+    }
+  </style>
 </head>
 <body data-agent="genesis">
   <canvas id="cosmos-canvas"></canvas>
@@ -17,7 +259,7 @@
         <div class="topbar-agent-icon icon-md"><span data-icon="agent:genesis"></span></div>
         <div>
           <div class="topbar-title">Genesis</div>
-          <div class="topbar-subtitle">The Strategy Architect · Plain-English Strategy Blueprint Designer &amp; Stress-Tester</div>
+          <div class="topbar-subtitle">The Agent Factory · Durable Control Plane for Ecosystem Capability Building</div>
         </div>
         <div class="topbar-spacer"></div>
         <div class="topbar-actions">
@@ -25,70 +267,223 @@
           <button class="icon-btn theme-toggle-btn" title="Toggle theme"><span data-icon="ui:theme" class="icon-md"></span></button>
         </div>
       </header>
+
       <main class="dashboard-content">
+        <!-- 1. Control-Plane Architecture Hero & Bounded Role Separation -->
+        <section class="genesis-hero-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 11px;border-radius:6px;background:rgba(20,184,166,0.15);border:1px solid rgba(20,184,166,0.38);color:var(--agent-badge-text);font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px">
+                ● UNIVERSE V2 · DURABLE CAPABILITY CONTROL PLANE &amp; AGENT FACTORY
+              </div>
+              <h2 style="font-family:var(--font-mythic);font-size:20px;font-weight:700;color:var(--text);letter-spacing:0.02em">
+                Genesis Durable Control-Plane Architecture
+              </h2>
+              <p style="font-size:13px;color:var(--text-secondary);margin-top:4px;max-width:860px;line-height:1.55" id="genesisOverviewBanner">
+                Nexus owns the durable case workflow (`case_id`), Atlas builds the source-linked evidence dossier, Aegis governs preflight and permission boundaries, Genesis writes the versioned specification and invokes the isolated Bounded Coding Worker (Steps 0–3), Forge runs paired 6-suite evaluations on the frozen artifact hash, and Human release approval gates every canary deployment with tested Chronicle rollback.
+              </p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">
+                <span data-icon="ui:refresh" class="icon-sm"></span> Refresh Control Plane
+              </button>
+            </div>
+          </div>
+
+          <!-- 6 Bounded Specialist Roles -->
+          <div class="genesis-roles-grid">
+            <div class="genesis-role-pill">
+              <strong>1. Atlas Researches (Evidence Analyst)</strong>
+              Builds source-linked dossier with claims, corroboration, contradiction, alternatives, and unresolved questions.
+            </div>
+            <div class="genesis-role-pill">
+              <strong>2. Nexus Coordinates (Workflow Owner)</strong>
+              Owns <code>case_id</code>, deduplication, routing, and final choice among <strong>Repair</strong>, <strong>Extend</strong>, <strong>Tool</strong>, <strong>Create</strong>, or <strong>Defer</strong>.
+            </div>
+            <div class="genesis-role-pill">
+              <strong>3. Aegis Governs Risk (Risk Authority)</strong>
+              Sets preflight limits before tool use and audits candidate permissions &amp; security controls before release; can veto.
+            </div>
+            <div class="genesis-role-pill">
+              <strong>4. Genesis Creates (Agent Factory)</strong>
+              Writes versioned specification, invokes the isolated <strong>Bounded Coding Worker</strong> (Steps 0–3), and never self-approves.
+            </div>
+            <div class="genesis-role-pill">
+              <strong>5. Forge Evaluates (Evaluation Lab)</strong>
+              Runs paired 6-suite checks (baseline, validation, hidden holdout, integration, safety, regression) on frozen artifact hashes.
+            </div>
+            <div class="genesis-role-pill">
+              <strong>6. Chronicle Remembers (Durable Memory)</strong>
+              Stores authoritative lifecycle records, policy versions, artifact hashes, human approvals, deployments, and rollbacks.
+            </div>
+          </div>
+
+          <!-- 8-Stage Persistent Case Workflow Ribbon -->
+          <div class="genesis-stage-ribbon">
+            <div class="genesis-stage-step"><span class="step-num">Stage 1</span><span>Trigger Signal</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 2</span><span>Nexus Case &amp; Dedup</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 3</span><span>Aegis Preflight + Atlas Dossier</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 4</span><span>Nexus Decision (5 Options)</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 5</span><span>Genesis Spec &amp; Isolated Build</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 6</span><span>Independent Reviews (Forge + Aegis)</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 7</span><span>Human Release &amp; Canary Rollback</span></div>
+            <div class="genesis-stage-step"><span class="step-num">Stage 8</span><span>Chronicle Durable Outcome</span></div>
+          </div>
+        </section>
+
+        <!-- 2. KPI Cards -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Active Strategies</div>
-            <div class="kpi-value" id="kpi_active_strategies">—</div>
-            <div class="kpi-delta neu" id="kpid_active_strategies"></div>
+            <div class="kpi-label">Active Capability Cases</div>
+            <div class="kpi-value" id="kpi_active_cases">—</div>
+            <div class="kpi-delta pos" id="kpid_active_cases">Durable Nexus case_id</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Avg Return</div>
-            <div class="kpi-value" id="kpi_avg_return">—</div>
-            <div class="kpi-delta pos" id="kpid_avg_return"></div>
+            <div class="kpi-label">Awaiting Human Release</div>
+            <div class="kpi-value" id="kpi_awaiting_human_release">—</div>
+            <div class="kpi-delta neu" id="kpid_awaiting_human_release">Book VI Human Gate</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Goals Met</div>
-            <div class="kpi-value" id="kpi_goals_met">—</div>
-            <div class="kpi-delta pos" id="kpid_goals_met"></div>
+            <div class="kpi-label">Sandbox Certified</div>
+            <div class="kpi-value" id="kpi_sandbox_certified">—</div>
+            <div class="kpi-delta pos" id="kpid_sandbox_certified">Isolated subprocess</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Backtests Run</div>
-            <div class="kpi-value" id="kpi_backtests_run">—</div>
-            <div class="kpi-delta neu" id="kpid_backtests_run"></div>
+            <div class="kpi-label">Forge &amp; Aegis Cleared</div>
+            <div class="kpi-value" id="kpi_forge_aegis_cleared">—</div>
+            <div class="kpi-delta pos" id="kpid_forge_aegis_cleared">6-suite + boundary audit</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Best Return</div>
-            <div class="kpi-value" id="kpi_best_strategy_return">—</div>
-            <div class="kpi-delta pos" id="kpid_best_strategy_return"></div>
+            <div class="kpi-label">Deployed Agents &amp; Tools</div>
+            <div class="kpi-value" id="kpi_deployed_agents">—</div>
+            <div class="kpi-delta pos" id="kpid_deployed_agents">Versioned with rollback</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Uptime</div>
-            <div class="kpi-value" id="kpi_uptime">—</div>
-            <div class="kpi-delta pos" id="kpid_uptime"></div>
+            <div class="kpi-label">Durable Handoffs Logged</div>
+            <div class="kpi-value" id="kpi_durable_handoffs">—</div>
+            <div class="kpi-delta neu" id="kpid_durable_handoffs">16-field typed schema</div>
           </div>
         </div>
 
-        <!-- Interactive Strategy Blueprint Designer Bar -->
-        <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.34);background:linear-gradient(180deg,rgba(16,185,129,0.08) 0%,rgba(15,23,42,0.5) 100%)">
-          <div class="card-body" style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <!-- 3. Interactive Capability Case Launcher & Bounded Coding Worker Console -->
+        <div class="card" style="margin-bottom:18px;border:1px solid var(--border-accent)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
-              <div style="font-size:13.5px;font-weight:800;color:var(--text)">Interactive Strategy Blueprint Designer</div>
-              <div id="genesisActionBanner" style="font-size:12px;color:var(--text-muted);margin-top:3px">
-                Blueprint generation is unavailable until Genesis is connected to its governed proposal and stress-test pipeline. No candidate is created by this control.
+              <span class="card-title">Open a New Capability Case &amp; Invoke Bounded Coding Worker</span>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Executes Stages 1–6 automatically (Trigger → Nexus Dedup → Aegis Preflight &amp; Atlas Dossier → Nexus Decision → Genesis Spec &amp; Sandbox Build → Independent Forge &amp; Aegis Reviews) and pauses at Stage 7 for Human Release Approval.
               </div>
             </div>
-            <button id="btnGenesisDesign" type="button" disabled title="Genesis proposal and stress-test workflow is not connected" style="padding:9px 16px;border-radius:8px;border:none;background:#475569;color:#cbd5e1;font-size:12.5px;font-weight:800;cursor:not-allowed">
-              Blueprint workflow unavailable
-            </button>
+            <span class="genesis-badge complete">No Self-Approval · Isolated Worktree</span>
+          </div>
+          <div class="card-body">
+            <!-- Quick Preset Scenarios -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+              <button type="button" class="genesis-preset-btn" onclick="fillCasePreset('create_new')">
+                ✦ Preset 1: New Specialist Agent (Step 2 Verified PR Drafter)
+              </button>
+              <button type="button" class="genesis-preset-btn" onclick="fillCasePreset('deterministic_tool')">
+                🔧 Preset 2: Deterministic Tool (Execution Spread Guard)
+              </button>
+              <button type="button" class="genesis-preset-btn" onclick="fillCasePreset('extend_existing')">
+                🧬 Preset 3: Existing Domain → Nexus Selects EXTEND
+              </button>
+              <button type="button" class="genesis-preset-btn" onclick="fillCasePreset('step0_analyst')">
+                🔍 Preset 4: Step 0 Read-Only Analyst (Spec Only, Zero File Writes)
+              </button>
+              <button type="button" class="genesis-preset-btn" onclick="fillCasePreset('aegis_veto')">
+                🛡️ Preset 5: Test Aegis Preflight Security Veto (Fail-Closed)
+              </button>
+            </div>
+
+            <div class="genesis-form-grid">
+              <div class="genesis-field">
+                <label for="caseTitleInput">Capability Case Title</label>
+                <input id="caseTitleInput" class="genesis-input" type="text" value="Orderbook Imbalance &amp; Session Liquidity Guard" placeholder="e.g. Orderbook Imbalance &amp; Liquidity Guard"/>
+              </div>
+              <div class="genesis-field">
+                <label for="caseDomainInput">Target Domain</label>
+                <input id="caseDomainInput" class="genesis-input" type="text" value="orderbook_liquidity" placeholder="e.g. orderbook_liquidity"/>
+              </div>
+              <div class="genesis-field">
+                <label for="caseNameInput">Candidate Agent / Tool Name</label>
+                <input id="caseNameInput" class="genesis-input" type="text" value="OrderbookSentinel" placeholder="e.g. OrderbookSentinel"/>
+              </div>
+              <div class="genesis-field">
+                <label for="caseTriggerSelect">Stage 1 Trigger Source</label>
+                <select id="caseTriggerSelect" class="genesis-select">
+                  <option value="unmet_user_request">Unmet User Request</option>
+                  <option value="operational_signal">Operational Signal</option>
+                  <option value="repeated_failure">Repeated Failure</option>
+                  <option value="identified_risk">Identified Risk</option>
+                </select>
+              </div>
+              <div class="genesis-field">
+                <label for="caseDecisionSelect">Stage 4 Nexus Decision Mode</label>
+                <select id="caseDecisionSelect" class="genesis-select">
+                  <option value="auto">Auto-Adjudicate from Coverage &amp; Dossier</option>
+                  <option value="create">Create New Bounded Specialist Agent</option>
+                  <option value="extend">Extend Existing Live Specialist</option>
+                  <option value="tool">Build Deterministic Stateless Tool</option>
+                  <option value="repair">Repair Existing Routing / Data Pipeline</option>
+                  <option value="defer">Defer (Insufficient Evidence)</option>
+                </select>
+              </div>
+              <div class="genesis-field">
+                <label for="caseWorkerStepSelect">Stage 5 Bounded Coding Worker Ladder</label>
+                <select id="caseWorkerStepSelect" class="genesis-select">
+                  <option value="0">Step 0 · Read-Only Analyst (Spec Only, No Writes)</option>
+                  <option value="1">Step 1 · Isolated Patch Author (AST + Safety + Lint)</option>
+                  <option value="2" selected>Step 2 · Verified PR Drafter (Subprocess Sandbox Certified)</option>
+                  <option value="3">Step 3 · Limited Routine Automation (Canary Bundle)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="genesis-field" style="margin-bottom:14px">
+              <label for="caseProblemInput">Problem Statement &amp; Evidence Scope (Evaluated by Aegis Preflight &amp; Atlas Dossier)</label>
+              <textarea id="caseProblemInput" class="genesis-textarea" rows="2">Detect cross-session liquidity vacuums and spread widening spikes so Nexus and Oracle receive typed liquidity-risk evidence before entering intraday trades, without granting direct order execution authority.</textarea>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+              <div id="genesisActionBanner" style="font-size:12.5px;color:var(--text-secondary);font-weight:600">
+                Ready to open a durable capability case. All generated artifacts are isolated and require independent Forge &amp; Aegis review before human approval.
+              </div>
+              <button id="btnGenesisOpenCase" type="button" onclick="openNewGenesisCase()" style="padding:10px 20px;border-radius:9px;border:none;background:var(--agent-color);color:#ffffff;font-size:13px;font-weight:800;cursor:pointer;box-shadow:var(--shadow-sm)">
+                ▶ Open Capability Case &amp; Run Stages 1–6
+              </button>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Recorded Genesis Artifacts (Status Shown in Each Record)</span>
+        <!-- 4. Active Capability Cases & 8-Stage Durable Workflow Inspector -->
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <span class="card-title">Durable Capability Cases — 8-Stage Pipeline, Forge 6-Suite Review &amp; Human Canary Release Gate</span>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Approve exact frozen <code>artifact_hash</code> values for staged canary deployment, inspect synthesized Python files, or trigger tested rollback to prior snapshots.
+              </div>
+            </div>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
-            <div id="section_primary" class="feed-list">
+            <div id="casesInspectorContainer">
               <div class="skeleton skeleton-card"></div>
-              <div class="skeleton skeleton-card" style="margin-top:8px"></div>
+              <div class="skeleton skeleton-card" style="margin-top:10px"></div>
             </div>
           </div>
         </div>
+
+        <!-- 5. Durable Handoff Envelopes Ledger (16-Field Typed Schema) -->
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Genesis Activity Records</span>
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <span class="card-title">Typed Durable Handoff Envelopes &amp; Chronicle Audit Trail</span>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                Every cross-agent handoff carries <code>case_id</code>, <code>sender</code>, <code>recipient</code>, <code>objective</code>, <code>allowed_actions</code>, <code>data_classification</code>, <code>evidence_references</code>, <code>trust_labels</code>, <code>expiry_deadline</code>, <code>retry_budget</code>, <code>policy_version</code>, <code>schema_version</code>, <code>idempotency_key</code>, <code>required_output_fields</code>, and <code>status</code>.
+              </div>
+            </div>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -101,6 +496,7 @@
     </div>
   </div>
 
+  <!-- Slide-in Chat Drawer -->
   <button class="chat-fab" id="chatFab" title="Ask Genesis">
     <span data-icon="ui:chat" class="icon-lg"></span>
   </button>
@@ -110,20 +506,20 @@
       <div class="chat-drawer-agent-icon icon-md"><span data-icon="agent:genesis"></span></div>
       <div>
         <div class="chat-drawer-title">Genesis</div>
-        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Strategy Intelligence</div>
+        <div style="font-size:11px;color:var(--text-muted);font-style:italic">Agent Factory &amp; Control-Plane Architect</div>
       </div>
       <button class="chat-drawer-close" id="chatClose"><span data-icon="ui:close" class="icon-sm"></span></button>
     </div>
     <div class="chat-drawer-messages" id="chatMessages">
       <div class="chat-msg agent">
-        <div class="chat-bubble">Hello! I am Genesis, our strategy architect. Ask me about our trading blueprints, how we design strategies before sending them to Forge, or what your trading goals are.</div>
+        <div class="chat-bubble">Hello! I am Genesis, the Agent Factory and Durable Capability Control Plane. Ask me about our active capability cases, how the 8-stage workflow coordinates Atlas, Nexus, Aegis, Genesis, Forge, and Chronicle, or how the Bounded Coding Worker synthesizes and sandbox-certifies new specialists.</div>
       </div>
     </div>
     <div class="chat-drawer-input-area">
       <div class="chat-hints">
-        <button class="chat-hint-chip">What trading blueprints are active?</button>
-        <button class="chat-hint-chip">How do you work with Forge and Oracle?</button>
-        <button class="chat-hint-chip">Explain our best performing blueprint</button>
+        <button class="chat-hint-chip">Explain the 8-stage Genesis Control-Plane workflow</button>
+        <button class="chat-hint-chip">What capability cases are active or awaiting approval?</button>
+        <button class="chat-hint-chip">How do Forge and Aegis review candidates before human release?</button>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask Genesis in plain English…"></textarea>
@@ -133,18 +529,33 @@
   </div>
   <div id="toast-container"></div>
 
-  <script src="shared/icons.js?v=5"></script>
-  <script src="shared/config.js?v=5"></script>
-  <script src="shared/api.js?v=5"></script>
-  <script src="shared/notifications.js?v=5"></script>
-  <script src="shared/cosmos.js?v=5"></script>
-  <script src="shared/sidebar.js?v=5"></script>
-  <script src="shared/chat.js?v=5"></script>
+  <script src="shared/icons.js?v=6"></script>
+  <script src="shared/config.js?v=6"></script>
+  <script src="shared/api.js?v=6"></script>
+  <script src="shared/notifications.js?v=6"></script>
+  <script src="shared/cosmos.js?v=6"></script>
+  <script src="shared/sidebar.js?v=6"></script>
+  <script src="shared/chat.js?v=6"></script>
   <script>
   const AGENT_ID = 'genesis';
+  const STAGE_SHORT_LABELS = [
+    '1. Trigger',
+    '2. Nexus Case',
+    '3. Aegis+Atlas',
+    '4. Decision',
+    '5. Spec+Build',
+    '6. Forge+Aegis',
+    '7. Human Gate',
+    '8. Chronicle'
+  ];
 
   function escHtml(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   async function checkConn() {
@@ -161,14 +572,314 @@
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
+    if (de && delta !== undefined) {
+      de.textContent = delta || '';
+    }
   }
 
-  function offlinePanel(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = '<div class="offline-panel"><div class="offline-icon icon-xl"><span data-icon="ui:connected" class="icon-xl"></span></div><div class="offline-title">Awaiting Connection</div><div class="offline-msg">Reconnecting to live data.</div></div>';
-    if (typeof injectIcons === 'function') injectIcons();
+  function fillCasePreset(presetKey) {
+    const titleEl = document.getElementById('caseTitleInput');
+    const domEl = document.getElementById('caseDomainInput');
+    const nameEl = document.getElementById('caseNameInput');
+    const trigEl = document.getElementById('caseTriggerSelect');
+    const decEl = document.getElementById('caseDecisionSelect');
+    const stepEl = document.getElementById('caseWorkerStepSelect');
+    const probEl = document.getElementById('caseProblemInput');
+
+    if (presetKey === 'create_new') {
+      titleEl.value = 'Cross-Exchange Orderbook Imbalance & Liquidity Guard';
+      domEl.value = 'orderbook_liquidity';
+      nameEl.value = 'OrderbookSentinel';
+      trigEl.value = 'unmet_user_request';
+      decEl.value = 'create';
+      stepEl.value = '2';
+      probEl.value = 'Detect cross-session liquidity vacuums and orderbook depth anomalies so Nexus and Oracle receive typed liquidity-risk evidence before entering intraday trades, without direct broker execution authority.';
+    } else if (presetKey === 'deterministic_tool') {
+      titleEl.value = 'Deterministic Rollover Spread & Swap Cost Calculator Tool';
+      domEl.value = 'rollover_spread_tool';
+      nameEl.value = 'RolloverSpreadTool';
+      trigEl.value = 'operational_signal';
+      decEl.value = 'tool';
+      stepEl.value = '2';
+      probEl.value = 'Build a deterministic stateless tool that computes exact rollover swap and spread thresholds across MT5 and cTrader sessions without spawning a stateful autonomous agent.';
+    } else if (presetKey === 'extend_existing') {
+      titleEl.value = 'Extend News Wire Collector with Central Bank Speech Calendar';
+      domEl.value = 'news';
+      nameEl.value = 'SentinelCalendarExtension';
+      trigEl.value = 'unmet_user_request';
+      decEl.value = 'auto';
+      stepEl.value = '2';
+      probEl.value = 'Because the news domain is already covered by Sentinel, Nexus should detect existing domain coverage and choose EXTEND rather than duplicating an agent.';
+    } else if (presetKey === 'step0_analyst') {
+      titleEl.value = 'Step 0 Read-Only Specification Draft for Macro Correlation Monitor';
+      domEl.value = 'macro_correlation';
+      nameEl.value = 'MacroCorrelationAnalyst';
+      trigEl.value = 'unmet_user_request';
+      decEl.value = 'create';
+      stepEl.value = '0';
+      probEl.value = 'Run Bounded Coding Worker at Step 0 (Read-Only Analyst) to inspect repository interfaces and produce a versioned specification without writing any code files.';
+    } else if (presetKey === 'aegis_veto') {
+      titleEl.value = 'Unrestricted Shell & Bypass Aegis Stop-Loss Override Request';
+      domEl.value = 'unrestricted_exec';
+      nameEl.value = 'UnsafeBypassAgent';
+      trigEl.value = 'identified_risk';
+      decEl.value = 'create';
+      stepEl.value = '2';
+      probEl.value = 'Attempt to bypass aegis and disable stop loss with raw shell access (should be immediately blocked by Aegis Stage 3 preflight gate).';
+    }
+  }
+
+  async function openNewGenesisCase() {
+    const btn = document.getElementById('btnGenesisOpenCase');
+    const banner = document.getElementById('genesisActionBanner');
+    const payload = {
+      title: document.getElementById('caseTitleInput').value.trim(),
+      domain: document.getElementById('caseDomainInput').value.trim(),
+      proposed_name: document.getElementById('caseNameInput').value.trim(),
+      trigger_type: document.getElementById('caseTriggerSelect').value,
+      preferred_decision: document.getElementById('caseDecisionSelect').value,
+      worker_step: Number(document.getElementById('caseWorkerStepSelect').value),
+      problem_statement: document.getElementById('caseProblemInput').value.trim(),
+      auto_advance_to_review: true,
+    };
+
+    if (!payload.title || !payload.domain) {
+      banner.style.color = '#d97706';
+      banner.textContent = 'Please provide both a Capability Case Title and a Target Domain.';
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Running Stages 1–6 (Sandbox + Forge & Aegis)…';
+    }
+    try {
+      const r = await fetch(API_BASE + '/api/genesis/cases/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      const st = (d.case && d.case.lifecycle_status) || d.status || 'complete';
+      banner.style.color = (st === 'blocked' || st === 'rejected' || st === 'failed') ? '#dc2626' : 'var(--agent-color)';
+      banner.textContent = d.human_summary || d.message || 'Capability case processed.';
+      await loadDashboard();
+    } catch (e) {
+      banner.style.color = '#dc2626';
+      banner.textContent = 'Genesis control-plane error: ' + (e.message || e);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '▶ Open Capability Case & Run Stages 1–6';
+      }
+    }
+  }
+
+  async function advanceGenesisCase(caseId, workerStep) {
+    const banner = document.getElementById('genesisActionBanner');
+    banner.textContent = 'Advancing case ' + caseId + ' through Bounded Coding Worker Step ' + workerStep + ' & Independent Reviews…';
+    try {
+      const r = await fetch(API_BASE + '/api/genesis/cases/' + encodeURIComponent(caseId) + '/advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_stage: 'INDEPENDENT_REVIEWS', worker_step: workerStep }),
+      });
+      const d = await r.json();
+      banner.textContent = d.human_summary || d.message || ('Updated case ' + caseId);
+      await loadDashboard();
+    } catch (e) {
+      banner.textContent = 'Could not advance case: ' + (e.message || e);
+    }
+  }
+
+  async function approveGenesisRelease(caseId) {
+    const banner = document.getElementById('genesisActionBanner');
+    banner.textContent = 'Approving frozen artifact hash for staged canary release on ' + caseId + '…';
+    try {
+      const r = await fetch(API_BASE + '/api/genesis/cases/' + encodeURIComponent(caseId) + '/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ human_approver: 'operator', release_scope: 'staged_canary', human_confirm: true }),
+      });
+      const d = await r.json();
+      banner.style.color = 'var(--agent-color)';
+      banner.textContent = d.human_summary || d.message || ('Deployed ' + caseId);
+      await loadDashboard();
+    } catch (e) {
+      banner.style.color = '#dc2626';
+      banner.textContent = 'Could not approve release: ' + (e.message || e);
+    }
+  }
+
+  async function rollbackGenesisCase(caseId) {
+    const banner = document.getElementById('genesisActionBanner');
+    banner.textContent = 'Executing tested canary rollback for ' + caseId + '…';
+    try {
+      const r = await fetch(API_BASE + '/api/genesis/cases/' + encodeURIComponent(caseId) + '/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Operator triggered canary rollback from Genesis Control-Plane console' }),
+      });
+      const d = await r.json();
+      banner.style.color = '#d97706';
+      banner.textContent = d.human_summary || d.message || ('Rolled back ' + caseId);
+      await loadDashboard();
+    } catch (e) {
+      banner.style.color = '#dc2626';
+      banner.textContent = 'Could not roll back case: ' + (e.message || e);
+    }
+  }
+
+  function renderCaseCard(c) {
+    const stageIdx = Number(c.current_stage_index || 1);
+    const status = String(c.lifecycle_status || 'open').toLowerCase();
+    const isHalted = ['blocked', 'rejected', 'failed', 'deferred'].includes(status);
+    const dec = (c.decision && c.decision.decision) ? c.decision.decision.toUpperCase() : 'PENDING';
+    const worker = c.coding_worker_run || {};
+    const spec = c.specification || {};
+    const forge = c.forge_evaluation || {};
+    const aegis = c.aegis_security_review || {};
+    const preflight = c.aegis_preflight || {};
+    const dossier = c.atlas_dossier || {};
+    const release = c.release_approval || {};
+    const outcome = c.chronicle_outcome || {};
+
+    // 8-stage progress bar
+    const progressCells = STAGE_SHORT_LABELS.map((lbl, idx) => {
+      const num = idx + 1;
+      let cls = 'genesis-progress-cell';
+      if (num < stageIdx || (num === 8 && status === 'deployed')) cls += ' done';
+      else if (num === stageIdx) cls += isHalted ? ' halted' : ' active';
+      return '<div class="' + cls + '" title="' + escHtml(lbl) + '">' + escHtml(lbl) + '</div>';
+    }).join('');
+
+    // Forge 6-suite grid
+    let suitesHtml = '';
+    if (forge.suites) {
+      const boxes = Object.entries(forge.suites).map(([k, v]) => {
+        const pass = v && v.status === 'pass';
+        return '<div class="genesis-suite-box">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
+            '<strong style="text-transform:uppercase;font-size:10.5px;color:var(--text)">' + escHtml(k.replace('_', ' ')) + '</strong>' +
+            '<span class="genesis-badge ' + (pass ? 'complete' : 'failed') + '" style="padding:1px 6px;font-size:9.5px">' + (pass ? 'PASS' : 'FAIL') + '</span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted)">' + escHtml(v.detail || '') + '</div>' +
+        '</div>';
+      }).join('');
+      suitesHtml = '<div class="genesis-suite-grid">' + boxes + '</div>';
+    }
+
+    // Action buttons depending on lifecycle state
+    let actionsHtml = '';
+    if (status === 'awaiting_approval') {
+      actionsHtml =
+        '<button type="button" onclick="approveGenesisRelease(\'' + escHtml(c.case_id) + '\')" style="padding:8px 16px;border-radius:8px;border:none;background:#059669;color:#ffffff;font-size:12.5px;font-weight:800;cursor:pointer">' +
+          '✓ Human Release Owner: Approve Artifact ' + escHtml(worker.artifact_hash || '') + ' &amp; Deploy Staged Canary' +
+        '</button>';
+    } else if (status === 'spec_ready_step0') {
+      actionsHtml =
+        '<button type="button" onclick="advanceGenesisCase(\'' + escHtml(c.case_id) + '\', 2)" style="padding:8px 16px;border-radius:8px;border:none;background:var(--agent-color);color:#ffffff;font-size:12.5px;font-weight:800;cursor:pointer">' +
+          '▶ Promote Coding Worker to Step 2 (Isolated Sandbox Build + Forge &amp; Aegis Reviews)' +
+        '</button>';
+    } else if (status === 'deployed') {
+      actionsHtml =
+        '<button type="button" onclick="rollbackGenesisCase(\'' + escHtml(c.case_id) + '\')" style="padding:8px 16px;border-radius:8px;border:1px solid #d97706;background:rgba(245,158,11,0.14);color:var(--text);font-size:12.5px;font-weight:800;cursor:pointer">' +
+          '↺ Trigger Tested Canary Rollback (Restore Snapshot / Retire Canary)' +
+        '</button>';
+    } else if (status === 'rolled_back') {
+      actionsHtml =
+        '<button type="button" onclick="advanceGenesisCase(\'' + escHtml(c.case_id) + '\', 2)" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">' +
+          '↻ Re-Run Isolated Build &amp; Independent Reviews' +
+        '</button>';
+    }
+
+    // File previews from Bounded Coding Worker
+    let filesPreviewHtml = '';
+    if (worker.file_previews && Object.keys(worker.file_previews).length > 0) {
+      const fileBlocks = Object.entries(worker.file_previews).slice(0, 3).map(([rel, code]) => {
+        return '<div style="margin-top:8px">' +
+          '<div style="font-size:11.5px;font-weight:700;color:var(--agent-color);margin-bottom:4px;font-family:var(--font-mono)">📄 ' + escHtml(rel) + '</div>' +
+          '<pre class="genesis-code-preview">' + escHtml(code) + '</pre>' +
+        '</div>';
+      }).join('');
+      filesPreviewHtml = fileBlocks;
+    }
+
+    // Handoff list for this case
+    const caseHandoffs = Array.isArray(c.handoffs) ? c.handoffs : [];
+    const handoffRows = caseHandoffs.map(ho => {
+      return '<div style="padding:9px 11px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);margin-bottom:6px;font-size:11.5px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:3px">' +
+          '<strong>[' + escHtml(ho.stage) + '] ' + escHtml(String(ho.sender).toUpperCase()) + ' → ' + escHtml(String(ho.recipient).toUpperCase()) + '</strong>' +
+          '<span class="genesis-badge ' + escHtml(ho.status) + '" style="font-size:10px;padding:2px 7px">' + escHtml(ho.status) + '</span>' +
+        '</div>' +
+        '<div style="color:var(--text-secondary);margin-bottom:4px">' + escHtml(ho.output_summary) + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted)">' +
+          'idempotency=' + escHtml(ho.idempotency_key) + ' · policy=' + escHtml(ho.policy_version) + ' · schema=' + escHtml(ho.schema_version) + ' · trust=[' + escHtml((ho.trust_labels || []).join(', ')) + ']' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="genesis-case-card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">' +
+        '<div>' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">' +
+            '<span style="font-family:var(--font-mono);font-size:12px;font-weight:800;color:var(--agent-color)">' + escHtml(c.case_id) + '</span>' +
+            '<span class="genesis-badge ' + escHtml(status) + '">' + escHtml(status.replace(/_/g, ' ')) + '</span>' +
+            '<span class="genesis-badge complete">Nexus Decision: ' + escHtml(dec) + '</span>' +
+            (worker.step_title ? '<span class="genesis-badge spec_ready_step0">' + escHtml(worker.step_title) + '</span>' : '') +
+            (worker.artifact_hash ? '<span style="font-family:var(--font-mono);font-size:11px;padding:2px 8px;border-radius:6px;background:var(--bg-elevated);border:1px solid var(--border-strong);color:var(--text)">' + escHtml(worker.artifact_hash) + '</span>' : '') +
+          '</div>' +
+          '<h3 style="font-size:15.5px;font-weight:800;color:var(--text);margin:2px 0">' + escHtml(c.title) + '</h3>' +
+          '<div style="font-size:12.5px;color:var(--text-secondary)">' + escHtml(c.problem_statement) + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + actionsHtml + '</div>' +
+      '</div>' +
+
+      '<div class="genesis-progress-track">' + progressCells + '</div>' +
+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;font-size:12px;color:var(--text-secondary);margin-top:8px">' +
+        '<div style="padding:9px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border)">' +
+          '<strong style="color:var(--text);display:block;margin-bottom:2px">🛡️ Aegis Preflight &amp; Permission Boundary</strong>' +
+          'Tier: <code>' + escHtml(preflight.risk_tier || 'pending') + '</code> · Audit: <strong>' + escHtml(aegis.reason || preflight.reason || 'Pending') + '</strong>' +
+        '</div>' +
+        '<div style="padding:9px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border)">' +
+          '<strong style="color:var(--text);display:block;margin-bottom:2px">🔬 Atlas Evidence Dossier (' + escHtml(dossier.dossier_id || 'pending') + ')</strong>' +
+          'Sufficiency: <strong>' + escHtml(dossier.evidence_sufficiency || 'pending') + '</strong> · ' + escHtml((dossier.corroborating_evidence || [])[0] || '') +
+        '</div>' +
+        '<div style="padding:9px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border)">' +
+          '<strong style="color:var(--text);display:block;margin-bottom:2px">⚙️ Bounded Coding Worker &amp; Sandbox</strong>' +
+          escHtml(worker.summary || 'Pending isolated build') +
+        '</div>' +
+        (outcome.chronicle_memory_id ? (
+          '<div style="padding:9px 12px;border-radius:8px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.35)">' +
+            '<strong style="color:var(--text);display:block;margin-bottom:2px">📜 Chronicle Durable Outcome (' + escHtml(outcome.chronicle_memory_id) + ')</strong>' +
+            'Deployed <strong>' + escHtml(outcome.agent_name) + ' v' + escHtml(outcome.version) + '</strong> (' + escHtml(outcome.release_scope) + ') · Rollback Snapshot Ready' +
+          '</div>'
+        ) : '') +
+      '</div>' +
+
+      suitesHtml +
+
+      '<details style="margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);font-size:12px;color:var(--text-secondary)">' +
+        '<summary style="cursor:pointer;font-weight:700;color:var(--text);outline:none">' +
+          'Inspect Versioned Specification (' + escHtml(spec.spec_id || 'Draft') + '), Synthesized URS Files (' + ((worker.files_synthesized || []).length) + ') &amp; Typed Durable Handoffs (' + caseHandoffs.length + ')' +
+        '</summary>' +
+        '<div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">' +
+          (spec.spec_id ? (
+            '<div>' +
+              '<div style="font-weight:700;color:var(--text);margin-bottom:4px">Versioned Specification &amp; Acceptance Criteria</div>' +
+              '<pre class="genesis-code-preview">' + escHtml(JSON.stringify(spec, null, 2)) + '</pre>' +
+            '</div>'
+          ) : '') +
+          filesPreviewHtml +
+          '<div>' +
+            '<div style="font-weight:700;color:var(--text);margin-bottom:6px">Typed Durable Handoff Envelopes (' + caseHandoffs.length + ' Stage Transitions)</div>' +
+            handoffRows +
+          '</div>' +
+        '</div>' +
+      '</details>' +
+    '</div>';
   }
 
   function renderFeedItem(item) {
@@ -176,66 +887,47 @@
     return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escHtml(title) + '</div><div class="feed-meta"><span>' + escHtml(item.source || item.agent || 'Source unavailable') + '</span><span>' + escHtml(item.time || item.timestamp || 'Timestamp unavailable') + '</span></div></div></div>';
   }
 
-  async function runGenesisBlueprint() {
-    const btn = document.getElementById('btnGenesisDesign');
-    const banner = document.getElementById('genesisActionBanner');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Designing & Stress-Testing Blueprint…';
-    }
-    try {
-      const r = await fetch(API_BASE + '/api/specialist/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent: 'genesis', action: 'design_blueprint', payload: { style: 'Trend Continuation & Pullback' } }),
-      });
-      const d = await r.json();
-      if (banner) {
-        banner.style.color = r.ok && d.status === 'complete' ? '#10b981' : '#f59e0b';
-        banner.style.fontWeight = '700';
-        banner.textContent = d.human_summary || d.message || 'Genesis did not confirm blueprint creation or stress testing.';
-      }
-      if (r.ok && d.status === 'complete') await loadDashboard();
-    } catch (e) {
-      if (banner) {
-        banner.style.color = '#f59e0b';
-        banner.textContent = 'Blueprint designer encountered an error: ' + (e.message || e);
-      }
-    } finally {
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Blueprint workflow unavailable';
-      }
-    }
-  }
-
   async function loadDashboard() {
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data', { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
-      setKpi('active_strategies', d['active_strategies'] != null ? d['active_strategies'] : (d.metrics && d.metrics['active_strategies'] != null ? d.metrics['active_strategies'] : null), d.deltas && d.deltas['active_strategies']);
-      setKpi('avg_return', d['avg_return'] != null ? d['avg_return'] : (d.metrics && d.metrics['avg_return'] != null ? d.metrics['avg_return'] : null), d.deltas && d.deltas['avg_return']);
-      setKpi('goals_met', d['goals_met'] != null ? d['goals_met'] : (d.metrics && d.metrics['goals_met'] != null ? d.metrics['goals_met'] : null), d.deltas && d.deltas['goals_met']);
-      setKpi('backtests_run', d['backtests_run'] != null ? d['backtests_run'] : (d.metrics && d.metrics['backtests_run'] != null ? d.metrics['backtests_run'] : null), d.deltas && d.deltas['backtests_run']);
-      setKpi('best_strategy_return', d['best_strategy_return'] != null ? d['best_strategy_return'] : (d.metrics && d.metrics['best_strategy_return'] != null ? d.metrics['best_strategy_return'] : null), d.deltas && d.deltas['best_strategy_return']);
-      setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
+      const m = d.metrics || d;
 
-      const artifacts = Array.isArray(d.strategy_blueprints) ? d.strategy_blueprints : [];
+      setKpi('active_cases', m.active_cases || m.active_strategies || '0');
+      setKpi('awaiting_human_release', m.awaiting_human_release || '0');
+      setKpi('sandbox_certified', m.sandbox_certified || '0/0');
+      setKpi('forge_aegis_cleared', m.forge_aegis_cleared || '0/0');
+      setKpi('deployed_agents', m.deployed_agents || '0');
+      setKpi('durable_handoffs', m.durable_handoffs || '0');
+
+      if (d.overview) {
+        const ov = document.getElementById('genesisOverviewBanner');
+        if (ov) ov.textContent = d.overview;
+      }
+
+      const cases = Array.isArray(d.cases) ? d.cases : [];
+      const casesContainer = document.getElementById('casesInspectorContainer');
+      if (casesContainer) {
+        casesContainer.innerHTML = cases.length
+          ? cases.map(renderCaseCard).join('')
+          : '<div class="offline-msg">No capability cases are currently open. Use the launcher above to open a new capability case.</div>';
+      }
+
       const activities = Array.isArray(d.activity_feed) ? d.activity_feed : [];
-      const primary = document.getElementById('section_primary');
       const secondary = document.getElementById('section_secondary');
-      if (primary) primary.innerHTML = artifacts.length ? artifacts.slice(0, 8).map(renderFeedItem).join('') : '<div class="offline-msg">No Genesis strategy records are available.</div>';
-      if (secondary) secondary.innerHTML = activities.length ? activities.slice(0, 6).map(renderFeedItem).join('') : '<div class="offline-msg">No separate Genesis activity records are available.</div>';
+      if (secondary) {
+        secondary.innerHTML = activities.length
+          ? activities.slice(0, 12).map(renderFeedItem).join('')
+          : '<div class="offline-msg">No durable handoff records available.</div>';
+      }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
-      ['active_strategies', 'avg_return', 'goals_met', 'backtests_run', 'best_strategy_return', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
-      offlinePanel('section_primary');
-      offlinePanel('section_secondary');
+      ['active_cases', 'awaiting_human_release', 'sandbox_certified', 'forge_aegis_cleared', 'deployed_agents', 'durable_handoffs'].forEach(key => setKpi(key, 'Unavailable'));
     }
   }
 
-  // Chat
+  // Chat Drawer
   const fab=document.getElementById('chatFab'), drawer=document.getElementById('chatDrawer'),
         overlay=document.getElementById('chatOverlay'), closeBtn=document.getElementById('chatClose'),
         chatIn=document.getElementById('chatInput'), chatSnd=document.getElementById('chatSend'),

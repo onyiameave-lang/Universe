@@ -473,10 +473,12 @@ const AGENT_STUDIO_PROFILES = {
   },
   genesis: {
     name: 'Genesis',
-    subtitle: 'Strategy artifact registry. A saved candidate is not described as tested, active, or promoted unless its records show that state.',
-    welcome: 'Hello! I am **Genesis**, the strategy design agent. Ask about saved strategy artifacts and their recorded lifecycle state. Stored ideas are not assumed to have passed testing or promotion.',
+    subtitle: 'Your Agent Factory & Durable Capability Control-Plane — synthesizes versioned specs, bounded coding-worker artifacts, and sandbox builds under 8-stage governance',
+    welcome: 'Hello! I am **Genesis**, the Agent Factory & Capability Builder in the 8-Stage Durable Control Plane. You can open a new capability case below, or ask me in plain English: **"What active capability cases are in the 8-stage pipeline?"**, **"How do all 6 control-plane agents work together?"**, or **"What does the 16-field durable handoff enforce?"**',
     prompts: [
-      { label: 'Show Our Best Trading Blueprints', text: 'What trading strategy blueprints have you designed and how well did they perform in testing?' },
+      { label: 'Active 8-Stage Capability Cases', text: 'What active capability cases and synthesized artifacts are in the 8-stage control plane right now?' },
+      { label: 'How the 6 Agents Coordinate', text: 'How do Genesis, Nexus, Atlas, Forge, Aegis, and Chronicle work together in the durable control plane?' },
+      { label: '16-Field Handoff & Canary Rules', text: 'What are the 16 required fields in the durable inter-agent handoff contract and how does canary rollback work?' },
       { label: 'What Do You Do?', text: 'What do you do?' },
     ],
   },
@@ -493,18 +495,18 @@ function renderCrossAgentReferralCards(referrals) {
     const reason = escape(r.reason || 'Ask this specialist for more details.');
     const hrefAgent = /^[a-z0-9_-]+$/.test(toAgent) ? toAgent : 'nexus';
     return `
-      <div style="flex:1;min-width:210px;background:rgba(15,23,42,0.45);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+      <div class="agent-referral-card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-          <span style="font-weight:700;font-size:12.5px;color:#38bdf8">${title}</span>
-          <a href="${hrefAgent}.html" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(56,189,248,0.15);color:#38bdf8;text-decoration:none;border:1px solid rgba(56,189,248,0.28)">Talk to ${title} →</a>
+          <span style="font-weight:700;font-size:12.5px;color:var(--agent-color,#0284c7)">${title}</span>
+          <a href="${hrefAgent}.html" class="agent-referral-link">Talk to ${title} →</a>
         </div>
-        <div style="font-size:11.5px;color:var(--text-muted,#cbd5e1);line-height:1.45">${reason}</div>
+        <div style="font-size:11.5px;color:var(--text-secondary,#334155);line-height:1.45">${reason}</div>
       </div>
     `;
   }).join('');
   return `
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">
-      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px">Related Specialists You Can Talk To:</div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#475569);margin-bottom:8px">Related Specialists You Can Talk To:</div>
       <div style="display:flex;flex-wrap:wrap;gap:10px">${cards}</div>
     </div>
   `;
@@ -527,11 +529,11 @@ function renderCompactDagTraceBadge(trace) {
     ? 'Tier-2 promotion recorded'
     : wb.tier2_promoted_to_reusable_knowledge === false ? 'Tier-1 trace only' : 'Memory state unavailable';
   return `
-    <details style="margin-top:10px;padding:7px 11px;border-radius:8px;background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#94a3b8">
-      <summary style="cursor:pointer;font-weight:600;color:#94a3b8;outline:none">
-        Coordinated with ${consulted || 'agent list unavailable'} in ${latency} <span style="opacity:0.75;font-weight:400">(view technical routing details)</span>
+    <details class="agent-trace-details">
+      <summary style="cursor:pointer;font-weight:600;color:var(--text-secondary,#334155);outline:none">
+        Coordinated with ${consulted || 'agent list unavailable'} in ${latency} <span style="opacity:0.8;font-weight:400">(view technical routing details)</span>
       </summary>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px;font-size:11px">
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-secondary,#334155)">
         <div><strong>Trace ID:</strong> <code>${escape(trace.trace_id || 'Unavailable')}</code> · <strong>Route:</strong> ${lvlText}</div>
         <div><strong>Provenance sources:</strong> ${cons.unique_provenance_sources_count ?? 'Unavailable'} (${cons.shared_sources_deduplicated_count ?? 'Unavailable'} duplicates recorded) · <strong>Quality score:</strong> ${qual != null && Number.isFinite(Number(qual)) ? Number(qual).toFixed(2) : 'Unavailable'}</div>
         <div><strong>Safety Gate:</strong> ${escape(gate.status || 'Unavailable')} · <strong>Memory:</strong> ${savedState}</div>
@@ -566,7 +568,8 @@ function initAgentPageStudio() {
     obs.observe(chatMsgEl, { childList: true });
   }
 
-  if (!agentId || agentId === 'atlas' || agentId === 'nexus') return; // atlas.html and nexus.html have dedicated custom institutional studios
+  // Skip pages that already have their own dedicated on-page chat console right below .kpi-grid
+  if (!agentId || agentId === 'atlas' || agentId === 'nexus' || agentId === 'pulse' || agentId === 'forge') return;
 
   // 2. Mount an interactive On-Page Chat Studio right below .kpi-grid so users can chat directly on the page
   const kpiGrid = document.querySelector('.kpi-grid');
@@ -580,15 +583,15 @@ function initAgentPageStudio() {
   };
 
   const studioCard = document.createElement('div');
-  studioCard.className = 'card';
+  studioCard.className = 'card agent-studio-card';
   studioCard.id = 'agentOnPageStudio';
   studioCard.style.marginBottom = '18px';
-  studioCard.style.border = '1px solid var(--agent-color, #38bdf8)';
+  studioCard.style.border = '1px solid var(--agent-color, #0284c7)';
 
   const pillsHtml = profile.prompts
     .map(
       (p) =>
-        `<button type="button" class="agent-quick-pill" data-prompt="${p.text.replace(/"/g, '&quot;')}" style="font-size:11.5px;padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.04);cursor:pointer;color:var(--text,#f8fafc);font-weight:600">${p.label}</button>`
+        `<button type="button" class="agent-quick-pill" data-prompt="${p.text.replace(/"/g, '&quot;')}">${p.label}</button>`
     )
     .join('');
 
@@ -596,23 +599,23 @@ function initAgentPageStudio() {
     <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div>
         <div class="card-title">Chat Directly with ${profile.name} — Human-Readable Console</div>
-        <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:2px">${profile.subtitle}</div>
+        <div style="font-size:12px;color:var(--text-secondary,#334155);margin-top:2px">${profile.subtitle}</div>
       </div>
-      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;background:rgba(56,189,248,0.14);color:var(--agent-color,#38bdf8)">Chronicle Memory + Nexus DAG Connected</span>
+      <span class="agent-studio-badge">Chronicle Memory + Nexus DAG Connected</span>
     </div>
     <div class="card-body" style="padding:14px 18px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         ${pillsHtml}
       </div>
-      <div id="agentStudioTranscript" style="background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;max-height:440px;overflow-y:auto;margin-bottom:12px;font-size:13.5px;line-height:1.55">
-        <div style="margin-bottom:6px">
-          <span style="font-weight:700;color:var(--agent-color,#38bdf8)">${profile.name}:</span>
-          <div style="margin-top:4px">${formatReadableMarkdown(profile.welcome)}</div>
+      <div id="agentStudioTranscript" class="agent-studio-transcript">
+        <div class="agent-studio-welcome">
+          <span class="agent-studio-speaker">${profile.name}:</span>
+          <div style="margin-top:4px;color:var(--text,#0f172a)">${formatReadableMarkdown(profile.welcome)}</div>
         </div>
       </div>
       <div style="display:flex;gap:8px">
-        <input id="agentStudioInput" type="text" placeholder="Say hi, ask '${profile.prompts[0]?.text || 'What do you do?'}', or ask any question..." style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:var(--text,#f8fafc);font-size:13.5px;font-family:inherit;outline:none" />
-        <button id="agentStudioSendBtn" type="button" style="padding:10px 18px;border-radius:8px;border:none;background:var(--agent-color,#2563eb);color:#fff;font-weight:600;font-size:13px;cursor:pointer">Ask ${profile.name}</button>
+        <input id="agentStudioInput" class="agent-studio-input" type="text" placeholder="Say hi, ask '${profile.prompts[0]?.text || 'What do you do?'}', or ask any question..." />
+        <button id="agentStudioSendBtn" class="agent-studio-send-btn" type="button">Ask ${profile.name}</button>
       </div>
     </div>
   `;
@@ -629,12 +632,12 @@ function initAgentPageStudio() {
     if (!customText && inputEl) inputEl.value = '';
 
     const uDiv = document.createElement('div');
-    uDiv.style.cssText = 'margin:12px 0;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px';
+    uDiv.className = 'agent-studio-msg-user';
     uDiv.innerHTML = `<strong>You:</strong> ${q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}`;
     transcript.appendChild(uDiv);
 
     const loadDiv = document.createElement('div');
-    loadDiv.style.cssText = 'margin:10px 0;color:var(--text-muted,#94a3b8);font-style:italic';
+    loadDiv.style.cssText = 'margin:10px 0;color:var(--text-secondary,#334155);font-style:italic';
     loadDiv.textContent = `${profile.name} is checking Chronicle memory and live telemetry...`;
     transcript.appendChild(loadDiv);
     transcript.scrollTop = transcript.scrollHeight;
@@ -650,11 +653,11 @@ function initAgentPageStudio() {
       loadDiv.remove();
 
       const aDiv = document.createElement('div');
-      aDiv.style.cssText = 'margin:12px 0;padding:12px 14px;background:rgba(255,255,255,0.03);border-left:3px solid var(--agent-color,#38bdf8);border-radius:8px';
+      aDiv.className = 'agent-studio-msg-agent';
       const replyText = d.reply || d.response || d.message || 'Done.';
       const referralsHtml = renderCrossAgentReferralCards(d.referrals || []);
       const traceHtml = renderCompactDagTraceBadge(d.trace);
-      aDiv.innerHTML = `<div style="font-weight:700;color:var(--agent-color,#38bdf8);margin-bottom:6px">${profile.name}</div><div>${formatReadableMarkdown(replyText)}</div>${traceHtml}${referralsHtml}`;
+      aDiv.innerHTML = `<div class="agent-studio-speaker" style="margin-bottom:6px">${profile.name}</div><div style="color:var(--text,#0f172a)">${formatReadableMarkdown(replyText)}</div>${traceHtml}${referralsHtml}`;
       transcript.appendChild(aDiv);
       transcript.scrollTop = transcript.scrollHeight;
     } catch (e) {

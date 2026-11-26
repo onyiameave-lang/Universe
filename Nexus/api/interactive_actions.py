@@ -829,7 +829,131 @@ def execute_specialist_action(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if agent == "genesis":
-        return {"status": "unavailable", "agent": "genesis",
-                "message": "Blueprint creation is not connected to Genesis's governed proposal and stress-test pipeline. No strategy or test result was fabricated."}
+        genesis_root = ROOT_DIR / "Genesis"
+        if str(genesis_root) not in sys.path:
+            sys.path.insert(0, str(genesis_root))
+        from core.control_plane import get_genesis_control_plane  # type: ignore
+
+        cp = get_genesis_control_plane()
+        act = str(payload.get("action") or "open_case").lower().strip()
+        sub = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
+
+        if act in ("snapshot", "status", "list_cases"):
+            snap = cp.get_dashboard_snapshot()
+            return {
+                "status": "complete",
+                "agent": "genesis",
+                "snapshot": snap,
+                "human_summary": snap.get("overview"),
+            }
+
+        if act in ("open_case", "create_case", "design_blueprint", "create_blueprint"):
+            title = str(
+                sub.get("title")
+                or sub.get("idea_name")
+                or sub.get("style")
+                or "Capability Case"
+            ).strip()
+            domain = str(
+                sub.get("domain")
+                or sub.get("market")
+                or sub.get("target_agent")
+                or "capability_extension"
+            ).strip()
+            prob = str(
+                sub.get("problem_statement")
+                or sub.get("trigger_reason")
+                or sub.get("purpose")
+                or f"Build and verify governed capability '{title}' in domain '{domain}'."
+            ).strip()
+            pref_dec = str(
+                sub.get("preferred_decision")
+                or sub.get("preferred_action")
+                or "auto"
+            ).strip().lower()
+            w_step = sub.get("worker_step")
+            if w_step is None:
+                w_step = sub.get("coding_worker_step", 2)
+            auto_adv = sub.get("auto_advance_to_review")
+            if auto_adv is None:
+                auto_adv = sub.get("auto_advance", True)
+            res = cp.open_case(
+                title=title,
+                domain=domain,
+                trigger_type=str(sub.get("trigger_type") or "unmet_user_request"),
+                problem_statement=prob,
+                requested_by=str(sub.get("requested_by") or "operator"),
+                parent_case_id=sub.get("parent_case_id"),
+                preferred_decision=pref_dec,
+                proposed_name=sub.get("proposed_name") or sub.get("target_agent"),
+                capabilities=sub.get("capabilities"),
+                security_level=str(sub.get("security_level") or "standard"),
+                worker_step=int(w_step),
+                auto_advance_to_review=bool(auto_adv),
+            )
+            case_obj = res.get("case") or {}
+            return {
+                "status": res.get("status", "complete"),
+                "agent": "genesis",
+                "case": case_obj,
+                "human_summary": (
+                    cp._build_case_human_summary(case_obj)
+                    if case_obj
+                    else res.get("message", "Genesis processed the capability case request.")
+                ),
+            }
+
+        if act in ("advance_case", "advance"):
+            cid = str(sub.get("case_id") or "").strip()
+            w_step = sub.get("worker_step")
+            if w_step is None:
+                w_step = sub.get("coding_worker_step")
+            res = cp.advance_case(
+                cid,
+                target_stage=sub.get("target_stage"),
+                override_decision=sub.get("override_decision") or sub.get("preferred_decision") or sub.get("preferred_action"),
+                worker_step=w_step,
+            )
+            return {
+                "status": res.get("status", "complete"),
+                "agent": "genesis",
+                "case": res.get("case"),
+                "human_summary": res.get("human_summary") or res.get("message"),
+            }
+
+        if act in ("approve_release", "approve", "deploy"):
+            cid = str(sub.get("case_id") or "").strip()
+            approver = str(sub.get("human_approver") or sub.get("approver") or "operator")
+            res = cp.approve_and_deploy_case(
+                cid,
+                human_approver=approver,
+                release_scope=str(sub.get("release_scope") or "staged_canary"),
+                human_confirm=bool(sub.get("human_confirm", True)),
+            )
+            return {
+                "status": res.get("status", "deployed"),
+                "agent": "genesis",
+                "case": res.get("case"),
+                "human_summary": res.get("human_summary") or res.get("message"),
+            }
+
+        if act in ("rollback_case", "rollback"):
+            cid = str(sub.get("case_id") or "").strip()
+            res = cp.rollback_case(
+                cid,
+                reason=str(sub.get("reason") or "Operator triggered canary rollback"),
+            )
+            return {
+                "status": res.get("status", "rolled_back"),
+                "agent": "genesis",
+                "case": res.get("case"),
+                "human_summary": res.get("human_summary") or res.get("message"),
+            }
+
+        return {
+            "status": "unavailable",
+            "agent": "genesis",
+            "message": f"Unknown Genesis control-plane action: '{act}'.",
+        }
 
     return {"status": "unavailable", "message": f"No specialist action is registered for {agent or 'the requested agent'}."}
