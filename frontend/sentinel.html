@@ -55,7 +55,7 @@
           <div class="kpi-card">
             <div class="kpi-label">Stories in Today's Edition</div>
             <div class="kpi-value" id="kpi_alerts_today">—</div>
-            <div class="kpi-delta pos" id="kpid_alerts_today">Verified Reporting</div>
+            <div class="kpi-delta pos" id="kpid_alerts_today">Feed status</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Editorial Edition</div>
@@ -211,7 +211,17 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'sentinel';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function safeMediaUrl(value) {
+    const raw = String(value || '').trim();
+    if (/^https?:\/\//i.test(raw)) {
+      try { const url = new URL(raw); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch (e) { return ''; }
+    }
+    return /^assets\/[a-zA-Z0-9_./-]+$/.test(raw) ? raw : '';
+  }
   let NEWS_ITEMS_STORE = [];
   let ACTIVE_NEWS_FILTER = 'ALL';
 
@@ -229,9 +239,10 @@
       const res = await r.json();
       if (banner) {
         banner.style.display = 'block';
-        banner.textContent = res.human_summary || 'Refreshed live global news stories and editorial photography.';
+        banner.textContent = res.human_summary || (res.status === 'refreshed' ? 'Live feed refresh completed.' : 'Live feed refresh could not be verified.');
+        banner.style.color = res.status === 'refreshed' ? '#34d399' : '#fbbf24';
       }
-      await loadDashboard();
+      if (r.ok && ['refreshed', 'partial'].includes(res.status)) await loadDashboard();
     } catch (e) {
       if (banner) {
         banner.style.display = 'block';
@@ -272,27 +283,28 @@
     const askBtn = document.getElementById('modalAskSentinelBtn');
     const askTradeBtn = document.getElementById('modalAskTradeImpactBtn');
 
-    img.onerror = function() { if (item.fallback_image_url && this.src !== item.fallback_image_url) this.src = item.fallback_image_url; };
-    img.src = item.image_url || item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
+    const sourceImage = safeMediaUrl(item.image_url || item.image);
+    img.hidden = !sourceImage;
+    if (sourceImage) img.src = sourceImage;
 
     badges.innerHTML =
-      '<span style="padding:4px 11px;border-radius:20px;background:rgba(245,158,11,0.92);color:#090d16;font-size:11px;font-weight:800;letter-spacing:0.04em">' + (item.outlet || 'Global News Desk') + '</span>' +
-      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.2);color:#f8fafc;font-size:11px;font-weight:600">' + (item.category || 'World Report') + '</span>' +
-      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px">' + (item.reading_time || '3 min read') + '</span>';
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(245,158,11,0.92);color:#090d16;font-size:11px;font-weight:800;letter-spacing:0.04em">' + escapeHtml(item.outlet || item.source || 'Source unavailable') + '</span>' +
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.2);color:#f8fafc;font-size:11px;font-weight:600">' + escapeHtml(item.category || 'Category unavailable') + '</span>' +
+      '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px">' + escapeHtml(item.time || item.published_at || 'Timestamp unavailable') + '</span>';
 
     head.textContent = item.headline || item.title || 'Global Editorial Report';
     const paras = Array.isArray(item.full_article_paragraphs) && item.full_article_paragraphs.length
       ? item.full_article_paragraphs
       : [item.summary || item.source || item.headline];
-    body.innerHTML = paras.map(p => '<p style="margin:0">' + String(p).replace(/</g, '&lt;') + '</p>').join('');
+    body.innerHTML = paras.map(p => '<p style="margin:0">' + escapeHtml(p) + '</p>').join('');
 
-    impact.textContent = item.optional_trade_impact || item.market_impact_plain || 'Optional Market Perspective: You can ask Sentinel or Oracle how this story could influence major currencies or commodities.';
+    impact.textContent = item.optional_trade_impact || item.market_impact_plain || 'No verified market-impact assessment is attached to this story.';
     impact.style.display = autoExpandImpact ? 'block' : 'none';
     if (chev) chev.textContent = autoExpandImpact ? 'Hide Market Impact ▴' : 'Show Market Impact ▾';
 
-    if (item.url && item.url.startsWith('http')) {
+    if (safeMediaUrl(item.url)) {
       extBtn.style.display = 'inline-block';
-      extBtn.href = item.url;
+      extBtn.href = safeMediaUrl(item.url);
     } else {
       extBtn.style.display = 'none';
     }
@@ -366,10 +378,9 @@
     if (!container) return;
     if (!item) { container.innerHTML = ''; return; }
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const imgSrc = item.image_url || item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
-    const fallbackSrc = item.fallback_image_url || 'assets/editorial/world_geopolitics.jpg';
-    const headline = item.headline || item.title || 'Lead Global Report';
-    const summary = item.summary || (Array.isArray(item.full_article_paragraphs) ? item.full_article_paragraphs[0] : '');
+    const imgSrc = safeMediaUrl(item.image_url || item.image);
+    const headline = item.headline || item.title || 'Headline unavailable';
+    const summary = item.summary || item.description || 'Source summary unavailable';
 
     const amberTxt = isLight ? '#b45309' : '#fbbf24';
     const cyanTxt = isLight ? '#0369a1' : '#7dd3fc';
@@ -381,25 +392,25 @@
     container.innerHTML =
       '<div class="card" style="margin-bottom:16px;border:1px solid rgba(245,158,11,0.38);overflow:hidden">' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:stretch">' +
-          '<div style="position:relative;min-height:250px;background:#070d19;cursor:pointer;overflow:hidden" onclick="openArticleModal(' + idx + ', false)">' +
-            '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="Lead story photo" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.35s ease" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'"/>' +
+          '<div style="position:relative;min-height:140px;background:#070d19;cursor:pointer;overflow:hidden" onclick="openArticleModal(' + idx + ', false)">' +
+            (imgSrc ? '<img src="' + escapeHtml(imgSrc) + '" alt="Source-provided image" style="width:100%;height:100%;object-fit:cover;display:block"/>' : '<div style="padding:36px;color:#94a3b8">No source image was provided for this story.</div>') +
             '<div style="position:absolute;top:14px;left:14px;display:flex;gap:8px;flex-wrap:wrap">' +
               '<span style="padding:4px 11px;border-radius:20px;background:#f59e0b;color:#090d16;font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase">★ Lead Cover Story</span>' +
-              '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);color:#ffffff;font-size:11px;font-weight:700">' + (item.outlet || 'Global Wire') + '</span>' +
+              '<span style="padding:4px 11px;border-radius:20px;background:rgba(15,23,42,0.88);color:#f8fafc;font-size:11px;font-weight:700">' + escapeHtml(item.outlet || item.source || 'Source unavailable') + '</span>' +
             '</div>' +
           '</div>' +
           '<div style="padding:22px 26px;display:flex;flex-direction:column;justify-content:space-between;gap:14px">' +
             '<div>' +
-              '<div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:' + amberTxt + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">' +
-                '<span>' + (item.category || 'World & Economy') + '</span>' +
+              '<div style="display:flex;align-items:center;gap:10px;font-size:11.5px;color:#fbbf24;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">' +
+                '<span>' + escapeHtml(item.category || 'Category unavailable') + '</span>' +
                 '<span>•</span>' +
-                '<span style="color:var(--text-muted)">' + (item.reading_time || '3 min read') + '</span>' +
+                '<span style="color:var(--text-muted)">Source summary</span>' +
               '</div>' +
-              '<h3 onclick="openArticleModal(' + idx + ', false)" style="cursor:pointer;font-family:var(--font-mythic);font-size:21px;font-weight:700;line-height:1.36;color:' + headTxt + ';margin-bottom:10px">' + headline + '</h3>' +
-              '<p style="font-size:13.5px;line-height:1.65;color:' + bodyTxt + '">' + String(summary).slice(0, 240) + (String(summary).length > 240 ? '…' : '') + '</p>' +
+              '<h3 onclick="openArticleModal(' + idx + ', false)" style="cursor:pointer;font-family:var(--font-mythic);font-size:21px;font-weight:700;line-height:1.36;color:' + headTxt + ';margin-bottom:10px">' + escapeHtml(headline) + '</h3>' +
+              '<p style="font-size:13.5px;line-height:1.65;color:' + bodyTxt + '">' + escapeHtml(String(summary).slice(0, 240) + (String(summary).length > 240 ? '…' : '')) + '</p>' +
             '</div>' +
             '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:12px;border-top:1px solid var(--border)">' +
-              '<button type="button" onclick="openArticleModal(' + idx + ', false)" style="padding:9px 16px;border-radius:9px;border:1px solid #d97706;background:' + readBtnBg + ';color:' + readBtnColor + ';font-size:12.5px;font-weight:700;cursor:pointer">📖 Read Full Cover Story →</button>' +
+              '<button type="button" onclick="openArticleModal(' + idx + ', false)" style="padding:9px 16px;border-radius:9px;border:1px solid #d97706;background:' + readBtnBg + ';color:' + readBtnColor + ';font-size:12.5px;font-weight:700;cursor:pointer">📖 View Source Summary →</button>' +
               '<button type="button" onclick="openArticleModal(' + idx + ', true)" style="padding:9px 14px;border-radius:9px;border:1px solid rgba(2,132,199,0.35);background:rgba(2,132,199,0.1);color:' + cyanTxt + ';font-size:12px;font-weight:700;cursor:pointer">💡 Optional: How Could This Affect Markets?</button>' +
             '</div>' +
           '</div>' +
@@ -409,13 +420,12 @@
 
   function renderPhotoNewsCard(item, idx) {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const headline = item.headline || item.title || 'Global News Update';
-    const outlet = item.outlet || 'Global News';
-    const category = item.category || 'World Desk';
-    const summary = item.summary || item.source || '';
-    const imgSrc = item.image_url || item.fallback_image_url || 'assets/editorial/global_economy.jpg';
-    const fallbackSrc = item.fallback_image_url || 'assets/editorial/global_economy.jpg';
-    const optImpact = item.optional_trade_impact || item.market_impact_plain || '';
+    const headline = item.headline || item.title || 'Headline unavailable';
+    const outlet = item.outlet || item.source || 'Source unavailable';
+    const category = item.category || 'Category unavailable';
+    const summary = item.summary || item.description || 'Source summary unavailable';
+    const imgSrc = safeMediaUrl(item.image_url || item.image);
+    const optImpact = item.optional_trade_impact || item.market_impact_plain || 'No verified market-impact assessment is attached to this story.';
 
     const cardBg = isLight
       ? 'linear-gradient(170deg, #ffffff 0%, #faf6ec 100%)'
@@ -432,23 +442,23 @@
     return (
       '<div onclick="openArticleModal(' + idx + ', false)" style="cursor:pointer;border-radius:14px;overflow:hidden;background:' + cardBg + ';border:1px solid ' + cardBorder + ';display:flex;flex-direction:column;box-shadow:' + cardShadow + ';transition:transform 0.2s ease,border-color 0.2s ease" onmouseover="this.style.borderColor=\'rgba(245,158,11,0.55)\';this.style.transform=\'translateY(-3px)\'" onmouseout="this.style.borderColor=\'' + cardBorder + '\';this.style.transform=\'none\'">' +
         '<div style="position:relative;width:100%;height:180px;background:#070d19;overflow:hidden">' +
-          '<img src="' + imgSrc + '" data-fallback="' + fallbackSrc + '" onerror="if(this.dataset.fallback && this.src!==this.dataset.fallback)this.src=this.dataset.fallback" alt="Editorial news photograph" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.35s ease" onmouseover="this.style.transform=\'scale(1.04)\'" onmouseout="this.style.transform=\'scale(1)\'"/>' +
+          (imgSrc ? '<img src="' + escapeHtml(imgSrc) + '" alt="Source-provided image" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.35s ease" onmouseover="this.style.transform=\'scale(1.04)\'" onmouseout="this.style.transform=\'scale(1)\'"/>' : '<div style="padding:26px;color:#94a3b8">No source image</div>') +
           '<div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(11,16,30,0.82) 0%,transparent 55%)"></div>' +
           '<div style="position:absolute;top:11px;left:11px;display:flex;gap:6px;flex-wrap:wrap">' +
-            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.9);border:1px solid rgba(245,158,11,0.45);color:#fbbf24;font-size:10.5px;font-weight:800">' + outlet + '</span>' +
-            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.88);color:#ffffff;font-size:10.5px;font-weight:600">' + category + '</span>' +
+            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.9);border:1px solid rgba(245,158,11,0.45);color:#fbbf24;font-size:10.5px;font-weight:800">' + escapeHtml(outlet) + '</span>' +
+            '<span style="padding:3px 9px;border-radius:20px;background:rgba(15,23,42,0.88);color:#e2e8f0;font-size:10.5px;font-weight:600">' + escapeHtml(category) + '</span>' +
           '</div>' +
-          '<span style="position:absolute;bottom:10px;right:12px;font-size:10.5px;color:#f1f5f9;font-weight:600">' + (item.reading_time || '3 min read') + '</span>' +
+          '<span style="position:absolute;bottom:10px;right:12px;font-size:10.5px;color:#cbd5e1;font-weight:600">' + escapeHtml(item.time || item.published_at || 'Timestamp unavailable') + '</span>' +
         '</div>' +
         '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:9px;flex:1">' +
-          '<div style="font-size:15.5px;font-weight:700;line-height:1.42;color:' + headTxt + '">' + headline + '</div>' +
-          '<div style="font-size:12.5px;line-height:1.6;color:' + bodyTxt + ';flex:1">' + String(summary).slice(0, 150) + (String(summary).length > 150 ? '…' : '') + '</div>' +
+          '<div style="font-size:15.5px;font-weight:700;line-height:1.42;color:' + headTxt + '">' + escapeHtml(headline) + '</div>' +
+          '<div style="font-size:12.5px;line-height:1.6;color:' + bodyTxt + ';flex:1">' + escapeHtml(String(summary).slice(0, 150) + (String(summary).length > 150 ? '…' : '')) + '</div>' +
           '<div id="cardOptionalImpact_' + idx + '" style="display:none;padding:10px 12px;border-radius:9px;background:' + impactBg + ';border-left:3px solid #0284c7;font-size:11.5px;line-height:1.55;color:' + impactTxt + '">' +
-            optImpact +
+            escapeHtml(optImpact) +
           '</div>' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;flex-wrap:wrap">' +
             '<button type="button" onclick="toggleCardTradeImpact(event, ' + idx + ')" style="padding:4px 9px;border-radius:6px;border:1px solid rgba(2,132,199,0.35);background:rgba(2,132,199,0.09);color:' + cyanTxt + ';font-size:11px;font-weight:700;cursor:pointer">💡 Optional: Market Impact</button>' +
-            '<span style="color:' + amberTxt + ';font-weight:700">Read Story →</span>' +
+            '<span style="color:' + amberTxt + ';font-weight:700">View Source Summary →</span>' +
           '</div>' +
         '</div>' +
       '</div>'
@@ -476,7 +486,7 @@
   }
 
   function renderFeedItem(item, idx) {
-    return '<div class="feed-item" style="cursor:pointer" onclick="openArticleModal(' + idx + ', false)"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||'') + '</span><span style="color:#fbbf24;font-weight:600">Open Reader →</span></div></div></div>';
+    return '<div class="feed-item" style="cursor:pointer" onclick="openArticleModal(' + idx + ', false)"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escapeHtml(item.title||item.headline||'') + '</div><div class="feed-meta"><span>' + escapeHtml(item.source||item.outlet||'Source unavailable') + '</span><span style="color:#fbbf24;font-weight:600">Open Summary →</span></div></div></div>';
   }
 
   async function checkConn() {
@@ -484,16 +494,16 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function offlinePanel(id) {
@@ -533,6 +543,8 @@
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
+      ['alerts_today', 'market_sentiment', 'sources_monitored', 'threats_detected', 'coverage_pct', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
+      NEWS_ITEMS_STORE = [];
       offlinePanel('section_primary');
       offlinePanel('section_secondary');
     }

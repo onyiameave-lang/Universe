@@ -147,12 +147,12 @@
             <div class="kpi-delta pos" id="kpid_agents_active"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Audited DAG Traces</div>
+            <div class="kpi-label">Recent Coordination Traces Loaded</div>
             <div class="kpi-value" id="kpi_tasks_queued">—</div>
             <div class="kpi-delta neu" id="kpid_tasks_queued"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Chronicle 2-Tier Matrix</div>
+            <div class="kpi-label">Tier-2 Knowledge Records</div>
             <div class="kpi-value" id="kpi_messages_per_hour">—</div>
             <div class="kpi-delta neu" id="kpid_messages_per_hour"></div>
           </div>
@@ -184,7 +184,7 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center">
               <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.14);color:#10b981;font-family:monospace">Aegis Gate: risk_policy.v2 (Non-Voting)</span>
-              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.15);color:#60a5fa;font-family:monospace" id="nexusBenchBadge">Benchmark: 23/23 (100%)</span>
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(59,130,246,0.15);color:#60a5fa;font-family:monospace" id="nexusBenchBadge">Benchmark: unavailable</span>
             </div>
           </div>
           <div class="card-body" style="padding:16px 20px">
@@ -246,7 +246,7 @@
               <div>
                 <span class="card-title">Collective Memory Matrix · Tier-2 Promoted Reusable Knowledge</span>
                 <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">
-                  Only multi-source, provenance-verified conclusions (Quality &ge; 0.65, Aegis Approved) are promoted to reusable shared knowledge
+                  Reusable knowledge is shown with its recorded provenance and Aegis gate outcome; missing evidence remains an audit trace.
                 </div>
               </div>
             </div>
@@ -285,7 +285,7 @@
           </div>
           <div class="card">
             <div class="card-header">
-              <span class="card-title">9-Agent Constellation Health &amp; Bus Channels</span>
+              <span class="card-title">Live Agent Health (Not Available from This Feed)</span>
               <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
             </div>
             <div class="card-body">
@@ -341,40 +341,43 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'nexus';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escapeHtml(item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + escapeHtml(item.source||item.agent||'') + '</span><span>' + escapeHtml(item.time||item.timestamp||'') + '</span></div></div></div>';
   }
 
   function renderFullDagTraceCard(t) {
     const cons = t.provenance_consensus || {};
     const gate = t.aegis_policy_gate || {};
-    const qual = (t.quality_signal || {}).quality_score ?? 0.92;
+    const qual = (t.quality_signal || {}).quality_score;
     const wb = t.chronicle_writeback || {};
     const gateClass = gate.status === 'BLOCKED' ? 'blocked' : gate.status === 'CAUTION' ? 'caution' : '';
     const gateColor = gate.status === 'BLOCKED' ? '#ef4444' : gate.status === 'CAUTION' ? '#f59e0b' : '#10b981';
 
     const levelsHtml = (t.dag_levels || []).map((lvl) => {
       const nodesHtml = (lvl.nodes || []).map((n) => {
-        const relPct = Math.round(Number(n.calibrated_reliability || 0.88) * 100);
+        const relPct = Number.isFinite(Number(n.calibrated_reliability)) ? Math.round(Number(n.calibrated_reliability) * 100) + '%' : 'Unavailable';
         const stanceBadge = n.directional_stance > 0
           ? '<span style="color:#10b981;font-family:monospace">LONG/BULL</span>'
           : n.directional_stance < 0
@@ -383,12 +386,12 @@
         return `
           <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-radius:6px;background:rgba(15,23,42,0.55);border:1px solid rgba(255,255,255,0.07)">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-              <a href="${n.agent}.html" style="font-weight:700;font-size:12px;color:#60a5fa;text-decoration:none">${n.agent_title} (${n.domain}) →</a>
-              <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${relPct}% Cal · ${n.provenance_count || 1} Src</span>
+              <a href="${n.agent}.html" style="font-weight:700;font-size:12px;color:#60a5fa;text-decoration:none">${escapeHtml(n.agent_title)} (${escapeHtml(n.domain)}) →</a>
+              <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${relPct} Cal · ${n.provenance_count ?? 'Unavailable'} Src</span>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);line-height:1.4">${(n.summary || '').slice(0, 145)}${(n.summary || '').length > 145 ? '…' : ''}</div>
+            <div style="font-size:11px;color:var(--text-muted);line-height:1.4">${escapeHtml((n.summary || '').slice(0, 145))}${(n.summary || '').length > 145 ? '…' : ''}</div>
             <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;font-family:monospace">
-              <span>Task: ${n.task}</span>
+              <span>Task: ${escapeHtml(n.task)}</span>
               ${stanceBadge}
             </div>
           </div>
@@ -398,8 +401,8 @@
       return `
         <div class="dag-level-box">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:11.5px;font-weight:800;color:#38bdf8">${lvl.level_name}</span>
-            <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${lvl.latency_ms || 8}ms</span>
+            <span style="font-size:11.5px;font-weight:800;color:#38bdf8">${escapeHtml(lvl.level_name)}</span>
+            <span style="font-size:10.5px;font-family:monospace;color:#94a3b8">${lvl.latency_ms != null ? escapeHtml(lvl.latency_ms) + 'ms' : 'Unavailable'}</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">${nodesHtml}</div>
         </div>
@@ -414,14 +417,14 @@
       <div class="dag-trace-card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
           <div>
-            <span style="font-family:monospace;font-size:12px;font-weight:700;color:#60a5fa">${t.trace_id}</span>
-            <span style="font-size:13px;font-weight:700;color:var(--text);margin-left:8px">“${t.query}”</span>
+            <span style="font-family:monospace;font-size:12px;font-weight:700;color:#60a5fa">${escapeHtml(t.trace_id)}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text);margin-left:8px">“${escapeHtml(t.query)}”</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;font-family:monospace">
-            <span style="padding:3px 8px;border-radius:4px;background:rgba(59,130,246,0.14);color:#60a5fa">Quality: ${Number(qual).toFixed(2)}</span>
-            <span style="padding:3px 8px;border-radius:4px;background:rgba(14,165,233,0.14);color:#38bdf8">Unique Sources: ${cons.unique_provenance_sources_count ?? 1} (${cons.shared_sources_deduplicated_count ?? 0} Deduped)</span>
+            <span style="padding:3px 8px;border-radius:4px;background:rgba(59,130,246,0.14);color:#60a5fa">Quality: ${(qual != null ? Number(qual).toFixed(2) : 'Unavailable')}</span>
+            <span style="padding:3px 8px;border-radius:4px;background:rgba(14,165,233,0.14);color:#38bdf8">Unique Sources: ${cons.unique_provenance_sources_count ?? 'Unavailable'} (${cons.shared_sources_deduplicated_count ?? 'Unavailable'} Deduped)</span>
             <span style="padding:3px 8px;border-radius:4px;background:rgba(139,92,246,0.15);color:#c084fc">${wb.tier2_promoted_to_reusable_knowledge ? 'Tier-2 Promoted' : 'Tier-1 Trace Only'}</span>
-            <span style="color:var(--text-muted)">${t.total_latency_ms || 18}ms</span>
+            <span style="color:var(--text-muted)">${t.total_latency_ms != null ? escapeHtml(t.total_latency_ms) + 'ms' : 'Unavailable'}</span>
           </div>
         </div>
 
@@ -429,10 +432,10 @@
 
         <div class="aegis-gate-box ${gateClass}">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
-            <strong style="color:${gateColor};font-family:monospace">INDEPENDENT AEGIS POLICY GATE (${gate.policy_version || 'risk_policy.v2'}) · ${gate.status || 'APPROVED'}</strong>
-            <span style="font-size:11px;color:var(--text-muted)">${gate.role || 'Independent Non-Voting Policy Gate'}</span>
+            <strong style="color:${gateColor};font-family:monospace">INDEPENDENT AEGIS POLICY GATE (${escapeHtml(gate.policy_version || 'Unavailable')}) · ${escapeHtml(gate.status || 'Unavailable')}</strong>
+            <span style="font-size:11px;color:var(--text-muted)">${escapeHtml(gate.role || 'Unavailable')}</span>
           </div>
-          <div style="color:var(--text);line-height:1.45">${gate.summary || ''}</div>
+          <div style="color:var(--text);line-height:1.45">${escapeHtml(gate.summary || '')}</div>
         </div>
         ${referralsHtml}
       </div>
@@ -450,14 +453,24 @@
         const benchBadge = document.getElementById('nexusBenchBadge');
         if (benchBadge && st.benchmark_summary) {
           benchBadge.textContent = `Benchmark: ${st.benchmark_summary.overall_cases_passed} (${st.benchmark_summary.overall_pass_rate_pct}%)`;
+        } else if (benchBadge) {
+          benchBadge.textContent = 'Benchmark unavailable';
         }
         const tracesEl = document.getElementById('dagTracesContainer');
         if (tracesEl && Array.isArray(st.recent_traces)) {
-          tracesEl.innerHTML = st.recent_traces.slice(0, 4).map(renderFullDagTraceCard).join('');
+          tracesEl.innerHTML = st.recent_traces.length
+            ? st.recent_traces.slice(0, 4).map(renderFullDagTraceCard).join('')
+            : 'No recent coordination traces are recorded.';
         }
+      } else {
+        const benchBadge = document.getElementById('nexusBenchBadge');
+        const tracesEl = document.getElementById('dagTracesContainer');
+        if (benchBadge) benchBadge.textContent = 'Nexus status unavailable';
+        if (tracesEl) tracesEl.textContent = 'Recent coordination traces are unavailable from the API.';
       }
       if (matrixRes.ok) {
         const mat = await matrixRes.json();
+        setKpi('messages_per_hour', mat.tier2_promoted_count ?? 'Unavailable');
         const t2El = document.getElementById('tier2KnowledgeContainer');
         const t1El = document.getElementById('tier1AuditContainer');
 
@@ -468,13 +481,13 @@
             : items.slice(0, 6).map((k) => `
               <div class="matrix-item">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
-                  <span style="font-family:monospace;font-size:11px;font-weight:700;color:#10b981">${k.knowledge_id} · PROMOTED TIER-2</span>
-                  <span style="font-family:monospace;font-size:11px;color:#94a3b8">Quality ${Number(k.quality_score || 0.92).toFixed(2)} · ${k.unique_provenance_sources_count || 1} Provenance Src</span>
+                  <span style="font-family:monospace;font-size:11px;font-weight:700;color:#10b981">${escapeHtml(k.knowledge_id)} · PROMOTED TIER-2</span>
+                  <span style="font-family:monospace;font-size:11px;color:#94a3b8">Quality ${(k.quality_score != null && Number.isFinite(Number(k.quality_score)) ? Number(k.quality_score).toFixed(2) : 'Unavailable')} · ${k.unique_provenance_sources_count ?? 'Unavailable'} Provenance Src</span>
                 </div>
-                <div style="font-weight:700;font-size:12.5px;color:var(--text);margin-bottom:4px">Query: “${k.query}”</div>
-                <div style="font-size:12px;color:var(--text-muted)">${k.validated_conclusion || ''}</div>
+                <div style="font-weight:700;font-size:12.5px;color:var(--text);margin-bottom:4px">Query: “${escapeHtml(k.query)}”</div>
+                <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(k.validated_conclusion || '')}</div>
                 <div style="margin-top:6px;font-size:11px;color:#60a5fa;font-family:monospace">
-                  Agents: ${(k.consulted_agents || []).map((a) => a.toUpperCase()).join(' + ')} · Aegis Gate: ${k.aegis_gate_status || 'APPROVED'}
+                  Agents: ${escapeHtml((k.consulted_agents || []).map((a) => a.toUpperCase()).join(' + '))} · Aegis Gate: ${escapeHtml(k.aegis_gate_status || 'Unavailable')}
                 </div>
               </div>
             `).join('');
@@ -489,26 +502,37 @@
                 <span style="font-family:monospace;font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.16);color:#10b981;font-weight:700">${integrity.synced ? 'IN SYNC' : 'RECONCILING'}</span>
               </div>
               <div style="font-size:12px;color:var(--text)">
-                • <strong>V2 Realized Trades:</strong> <code>${integrity.v2_trades_entered ?? 0}</code> Entered / <code>${integrity.v2_trades_closed ?? 0}</code> Closed (Scout dimension weights at uniform prior <code>0.1667</code>, conviction floor <code>${integrity.scout_conviction_floor ?? 0.50}</code>)<br/>
-                • <strong>Shadow Replays:</strong> Invalidated <code>+67.764R ASX200</code> price-scale outlier quarantined from persisted Scout state; shadow summaries isolated from live conviction scoring.
+                • <strong>Oracle V2 trades in ledger:</strong> <code>${integrity.v2_trades_entered ?? 'Unavailable'}</code> entered / <code>${integrity.v2_trades_closed ?? 'Unavailable'}</code> closed. Scout state: <code>${integrity.synced === true ? 'reconciled' : integrity.synced === false ? 'reconciliation required' : 'unavailable'}</code>.<br/>
+                • <strong>Counterfactual replays:</strong> <code>${integrity.settled_shadow_replays ?? 'Unavailable'}</code> settled; <code>${integrity.invalidated_replays_count ?? 'Unavailable'}</code> invalidated. Live-scoring eligibility: <code>${integrity.shadow_summary_ready_for_live_scoring === true ? 'eligible' : integrity.shadow_summary_ready_for_live_scoring === false ? 'not eligible' : 'unavailable'}</code>.
               </div>
             </div>
           `;
           const t1Items = (mat.tier1_episodic_traces || []).slice(0, 5).map((tr) => `
             <div class="matrix-item">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                <span style="font-family:monospace;font-size:11px;font-weight:700;color:#60a5fa">${tr.trace_id}</span>
+                <span style="font-family:monospace;font-size:11px;font-weight:700;color:#60a5fa">${escapeHtml(tr.trace_id || 'Unavailable')}</span>
                 <span style="font-family:monospace;font-size:10.5px;color:${tr.promoted_to_tier2 ? '#10b981' : '#f59e0b'}">${tr.promoted_to_tier2 ? '→ Promoted to Tier-2' : 'Tier-1 Audit Only'}</span>
               </div>
-              <div style="font-size:12px;font-weight:600;color:var(--text);margin:3px 0">“${tr.query}”</div>
-              <div style="font-size:11px;color:var(--text-muted)">${tr.writeback_reason || ''}</div>
+              <div style="font-size:12px;font-weight:600;color:var(--text);margin:3px 0">“${escapeHtml(tr.query || '')}”</div>
+              <div style="font-size:11px;color:var(--text-muted)">${escapeHtml(tr.writeback_reason || '')}</div>
             </div>
           `).join('');
           t1El.innerHTML = integrityHtml + t1Items;
         }
+      } else {
+        setKpi('messages_per_hour', 'Unavailable');
+        const t2El = document.getElementById('tier2KnowledgeContainer');
+        const t1El = document.getElementById('tier1AuditContainer');
+        if (t2El) t2El.textContent = 'Chronicle promoted knowledge is unavailable from the API.';
+        if (t1El) t1El.textContent = 'Chronicle episodic traces and Oracle reconciliation are unavailable from the API.';
       }
     } catch (err) {
       console.warn('Nexus workspace load warning:', err);
+      setKpi('messages_per_hour', 'Unavailable');
+      ['dagTracesContainer', 'tier2KnowledgeContainer', 'tier1AuditContainer'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = 'This Nexus data is unavailable from the API.';
+      });
     }
   }
 
@@ -539,6 +563,7 @@
         body: JSON.stringify({ query: q }),
       });
       const d = await r.json();
+      if (!r.ok || d.status === 'unavailable') throw new Error(d.detail || d.message || ('HTTP ' + r.status));
       loadDiv.remove();
 
       const aDiv = document.createElement('div');
@@ -592,17 +617,20 @@
       setKpi('errors_today', d['errors_today'] != null ? d['errors_today'] : (d.metrics && d.metrics['errors_today']), d.deltas && d.deltas['errors_today']);
       setKpi('throughput', d['throughput'] != null ? d['throughput'] : (d.metrics && d.metrics['throughput']), d.deltas && d.deltas['throughput']);
 
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
-        const el = document.getElementById('section_primary');
-        if (el) el.innerHTML = d[keys[0]].slice(0, 8).map(renderFeedItem).join('');
-      }
-      if (keys.length > 1) {
-        const el2 = document.getElementById('section_secondary');
-        if (el2) el2.innerHTML = d[keys[1]].slice(0, 9).map(renderFeedItem).join('');
-      }
+      const orchestration = Array.isArray(d.orchestration_feed) ? d.orchestration_feed : [];
+      const health = Array.isArray(d.agent_health_feed) ? d.agent_health_feed : [];
+      const primary = document.getElementById('section_primary');
+      const secondary = document.getElementById('section_secondary');
+      if (primary) primary.innerHTML = orchestration.length ? orchestration.slice(0, 8).map(renderFeedItem).join('') : '<div class="offline-msg">No recorded coordination traces are available.</div>';
+      if (secondary) secondary.innerHTML = health.length ? health.slice(0, 9).map(renderFeedItem).join('') : '<div class="offline-msg">Live agent health is unavailable from this dashboard feed.</div>';
       if (typeof injectIcons === 'function') injectIcons();
-    } catch(e) {}
+    } catch(e) {
+      ['agents_active', 'tasks_queued', 'messages_per_hour', 'uptime', 'errors_today', 'throughput'].forEach(key => setKpi(key, 'Unavailable'));
+      const primary = document.getElementById('section_primary');
+      const secondary = document.getElementById('section_secondary');
+      if (primary) primary.textContent = 'Nexus coordination records are unavailable.';
+      if (secondary) secondary.textContent = 'Live agent health is unavailable.';
+    }
   }
 
   // Slide-in Drawer Chat

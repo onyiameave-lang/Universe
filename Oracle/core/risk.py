@@ -47,6 +47,7 @@ BOUNDARY BUG FIX (2026-07-17):
 from __future__ import annotations
 
 import os
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -306,6 +307,11 @@ class RiskManager:
         self.risk_per_trade = risk_per_trade
         self.max_positions  = max_positions
         self.max_drawdown   = max_drawdown
+        # Learned policy may tighten these values, but cannot relax the
+        # operator-configured limits captured when the risk manager starts.
+        self.hard_risk_per_trade = float(risk_per_trade)
+        self.hard_max_positions = max(0, int(max_positions))
+        self.hard_max_drawdown = float(max_drawdown)
         self.paper          = PAPER_TRADING
 
         # Pick paper vs live variants for every threshold.
@@ -315,17 +321,46 @@ class RiskManager:
             self.daily_loss_limit = daily_loss_limit
         else:
             self.daily_loss_limit = _DAILY_LOSS_PAPER if self.paper else _DAILY_LOSS_LIVE
+        self.hard_daily_loss_limit = float(self.daily_loss_limit)
 
         self.confidence_floor = _CONF_FLOOR_PAPER if self.paper else _CONF_FLOOR_LIVE
         self.max_lot_pct      = _MAX_LOT_PCT_PAPER if self.paper else _MAX_LOT_PCT_LIVE
         self.max_currency_pct = _MAX_CURRENCY_PCT_PAPER if self.paper else _MAX_CURRENCY_PCT_LIVE
+        self.hard_max_currency_pct = float(self.max_currency_pct)
         self.loss_cooldown_sec = _LOSS_COOLDOWN_SEC_PAPER if self.paper else _LOSS_COOLDOWN_SEC_LIVE
         self.win_cooldown_sec = _WIN_COOLDOWN_SEC_PAPER if self.paper else _WIN_COOLDOWN_SEC_LIVE
         self.max_trades_per_symbol_per_day = (
             _MAX_TRADES_PER_SYMBOL_PER_DAY_PAPER if self.paper else _MAX_TRADES_PER_SYMBOL_PER_DAY_LIVE)
+        self.hard_max_trades_per_symbol_per_day = int(self.max_trades_per_symbol_per_day)
         self.stop_mult        = _STOP_MULT
         self.target_mult      = _TARGET_MULT
         self.reward_risk      = _REWARD_RISK
+        self._broker_snapshot_initialized = False
+
+    def sync_broker_account(self, *, equity: float, daily_pnl: float) -> bool:
+        """Use a validated broker snapshot as the live risk book's equity.
+
+        The first broker snapshot establishes the process-local high-water mark
+        instead of comparing a real account against the generic $10,000 default.
+        Later snapshots update equity and preserve the observed peak. The caller
+        supplies P&L relative to its current UTC-day baseline.
+        """
+        try:
+            equity_value = float(equity)
+            daily_pnl_value = float(daily_pnl)
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if (not math.isfinite(equity_value) or equity_value <= 0
+                or not math.isfinite(daily_pnl_value)):
+            return False
+        if not self._broker_snapshot_initialized:
+            self.portfolio.peak_equity = equity_value
+            self._broker_snapshot_initialized = True
+        else:
+            self.portfolio.peak_equity = max(self.portfolio.peak_equity, equity_value)
+        self.portfolio.equity = equity_value
+        self.portfolio.daily_pnl = daily_pnl_value
+        return True
 
     # ---- sizing ----
 
@@ -398,11 +433,20 @@ class RiskManager:
         # A candidate-specific learned floor may tighten the normal risk
         # threshold, but must never relax it. Keep this per call so concurrent
         # symbol evaluations cannot overwrite the shared manager setting.
-        active_confidence_floor = self.confidence_floor
-        if confidence_floor is not None:
+        configured_confidence_floor = float(self.confidence_floor)
+        learned_confidence_floor = (
+            float(confidence_floor) if confidence_floor is not None else None
+        )
+        active_confidence_floor = configured_confidence_floor
+        if learned_confidence_floor is not None:
             active_confidence_floor = max(
-                active_confidence_floor, float(confidence_floor)
+                configured_confidence_floor, learned_confidence_floor
             )
+        confidence_floor_facts = {
+            "confidence_floor": active_confidence_floor,
+            "configured_confidence_floor": configured_confidence_floor,
+            "learned_confidence_floor": learned_confidence_floor,
+        }
 
         # drawdown kill-switch
         if self.portfolio.drawdown >= self.max_drawdown:
@@ -449,10 +493,14 @@ class RiskManager:
         conf_rounded = round(confidence, 4)
         if conf_rounded < active_confidence_floor:
             mode_label = "paper" if self.paper else "live"
+            learned_detail = (
+                f", learned={learned_confidence_floor:.4f}"
+                if learned_confidence_floor is not None else ""
+            )
             rejections.append(
-                f"confidence {conf_rounded:.4f} below {mode_label} floor "
-                f"{active_confidence_floor:.4f} (ORACLE_CONFIDENCE_FLOOR"
-                f"{'_LIVE' if not self.paper else ''})")
+                f"confidence {conf_rounded:.4f} below effective {mode_label} floor "
+                f"{active_confidence_floor:.4f} (configured={configured_confidence_floor:.4f}"
+                f"{learned_detail})")
 
         # need volatility to size
         if atr <= 0:
@@ -461,11 +509,13 @@ class RiskManager:
         if rejections:
             return {"approved": False, "reasons": rejections,
                     "paper_trading": self.paper,
-                    "confidence_floor": active_confidence_floor,
+                    **confidence_floor_facts,
                     "mode": "paper" if self.paper else "live"}
 
         st   = self.stop_target(entry, direction, atr)
         size = self.size_position(entry, st["stop"], confidence)
+        risk_budget = self.portfolio.equity * self.risk_per_trade
+        risk_budget *= self._confidence_size_multiplier(confidence)
 
         # exposure cap: single trade notional <= max_lot_pct of equity
         notional = abs(size * entry)
@@ -485,7 +535,7 @@ class RiskManager:
         if concentration_reason:
             return {"approved": False, "reasons": [concentration_reason],
                     "paper_trading": self.paper,
-                    "confidence_floor": active_confidence_floor,
+                    **confidence_floor_facts,
                     "mode": "paper" if self.paper else "live"}
 
         return {
@@ -499,9 +549,11 @@ class RiskManager:
             "notional":      round(notional, 2),
             "stop":          st["stop"],
             "target":        st["target"],
-            "risk_amount":   round(self.portfolio.equity * self.risk_per_trade, 2),
+            # Maximum account-currency loss budget the broker adapter must
+            # independently verify using its contract/FX conversion rules.
+            "risk_amount":   round(risk_budget, 2),
             "reward_risk":   self.reward_risk,
-            "confidence_floor": active_confidence_floor,
+            **confidence_floor_facts,
         }
 
     # ---- execution (paper by default) ----

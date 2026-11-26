@@ -247,12 +247,18 @@ class CTraderBroker:
             from ctrader_open_api import Client, Protobuf, TcpProtocol, EndPoints
             from ctrader_open_api.messages.OpenApiMessages_pb2 import (
                 ProtoOAApplicationAuthReq, ProtoOAAccountAuthReq, ProtoOASymbolsListReq,
-                ProtoOASymbolByIdReq, ProtoOATraderReq, ProtoOAAssetListReq,
+                ProtoOASymbolByIdReq, ProtoOATraderReq, ProtoOAGetPositionUnrealizedPnLReq,
+                ProtoOAAssetListReq,
                 ProtoOAApplicationAuthRes, ProtoOAAccountAuthRes,
                 ProtoOAErrorRes,
             )
         except ImportError as exc:
-            self.status = BrokerStatus(connected=False, reason=f"ctrader-open-api not installed: {exc}")
+            reason = str(exc)
+            if "No module named 'ctrader_open_api'" in reason:
+                reason = f"ctrader-open-api is not installed: {reason}"
+            else:
+                reason = f"ctrader-open-api is incompatible or incomplete: {reason}"
+            self.status = BrokerStatus(connected=False, reason=reason)
             return self.status.to_dict()
 
         from twisted.internet import reactor as _reactor
@@ -342,7 +348,7 @@ class CTraderBroker:
         self._load_symbols(ProtoOASymbolsListReq)
         self._load_assets(ProtoOAAssetListReq)
 
-        account_info = self._fetch_balance(ProtoOATraderReq)
+        account_info = self._fetch_balance(ProtoOATraderReq, ProtoOAGetPositionUnrealizedPnLReq)
         if account_info is None:
             # An authenticated socket without a confirmed account snapshot is
             # not a usable trading connection. In particular, do not report
@@ -652,8 +658,16 @@ class CTraderBroker:
             deals = []
             for deal in getattr(payload, "deal", []):
                 symbol_id = int(getattr(deal, "symbolId", 0) or 0)
+                try:
+                    has_close_detail = bool(deal.HasField("closePositionDetail"))
+                except (AttributeError, ValueError):
+                    has_close_detail = False
+                close_detail = getattr(deal, "closePositionDetail", None) if has_close_detail else None
+                close_money_digits = (int(getattr(close_detail, "moneyDigits", 0) or 0)
+                                      if close_detail is not None else None)
                 deals.append({
                     "deal_id": int(getattr(deal, "dealId", 0) or 0),
+                    "position_id": int(getattr(deal, "positionId", 0) or 0),
                     "symbol_id": symbol_id,
                     "symbol": self._symbol_name_by_id.get(symbol_id),
                     "execution_timestamp_ms": int(getattr(deal, "executionTimestamp", 0) or 0),
@@ -665,6 +679,16 @@ class CTraderBroker:
                     "commission_raw": int(getattr(deal, "commission", 0) or 0),
                     "money_digits": int(getattr(deal, "moneyDigits", 0) or 0),
                     "base_to_usd_conversion_rate": getattr(deal, "baseToUsdConversionRate", None),
+                    "close_detail": ({
+                        "entry_price": getattr(close_detail, "entryPrice", None),
+                        "gross_profit_raw": int(getattr(close_detail, "grossProfit", 0) or 0),
+                        "swap_raw": int(getattr(close_detail, "swap", 0) or 0),
+                        "commission_raw": int(getattr(close_detail, "commission", 0) or 0),
+                        "balance_raw": int(getattr(close_detail, "balance", 0) or 0),
+                        "closed_volume_cents": int(getattr(close_detail, "closedVolume", 0) or 0),
+                        "money_digits": close_money_digits,
+                        "pnl_conversion_fee_raw": int(getattr(close_detail, "pnlConversionFee", 0) or 0),
+                    } if close_detail is not None else None),
                 })
             if not bool(getattr(payload, "hasMore", False)):
                 return {"status": "complete", "deals": deals}
@@ -1038,7 +1062,9 @@ class CTraderBroker:
 
         payload = self._send_and_wait(req)
         if payload is None:
-            return {"status": "error", "reason": "order timed out waiting for execution event"}
+            return {"status": "unknown",
+                    "reason": "order outcome is uncertain after execution-event timeout; reconcile broker positions before retrying",
+                    "symbol": symbol_name}
 
         position_id = getattr(getattr(payload, "position", None), "positionId", None)
         fill_price = getattr(getattr(payload, "position", None), "price", None) or getattr(payload, "executionPrice", 0.0)
@@ -1048,8 +1074,16 @@ class CTraderBroker:
                         direction, symbol_name, reason)
             return {"status": "rejected", "reason": reason}
 
+        position_trade_data = getattr(getattr(payload, "position", None), "tradeData", None)
+        filled_volume_cents = getattr(position_trade_data, "volume", None)
+        if not isinstance(filled_volume_cents, (int, float)) or filled_volume_cents <= 0:
+            filled_volume_cents = req.volume
         return {"status": "filled", "order": position_id, "price": fill_price,
-                "volume": float(plan["size"]), "sl": plan.get("stop"), "tp": plan.get("target"),
+                "volume": float(filled_volume_cents) / 100.0,
+                "volume_units": float(filled_volume_cents) / 100.0,
+                "requested_volume_units": raw_volume,
+                "volume_protocol_cents": int(filled_volume_cents),
+                "sl": plan.get("stop"), "tp": plan.get("target"),
                 "symbol": symbol_name, "account_type": self.status.account_type}
 
     def close_position(self, ticket: int) -> Dict[str, Any]:
@@ -1137,22 +1171,22 @@ class CTraderBroker:
         updates can never actually trigger, since equity would always
         equal its own starting value).
 
-        Honest remaining limitation: this refreshes BALANCE (realized
-        P&L — e.g. a closed trade's profit/loss), but not intra-trade
-        floating P&L from currently-open positions, which needs a separate
-        ProtoOAGetPositionUnrealizedPnLReq call not yet built. So a
-        kill-switch check using this WILL catch realized losses correctly,
-        but won't see an open position's floating drawdown until it closes.
+        Equity includes Spotware-calculated net unrealized P&L for open
+        positions, converted to the account deposit currency by cTrader.
+        The API's net unrealized P&L excludes potential closing commission.
         On a failed refresh, `account_info_available` is false and the last
         known numeric balance/equity is retained rather than replaced by zero.
         """
         if not self.status.connected:
             return self.status.to_dict()
         try:
-            from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOATraderReq
+            from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+                ProtoOATraderReq,
+                ProtoOAGetPositionUnrealizedPnLReq,
+            )
         except ImportError:
             return self.status.to_dict()
-        account_info = self._fetch_balance(ProtoOATraderReq)
+        account_info = self._fetch_balance(ProtoOATraderReq, ProtoOAGetPositionUnrealizedPnLReq)
         self.status.account_info_available = account_info is not None
         if account_info is not None:
             balance, equity, currency = account_info
@@ -1161,10 +1195,10 @@ class CTraderBroker:
             self.status.currency = currency
         return self.status.to_dict()
 
-    def _fetch_balance(self, ProtoOATraderReq) -> Optional[Tuple[float, float, str]]:
+    def _fetch_balance(self, ProtoOATraderReq, ProtoOAGetPositionUnrealizedPnLReq) -> Optional[Tuple[float, float, str]]:
         """Shared by connect() and account() -- sends ProtoOATraderReq and
-        returns (balance, equity, currency), or None if the refresh failed.
-        See account()'s docstring for the honest limitation on equity."""
+        calculates equity from the server balance and server-calculated open
+        position P&L in the account's deposit currency."""
         try:
             trader = None
             for attempt in (1, 2):
@@ -1182,14 +1216,32 @@ class CTraderBroker:
                 scale = 10 ** money_digits
                 raw_balance = getattr(trader, "balance", 0)
                 balance = raw_balance / scale
-                equity = balance   # no open positions' floating P&L folded in yet — see docstring above
+                pnl_req = ProtoOAGetPositionUnrealizedPnLReq()
+                pnl_req.ctidTraderAccountId = self._account_id
+                pnl_payload = self._send_and_wait(pnl_req, timeout=_DEFAULT_TIMEOUT_SEC)
+                if pnl_payload is None:
+                    log.warning("cTrader: unrealized P&L refresh timed out; account equity is unavailable")
+                    return None
+                pnl_digits = int(getattr(pnl_payload, "moneyDigits", money_digits) or money_digits)
+                pnl_scale = 10 ** pnl_digits
+                pnl_rows = getattr(pnl_payload, "positionUnrealizedPnL", [])
+                unrealized_pnl = sum(
+                    float(getattr(row, "netUnrealizedPnL", 0)) / pnl_scale
+                    for row in pnl_rows
+                )
+                if not math.isfinite(unrealized_pnl):
+                    log.warning("cTrader: unrealized P&L response was non-finite")
+                    return None
+                # Spotware returns net unrealized P&L in the account deposit
+                # currency. Its net value excludes potential closing commission.
+                equity = balance + unrealized_pnl
                 deposit_asset_id = getattr(trader, "depositAssetId", None)
                 currency = self._asset_name_by_id.get(int(deposit_asset_id), "") if deposit_asset_id is not None else ""
                 if not currency and deposit_asset_id is not None:
                     currency = f"asset_id:{deposit_asset_id}"
                 return balance, equity, currency
             else:
-                log.warning("cTrader: account info fetch timed out twice; keeping last known balance/equity")
+                log.warning("cTrader: account info fetch timed out twice")
         except Exception as exc:
             log.warning("cTrader: could not fetch account balance/equity: %s", exc)
         return None

@@ -1,4 +1,5 @@
 import json
+import time
 
 from Oracle.execution import chronicle_position_log
 from Oracle.execution.chronicle_position_log import ChroniclePositionLog
@@ -78,3 +79,26 @@ def test_explicit_chronicle_error_status_uses_local_fallback(
     writer.log_modified("EURUSD", "EURUSD", 244400714, sl=1.13429)
 
     assert len(fallback.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_recent_open_guard_ignores_stale_unmatched_position_event():
+    writer = ChroniclePositionLog(chronicle_agent=_SuccessfulChronicle())
+    writer._query_recent_events = lambda _symbol: [{
+        "event": "position_opened",
+        "ticket": 123,
+        "ts": time.time() - 3600,
+    }]
+
+    assert writer.has_open_position("EURUSD") is True
+    assert writer.has_open_position("EURUSD", max_age_sec=60) is False
+
+
+def test_recent_open_guard_still_blocks_a_fresh_unreconciled_fill():
+    writer = ChroniclePositionLog(chronicle_agent=_SuccessfulChronicle())
+    writer._query_recent_events = lambda _symbol: [{
+        "event": "position_opened",
+        "ticket": 123,
+        "ts": time.time(),
+    }]
+
+    assert writer.has_open_position("EURUSD", max_age_sec=60) is True

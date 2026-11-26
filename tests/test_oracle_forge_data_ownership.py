@@ -38,8 +38,10 @@ class _Confidence:
 def test_forge_owned_research_does_not_fetch_oracle_market_data(monkeypatch):
     agent = OracleAgent.__new__(OracleAgent)
     agent.forge = _Forge()
-    agent.evolution = _Evolution()
-    agent.lab = _Lab()
+    # The Forge-owned path must use already-loaded incumbent state and must
+    # not instantiate legacy V1 stores as a side effect.
+    agent._evolution = _Evolution()
+    agent._lab = _Lab()
     agent._champion_confidence = _Confidence()
     agent._research_bundle_cache = {}
     agent.risk = type("Risk", (), {"max_drawdown": 0.2})()

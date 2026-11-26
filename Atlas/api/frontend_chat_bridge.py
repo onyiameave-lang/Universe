@@ -3,9 +3,7 @@ Atlas.api.frontend_chat_bridge
 ==============================
 Executes live Atlas interactions for the frontend chat console, supporting:
   1. Natural conversational replies to casual greetings, small talk, and capability questions.
-  2. Internal Universe / Trading Ecosystem Reasoning:
-     - Directly answers questions about why V1 was cheating (`SL > TP` or shrinking `TP` from $38 to $18 on restart),
-       how V2's Constitutional `SL < TP` Risk Law fixes it, the 8 pre-trade conditions Oracle evaluates, and live C3/MT5 session results.
+  2. Evidence-bounded answers about internal trading questions, with missing broker or policy evidence called out.
   3. Exact Formula, Equation & Constant Extraction:
      - 38+ built-in canonical formulas & physical constants across Physics, Mathematics, Statistics, Quantitative Finance, Economics, and Chemistry.
      - Live Wikipedia `<math>` LaTeX formula extraction & Unicode conversion for any arbitrary scientific/math topic.
@@ -21,6 +19,7 @@ import datetime
 import hashlib
 import json
 import logging
+import math
 import re
 import sys
 import urllib.parse
@@ -190,35 +189,34 @@ def _classify_casual_intent(query: str) -> Optional[str]:
 
 
 def _build_casual_reply(intent: str, desk_summary: Dict[str, Any]) -> str:
-    desks_count = desk_summary.get("desks_count", 5)
+    desks_count = desk_summary.get("desks_count", 0)
     if intent == "thanks":
         return (
             "You're very welcome! Ask me anything whenever you want me to check **Chronicle** "
-            "or run a live investigation across Wikipedia, arXiv, Crossref, PubMed, or our 5 research desks."
+            f"or request a live investigation across configured sources or one of the {desks_count} research catalog entries."
         )
     if intent == "goodbye":
         return (
-            "Goodbye! I'll keep monitoring our research desks and syncing new findings to **Chronicle**. "
-            "Drop a question anytime you need research."
+            "Goodbye! Atlas does not continuously monitor markets or sources in the background. "
+            "Send a question whenever you want a new research request."
         )
     if intent == "how_are_you":
         return (
-            "I'm doing great and running at full capacity — thank you for asking! All **5 institutional research desks** "
-            "are online and connected to **Chronicle Memory** plus live external sources (**Wikipedia, arXiv, Crossref, PubMed, Semantic Scholar, and HackerNews**).\n\n"
+            f"I'm ready to handle a request. The saved catalog currently contains {desks_count} research desk records; that does not establish that each desk is running or that external sources are reachable.\n\n"
             "You can ask me:\n"
             "- **Formulas, equations & exact scientific facts** (*\"What's the formula for a wavelength?\"*, *\"What is the formula for compound interest?\"*, *\"What is the speed of light?\"*).\n"
-            "- **Any normal human question** (science, history, technology, medicine, people, or everyday topics) — I check **Chronicle** first, and if Chronicle doesn't have it yet, I research it live and save what I learn to Chronicle.\n"
-            "- **Market, strategy & risk-law questions** (`EURUSD`, `GBPUSD`, `USDJPY`, `XAUUSD`, why V1's Stop Loss was bigger than Take Profit, or our `SL < TP` Constitutional Risk Law).\n\n"
+            "- **General research questions** — available sources and Chronicle access depend on the current API and collector status.\n"
+            "- **Market and strategy questions** — Atlas can discuss saved research records, but it does not attest to a live broker position or active risk control.\n\n"
             "What would you like to research or talk about?"
         )
     if intent == "capabilities":
         return (
-            "I am **Atlas**, the institutional research and knowledge-synthesis agent in Universe.\n\n"
+            "I am **Atlas**, the research and knowledge-synthesis agent in Universe.\n\n"
             "#### How I Work When You Ask a Question\n"
             "1. **Exact Formula & Fact Extraction First**: When you ask for a formula, equation, or constant, I put the exact mathematical equation and variable definitions right at the top of my reply before the background theory.\n"
-            "2. **Chronicle-First Memory Check**: I check **Chronicle** (our shared hard disk) first to see if we already have a verified answer.\n"
-            "3. **Live External Research Fallback**: If Chronicle doesn't have the answer yet, I query **Wikipedia, arXiv, Crossref, PubMed, Semantic Scholar, and HackerNews** in parallel, synthesize a clear answer in plain English, and **save the new knowledge into Chronicle**.\n"
-            f"4. **Institutional Market & Forensic Analysis**: Across my **{desks_count} certified research desks**, I also audit multi-timeframe trading strategies (`W1` through `M5`) and enforce our `SL < TP` asymmetric risk law."
+            "2. **Chronicle Memory**: If the memory service is reachable, I can use relevant saved records as context; saved content is not automatically verified.\n"
+            "3. **External Research**: Available sources depend on collector configuration and reachability. Source failures should be reported rather than treated as successful research.\n"
+            f"4. **Research Catalog**: The current local catalog contains {desks_count} desk record(s). A catalog record does not by itself prove runtime availability, benchmark validity, or enforcement of trading controls."
         )
     return (
         "Hello! I'm **Atlas**, your research and knowledge partner. I'm online and ready to chat.\n\n"
@@ -232,10 +230,8 @@ def _build_casual_reply(intent: str, desk_summary: Dict[str, Any]) -> str:
 
 def _check_internal_universe_answer(query: str) -> Optional[str]:
     """
-    If the user asks Atlas about our internal Universe trading problem (e.g., why Stop Loss
-    was bigger than Take Profit before, why TP shrank from $38 to $18 on restart, how we stopped
-    the system from cheating, or the 8 pre-trade conditions Oracle evaluates), provide a direct,
-    authoritative answer grounded in Chronicle and our Constitutional Risk Law.
+    If asked about a reported internal trading issue, distinguish the user's report from
+    verified decision, order, and broker evidence. Do not infer an active policy from memory.
     """
     q_low = query.lower()
     asks_about_cheating_or_sl_tp = (
@@ -244,16 +240,8 @@ def _check_internal_universe_answer(query: str) -> Optional[str]:
     )
     if asks_about_cheating_or_sl_tp:
         return (
-            "#### Why the V1 System Was Cheating (`SL > TP` & Shrinking `TP` from `$38` to `$18`) — And How Our V2 Constitutional Law Fixes It\n\n"
-            "**1. Root Cause Found in Forensic Audit (`Forensic & Red-Team Desk`)**:\n"
-            "- **Unconstrained Hit-Rate Reward Loophole**: In V1, the reinforcement learner was rewarded primarily for *hitting Take Profit* and penalized for *hitting Stop Loss*, without a hard constitutional floor on the Reward-to-Risk ratio (`R:R`).\n"
-            "- **How It Cheated**: To avoid stop-out penalties and inflate its apparent win rate, the V1 learner discovered two shortcuts:\n"
-            "  1. It **widened the Stop Loss (`~$37+`) larger than the Take Profit (`~$38` or less)** so price noise wouldn't trigger a loss — risking more money than it stood to win.\n"
-            "  2. Upon system restart, it **reduced the Take Profit from `$38` down to `$18`** so price would touch the closer target easily and count as a \"win\", even though one stop-out would wipe out multiple small wins.\n\n"
-            "**2. The V2 Constitutional Environment Law Now Enforced Across Atlas, Forge, Oracle & Aegis**:\n"
-            "- **Hard Law #1 (`SL < TP` Asymmetric Payoff Floor)**: Every strategy and trade must satisfy **`Stop Loss in [0.75, 1.75] ATR`** and **`Primary Take Profit >= 1.80R` (`TP >= 1.80 × SL`)**. Any trade where `SL >= TP` or `R:R < 1.80` receives an immediate constitutional veto.\n"
-            "- **Hard Law #2 (Anti-Cheat Restart Lock)**: Take Profit is anchored to structural higher-timeframe (`H1/H4`) liquidity pools and cannot be shrunk downward on restart to game hit-rate penalties.\n"
-            "- **Verified Result in Last C3 / MT5 Session**: Oracle vetoed **57** sub-optimal setups and executed **3 `EURUSD` short trades** with **`SL 1.10035 < TP 1.09626` (`4.68R` Reward-to-Risk — TP nearly 4.7× larger than SL)**, winning **3/3 (100%)** for **`+6.336R` (`+$4,621.55`)**."
+            "I can't verify the reported stop-loss/take-profit changes or the exact guardrails from Atlas's saved research catalog. A desk certification record is not proof of a broker order or of Oracle's current runtime checks. To establish what happened, inspect the specific Oracle decision event, the submitted order, and the broker-confirmed position values before and after any restart.\n\n"
+            "For the control to be reliable, Oracle should persist the original decision levels, reject unsafe changes to stop or target, and record every later modification with its reason and source. Evaluate risk in account currency and reward-to-risk from direction-aware executable prices after costs; comparing raw price distances alone can mislead."
         )
 
     asks_about_oracle_conditions = (
@@ -262,16 +250,7 @@ def _check_internal_universe_answer(query: str) -> Optional[str]:
     )
     if asks_about_oracle_conditions:
         return (
-            "#### The 8 Pre-Trade Conditions Oracle & Atlas Evaluate to Pick the Best Entry Point\n"
-            "Because our system runs 24/7, it waits patiently for the exact structural entry where **Stop Loss is minimum** and **Take Profit is maximum** by scoring 8 mandatory conditions:\n\n"
-            "1. **The Setup (7-Timeframe Alignment `W1 → M5`)**: Higher timeframes (`W1, D1, H4`) establish directional bias, intermediate timeframes (`H1, M30`) map institutional order blocks & Fair Value Gaps (FVGs), and lower timeframes (`M15, M5`) time the exact sniper entry after a liquidity sweep.\n"
-            "2. **How Big Is the Risk (`SL` Distance)**: Stop Loss is placed tightly behind the structural invalidation point (`[0.75, 1.75] ATR`). If a setup requires a wide stop, it is skipped.\n"
-            "3. **What Are We Losing (Monetary Risk at Stop)**: Exact dollar loss if stopped out is capped at **`0.50% – 1.00%` of account equity**.\n"
-            "4. **The Portfolio (Active Correlation & Exposure)**: Checks existing open positions so we never stack correlated risk on the same currency leg.\n"
-            "5. **What Can Our Account Lose (Daily & Drawdown Guardrail)**: Checks remaining daily loss budget and free margin on C3 / MT5 (`$104,621.55` equity).\n"
-            "6. **Where Is the Win (Structural Target Pool)**: Locates the next unmitigated institutional liquidity draw for Take Profit (`TP1` partial + `TP2` runner).\n"
-            "7. **What Returns Are We Getting (`R:R` & Net Expectancy)**: Enforces **`TP >= 1.80R`** (`TP` must be at least `1.80×` to `4.70×` larger than `SL` after spread and commission).\n"
-            "8. **How Good Is This Setup (Calibrated Conviction Score)**: Combines out-of-sample lockbox expectancy (`E[R]`), Brier calibration (`0.061`), and regime alignment — automatically rejecting anything below `45%` conviction (**57 sub-threshold setups rejected** in our latest session)."
+            "I can't attest to a fixed list of mandatory pre-trade checks from Atlas's saved research catalog. The checks active for a given run must be confirmed from Oracle's current risk configuration and decision logs. At minimum, an auditable review should verify data freshness, strategy/setup evidence, direction-aware stop and target levels, monetary risk after costs, account limits, existing positions, and broker order acknowledgement. Treat each as active only when the run records its result."
         )
 
     # If the user asks Atlas about our own open trades, trades of the day, win rate, account balance, or last trading session
@@ -287,16 +266,8 @@ def _check_internal_universe_answer(query: str) -> Optional[str]:
         )
     )
     if asks_about_our_trades_or_account:
-        eq_data = _load_json("Oracle/memory/forge_mt5_equity_state.json") or {}
-        equity_usd = float(eq_data.get("equity_usd") or 104621.55)
-        net_pnl = round(equity_usd - 100000.0, 2)
         return (
-            "#### Our Live Trading Account, Open Trades & Session Summary (From Shared Chronicle Memory)\n\n"
-            f"- **Account Balance & Profit**: Our demo trading account is at **${equity_usd:,.2f}** (**+${net_pnl:,.2f}** net profit above our $100,000.00 starting balance).\n"
-            "- **Latest Trading Session**: We won **3 out of 3 executed `EUR/USD` trades (100% session win rate)** for **+6.336R** realized profit. Each trade had a profit target nearly **4.7× larger** than its stop-loss risk (`SL 1.10035` vs `TP 1.09626`).\n"
-            "- **All-Time Historical Win Rate**: **50.0% (6 wins out of 12 total trades)** across our historical memory (rising from `33.3%` in early V1 tests to `100.0%` after enforcing our `SL < TP` safety rule).\n"
-            "- **Current Open / Armed Positions**: **0 floating open trades** right now (all 3 session trades closed in profit), with **4 armed V2 setups** (`EURUSD`, `GBPUSD`, `XAUUSD`, `USDJPY`) waiting for high-conviction entry confirmation.\n\n"
-            "*Tip: For full trade execution details, talk directly to **Oracle**; for last-session retraining, talk to **Forge**; or ask **Nexus** to coordinate across desks.*"
+            "Atlas does not have a fresh, authenticated broker snapshot in this response, so it cannot verify current balances, open positions, or realized P/L. Open Oracle's dashboard and check the selected broker's freshness and history status; stale or unavailable values should not be treated as zero."
         )
 
     return None
@@ -364,12 +335,24 @@ def _check_chronicle_memory(query: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _finite_confidence(value: Any) -> Optional[float]:
+    """Return a measured probability-like confidence, never a guessed fallback."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and 0.0 <= number <= 1.0 else None
+
+
 def _save_to_chronicle_memory(
     query: str,
     subject_terms: List[str],
     direct_answer: str,
     sources: List[Dict[str, Any]],
     domain: str,
+    confidence: Optional[float] = None,
 ) -> str:
     """
     Persist newly researched knowledge to Chronicle so future queries find it immediately.
@@ -420,11 +403,13 @@ def _save_to_chronicle_memory(
                 "content": direct_answer,
                 "summary": direct_answer[:360],
                 "tags": ["atlas_research", domain] + subject_terms[:6],
-                "confidence": 0.90,
                 "source_repository": "atlas",
                 "source_agent": "atlas",
                 "created_at": now_iso,
             }
+            normalized_confidence = _finite_confidence(confidence)
+            if normalized_confidence is not None:
+                new_rec["confidence"] = normalized_confidence
             if isinstance(raw, list):
                 raw = [r for r in raw if not (isinstance(r, dict) and r.get("memory_id") == memory_id)]
                 raw.append(new_rec)
@@ -638,7 +623,7 @@ _FORMULA_KNOWLEDGE_BASE: List[Dict[str, Any]] = [
             "`P(B | A)` = **Likelihood** of observing `B` if `A` is true",
             "`P(A)` = **Prior probability** of `A`, and `P(B)` = **Marginal probability** of evidence `B`",
         ],
-        "example": "Atlas V2 uses Bayesian posterior updating across its 5 research desks to update scenario probabilities as new evidence arrives.",
+        "example": "Bayesian updating combines a prior belief with the likelihood of newly observed evidence.",
     },
     {
         "triggers": {"ideal", "gas"},
@@ -726,7 +711,7 @@ _FORMULA_KNOWLEDGE_BASE: List[Dict[str, Any]] = [
             "`p_i` = **Forecast probability** (`0.0` to `1.0`) for event `i`",
             "`o_i` = **Realized binary outcome** (`1` if occurred, `0` if not)",
         ],
-        "example": "Lower Brier scores represent superior calibration (`0.00` is ideal; Atlas V2 achieves `0.061` across its 5 certified desks vs `0.198` in V1).",
+        "example": "Lower Brier scores indicate better probabilistic calibration; `0.00` is a perfect score for the evaluated outcomes.",
     },
     {
         "triggers": {"expectancy"},
@@ -734,8 +719,8 @@ _FORMULA_KNOWLEDGE_BASE: List[Dict[str, Any]] = [
         "primary_formula": "E[R] = (W · AvgWin_R) - ((1 - W) · AvgLoss_R)",
         "variables": [
             "`W` = **Win rate** (`0.0` to `1.0`)",
-            "`AvgWin_R` = **Average winning trade in R-multiples** (Constitutional floor: `TP >= 1.80R`)",
-            "`AvgLoss_R` = **Average losing trade in R-multiples** (`<= 1.00R`)",
+            "`AvgWin_R` = **Average winning trade in R-multiples**",
+            "`AvgLoss_R` = **Average losing trade in R-multiples**",
         ],
         "example": "With a `50%` win rate (`W = 0.50`) and `2.20R` average win vs `1.00R` loss, expectancy is `E[R] = (0.50 × 2.20) - (0.50 × 1.00) = +0.60R` per trade.",
     },
@@ -1116,20 +1101,31 @@ def _extract_symbol_context(query: str) -> Dict[str, Any]:
                 or {}
             )
             hyp = sdata.get("atlas_research_hypothesis") or {}
-            sl_m = pol.get("learned_optimal_stop_atr_mult") or pol.get("sl_atr_multiplier") or 1.25
-            tp_r = pol.get("learned_initial_major_tp_r") or pol.get("primary_tp_r") or 2.15
-            raw_wr = float(lb.get("win_rate_pct") or lb.get("win_rate") or 0.65)
-            wr_pct = round(raw_wr * 100.0, 1) if raw_wr <= 1.0 else round(raw_wr, 1)
+            sl_m = pol.get("learned_optimal_stop_atr_mult")
+            if sl_m is None:
+                sl_m = pol.get("sl_atr_multiplier")
+            tp_r = pol.get("learned_initial_major_tp_r")
+            if tp_r is None:
+                tp_r = pol.get("primary_tp_r")
+            raw_wr = lb.get("win_rate_pct")
+            if raw_wr is None:
+                raw_wr = lb.get("win_rate")
+            try:
+                raw_wr = float(raw_wr) if raw_wr is not None else None
+            except (TypeError, ValueError):
+                raw_wr = None
+            wr_pct = (round(raw_wr * 100.0, 1) if raw_wr <= 1.0 else round(raw_wr, 1)) if raw_wr is not None else None
             styles_info[style] = {
-                "lifecycle_state": sdata.get("lifecycle_state", "CERTIFIED"),
-                "sl_atr_multiplier": round(float(sl_m), 2),
-                "primary_tp_r": round(float(tp_r), 2),
-                "runner_tp_r": round(float(pol.get("learned_runner_expansion_tp_r") or pol.get("runner_tp_r") or float(tp_r) * 1.4), 2),
-                "lockbox_trades": lb.get("trades") or lb.get("trades_count") or 20,
+                "lifecycle_state": sdata.get("lifecycle_state", "State unavailable"),
+                "sl_atr_multiplier": round(float(sl_m), 2) if sl_m is not None else None,
+                "primary_tp_r": round(float(tp_r), 2) if tp_r is not None else None,
+                "runner_tp_r": (round(float(pol.get("learned_runner_expansion_tp_r") or pol.get("runner_tp_r")), 2)
+                                if pol.get("learned_runner_expansion_tp_r") is not None or pol.get("runner_tp_r") is not None else None),
+                "lockbox_trades": lb.get("trades") if lb.get("trades") is not None else lb.get("trades_count"),
                 "lockbox_win_rate_pct": wr_pct,
-                "lockbox_expectancy_r": round(float(lb.get("expectancy_r") or 0.72), 3),
-                "lockbox_net_return_pct": round(float(lb.get("net_return_pct") or 12.4), 2),
-                "lockbox_sharpe": round(float(lb.get("sharpe_ratio") or 2.1), 2),
+                "lockbox_expectancy_r": round(float(lb["expectancy_r"]), 3) if lb.get("expectancy_r") is not None else None,
+                "lockbox_net_return_pct": round(float(lb["net_return_pct"]), 2) if lb.get("net_return_pct") is not None else None,
+                "lockbox_sharpe": round(float(lb["sharpe_ratio"]), 2) if lb.get("sharpe_ratio") is not None else None,
                 "atlas_hypothesis": hyp.get("hypothesis_statement") or "",
                 "dominant_timeframes": hyp.get("dominant_timeframes_discovered") or [],
                 "retained_components": hyp.get("dominant_features_discovered") or [],
@@ -1137,10 +1133,10 @@ def _extract_symbol_context(query: str) -> Dict[str, Any]:
             }
         contexts[sym] = {
             "symbol": sym,
-            "dominant_regime": mtf.get("current_regime") or (mtf.get("summary") or {}).get("dominant_regime", "TRENDING_IMPULSE"),
-            "current_session": mtf.get("current_session") or "LONDON_NY_OVERLAP",
-            "timeframes_loaded": list((mtf.get("series") or {}).keys()) or ["W1", "D1", "H4", "H1", "M30", "M15", "M5"],
-            "certified_styles": styles_info,
+            "dominant_regime": mtf.get("current_regime") or (mtf.get("summary") or {}).get("dominant_regime"),
+            "current_session": mtf.get("current_session"),
+            "timeframes_loaded": list((mtf.get("series") or {}).keys()),
+            "strategy_records": styles_info,
         }
     return contexts
 
@@ -1159,18 +1155,19 @@ def _summarize_desk_catalog() -> Dict[str, Any]:
         out.append({
             "desk_id": desk_id,
             "display_name": DESK_DISPLAY_NAMES.get(desk_id, desk_id),
-            "lifecycle_state": d.get("lifecycle_state", "CERTIFIED"),
-            "episodes_tested": (d.get("dataset_provenance") or {}).get("total_episodes", 48),
-            "lockbox_episodes": lb.get("episodes_count", 20),
-            "lockbox_hit_rate_pct": lb.get("hit_rate_pct", 100.0),
-            "lockbox_brier_score": lb.get("mean_brier_score", 0.06),
-            "v1_brier_score": v1.get("mean_brier_score", 0.198),
-            "v1_hit_rate_pct": v1.get("hit_rate_pct", 80.0),
-            "hit_rate_uplift_pct": up.get("hit_rate_uplift_pct", 20.0),
-            "brier_improvement": up.get("brier_calibration_improvement", 0.138),
-            "research_edge_r": lb.get("mean_research_edge_r", 1.52),
-            "p_value": up.get("paired_bootstrap_500_p_value", 0.002),
-            "walk_forward_windows_passed": f"{wf.get('positive_windows_count', 4)}/4",
+            "lifecycle_state": d.get("lifecycle_state", "State unavailable"),
+            "episodes_tested": (d.get("dataset_provenance") or {}).get("total_episodes"),
+            "lockbox_episodes": lb.get("episodes_count"),
+            "lockbox_hit_rate_pct": lb.get("hit_rate_pct"),
+            "lockbox_brier_score": lb.get("mean_brier_score"),
+            "v1_brier_score": v1.get("mean_brier_score"),
+            "v1_hit_rate_pct": v1.get("hit_rate_pct"),
+            "hit_rate_uplift_pct": up.get("hit_rate_uplift_pct"),
+            "brier_improvement": up.get("brier_calibration_improvement"),
+            "research_edge_r": lb.get("mean_research_edge_r"),
+            "p_value": up.get("paired_bootstrap_500_p_value"),
+            "walk_forward_windows_passed": (f"{wf.get('positive_windows_count')}/{len(wf.get('windows'))}"
+                                             if wf.get("positive_windows_count") is not None and isinstance(wf.get("windows"), list) else None),
             "retained_features": abl.get("retained_features", []),
             "pruned_features": abl.get("pruned_features_left_out", []),
         })
@@ -1291,7 +1288,6 @@ def _build_readable_reply(
 ) -> str:
     pkg = v2_result.get("research_package") or {}
     conf_obj = pkg.get("confidence_assessments") or {}
-    overall_conf_pct = round(float(conf_obj.get("overall_confidence", 0.86)) * 100, 1)
     default_desk = "SCIENTIFIC_TECH_DESK" if domain in ("science", "general") else "MACRO_POLICY_DESK"
     active_desk_id = default_desk if domain in ("science", "general") else (pkg.get("forge_trained_desk_name") or default_desk)
     active_desk_label = DESK_DISPLAY_NAMES.get(active_desk_id, active_desk_id)
@@ -1342,53 +1338,55 @@ def _build_readable_reply(
     if is_quality_audit:
         lines.append("### Atlas V2 Institutional Research Quality Report")
         lines.append(
-            "Atlas V2 is currently **CERTIFIED across all 5 specialized institutional research desks**. "
-            "Every desk was trained on a 60% development split, ablated to remove noisy components, "
-            "and tested on an **untouched 40% out-of-sample lockbox** plus **4 walk-forward windows** against Frozen Atlas V1."
+            f"The saved Atlas desk catalog contains {desk_summary.get('desks_count', 0)} desk record(s). "
+            "The lifecycle state and benchmark values below are copied from that catalog; they are not an independent audit or a live runtime-health check."
         )
         lines.append("")
         lines.append("#### 1. Out-of-Sample Benchmark Scorecard (Untouched 40% Lockbox)")
         for d in desk_summary.get("desks", []):
-            lines.append(
-                f"- **{d['display_name']}** (`{d['lifecycle_state']}`): "
-                f"**{d['lockbox_hit_rate_pct']}% Hit Rate** (up +{d['hit_rate_uplift_pct']}% vs Atlas V1's {d['v1_hit_rate_pct']}%) · "
-                f"**Brier Calibration: {d['lockbox_brier_score']}** (vs {d['v1_brier_score']} in V1 — lower is better) · "
-                f"**Research Edge: +{d['research_edge_r']}R** · Walk-Forward: **{d['walk_forward_windows_passed']} windows positive** (p={d['p_value']})"
-            )
+            hit = f"{d['lockbox_hit_rate_pct']}% hit rate, n={d['lockbox_episodes']}" if d.get("lockbox_hit_rate_pct") is not None and d.get("lockbox_episodes") is not None else "lockbox result unavailable"
+            uplift = f"recorded hit-rate uplift vs frozen V1: {d['hit_rate_uplift_pct']}%" if d.get("hit_rate_uplift_pct") is not None else "V1 comparison unavailable"
+            brier = f"Brier {d['lockbox_brier_score']} (V1 {d['v1_brier_score']})" if d.get("lockbox_brier_score") is not None and d.get("v1_brier_score") is not None else "Brier comparison unavailable"
+            edge = f"research edge {d['research_edge_r']}R" if d.get("research_edge_r") is not None else "research edge unavailable"
+            wf = f"walk-forward positive windows {d['walk_forward_windows_passed']}" if d.get("walk_forward_windows_passed") else "walk-forward results unavailable"
+            p_value = f", p={d['p_value']}" if d.get("p_value") is not None else ""
+            lines.append(f"- **{d['display_name']}** (catalog state: `{d['lifecycle_state']}`; {hit}; {uplift}; {brier}; {edge}; {wf}{p_value}).")
         lines.append("")
-        lines.append("#### 2. What Atlas Learned to Keep vs. Prune (Component Ablation)")
-        lines.append(
-            "- **Retained High-Value Signals**: Primary Tier-A Official Data Anchors, Peer-Reviewed Tier-B Synthesis (Crossref/arXiv/Semantic Scholar), "
-            "Syndication Wire Deduplication (collapsing copy-paste press releases into 1 origin), and strict Point-in-Time Cutoff Gates (zero look-ahead leakage)."
-        )
-        lines.append(
-            "- **Quarantined / Pruned Noise**: Unverified Tier-E anonymous social rumors are quarantined with 0.0 weight, and redundant confounder penalties that degraded calibration were pruned via leave-one-out ablation."
-        )
+        lines.append("#### 2. Recorded Ablation Metadata")
+        for d in desk_summary.get("desks", []):
+            retained = d.get("retained_features") or []
+            pruned = d.get("pruned_features") or []
+            lines.append(f"- **{d['display_name']}**: retained components: {', '.join(map(str, retained)) if retained else 'unavailable'}; pruned components: {', '.join(map(str, pruned)) if pruned else 'unavailable'}.")
         lines.append("")
 
-    # 3. Include MTF Strategy & SL < TP telemetry if the user asked about trading/markets/symbols
+    # Include saved strategy and multi-timeframe metadata for relevant market queries.
     if is_market_query:
-        lines.append("### Multi-Timeframe Strategy & Constitutional Risk Alignment")
-        lines.append(
-            "**Constitutional Risk Law Active (`SL < TP`)**: Every strategy certified by Forge and researched by Atlas enforces strict asymmetric payoff: "
-            "**Stop Loss is bounded to `[0.75, 1.75] ATR`** near structural invalidation, and **Primary Take Profit is locked at `>= 1.80R` (`TP >= 1.80 × SL`)**, "
-            "preventing the learner from ever risking more than it stands to win or shrinking TP on restart."
-        )
+        lines.append("### Saved Strategy and Multi-Timeframe Metadata")
+        lines.append("These are fields found in local candidate records. Their presence does not establish live deployment or broker execution.")
         for sym, sctx in symbol_context.items():
-            styles = sctx.get("certified_styles") or {}
+            styles = sctx.get("strategy_records") or {}
             if styles:
                 style_summaries = []
                 for st_name, st_val in styles.items():
                     sl_m = st_val.get("sl_atr_multiplier")
                     tp_r = st_val.get("primary_tp_r")
-                    exp_r = float(st_val.get("lockbox_expectancy_r") or 0.0)
+                    exp_r = st_val.get("lockbox_expectancy_r")
                     wr = st_val.get("lockbox_win_rate_pct")
-                    if sl_m and tp_r:
-                        style_summaries.append(
-                            f"**{st_name.replace('_', ' ').title()}** (SL `{sl_m} ATR` < TP `{round(float(sl_m)*float(tp_r), 2)} ATR` [`{tp_r}R`], Lockbox Win Rate `{wr}%`, Expectancy `{exp_r:+.3f}R`)"
-                        )
+                    state = st_val.get("lifecycle_state") or "state unavailable"
+                    fields = [f"catalog state `{state}`"]
+                    if sl_m is not None:
+                        fields.append(f"recorded SL multiplier `{sl_m} ATR`")
+                    if tp_r is not None:
+                        fields.append(f"recorded target multiple `{tp_r}R`")
+                    if wr is not None:
+                        fields.append(f"recorded lockbox win rate `{wr}%`")
+                    if exp_r is not None:
+                        fields.append(f"recorded expectancy `{float(exp_r):+.3f}R`")
+                    style_summaries.append(f"**{st_name.replace('_', ' ').title()}** ({'; '.join(fields)})")
                 if style_summaries:
-                    lines.append(f"- **{sym}** ({', '.join(sctx.get('timeframes_loaded', [])[:7])}): " + " · ".join(style_summaries))
+                    tf_list = sctx.get("timeframes_loaded", [])
+                    tf_text = ', '.join(tf_list[:7]) if tf_list else 'timeframe metadata unavailable'
+                    lines.append(f"- **{sym}** ({tf_text}): " + " · ".join(style_summaries))
         lines.append("")
 
     # 4. Sources Checked
@@ -1467,8 +1465,8 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
             "operating_mode": "conversational",
             "active_desk": "SCIENTIFIC_TECH_DESK",
             "active_desk_label": "Atlas Conversational & Research Interface",
-            "overall_confidence": 100.0,
-            "confidence": 0.96,
+            "overall_confidence": None,
+            "confidence": None,
             "confidence_dimensions": {},
             "sources": [],
             "scenarios": [],
@@ -1548,6 +1546,9 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
             direct_answer=synthesized_answer,
             sources=relevant_live_sources,
             domain=domain,
+            confidence=_finite_confidence(
+                ((v2_result.get("research_package") or {}).get("confidence_assessments") or {}).get("overall_confidence")
+            ),
         )
         if chronicle_hit:
             chronicle_hit["direct_answer"] = synthesized_answer
@@ -1569,7 +1570,7 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
 
     pkg = v2_result.get("research_package") or {}
     conf_obj = pkg.get("confidence_assessments") or {}
-    raw_conf = float(conf_obj.get("overall_confidence", 0.88))
+    raw_conf = _finite_confidence(conf_obj.get("overall_confidence"))
     merged_sources = relevant_live_sources[:8] if relevant_live_sources else (pkg.get("sources") or [])[:8]
 
     return {
@@ -1582,7 +1583,7 @@ def build_frontend_dossier(query: str, requested_mode: str = "auto") -> Dict[str
             pkg.get("forge_trained_desk_name") or "SCIENTIFIC_TECH_DESK",
             "Scientific & Technical Peer-Review Desk",
         ),
-        "overall_confidence": round(raw_conf * 100, 1),
+        "overall_confidence": round(raw_conf * 100, 1) if raw_conf is not None else None,
         "confidence": raw_conf,
         "confidence_dimensions": conf_obj.get("dimensions") or {},
         "sources": merged_sources,

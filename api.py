@@ -8,11 +8,16 @@ import logging
 import re
 import os
 import hmac
+import subprocess
+import threading
+import signal
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
@@ -49,6 +54,8 @@ logger = logging.getLogger("api")
 # Global state to hold agents
 AGENTS: Dict[str, Any] = {}
 LOGS: List[Dict[str, Any]] = []
+_ORACLE_RUNNERS: Dict[str, Dict[str, Any]] = {}
+_ORACLE_RUNNERS_LOCK = threading.Lock()
 
 AGENT_CHAT_TASKS = {
     "oracle":    "portfolio.status",
@@ -430,132 +437,6 @@ def _call_agent(agent: Any, task: str, ctx: Dict[str, Any], fallback: str) -> An
         return agent.execute(task, ctx)
     return fallback
 
-def _dashboard_metrics(name: str, status: Dict[str, Any]) -> Dict[str, Any]:
-    handled = status.get("handled", 0)
-    failed = status.get("failed", 0)
-    uptime = status.get("uptime_sec", 0)
-    success_rate = 1.0 if handled and not failed else (handled / max(handled + failed, 1))
-    metrics: Dict[str, Any] = {
-        "handled": handled,
-        "failed": failed,
-        "uptime": f"{int(uptime)}s",
-        "success_rate": f"{round(success_rate * 100)}%",
-    }
-    if name == "chronicle":
-        store = status.get("store", {})
-        metrics.update({"events_logged": store.get("active", 0), "queries_today": handled, "storage_used": store.get("storage_dir", "local")})
-    elif name == "nexus":
-        engine = status.get("engine", {})
-        metrics.update({"agents_active": len(AGENTS), "tasks_queued": engine.get("routes", handled), "messages_per_hour": handled})
-    elif name == "aegis":
-        health = status.get("health", {})
-        risk_count = len(health.get("risk_register", {}) or {})
-        metrics.update({
-            "risk_score": risk_count,
-            "anomalies_detected": (health.get("anomaly") or {}).get("total", 0),
-            "threats_blocked": (health.get("anomaly") or {}).get("total", 0),  # Use anomaly count as proxy
-            "compliance_score": "tracked"
-        })
-    elif name == "oracle":
-        portfolio = status.get("portfolio", {})
-        open_positions = len(portfolio.get("open_positions", []) or [])
-        pnl = portfolio.get("realized_pnl", 0)
-        metrics.update({
-            "open_trades": open_positions,
-            "signals_today": handled,
-            "pnl_today": f"${pnl:.2f}" if isinstance(pnl, (int, float)) else str(pnl),
-            "win_rate": f"{round(success_rate * 100)}%"
-        })
-    elif name == "sentinel":
-        engine = status.get("engine", {})
-        sources = len(engine.get("collectors", {}) or {})
-        metrics.update({
-            "alerts_today": handled,
-            "sources_monitored": sources,
-            "market_sentiment": "available",
-            "threats_detected": failed  # Use failed tasks as proxy for threats
-        })
-    elif name == "pulse":
-        engine = status.get("engine", {})
-        post_count = engine.get("post_count", handled)
-        metrics.update({
-            "posts_analyzed": post_count,
-            "trending_topics": "available",
-            "overall_sentiment": "available",
-            "sentiment_score": f"{round(success_rate * 100)}%"  # Use success rate as proxy
-        })
-    elif name == "forge":
-        registry = status.get("registry", {})
-        metrics.update({"builds_today": handled, "deployments": registry.get("promoted", 0), "system_health": "online"})
-    elif name == "genesis":
-        factory = status.get("factory", {})
-        active = factory.get("registry", {}).get("total_created", 0) if isinstance(factory.get("registry"), dict) else 0
-        metrics.update({
-            "active_strategies": active,
-            "goals_met": handled,
-            "backtests_run": 0,
-            "avg_return": f"{round((success_rate - 0.5) * 20, 1)}%"  # Synthetic metric based on success
-        })
-    elif name == "atlas":
-        engine = status.get("engine", {})
-        sources = len(engine.get("sources", {}) or {})
-        metrics.update({
-            "reports_today": handled,
-            "sources_monitored": sources,
-            "sectors_tracked": min(sources, 12),  # Estimate sectors from sources
-            "alerts": failed
-        })
-    return metrics
-
-def _agent_suggestions(agent: Any) -> List[str]:
-    capabilities = list(getattr(agent, "capabilities", []) or [])
-    domain = getattr(agent, "domain", "general") or "general"
-    suggestions = []
-    for capability in capabilities[:2]:
-        readable = capability.replace(".", " ").replace("_", " ")
-        suggestions.append(f"Try {readable} through the {domain} agent.")
-    suggestions.append("Useful outcomes and failures are preserved so future routing can improve.")
-    return suggestions[:3]
-
-def _agent_dashboard_data(name: str, agent: Any) -> Dict[str, Any]:
-    try:
-        status_data = agent.get_status() if hasattr(agent, "get_status") else {}
-        if not isinstance(status_data, dict):
-            status_data = {}
-    except Exception as exc:
-        status_data = {"status": "error", "error": str(exc)}
-    running = bool(status_data.get("running", False))
-    status = status_data.get("status") or ("active" if running else "idle")
-    metrics = _dashboard_metrics(name, status_data)
-    overview = (
-        f"{getattr(agent, 'name', name).title()} is {_status_label(status).lower()} in the "
-        f"{getattr(agent, 'domain', 'general')} domain. "
-        f"It has handled {status_data.get('handled', 0)} tasks with {status_data.get('failed', 0)} failures."
-    )
-    primary = [
-        {"title": overview, "source": getattr(agent, "repository", name.title()), "agent": name},
-        {"title": f"Mission: {_short((getattr(agent, 'mission', {}) or {}).get('purpose', 'No mission recorded.'), 180)}", "source": "Book I-VI alignment", "agent": name},
-    ]
-    suggestions = _agent_suggestions(agent)
-    secondary = [{"title": suggestion, "source": "Declared capability", "agent": name} for suggestion in suggestions]
-    return {
-        "id": name,
-        "name": getattr(agent, "name", name),
-        "repository": getattr(agent, "repository", name.title()),
-        "domain": getattr(agent, "domain", ""),
-        "description": getattr(agent, "description", ""),
-        "status": status,
-        "running": running,
-        "metrics": metrics,
-        "overview": overview,
-        "primary": primary,
-        "secondary": secondary,
-        "capabilities": getattr(agent, "capabilities", []),
-        "mission": getattr(agent, "mission", {}),
-        "suggestions": suggestions,
-        "raw_status": status_data,
-    }
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Booting AI Ecosystem...")
@@ -612,6 +493,20 @@ async def lifespan(app: FastAPI):
             except Exception as exc:
                 logger.warning("Could not register %s with Nexus: %s", agent_name, exc)
     yield
+    with _ORACLE_RUNNERS_LOCK:
+        owned_runners = list(_ORACLE_RUNNERS.items())
+    for broker_name, record in owned_runners:
+        process = record.get("process")
+        if not process or process.poll() is not None:
+            continue
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
+            await run_in_threadpool(process.wait, 10)
+        except subprocess.TimeoutExpired:
+            logger.error("Oracle %s trader did not stop gracefully during API shutdown (pid=%s)",
+                         broker_name, process.pid)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not request Oracle %s trader shutdown: %s", broker_name, type(exc).__name__)
     for name, agent in list(AGENTS.items()):
         try:
             if hasattr(agent, "stop"):
@@ -638,6 +533,178 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "online", "ecosystem": "Universal AI", "active_agents": list(AGENTS.keys()), "version": "1.0.0"}
+
+
+def _require_local_oracle_control(request: Request) -> None:
+    peer = request.client.host if request.client else ""
+    if peer not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(status_code=403, detail="Oracle run controls are local-machine only")
+    origin = request.headers.get("origin")
+    if origin:
+        try:
+            origin_host = (urlsplit(origin).hostname or "").strip("[]").lower()
+        except ValueError:
+            origin_host = ""
+        if origin_host not in {"127.0.0.1", "localhost", "::1"}:
+            raise HTTPException(status_code=403, detail="Oracle run controls require a local browser origin")
+
+
+@app.get("/api/oracle/run/status")
+async def oracle_run_status(request: Request, broker: str = ""):
+    _require_local_oracle_control(request)
+    selected = broker.strip().lower()
+    if selected not in {"", "mt5", "ctrader"}:
+        raise HTTPException(status_code=400, detail="broker must be mt5 or ctrader")
+    with _ORACLE_RUNNERS_LOCK:
+        rows = {}
+        owned_brokers = set(_ORACLE_RUNNERS)
+        for key, record in list(_ORACLE_RUNNERS.items()):
+            process = record.get("process")
+            running = bool(process and process.poll() is None)
+            rows[key] = {
+                "status": ("stopping" if running and record.get("stop_requested_at_unix") else "running") if running else "stopped",
+                "pid": process.pid if process else None,
+                "started_at_unix": record.get("started_at_unix"),
+                "cycles": record.get("cycles"),
+                "exit_code": None if running or not process else process.returncode,
+                "log_path": str(record.get("log_path") or ""),
+            }
+    for key in (selected,) if selected else ("mt5", "ctrader"):
+        if rows.get(key, {}).get("status") == "running":
+            continue
+        if key in owned_brokers:
+            continue
+        snapshot_path = ROOT / "Oracle" / "memory" / f"{key}_dashboard_snapshot.json"
+        try:
+            import json
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            updated = float(snapshot.get("positions_updated_at_unix") or snapshot.get("account_updated_at_unix") or 0)
+            if (snapshot.get("connected") is True and snapshot.get("account_type") == "demo"
+                    and 0 <= time.time() - updated < 45):
+                rows[key] = {"status": "connected_external", "pid": None,
+                             "account_type": "demo", "log_path": None}
+        except (OSError, ValueError, TypeError):
+            pass
+    if selected:
+        return {"broker": selected, **rows.get(selected, {"status": "stopped"})}
+    return {"runners": rows}
+
+
+@app.post("/api/oracle/run/start")
+async def start_oracle_run(request: Request):
+    """Start a local demo trader without ever enabling real-account execution."""
+    _require_local_oracle_control(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    broker = str(body.get("broker") or "").strip().lower() if isinstance(body, dict) else ""
+    if broker not in {"mt5", "ctrader"}:
+        raise HTTPException(status_code=400, detail="Choose MT5 or cTrader before starting Oracle")
+    cycles = body.get("cycles") if isinstance(body, dict) else None
+    if cycles is not None:
+        try:
+            cycles = int(cycles)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="cycles must be a positive integer") from exc
+        if cycles < 1 or cycles > 10000:
+            raise HTTPException(status_code=400, detail="cycles must be between 1 and 10000")
+
+    with _ORACLE_RUNNERS_LOCK:
+        existing = _ORACLE_RUNNERS.get(broker, {})
+        process = existing.get("process")
+        if process and process.poll() is None:
+            return {"status": "running", "broker": broker, "pid": process.pid,
+                    "message": f"The {broker.upper()} Oracle run is already running."}
+
+        # A recent broker-authenticated snapshot usually means the trader was
+        # started in a terminal. Do not create a second process against the same account.
+        snapshot_path = ROOT / "Oracle" / "memory" / f"{broker}_dashboard_snapshot.json"
+        try:
+            import json
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            updated = float(snapshot.get("positions_updated_at_unix") or snapshot.get("account_updated_at_unix") or 0)
+            is_demo = str(snapshot.get("account_type") or "").lower() == "demo"
+            is_connected = snapshot.get("connected") is True
+            if broker not in _ORACLE_RUNNERS and is_demo and is_connected and 0 <= time.time() - updated < 45:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A fresh {broker.upper()} snapshot suggests its trader is already running. Check the trader terminal before starting a second instance.",
+                )
+        except HTTPException:
+            raise
+        except (OSError, ValueError, TypeError):
+            pass
+
+        env = os.environ.copy()
+        # The frontend exposes demo-only launch controls. Override inherited
+        # host settings for both brokers so a local machine's live-execution
+        # flag cannot leak into a process started by this endpoint.
+        env["ORACLE_ALLOW_LIVE"] = "false"
+        if broker == "mt5":
+            # Connect to the actual terminal for verified account/position reads;
+            # real-money order execution remains disabled by the broker guard.
+            env["ORACLE_PAPER_TRADING"] = "false"
+            env["ORACLE_ALLOW_LIVE"] = "false"
+            env["ORACLE_REQUIRE_DEMO_ACCOUNT"] = "true"
+            module = "Oracle.execution.mt5_demo_trader"
+        else:
+            env["CTRADER_USE_DEMO"] = "true"
+            env["ORACLE_REQUIRE_DEMO_ACCOUNT"] = "true"
+            module = "Oracle.execution.ctrader_demo_trader"
+
+        log_dir = ROOT / "Oracle" / "memory" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"frontend_{broker}_trader.log"
+        log_handle = log_path.open("a", encoding="utf-8", buffering=1)
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-m", module] + (["--cycles", str(cycles)] if cycles is not None else []),
+                cwd=str(ROOT), env=env, stdin=subprocess.DEVNULL,
+                stdout=log_handle, stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+            )
+        except OSError as exc:
+            log_handle.close()
+            raise HTTPException(status_code=500, detail=f"Could not start Oracle: {type(exc).__name__}") from exc
+        log_handle.close()
+        _ORACLE_RUNNERS[broker] = {
+            "process": process, "started_at_unix": time.time(), "log_path": log_path,
+            "cycles": cycles,
+        }
+        logger.info("Started local Oracle %s demo trader (pid=%s)", broker, process.pid)
+        return {"status": "starting", "broker": broker, "pid": process.pid,
+                "cycles": cycles,
+                "log_path": str(log_path),
+                "message": f"Oracle {broker.upper()} demo trader is starting. Verify its broker account before relying on new orders."}
+
+
+@app.post("/api/oracle/run/stop")
+async def stop_oracle_run(request: Request):
+    """Ask only an API-owned trader process to shut down gracefully."""
+    _require_local_oracle_control(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    broker = str(body.get("broker") or "").strip().lower() if isinstance(body, dict) else ""
+    if broker not in {"mt5", "ctrader"}:
+        raise HTTPException(status_code=400, detail="Choose MT5 or cTrader before stopping Oracle")
+    with _ORACLE_RUNNERS_LOCK:
+        record = _ORACLE_RUNNERS.get(broker) or {}
+        process = record.get("process")
+        if not process or process.poll() is not None:
+            raise HTTPException(status_code=404, detail="No API-owned Oracle run is active for this broker")
+        try:
+            if os.name == "nt":
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                process.send_signal(signal.SIGINT)
+            record["stop_requested_at_unix"] = time.time()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail="Could not send a graceful stop request") from exc
+    return {"status": "stop_requested", "broker": broker, "pid": process.pid,
+            "message": "Graceful stop requested. The trader is shutting down and releasing its broker connection."}
 
 
 @app.post("/internal/forge/act")
@@ -802,9 +869,53 @@ def _get_rich_or_fallback_dashboard(name: str, broker: str = "all") -> Dict[str,
         return rich
     except Exception as exc:
         logger.warning("Rich dashboard data fallback for %s: %s", name_low, exc)
+        if name_low == "oracle":
+            return {
+                "id": "oracle",
+                "name": "Oracle",
+                "status": "unavailable",
+                "running": False,
+                "overview": "Oracle account data is unavailable. The dashboard will not substitute simulated balances or trades.",
+                "portfolio_value": "Unavailable",
+                "pnl_today": "Unavailable",
+                "win_rate": "Unavailable",
+                "open_trades": "Unavailable",
+                "signals_today": "Unavailable",
+                "max_drawdown": "Unavailable",
+                "metrics": {
+                    "portfolio_value": "Unavailable",
+                    "pnl_today": "Unavailable",
+                    "win_rate": "Unavailable",
+                    "open_trades": "Unavailable",
+                    "signals_today": "Unavailable",
+                    "max_drawdown": "Unavailable",
+                },
+                "open_and_recent_trades": [],
+                "win_rate_breakdown": [],
+                "brokers": {},
+            }
         if name_low in AGENTS:
-            return _agent_dashboard_data(name_low, AGENTS[name_low])
-        return {"id": name_low, "name": name_low.title(), "status": "online", "running": True, "metrics": {}, "primary": [], "secondary": []}
+            agent = AGENTS[name_low]
+            return {
+                "id": name_low,
+                "name": getattr(agent, "name", name_low.title()),
+                "repository": getattr(agent, "repository", name_low.title()),
+                "domain": getattr(agent, "domain", ""),
+                "description": getattr(agent, "description", ""),
+                "status": "unavailable",
+                "running": None,
+                "overview": "The authoritative dashboard data source failed. Runtime status and metrics are unavailable; no estimates are substituted.",
+                "metrics": {},
+                "primary": [],
+                "secondary": [],
+                "primary_feed": [],
+                "secondary_feed": [],
+                "data_status": "unavailable",
+            }
+        return {"id": name_low, "name": name_low.title(), "status": "unavailable", "running": None,
+                "overview": "The authoritative dashboard data source failed.", "metrics": {},
+                "primary": [], "secondary": [], "primary_feed": [], "secondary_feed": [],
+                "data_status": "unavailable"}
 
 @app.get("/api/status")
 async def api_status():
@@ -849,7 +960,7 @@ async def get_logs(limit: int = 10):
 async def _agent_status_response(name: str) -> Dict[str, Any]:
     name_low = name.strip().lower()
     dashboard = await run_in_threadpool(_get_rich_or_fallback_dashboard, name_low)
-    return {"agent": name_low, "task": "agent.status", "status": dashboard.get("status", "online"), "response": dashboard.get("overview", ""), "confidence": 1.0, "evidence": [], "data": dashboard}
+    return {"agent": name_low, "task": "agent.status", "status": dashboard.get("status", "unavailable"), "response": dashboard.get("overview", ""), "confidence": None, "evidence": [], "data": dashboard}
 
 @app.post("/agents/{name}/query")
 async def query_agent(name: str, request: Request):
@@ -1250,18 +1361,88 @@ async def ecosystem_chat(request: Request):
         }
 
 
+# ── Nexus live workspace routes (shared by the local Python and Express APIs) ──
+@app.get("/api/nexus/status")
+async def api_nexus_status():
+    from Nexus.api.coordination_bridge import get_live_nexus_status
+    try:
+        return await run_in_threadpool(get_live_nexus_status)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Nexus status is unavailable: {type(exc).__name__}") from exc
+
+
+@app.get("/api/nexus/memory-matrix")
+async def api_nexus_memory_matrix(limit: int = 12):
+    if not 1 <= limit <= 50:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 50")
+    from Nexus.api.coordination_bridge import get_collective_memory_matrix
+    try:
+        return {"status": "ok", **await run_in_threadpool(get_collective_memory_matrix, limit)}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Chronicle memory matrix is unavailable: {type(exc).__name__}") from exc
+
+
+@app.post("/api/nexus/coordinate")
+async def api_nexus_coordinate(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="request body must be a JSON object")
+    query = str(body.get("query") or body.get("message") or "").strip()
+    if not query or len(query) > 8000:
+        raise HTTPException(status_code=400, detail="query must contain 1 to 8000 characters")
+    user_id = str(body.get("user_id") or "operator")[:128]
+    target_agent = str(body.get("target_agent") or "nexus").strip().lower()
+    from Nexus.api.coordination_bridge import coordinate_query
+    try:
+        trace = await run_in_threadpool(coordinate_query, query, user_id, target_agent)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Nexus coordination is unavailable: {type(exc).__name__}") from exc
+    reply = str(trace.get("human_synthesis") or trace.get("final_synthesis") or "").strip() if isinstance(trace, dict) else ""
+    if not reply:
+        raise HTTPException(status_code=503, detail="Nexus returned no evidence-backed synthesis")
+    return {"status": "complete", "agent": "nexus", "reply": reply, "response": reply,
+            "trace": trace, "referrals": trace.get("referrals") or [],
+            "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
 # ── Oracle Interactive Chart, cTrader/MT5 Cycle & Open/Close Demo Trade Routes ──
+@app.get("/api/oracle/dashboard")
+async def api_oracle_dashboard(broker: str = "all"):
+    if broker.strip().lower() not in {"all", "mt5", "ctrader"}:
+        raise HTTPException(status_code=400, detail="broker must be all, mt5, or ctrader")
+    from Nexus.api.interactive_actions import get_oracle_dashboard_data
+    return await run_in_threadpool(get_oracle_dashboard_data, broker)
+
+
 @app.get("/api/oracle/chart")
 async def api_oracle_chart(symbol: str = "EURUSD", timeframe: str = "M15", broker: str = "all"):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", symbol.strip()):
+        raise HTTPException(status_code=400, detail="symbol contains unsupported characters")
+    if timeframe.strip().upper() not in {"W1", "D1", "H4", "H1", "M45", "M30", "M15", "M5"}:
+        raise HTTPException(status_code=400, detail="unsupported chart timeframe")
+    if broker.strip().lower() not in {"all", "mt5", "ctrader"}:
+        raise HTTPException(status_code=400, detail="broker must be all, mt5, or ctrader")
     from Nexus.api.interactive_actions import get_oracle_chart_data
     return await run_in_threadpool(get_oracle_chart_data, symbol, timeframe, broker)
+
+
+@app.get("/api/oracle/telegram/signals")
+async def api_oracle_telegram_signals(limit: int = 100):
+    from Nexus.api.interactive_actions import get_telegram_signal_feed
+    return await run_in_threadpool(get_telegram_signal_feed, limit)
 
 
 @app.post("/api/oracle/execute-action")
 async def api_oracle_execute_action(request: Request):
     from Nexus.api.interactive_actions import execute_oracle_action
     body = await request.json()
-    return await run_in_threadpool(execute_oracle_action, body if isinstance(body, dict) else {})
+    result = await run_in_threadpool(execute_oracle_action, body if isinstance(body, dict) else {})
+    if result.get("status") == "unavailable":
+        raise HTTPException(status_code=503, detail=result.get("message", "Manual Oracle action is unavailable"))
+    return result
 
 
 # ── Sentinel & Pulse Live Feed Refresh & Full Photo Reader Route ──
@@ -1273,7 +1454,9 @@ async def api_feeds_refresh(request: Request):
     except Exception:
         body = {}
     agent_id = str((body or {}).get("agent") or "all")
-    return await run_in_threadpool(execute_feed_refresh, agent_id)
+    result = await run_in_threadpool(execute_feed_refresh, agent_id, AGENTS)
+    status_code = 409 if result.get("status") == "busy" else 503 if result.get("status") == "unavailable" else 200
+    return JSONResponse(content=result, status_code=status_code)
 
 
 # ── Chronicle, Aegis & Genesis Interactive Action Route ──

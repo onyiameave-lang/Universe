@@ -229,7 +229,7 @@
               <span class="card-title">CHAT DIRECTLY WITH FORGE — STRATEGY FOUNDRY &amp; PRACTICE COACH</span>
               <div style="margin-top:3px;font-size:12px;color:var(--text-muted)">Ask Forge how our strategies are trained, which trading styles have the highest win rate, or how our last session performed</div>
             </div>
-            <span class="badge-pill badge-validated">4 Trading Styles · Walk-Forward Verified</span>
+            <span class="badge-pill badge-validated">Training styles · validation status from records</span>
           </div>
           <div class="card-body">
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
@@ -241,7 +241,7 @@
 
             <div id="forgeChatHistory" style="max-height:220px;overflow-y:auto;padding:14px;border-radius:12px;background:rgba(8,12,24,0.68);border:1px solid rgba(148,163,184,0.15);margin-bottom:12px;font-size:13.5px;line-height:1.65">
               <div style="color:#cbd5e1">
-                <strong style="color:#fbbf24">Forge:</strong> Hello! I am <strong>Forge</strong>, your Strategy Foundry &amp; Practice Trainer. I train 4 distinct trading styles — <strong>Quick Scalping, Day Trading, Multi-Day Swing, and Range Bounce</strong> — test them on unseen market candles after subtracting real broker spreads, and only send proven strategies with <strong>Stop-Loss smaller than Profit Target</strong> to Oracle.
+                <strong style="color:#fbbf24">Forge:</strong> Hello! I am <strong>Forge</strong>, the strategy training and evaluation agent. This page shows recorded candidate artifacts and experiment results when they are available. A saved candidate is not evidence that it passed independent validation or is approved for Oracle.
               </div>
             </div>
 
@@ -262,7 +262,7 @@
               </div>
               <h2 style="margin:6px 0 4px;font-size:21px;font-weight:800;color:#f8fafc;letter-spacing:-0.015em">Interactive Strategy Training Studio — Plain-English Practice Results</h2>
               <p style="margin:0;font-size:12.5px;color:#94a3b8;max-width:780px">
-                Choose a currency pair and tap any training button below. Forge trains the strategy on historical candles, runs a 20-trade practice exam on unseen data, and translates the win rate, profit ratio, and safety score into plain English.
+                Choose a symbol to request an evidence-backed Forge run. This page reports only results returned by Forge; a request or saved candidate is not proof of independent validation or promotion.
               </p>
             </div>
 
@@ -278,13 +278,13 @@
                 🚀 Train All 4 Styles Now
               </button>
               <button type="button" id="btnRunPractice" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(null, this)">
-                🧪 Run 20-Trade Practice Exam
+                🧪 Evaluate latest candidate in shadow mode
               </button>
               <button type="button" id="btnMistakeClinic" class="forge-btn forge-btn-violet" onclick="runMistakeClinic(null, this)">
                 🔧 Mistake Clinic (Fix Weakest)
               </button>
               <button type="button" class="forge-btn" onclick="sendApprovedToOracle()">
-                📤 Promote Approved to Oracle
+                📤 Request governed deployment review
               </button>
             </div>
           </div>
@@ -295,21 +295,21 @@
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                   <span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#fbbf24;text-transform:uppercase">⚡ QUICK SCALPING</span>
-                  <span style="font-size:11px;font-family:var(--font-mono);color:#fde68a;background:rgba(245,158,11,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(245,158,11,0.32)">5m – 15m Chart</span>
+                  <span style="font-size:11px;font-family:var(--font-mono);color:#fde68a;background:rgba(245,158,11,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(245,158,11,0.32)">Timeframes learned from evidence</span>
                 </div>
                 <h3 style="margin:0 0 6px;font-size:16px;font-weight:800;color:#f8fafc">Quick Intraday Scalping</h3>
                 <p style="margin:0 0 12px;font-size:12px;line-height:1.55;color:#cbd5e1">
-                  Captures fast 15–30 pip momentum bursts during London &amp; New York sessions with tight 8–12 pip stop-losses.
+                  Captures fast This is a research category. Forge must learn the entry, exit, and risk parameters from valid market evidence.
                 </p>
               </div>
               <div>
                 <div style="margin-bottom:12px">
                   <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px">
-                    <span style="color:#94a3b8;font-weight:600">Practice Win Rate</span>
-                    <span style="color:#fbbf24;font-weight:800;font-family:var(--font-mono)">61.5% · 1.92x R:R</span>
+                    <span style="color:#94a3b8;font-weight:600">Recorded evaluation</span>
+                    <span style="color:#fbbf24;font-weight:800;font-family:var(--font-mono)">Awaiting measured results</span>
                   </div>
                   <div style="height:6px;border-radius:999px;background:rgba(15,23,42,0.9);overflow:hidden">
-                    <div style="width:62%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:999px"></div>
+                    <div style="width:0%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:999px"></div>
                   </div>
                 </div>
                 <button type="button" class="forge-btn" style="width:100%" onclick="runForgeTraining('SCALP_PRECISION', this)">
@@ -322,21 +322,21 @@
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                   <span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#38bdf8;text-transform:uppercase">📈 DAY TRADING</span>
-                  <span style="font-size:11px;font-family:var(--font-mono);color:#bae6fd;background:rgba(56,189,248,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(56,189,248,0.32)">15m – 1h Chart</span>
+                  <span style="font-size:11px;font-family:var(--font-mono);color:#bae6fd;background:rgba(56,189,248,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(56,189,248,0.32)">Timeframes learned from evidence</span>
                 </div>
                 <h3 style="margin:0 0 6px;font-size:16px;font-weight:800;color:#f8fafc">Day Trading Trend Rider</h3>
                 <p style="margin:0 0 12px;font-size:12px;line-height:1.55;color:#cbd5e1">
-                  Waits for an established intraday trend to make a calm pullback, then rides the continuation wave for 2.2x profit vs risk.
+                  This is a research category. No entry, stop, or target values are assumed before evaluation.
                 </p>
               </div>
               <div>
                 <div style="margin-bottom:12px">
                   <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px">
-                    <span style="color:#94a3b8;font-weight:600">Practice Win Rate</span>
-                    <span style="color:#38bdf8;font-weight:800;font-family:var(--font-mono)">64.0% · 2.15x R:R</span>
+                    <span style="color:#94a3b8;font-weight:600">Recorded evaluation</span>
+                    <span style="color:#38bdf8;font-weight:800;font-family:var(--font-mono)">Awaiting measured results</span>
                   </div>
                   <div style="height:6px;border-radius:999px;background:rgba(15,23,42,0.9);overflow:hidden">
-                    <div style="width:64%;height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:999px"></div>
+                    <div style="width:0%;height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:999px"></div>
                   </div>
                 </div>
                 <button type="button" class="forge-btn forge-btn-blue" style="width:100%" onclick="runForgeTraining('INTRADAY_CONTINUATION', this)">
@@ -349,21 +349,21 @@
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                   <span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#34d399;text-transform:uppercase">🌊 SWING TRADING</span>
-                  <span style="font-size:11px;font-family:var(--font-mono);color:#a7f3d0;background:rgba(16,185,129,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(16,185,129,0.32)">4h – 1D Chart</span>
+                  <span style="font-size:11px;font-family:var(--font-mono);color:#a7f3d0;background:rgba(16,185,129,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(16,185,129,0.32)">Timeframes learned from evidence</span>
                 </div>
                 <h3 style="margin:0 0 6px;font-size:16px;font-weight:800;color:#f8fafc">Multi-Day Swing Pullback</h3>
                 <p style="margin:0 0 12px;font-size:12px;line-height:1.55;color:#cbd5e1">
-                  Aligns 4-hour and Daily institutional support zones to capture major multi-day swings with high reward-to-risk ratios.
+                  This is a research category. Forge evaluates higher and lower timeframes using the current dataset and records its findings.
                 </p>
               </div>
               <div>
                 <div style="margin-bottom:12px">
                   <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px">
-                    <span style="color:#94a3b8;font-weight:600">Practice Win Rate</span>
-                    <span style="color:#34d399;font-weight:800;font-family:var(--font-mono)">66.7% · 2.45x R:R</span>
+                    <span style="color:#94a3b8;font-weight:600">Recorded evaluation</span>
+                    <span style="color:#34d399;font-weight:800;font-family:var(--font-mono)">Awaiting measured results</span>
                   </div>
                   <div style="height:6px;border-radius:999px;background:rgba(15,23,42,0.9);overflow:hidden">
-                    <div style="width:67%;height:100%;background:linear-gradient(90deg,#059669,#34d399);border-radius:999px"></div>
+                    <div style="width:0%;height:100%;background:linear-gradient(90deg,#059669,#34d399);border-radius:999px"></div>
                   </div>
                 </div>
                 <button type="button" class="forge-btn forge-btn-success" style="width:100%" onclick="runForgeTraining('SWING_PULLBACK', this)">
@@ -376,21 +376,21 @@
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                   <span style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#c4b5fd;text-transform:uppercase">🎯 RANGE BOUNCE</span>
-                  <span style="font-size:11px;font-family:var(--font-mono);color:#ddd6fe;background:rgba(139,92,246,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(139,92,246,0.32)">15m – 1h Chart</span>
+                  <span style="font-size:11px;font-family:var(--font-mono);color:#ddd6fe;background:rgba(139,92,246,0.16);padding:2px 8px;border-radius:999px;border:1px solid rgba(139,92,246,0.32)">Timeframes learned from evidence</span>
                 </div>
                 <h3 style="margin:0 0 6px;font-size:16px;font-weight:800;color:#f8fafc">Sideways Range Specialist</h3>
                 <p style="margin:0 0 12px;font-size:12px;line-height:1.55;color:#cbd5e1">
-                  Buys clean support floors and sells resistance ceilings when markets move sideways, avoiding breakout fakeouts.
+                  This is a research category. Forge must test whether the candidate has evidence for this market condition.
                 </p>
               </div>
               <div>
                 <div style="margin-bottom:12px">
                   <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px">
-                    <span style="color:#94a3b8;font-weight:600">Practice Win Rate</span>
-                    <span style="color:#c4b5fd;font-weight:800;font-family:var(--font-mono)">59.5% · 1.85x R:R</span>
+                    <span style="color:#94a3b8;font-weight:600">Recorded evaluation</span>
+                    <span style="color:#c4b5fd;font-weight:800;font-family:var(--font-mono)">Awaiting measured results</span>
                   </div>
                   <div style="height:6px;border-radius:999px;background:rgba(15,23,42,0.9);overflow:hidden">
-                    <div style="width:60%;height:100%;background:linear-gradient(90deg,#7c3aed,#c4b5fd);border-radius:999px"></div>
+                    <div style="width:0%;height:100%;background:linear-gradient(90deg,#7c3aed,#c4b5fd);border-radius:999px"></div>
                   </div>
                 </div>
                 <button type="button" class="forge-btn forge-btn-violet" style="width:100%" onclick="runForgeTraining('RANGE_MEAN_REVERSION', this)">
@@ -403,14 +403,14 @@
           <!-- Plain-English Training Results Banner -->
           <div id="forgeTrainingReportBanner" style="margin-top:18px;padding:18px 20px;border-radius:14px;background:radial-gradient(120% 140% at 0% 0%,rgba(16,185,129,0.14),rgba(10,15,28,0.95));border:1px solid rgba(16,185,129,0.38);color:#f8fafc">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-              <strong id="reportBannerTitle" style="font-size:15px;color:#34d399">✅ Forge Strategy Foundry Ready — Tap Any Training Button Above</strong>
-              <span id="reportBannerTimestamp" style="font-size:11.5px;color:#94a3b8;font-family:var(--font-mono)">Connected to Oracle &amp; Chronicle Memory</span>
+              <strong id="reportBannerTitle" style="font-size:15px;color:#34d399">Forge workbench · waiting for recorded results</strong>
+              <span id="reportBannerTimestamp" style="font-size:11.5px;color:#94a3b8;font-family:var(--font-mono)">Candidate data source: Chronicle</span>
             </div>
             <div id="reportBannerHeadline" style="font-size:14px;font-weight:800;color:#f8fafc;margin-bottom:5px">
-              Train any of the 4 trading styles above to run a live walk-forward practice exam and see its results in plain English.
+              Run a selected strategy-family evaluation. Forge will block when market data, cost profiles, or validation evidence are missing.
             </div>
             <div id="reportBannerStory" style="font-size:13px;line-height:1.6;color:#cbd5e1">
-              Every strategy Forge trains must obey our Golden Safety Rule: the Profit Target must be larger than the Stop-Loss risk (SL &lt; TP), and it must remain profitable after subtracting real broker spreads and fees.
+              Only the governed Forge evaluation pipeline can certify a candidate. This page does not approve strategies or claim performance without recorded evidence.
             </div>
             <div id="reportBannerMetrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px;margin-top:14px"></div>
           </div>
@@ -430,7 +430,7 @@
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <span class="card-title">TRAINED TRADING STRATEGIES SCOREBOARD — PLAIN-ENGLISH PRACTICE RESULTS</span>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Compare how each strategy performed in practice testing, open its plain-English rulebook, improve it in the Mistake Clinic, or approve it for Oracle</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Compare recorded evaluation results. Deployment requires the separate governed approval workflow.</div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="loadForgeWorkbench()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
@@ -440,7 +440,7 @@
                 <tr>
                   <th>Strategy &amp; Trading Style</th>
                   <th>Current Status</th>
-                  <th>Practice Win Rate &amp; Meter</th>
+                  <th>Recorded evaluation &amp; Meter</th>
                   <th>Simulated Profit &amp; Ratio</th>
                   <th>Account Safety &amp; Stop-Loss Rule</th>
                   <th>Interactive Actions</th>
@@ -456,7 +456,7 @@
         <!-- Recent Training Milestones & Lessons Learned -->
         <div class="card" style="margin-bottom:18px">
           <div class="card-header">
-            <span class="card-title">Last Trading Session Review &amp; Training Highlights</span>
+            <span class="card-title">Recorded Forge Training Activity</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -466,7 +466,7 @@
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Proven Trading Rules Confirmed in Practice</span>
+            <span class="card-title">Recorded Experiment Status</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -518,7 +518,6 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'forge';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
   let FORGE_CANDIDATES = [];
 
   function escapeHtml(str) {
@@ -530,7 +529,7 @@
   }
 
   function formatForgeChatHtml(text) {
-    let clean = String(text || '')
+    let clean = escapeHtml(text || '')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]+)\*/g, '$1')
       .replace(/\*\*/g, '')
@@ -595,7 +594,9 @@
     const storyEl = document.getElementById('reportBannerStory');
     const metricsEl = document.getElementById('reportBannerMetrics');
 
-    if (titleEl) titleEl.textContent = '✅ ' + (report.title || 'Training Completed');
+    const state = String(report.status || '').toLowerCase();
+    const mark = state === 'complete' || state === 'recorded' || state === 'ok' ? '✓ ' : state ? '⚠ ' : '';
+    if (titleEl) titleEl.textContent = mark + (report.title || 'Forge result');
     if (timeEl) timeEl.textContent = 'Updated ' + new Date().toLocaleTimeString();
     if (headEl) headEl.textContent = report.headline || '';
     if (storyEl) storyEl.textContent = report.what_happened || '';
@@ -615,21 +616,20 @@
     const origText = btnEl ? btnEl.textContent : '';
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Training Strategy…'; }
     try {
-      const symbol = document.getElementById('forgeSymbolSelect')?.value || 'EURUSD';
+      const symbol = document.getElementById('forgeSymbolSelect')?.value || '';
       const r = await fetch(API_BASE + '/api/forge/v2/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ strategy_family: family === 'ALL' ? null : family, symbol: symbol })
       });
       const res = await r.json();
-      if (res.plain_english_report) {
-        showPlainTrainingReport(res.plain_english_report);
-      }
+      showPlainTrainingReport({ ...(res.plain_english_report || {}), status: res.status });
       await loadForgeWorkbench();
       await loadDashboard();
     } catch (e) {
       showPlainTrainingReport({
         title: 'Training Notice',
+        status: 'error',
         headline: 'Could not complete training request: ' + e.message,
         what_happened: 'Please check connection and try again.',
         key_numbers: []
@@ -641,21 +641,21 @@
 
   async function runLivePracticeBatch(candidateId, btnEl) {
     const origText = btnEl ? btnEl.textContent : '';
-    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Running 20 Practice Trades…'; }
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Evaluating candidate…'; }
     try {
+      const selected = candidateId || FORGE_CANDIDATES[0]?.candidate_id || '';
+      if (!selected) throw new Error('No recorded Forge candidate is available for evaluation.');
       const r = await fetch(API_BASE + '/api/forge/v2/shadow/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidate_id: candidateId || null, trades_per_candidate: 20 })
+        body: JSON.stringify({ candidate_id: selected })
       });
       const res = await r.json();
-      if (res.plain_english_report) {
-        showPlainTrainingReport(res.plain_english_report);
-      }
+      showPlainTrainingReport({ ...(res.plain_english_report || {}), status: res.status });
       await loadForgeWorkbench();
       await loadDashboard();
     } catch (e) {
-      console.error(e);
+      showPlainTrainingReport({ status: 'error', title: 'Shadow evaluation unavailable', headline: e.message, what_happened: 'The request did not return a verified evaluation result.', key_numbers: [] });
     } finally {
       if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
     }
@@ -665,20 +665,19 @@
     const origText = btnEl ? btnEl.textContent : '';
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Studying Losses & Improving…'; }
     try {
-      const cid = candidateId || (FORGE_CANDIDATES[0] && FORGE_CANDIDATES[0].candidate_id) || '';
+      const cid = candidateId || FORGE_CANDIDATES[0]?.candidate_id || '';
+      if (!cid) throw new Error('No recorded Forge candidate is available for retraining.');
       const r = await fetch(API_BASE + '/api/forge/v2/retrain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate_id: cid })
       });
       const res = await r.json();
-      if (res.plain_english_report) {
-        showPlainTrainingReport(res.plain_english_report);
-      }
+      showPlainTrainingReport({ ...(res.plain_english_report || {}), status: res.status });
       await loadForgeWorkbench();
       await loadDashboard();
     } catch (e) {
-      console.error(e);
+      showPlainTrainingReport({ status: 'error', title: 'Retraining unavailable', headline: e.message, what_happened: 'No successful Forge retraining result was confirmed.', key_numbers: [] });
     } finally {
       if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
     }
@@ -699,13 +698,11 @@
         })
       });
       const res = await r.json();
-      if (res.plain_english_report) {
-        showPlainTrainingReport(res.plain_english_report);
-      }
+      showPlainTrainingReport({ ...(res.plain_english_report || {}), status: res.status });
       await loadForgeWorkbench();
       await loadDashboard();
     } catch (e) {
-      console.error(e);
+      showPlainTrainingReport({ status: 'error', title: 'Governed action unavailable', headline: e.message, what_happened: 'Candidate state was not changed.', key_numbers: [] });
     } finally {
       if (btnEl) { btnEl.disabled = false; btnEl.textContent = origText; }
     }
@@ -715,10 +712,10 @@
     try {
       const r = await fetch(API_BASE + '/api/forge/outbox/flush', { method: 'POST' });
       const res = await r.json();
-      if (res.plain_english_report) {
-        showPlainTrainingReport(res.plain_english_report);
-      }
-    } catch (e) {}
+      showPlainTrainingReport({ ...(res.plain_english_report || {}), status: res.status });
+    } catch (e) {
+      showPlainTrainingReport({ status: 'error', title: 'Forge delivery unavailable', headline: e.message, what_happened: 'No Oracle delivery acknowledgement was received.', key_numbers: [] });
+    }
   }
 
   function inspectStrategyPlainEnglish(candidateId) {
@@ -736,43 +733,52 @@
       '<div style="display:flex;flex-direction:column;gap:14px">' +
         '<div style="padding:14px 16px;border-radius:11px;background:rgba(56,189,248,0.1);border-left:4px solid #38bdf8;font-size:13.5px;line-height:1.65;color:#f8fafc">' +
           '<strong>How This Strategy Works in Plain English:</strong><br/>' +
-          escapeHtml(c.plain_story || 'This strategy checks higher-timeframe trend direction first, waits for a calm pullback, and enters with a profit target more than twice the size of its stop-loss.') +
+          escapeHtml(c.plain_story || 'No strategy rules are inferred from the candidate name. Review its saved evidence and validation record.') +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">' +
           '<div style="padding:13px 15px;border-radius:10px;background:rgba(8,12,24,0.75);border:1px solid rgba(56,189,248,0.25)">' +
-            '<div style="font-size:11px;color:#38bdf8;font-weight:800;text-transform:uppercase">Practice Win Rate</div>' +
-            '<div style="font-size:15.5px;font-weight:800;color:#fff;margin-top:4px">' + escapeHtml(c.plain_win_loss_summary || ((val.win_rate_pct || 61.5) + '% Win Rate')) + '</div>' +
-            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">Tested on historical &amp; unseen market candles</div>' +
+            '<div style="font-size:11px;color:#38bdf8;font-weight:800;text-transform:uppercase">Recorded evaluation</div>' +
+            '<div style="font-size:15.5px;font-weight:800;color:#fff;margin-top:4px">' + escapeHtml(c.plain_win_loss_summary || (val.win_rate_pct != null ? (val.win_rate_pct + '% win rate') : 'Unavailable · no evaluation result')) + '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">See candidate provenance and holdout details</div>' +
           '</div>' +
           '<div style="padding:13px 15px;border-radius:10px;background:rgba(8,12,24,0.75);border:1px solid rgba(16,185,129,0.25)">' +
             '<div style="font-size:11px;color:#10b981;font-weight:800;text-transform:uppercase">Profit vs. Loss Ratio</div>' +
-            '<div style="font-size:15.5px;font-weight:800;color:#34d399;margin-top:4px">' + escapeHtml(c.plain_profit_summary || ('Earns $' + (val.profit_factor || 1.85) + ' per $1 lost')) + '</div>' +
-            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">Includes real broker spread &amp; slippage costs</div>' +
+            '<div style="font-size:15.5px;font-weight:800;color:#34d399;margin-top:4px">' + escapeHtml(c.plain_profit_summary || (val.profit_factor != null ? ('Profit factor ' + val.profit_factor) : 'Unavailable · no evaluation result')) + '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">Cost treatment must be verified in the candidate report</div>' +
           '</div>' +
           '<div style="padding:13px 15px;border-radius:10px;background:rgba(8,12,24,0.75);border:1px solid rgba(245,158,11,0.25)">' +
             '<div style="font-size:11px;color:#fbbf24;font-weight:800;text-transform:uppercase">Safety &amp; Stop-Loss Rule</div>' +
-            '<div style="font-size:15.5px;font-weight:800;color:#fbbf24;margin-top:4px">' + escapeHtml(c.plain_safety_summary || 'Stop-Loss < Profit Target Verified') + '</div>' +
-            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">Protected by Aegis 24/7 Risk Guard</div>' +
+            '<div style="font-size:15.5px;font-weight:800;color:#fbbf24;margin-top:4px">' + escapeHtml(c.plain_safety_summary || 'Safety result unavailable') + '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:3px">Governed risk status is shown in the candidate record</div>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
-          '<button type="button" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(\'' + c.candidate_id + '\', this)">🧪 Run 20 Practice Trades on This Strategy</button>' +
-          '<button type="button" class="forge-btn forge-btn-violet" onclick="runMistakeClinic(\'' + c.candidate_id + '\', this)">🔧 Improve in Mistake Clinic</button>' +
-          '<button type="button" class="forge-btn forge-btn-success" onclick="changeStrategyStatus(\'' + c.candidate_id + '\', \'CANONICAL\', this)">✅ Approve &amp; Send to Oracle</button>' +
+          '<button type="button" class="forge-btn forge-btn-blue" data-forge-action="practice" data-candidate-id="' + escapeHtml(c.candidate_id || '') + '"' + (c.candidate_id ? '' : ' disabled') + '>🧪 Run shadow evaluation</button>' +
+          '<button type="button" class="forge-btn forge-btn-violet" data-forge-action="improve" data-candidate-id="' + escapeHtml(c.candidate_id || '') + '"' + (c.candidate_id ? '' : ' disabled') + '>🔧 Improve in Mistake Clinic</button>' +
+          '<span class="forge-btn" aria-disabled="true">Governed review required</span>' +
         '</div>' +
       '</div>';
 
     card.style.display = 'block';
+    body.querySelectorAll('[data-forge-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const id = button.getAttribute('data-candidate-id') || '';
+        if (!id) return;
+        if (button.getAttribute('data-forge-action') === 'practice') runLivePracticeBatch(id, button);
+        if (button.getAttribute('data-forge-action') === 'improve') runMistakeClinic(id, button);
+      });
+    });
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function extractNumericWinRate(candidate) {
-    if (candidate.validation && typeof candidate.validation.win_rate_pct === 'number') {
-      return Math.max(35, Math.min(95, candidate.validation.win_rate_pct));
-    }
-    const m = String(candidate.plain_win_loss_summary || '').match(/(\d+(?:\.\d+)?)\s*%/);
-    if (m) return Math.max(35, Math.min(95, parseFloat(m[1])));
-    return 61.5;
+    const metrics = (candidate.lockbox_holdout_report || {}).candidate_metrics || candidate.validation || {};
+    const source = metrics.win_rate_pct != null ? metrics.win_rate_pct : metrics.win_rate;
+    if (source == null || source === '') return null;
+    const raw = Number(source);
+    if (!Number.isFinite(raw)) return null;
+    const pct = raw <= 1 ? raw * 100 : raw;
+    return Math.max(0, Math.min(100, pct));
   }
 
   function renderForgeCandidatesTable(candidates) {
@@ -780,7 +786,7 @@
     if (!tbody) return;
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     if (!Array.isArray(candidates) || candidates.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--text-muted)">No strategies loaded yet. Click "🚀 Train All 4 Styles Now" above to train your first batch!</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--text-muted)">No strategies loaded yet. Candidate artifacts appear after a successful evidence-backed evaluation.</td></tr>';
       return;
     }
 
@@ -792,49 +798,53 @@
     const trackBg = isLight ? '#e8e2d2' : 'rgba(15,23,42,0.9)';
 
     tbody.innerHTML = candidates.slice(0, 16).map(c => {
-      const cid = c.candidate_id || 'FG-V2';
-      const state = String(c.lifecycle_state || 'VALIDATED').toUpperCase();
+      const cid = String(c.candidate_id || '');
+      const state = String(c.lifecycle_state || 'UNKNOWN').toUpperCase();
       const badgeClass = state === 'CANONICAL' ? 'badge-approved' : (state === 'PAPER_SHADOW' ? 'badge-shadow' : (state === 'QUARANTINED' ? 'badge-paused' : 'badge-validated'));
-      const plainState = c.plain_state_badge || (state === 'CANONICAL' ? 'Approved for Live Demo Trading' : 'Passed Practice Tests');
+      const plainState = c.plain_state_badge || (state === 'CANONICAL' ? 'Legacy state · approval evidence unavailable' : 'Evaluation status unavailable');
       const plainFamily = c.plain_family_name || c.name || cid;
-      const winLoss = c.plain_win_loss_summary || '61.5% practice win rate';
+      const winLoss = c.plain_win_loss_summary || 'Unavailable · no recorded evaluation';
       const winPct = extractNumericWinRate(c);
-      const profitSum = c.plain_profit_summary || '+8.4% simulated gain (1.88x R:R)';
-      const safetySum = c.plain_safety_summary || 'Max dip 3.2% • SL < TP Verified';
+      const profitSum = c.plain_profit_summary || 'Unavailable · no recorded return';
+      const safetySum = c.plain_safety_summary || 'Risk metrics unavailable';
 
-      let statusBtn = '';
-      if (state !== 'CANONICAL') {
-        statusBtn = '<button type="button" class="forge-btn forge-btn-success" onclick="changeStrategyStatus(\'' + cid + '\', \'CANONICAL\', this)">✅ Approve for Oracle</button>';
-      } else {
-        statusBtn = '<button type="button" class="forge-btn forge-btn-danger" onclick="changeStrategyStatus(\'' + cid + '\', \'ROLLBACK\', this)">⏸ Pause</button>';
-      }
 
       return (
         '<tr>' +
           '<td>' +
-            '<div style="font-weight:800;font-size:13.5px;color:' + titleColor + '">' + escapeHtml(plainFamily) + '</div>' +
-            '<div style="font-size:11px;color:' + subColor + ';margin-top:3px;font-family:var(--font-mono)">ID: <span style="color:' + amberColor + ';font-weight:700">' + escapeHtml(cid) + '</span> · v' + (c.version || 1) + ' · ' + escapeHtml(c.symbol || 'EURUSD') + '</div>' +
+            '<div style="font-weight:800;font-size:13.5px;color:' + titleColor + '">' + escapeHtml(plainFamily || 'Strategy unavailable') + '</div>' +
+            '<div style="font-size:11px;color:' + subColor + ';margin-top:3px;font-family:var(--font-mono)">ID: <span style="color:' + amberColor + ';font-weight:700">' + escapeHtml(cid || 'Unavailable') + '</span> · v' + escapeHtml(c.version ?? 'Unavailable') + ' · ' + escapeHtml(c.symbol || 'Unavailable') + '</div>' +
           '</td>' +
           '<td><span class="badge-pill ' + badgeClass + '">' + escapeHtml(plainState) + '</span></td>' +
           '<td>' +
             '<div style="font-weight:700;color:' + bodyColor + ';font-size:12.5px;margin-bottom:5px">' + escapeHtml(winLoss) + '</div>' +
-            '<div style="width:140px;height:6px;background:' + trackBg + ';border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.22)">' +
-              '<div style="width:' + winPct + '%;height:100%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:999px"></div>' +
+            '<div aria-label="Recorded win rate" style="width:140px;height:6px;background:' + trackBg + ';border-radius:999px;overflow:hidden;border:1px solid rgba(148,163,184,0.22)">' +
+              (winPct == null ? '' : '<div style="width:' + winPct + '%;height:100%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:999px"></div>') +
             '</div>' +
           '</td>' +
           '<td style="font-weight:800;color:' + emeraldColor + ';font-family:var(--font-mono)">' + escapeHtml(profitSum) + '</td>' +
           '<td style="font-size:12px;color:' + bodyColor + '">' + escapeHtml(safetySum) + '</td>' +
           '<td>' +
             '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-              '<button type="button" class="forge-btn forge-btn-secondary" onclick="inspectStrategyPlainEnglish(\'' + cid + '\')">📖 Guide</button>' +
-              '<button type="button" class="forge-btn forge-btn-blue" onclick="runLivePracticeBatch(\'' + cid + '\', this)">🧪 Practice</button>' +
-              '<button type="button" class="forge-btn forge-btn-violet" onclick="runMistakeClinic(\'' + cid + '\', this)">🔧 Improve</button>' +
-              statusBtn +
+              '<button type="button" class="forge-btn forge-btn-secondary" data-forge-action="guide" data-candidate-id="' + escapeHtml(cid) + '"' + (cid ? '' : ' disabled') + '>📖 Guide</button>' +
+              '<button type="button" class="forge-btn forge-btn-blue" data-forge-action="practice" data-candidate-id="' + escapeHtml(cid) + '"' + (cid ? '' : ' disabled') + '>🧪 Practice</button>' +
+              '<button type="button" class="forge-btn forge-btn-violet" data-forge-action="improve" data-candidate-id="' + escapeHtml(cid) + '"' + (cid ? '' : ' disabled') + '>🔧 Improve</button>' +
+              '<span class="forge-btn" aria-disabled="true">Governed review required</span>' +
             '</div>' +
           '</td>' +
         '</tr>'
       );
     }).join('');
+    tbody.querySelectorAll('[data-forge-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const id = button.getAttribute('data-candidate-id') || '';
+        if (!id) return;
+        const action = button.getAttribute('data-forge-action');
+        if (action === 'guide') inspectStrategyPlainEnglish(id);
+        if (action === 'practice') runLivePracticeBatch(id, button);
+        if (action === 'improve') runMistakeClinic(id, button);
+      });
+    });
   }
   window.addEventListener('universe:theme-changed', () => { renderForgeCandidatesTable(FORGE_CANDIDATES); });
 
@@ -855,16 +865,16 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function renderFeedItem(item) {
@@ -884,14 +894,21 @@
       setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
 
       if (Array.isArray(d.recent_builds)) {
-        document.getElementById('section_primary').innerHTML = d.recent_builds.slice(0, 8).map(renderFeedItem).join('');
+        const primary = document.getElementById('section_primary');
+        if (primary) primary.innerHTML = d.recent_builds.length ? d.recent_builds.slice(0, 8).map(renderFeedItem).join('') : '<div class="offline-msg">No Forge training activity records are available.</div>';
       }
       if (Array.isArray(d.incubator_experiments)) {
-        document.getElementById('section_secondary').innerHTML = d.incubator_experiments.slice(0, 6).map(renderFeedItem).join('');
+        const secondary = document.getElementById('section_secondary');
+        if (secondary) secondary.innerHTML = d.incubator_experiments.length ? d.incubator_experiments.slice(0, 6).map(renderFeedItem).join('') : '<div class="offline-msg">No Forge experiment records are available.</div>';
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       console.error(e);
+      ['builds_today', 'success_rate', 'deployments', 'system_health', 'avg_build_time', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
+      const primary = document.getElementById('section_primary');
+      const secondary = document.getElementById('section_secondary');
+      if (primary) primary.textContent = 'Forge activity data is unavailable.';
+      if (secondary) secondary.textContent = 'Forge experiment data is unavailable.';
     }
   }
 

@@ -411,14 +411,28 @@ class MarketData:
         _now = time.time()
         _cached_mem = _market_data_mem_cache.get(_mem_key)
         if _cached_mem and (_now - _cached_mem["ts"]) < _MARKET_DATA_CACHE_TTL_SEC:
-            invalid = self._series_validation_error(_cached_mem["result"].get("series"))
-            if not invalid:
+            cached_result = _cached_mem["result"]
+            invalid = self._series_validation_error(cached_result.get("series"))
+            cached_source = str(cached_result.get("source") or "")
+            is_disk_fallback = (
+                cached_result.get("cache_age_hours") is not None
+                or cached_source.lower().startswith("cache:")
+            )
+            if not allow_cache_fallback and is_disk_fallback:
+                # A cached fallback may have been loaded by an earlier analysis
+                # call. Do not let the in-memory TTL turn that stale result into
+                # apparently live input for an execution decision.
+                _market_data_mem_cache.pop(_mem_key, None)
+                _cached_mem = None
+            elif invalid:
+                logger.warning("discarding invalid in-memory history for %s: %s", symbol, invalid)
+                _market_data_mem_cache.pop(_mem_key, None)
+                _cached_mem = None
+            elif _cached_mem is not None:
                 logger.debug(
                     "market_data mem-cache HIT for %s (%.0fs old)", symbol,
                     _now - _cached_mem["ts"])
-                return _cached_mem["result"]
-            logger.warning("discarding invalid in-memory history for %s: %s", symbol, invalid)
-            _market_data_mem_cache.pop(_mem_key, None)
+                return cached_result
 
         source_errors = []
         for src in self.sources:

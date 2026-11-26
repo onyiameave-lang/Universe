@@ -211,8 +211,8 @@
                 <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ec4899;box-shadow:0 0 12px #ec4899"></span>
                 <span style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#f472b6;text-transform:uppercase">PULSE SOCIAL DISCOVERY STREAM · PUBLIC COMMUNITY CONVERSATIONS</span>
               </div>
-              <h2 style="margin:6px 0 2px;font-size:21px;font-weight:800;color:#f8fafc;letter-spacing:-0.015em">What Creators, Builders &amp; Communities Are Discussing Right Now</h2>
-              <p style="margin:0;font-size:12.5px;color:#94a3b8">Pure social media &amp; tech community feed first — click any conversation card to read the full thread, or tap the optional Market Impact button if you want the financial angle</p>
+              <h2 style="margin:6px 0 2px;font-size:21px;font-weight:800;color:#f8fafc;letter-spacing:-0.015em">Recorded Social Feed Snapshot</h2>
+              <p style="margin:0;font-size:12.5px;color:#94a3b8">Shows collected post text and source metadata. Original threads open only when a source link is recorded; this page does not invent full threads or engagement.</p>
             </div>
 
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -223,6 +223,7 @@
               <button type="button" id="btnRefreshSocialNow" onclick="triggerLiveSocialScan()" style="background:rgba(236,72,153,0.16);color:#f472b6;border:1px solid rgba(236,72,153,0.38);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">↻ Scan Live Social Feeds</button>
             </div>
           </div>
+          <div id="pulseScanStatus" role="status" style="margin-top:8px;font-size:12px;color:#94a3b8">Feed freshness has not been checked.</div>
 
           <div id="pulseFeaturedContainer"></div>
         </section>
@@ -231,8 +232,8 @@
         <div class="card" style="margin-bottom:18px;border:1px solid rgba(236,72,153,0.24)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
-              <span class="card-title">LIVE SOCIAL MEDIA &amp; COMMUNITY CARDS — CLICK ANY POST TO READ</span>
-              <div style="margin-top:3px;font-size:12px;color:var(--text-muted)">Illustrated community posts from Mastodon, Bluesky, and HackerNews with creator handles and optional market insights</div>
+              <span class="card-title">Recorded Social Posts</span>
+              <div style="margin-top:3px;font-size:12px;color:var(--text-muted)">Post text and recorded metadata only. Original threads are not expanded unless the source page is linked.</div>
             </div>
             <span id="pulseFeedCountBadge" style="padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(236,72,153,0.14);color:#f472b6;border:1px solid rgba(236,72,153,0.3)">Loading discussions...</span>
           </div>
@@ -285,7 +286,7 @@
       </div>
 
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid rgba(148,163,184,0.16);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <span id="modalPostFooter" style="font-size:12px;color:#94a3b8">Verified by Pulse Social Discovery Stream</span>
+        <span id="modalPostFooter" style="font-size:12px;color:#94a3b8">Feed source and timestamp are shown when provided</span>
         <a id="modalPostSourceLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;padding:8px 14px;border-radius:8px;background:rgba(236,72,153,0.16);color:#f472b6;border:1px solid rgba(236,72,153,0.35);font-size:12px;font-weight:700;text-decoration:none">Open Original Thread ↗</a>
       </div>
     </div>
@@ -332,10 +333,10 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'pulse';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   let currentSocialPosts = [];
   let activePlatformFilter = 'all';
+  let socialFeedState = 'unavailable';
 
   function escapeHtml(str) {
     return String(str == null ? '' : str)
@@ -344,9 +345,16 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+  function safeMediaUrl(value) {
+    const raw = String(value || '').trim();
+    if (/^https?:\/\//i.test(raw)) {
+      try { const url = new URL(raw); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch (e) { return ''; }
+    }
+    return /^assets\/[a-zA-Z0-9_./-]+$/.test(raw) ? raw : '';
+  }
 
   function formatPulseChatHtml(text) {
-    let clean = String(text || '')
+    let clean = escapeHtml(text || '')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]+)\*/g, '$1')
       .replace(/\*\*/g, '')
@@ -405,16 +413,20 @@
 
   async function triggerLiveSocialScan() {
     const btn = document.getElementById('btnRefreshSocialNow');
+    const status = document.getElementById('pulseScanStatus');
     const orig = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning Networks…'; }
     try {
-      await fetch(API_BASE + '/api/feeds/refresh', {
+      const r = await fetch(API_BASE + '/api/feeds/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent: 'pulse' })
+        body: JSON.stringify({ agent: 'pulse' }),
+        signal: AbortSignal.timeout(15000)
       });
-      await loadDashboard();
-    } catch (e) {} finally {
+      const result = await r.json();
+      if (status) status.textContent = result.human_summary || ('Feed refresh status: ' + (result.status || 'unavailable'));
+      if (r.ok && ['refreshed', 'partial'].includes(result.status)) await loadDashboard();
+    } catch (e) { if (status) status.textContent = 'Feed refresh unavailable: ' + e.message; } finally {
       if (btn) { btn.disabled = false; btn.textContent = orig; }
     }
   }
@@ -483,9 +495,7 @@
       return String(p.platform || '').toLowerCase().includes(activePlatformFilter.toLowerCase());
     });
 
-    if (badge) {
-      badge.textContent = filtered.length + ' Live Community Threads';
-    }
+    if (badge) badge.textContent = filtered.length + ' recorded posts · feed ' + socialFeedState;
 
     if (!filtered.length) {
       if (featuredBox) featuredBox.innerHTML = '';
@@ -508,18 +518,16 @@
     const leadStyle = getPlatformBadgeStyle(lead.platform);
     const leadHeadline = lead.post || lead.title || lead.headline || 'Community Conversation';
     const leadSummary = lead.summary || (Array.isArray(lead.full_post_paragraphs) ? lead.full_post_paragraphs[0] : leadHeadline);
-    const leadAuthor = lead.handle || lead.author || '@community';
-    const leadTopic = lead.topic || lead.topic_label || 'Community Discussion';
-    const leadImg = (lead.image_url && !String(lead.image_url).startsWith('data:image/svg'))
-      ? lead.image_url
-      : getFallbackEditorialPhoto(0, leadHeadline);
+    const leadAuthor = lead.handle || lead.author || 'Author unavailable';
+    const leadTopic = lead.topic || lead.topic_label || 'Topic unavailable';
+    const leadImg = safeMediaUrl(lead.image_url || lead.image);
     const leadInitial = String(leadAuthor).replace(/^@/, '').charAt(0).toUpperCase() || 'P';
 
     if (featuredBox) {
       featuredBox.innerHTML = `
         <article class="pulse-featured-card" onclick="openPostModal(${leadIdx})">
           <div style="position:relative;min-height:220px;background:#0b1322">
-            <img src="${leadImg}" alt="Featured discussion" onerror="this.src='assets/editorial/social_community.jpg'" style="width:100%;height:100%;object-fit:cover;display:block" />
+            ${leadImg ? `<img src="${escapeHtml(leadImg)}" alt="Source-provided post image" style="width:100%;height:100%;object-fit:cover;display:block" />` : '<div style="padding:32px;color:#94a3b8">No source image was provided for this post.</div>'}
             <span style="position:absolute;top:12px;left:12px;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(10,14,26,0.88);color:#f472b6;border:1px solid rgba(236,72,153,0.45);backdrop-filter:blur(6px)">
               🔥 FEATURED COMMUNITY THREAD
             </span>
@@ -530,7 +538,7 @@
                 <div class="pulse-creator-avatar">${escapeHtml(leadInitial)}</div>
                 <div>
                   <div style="font-size:13px;font-weight:800;color:${headTxt}">${escapeHtml(leadAuthor)}</div>
-                  <div style="font-size:11px;color:${metaTxt}">${escapeHtml(lead.time || 'Live')} · ${escapeHtml(leadTopic)}</div>
+                  <div style="font-size:11px;color:${metaTxt}">${escapeHtml(lead.time || lead.published_at || 'Timestamp unavailable')} · ${escapeHtml(leadTopic)}</div>
                 </div>
                 <span style="margin-left:auto;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:800;background:${leadStyle.bg};color:${leadStyle.color};border:1px solid ${leadStyle.border}">
                   ${leadStyle.icon} ${escapeHtml(lead.platform || 'Social')}
@@ -546,7 +554,7 @@
               </button>
             </div>
             <div id="pulseTradeImpact-lead" style="display:none;margin-top:10px;padding:10px 12px;border-radius:9px;background:${impactBoxBg};border:1px solid rgba(219,39,119,0.28);font-size:12px;line-height:1.55;color:${impactBoxColor}">
-              ${escapeHtml(lead.optional_trade_impact || 'Optional Market Context: Community discussions on this topic are informational and help gauge public sentiment.')}
+              ${escapeHtml(lead.optional_trade_impact || 'No verified market-impact assessment is attached to this post.')}
             </div>
           </div>
         </article>
@@ -556,19 +564,17 @@
     grid.innerHTML = filtered.map((item, idx) => {
       const globalIdx = currentSocialPosts.indexOf(item);
       const pStyle = getPlatformBadgeStyle(item.platform);
-      const headline = item.post || item.title || item.headline || 'Community Thread';
+      const headline = item.post || item.title || item.headline || 'Post text unavailable';
       const summary = item.summary || (Array.isArray(item.full_post_paragraphs) ? item.full_post_paragraphs[0] : headline);
-      const author = item.handle || item.author || '@community';
-      const topic = item.topic || item.topic_label || 'Community Thread';
-      const imgSrc = (item.image_url && !String(item.image_url).startsWith('data:image/svg'))
-        ? item.image_url
-        : getFallbackEditorialPhoto(idx + 1, headline);
+      const author = item.handle || item.author || 'Author unavailable';
+      const topic = item.topic || item.topic_label || 'Topic unavailable';
+      const imgSrc = safeMediaUrl(item.image_url || item.image);
       const initial = String(author).replace(/^@/, '').charAt(0).toUpperCase() || 'U';
 
       return `
         <article class="pulse-social-card" onclick="openPostModal(${globalIdx})">
           <div class="pulse-card-media">
-            <img src="${imgSrc}" alt="${escapeHtml(headline)}" onerror="this.src='assets/editorial/social_community.jpg'" />
+            ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="Source-provided image for ${escapeHtml(headline)}" />` : '<div style="padding:24px;color:#94a3b8">No source image</div>'}
             <span style="position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(10,14,26,0.88);color:#f8fafc;border:1px solid rgba(255,255,255,0.24);backdrop-filter:blur(6px)">
               ${pStyle.icon} ${escapeHtml(item.platform || 'Social')}
             </span>
@@ -582,7 +588,7 @@
                 <div class="pulse-creator-avatar" style="width:28px;height:28px;font-size:11.5px">${escapeHtml(initial)}</div>
                 <div style="min-width:0">
                   <div style="font-size:12px;font-weight:700;color:${headTxt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(author)}</div>
-                  <div style="font-size:10.5px;color:${metaTxt}">${escapeHtml(item.time || 'Live')} · ${escapeHtml(item.engagement || 'Active Thread')}</div>
+                  <div style="font-size:10.5px;color:${metaTxt}">${escapeHtml(item.time || item.published_at || 'Timestamp unavailable')} · ${escapeHtml(item.engagement || 'Engagement unavailable')}</div>
                 </div>
               </div>
               <h3 style="margin:0 0 8px;font-size:15.5px;font-weight:800;line-height:1.42;color:${headTxt}">${escapeHtml(headline)}</h3>
@@ -596,7 +602,7 @@
                 </button>
               </div>
               <div id="pulseTradeImpact-${globalIdx}" style="display:none;margin-top:9px;padding:9px 11px;border-radius:8px;background:${impactBoxBg};border:1px solid rgba(219,39,119,0.25);font-size:11.5px;line-height:1.5;color:${impactBoxColor}">
-                ${escapeHtml(item.optional_trade_impact || 'Optional Market Context: Community discussions provide grassroots sentiment context.')}
+                ${escapeHtml(item.optional_trade_impact || 'No verified market-impact assessment is attached to this post.')}
               </div>
             </div>
           </div>
@@ -622,13 +628,13 @@
     const headline = item.post || item.title || item.headline || 'Community Conversation';
     document.getElementById('modalPostPlatform').textContent = item.platform || 'Social Network';
     document.getElementById('modalPostTopic').textContent = item.topic || item.topic_label || 'Community Thread';
-    document.getElementById('modalPostAuthor').textContent = item.handle || item.author || '@community';
-    document.getElementById('modalPostTime').textContent = item.time || '';
+    document.getElementById('modalPostAuthor').textContent = item.handle || item.author || 'Author unavailable';
+    document.getElementById('modalPostTime').textContent = item.time || item.published_at || 'Timestamp unavailable';
     document.getElementById('modalPostTitle').textContent = headline;
     const imgEl = document.getElementById('modalPostImage');
-    imgEl.src = (item.image_url && !String(item.image_url).startsWith('data:image/svg'))
-      ? item.image_url
-      : getFallbackEditorialPhoto(idx, headline);
+    const sourceImage = safeMediaUrl(item.image_url || item.image);
+    imgEl.hidden = !sourceImage;
+    if (sourceImage) imgEl.src = sourceImage;
 
     const bodyEl = document.getElementById('modalPostBody');
     const paragraphs = Array.isArray(item.body_paragraphs) && item.body_paragraphs.length
@@ -640,14 +646,15 @@
     const impactChev = document.getElementById('modalPostTradeImpactChevron');
     if (impactBox) {
       impactBox.style.display = 'none';
-      impactBox.textContent = item.optional_trade_impact || 'Optional Market & Trade Context: If you are monitoring financial markets, public community discussions can offer early clues about consumer and developer sentiment.';
+      impactBox.textContent = item.optional_trade_impact || 'No verified market-impact assessment is attached to this post.';
     }
     if (impactChev) impactChev.textContent = '▼ Show';
 
     const srcLink = document.getElementById('modalPostSourceLink');
     if (srcLink) {
-      if (item.url && String(item.url).startsWith('http')) {
-        srcLink.href = item.url;
+      const sourceUrl = safeMediaUrl(item.url);
+      if (sourceUrl) {
+        srcLink.href = sourceUrl;
         srcLink.style.display = 'inline-block';
       } else {
         srcLink.style.display = 'none';
@@ -666,16 +673,16 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function renderFeedItem(item, idx) {
@@ -688,29 +695,37 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
 
-      setKpi('overall_sentiment', d['overall_sentiment'] || (d.metrics && d.metrics['overall_sentiment']), d.deltas && d.deltas['overall_sentiment']);
-      setKpi('posts_analyzed', d['posts_analyzed'] || (d.metrics && d.metrics['posts_analyzed']), d.deltas && d.deltas['posts_analyzed']);
-      setKpi('trending_topics', d['trending_topics'] || (d.metrics && d.metrics['trending_topics']), d.deltas && d.deltas['trending_topics']);
-      setKpi('sentiment_score', d['sentiment_score'] || (d.metrics && d.metrics['sentiment_score']), d.deltas && d.deltas['sentiment_score']);
-      setKpi('influencers_tracked', d['influencers_tracked'] || (d.metrics && d.metrics['influencers_tracked']), d.deltas && d.deltas['influencers_tracked']);
-      setKpi('uptime', d['uptime'] || (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
+      setKpi('overall_sentiment', d['overall_sentiment'] ?? (d.metrics && d.metrics['overall_sentiment']), d.deltas && d.deltas['overall_sentiment']);
+      setKpi('posts_analyzed', d['posts_analyzed'] ?? (d.metrics && d.metrics['posts_analyzed']), d.deltas && d.deltas['posts_analyzed']);
+      setKpi('trending_topics', d['trending_topics'] ?? (d.metrics && d.metrics['trending_topics']), d.deltas && d.deltas['trending_topics']);
+      setKpi('sentiment_score', d['sentiment_score'] ?? (d.metrics && d.metrics['sentiment_score']), d.deltas && d.deltas['sentiment_score']);
+      setKpi('influencers_tracked', d['influencers_tracked'] ?? (d.metrics && d.metrics['influencers_tracked']), d.deltas && d.deltas['influencers_tracked']);
+      setKpi('uptime', d['uptime'] ?? (d.metrics && d.metrics['uptime']), d.deltas && d.deltas['uptime']);
 
       const posts = Array.isArray(d.social_posts) && d.social_posts.length
         ? d.social_posts
         : (Array.isArray(d.social_posts_feed) ? d.social_posts_feed : []);
-      if (posts.length) {
-        currentSocialPosts = posts;
-        renderSocialCards();
-      }
+      socialFeedState = String(d.status || d.uptime || 'unavailable');
+      const freshness = document.getElementById('pulseScanStatus');
+      if (freshness) freshness.textContent = 'Snapshot state: ' + socialFeedState + (d.updated_at ? ' · updated ' + d.updated_at : ' · source timestamp unavailable');
+      currentSocialPosts = posts;
+      renderSocialCards();
 
       const infFeed = Array.isArray(d.influencer_sentiment_feed) ? d.influencer_sentiment_feed : [];
       const secEl = document.getElementById('section_secondary');
-      if (secEl && infFeed.length) {
-        secEl.innerHTML = infFeed.slice(0, 8).map((item, idx) => renderFeedItem(item, idx)).join('');
-      }
+      if (secEl) secEl.innerHTML = infFeed.length ? infFeed.slice(0, 8).map((item, idx) => renderFeedItem(item, idx)).join('') : '<div class="offline-msg">No separate influencer feed records are available.</div>';
       if (typeof injectIcons === 'function') injectIcons();
     } catch (e) {
       console.error(e);
+      ['overall_sentiment', 'posts_analyzed', 'trending_topics', 'sentiment_score', 'influencers_tracked', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
+      socialFeedState = 'unavailable';
+      currentSocialPosts = [];
+      renderSocialCards();
+      ['overall_sentiment', 'posts_analyzed', 'trending_topics', 'sentiment_score', 'influencers_tracked', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
+      const secondary = document.getElementById('section_secondary');
+      if (secondary) secondary.textContent = 'Social feed data is unavailable.';
+      const freshness = document.getElementById('pulseScanStatus');
+      if (freshness) freshness.textContent = 'Social feed data unavailable: ' + e.message;
     }
   }
 

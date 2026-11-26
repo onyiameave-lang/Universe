@@ -391,6 +391,18 @@ class OracleDecisionLedger:
         learning_adjustments: Dict[str, Any],
         strategy_id: Optional[str] = None,
         shadow_observation: Optional[bool] = None,
+        entry_session: Optional[str] = None,
+        exit_price: Optional[float] = None,
+        exit_reason: Optional[str] = None,
+        bars_observed: Optional[int] = None,
+        data_source: Optional[str] = None,
+        data_timeframe: Optional[str] = None,
+        pnl_basis: Optional[str] = None,
+        ambiguous_bar: Optional[bool] = None,
+        final_stop_price: Optional[float] = None,
+        max_favorable_excursion_r: Optional[float] = None,
+        max_adverse_excursion_r: Optional[float] = None,
+        management_actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         event_id = self._make_event_id("CF_REPLAY", symbol, now)
@@ -413,6 +425,30 @@ class OracleDecisionLedger:
             record["strategy_id"] = strategy_id
         if shadow_observation is not None:
             record["shadow_observation"] = bool(shadow_observation)
+        if entry_session is not None:
+            record["entry_session"] = str(entry_session)
+        if exit_price is not None:
+            record["exit_price"] = float(exit_price)
+        if exit_reason is not None:
+            record["exit_reason"] = str(exit_reason)
+        if bars_observed is not None:
+            record["bars_observed"] = max(0, int(bars_observed))
+        if data_source is not None:
+            record["data_source"] = str(data_source)
+        if data_timeframe is not None:
+            record["data_timeframe"] = str(data_timeframe)
+        if pnl_basis is not None:
+            record["pnl_basis"] = str(pnl_basis)
+        if ambiguous_bar is not None:
+            record["ambiguous_bar"] = bool(ambiguous_bar)
+        if final_stop_price is not None:
+            record["final_stop_price"] = float(final_stop_price)
+        if max_favorable_excursion_r is not None:
+            record["max_favorable_excursion_r"] = float(max_favorable_excursion_r)
+        if max_adverse_excursion_r is not None:
+            record["max_adverse_excursion_r"] = float(max_adverse_excursion_r)
+        if management_actions is not None:
+            record["management_actions"] = list(management_actions)
         summary = (
             f"COUNTERFACTUAL {classification} on {symbol.upper()} ({original_event_id}): "
             f"would have realized {counterfactual_r:+.2f}R after {stage_rejected}:{reason_code}"

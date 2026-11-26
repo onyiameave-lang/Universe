@@ -163,981 +163,14 @@ const PYTHON_BIN =
   (process.platform === "win32" ? "python" : "python3");
 
 let _lastFeedRefreshMs = 0;
-function getEcosystemLiveFeeds(): Record<string, any> {
-  const cached = readJsonFileSafe(
-    "Chronicle/memory/research/ecosystem_live_feeds.json",
-    {}
-  );
-  const now = Date.now();
-  // Asynchronously refresh in background if older than 5 minutes
-  if (now - _lastFeedRefreshMs > 5 * 60 * 1000) {
-    _lastFeedRefreshMs = now;
-    try {
-      const scriptPath = path.join(
-        __dirname,
-        "Atlas",
-        "api",
-        "ecosystem_live_feeds.py"
-      );
-      if (fs.existsSync(scriptPath)) {
-        const child = spawn(PYTHON_BIN, [scriptPath], {
-          cwd: __dirname,
-          stdio: "ignore",
-        });
-        child.unref();
-      }
-    } catch {
-      // ignore background refresh error
-    }
-  }
-  return cached;
-}
-
-function readOracleRealTradingLedger() {
-  const equityState = readJsonFileSafe(
-    "Oracle/memory/forge_mt5_equity_state.json",
-    { equity_usd: 104621.55, balance_usd: 104621.55 }
-  );
-  const learnedClosed = readJsonFileSafe(
-    "Oracle/memory/learned_closed_trades.json",
-    {}
-  );
-
-  // Parse Oracle/memory/trade_experiment_log.jsonl
-  const expLogPath = path.join(
-    __dirname,
-    "Oracle",
-    "memory",
-    "trade_experiment_log.jsonl"
-  );
-  const experimentTrades: Array<Record<string, any>> = [];
-  if (fs.existsSync(expLogPath)) {
-    try {
-      const lines = fs
-        .readFileSync(expLogPath, "utf8")
-        .split("\n")
-        .filter((l) => l.trim().length > 0);
-      for (const line of lines) {
-        try {
-          experimentTrades.push(JSON.parse(line));
-        } catch {}
-      }
-    } catch {}
-  }
-
-  // Parse Oracle/logs/mt5_demo_trades.csv
-  // Columns: timestamp,session_id,cycle,symbol,broker_symbol,direction,confidence,regime,size,price,stop,target,reward_risk,outcome,retcode,reason,account_type,equity_before,note
-  const tradesCsvPath = path.join(
-    __dirname,
-    "Oracle",
-    "logs",
-    "mt5_demo_trades.csv"
-  );
-  const sessionExecutedTrades: Array<Record<string, any>> = [];
-  let riskRejectedCount = 0;
-  let marketClosedHolds = 0;
-  let totalCsvRows = 0;
-  if (fs.existsSync(tradesCsvPath)) {
-    try {
-      const rawCsv = fs.readFileSync(tradesCsvPath, "utf8").trim().split(/\r?\n/);
-      const headers = (rawCsv[0] || "").split(",");
-      for (let i = 1; i < rawCsv.length; i++) {
-        const cols = rawCsv[i].split(",");
-        if (cols.length < 14) continue;
-        totalCsvRows++;
-        const row: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          row[h.trim()] = (cols[idx] || "").trim();
-        });
-        const outcome = (row.outcome || "").toLowerCase();
-        const reason = row.reason || "";
-        const priceNum = Number(row.price || 0);
-        if (
-          priceNum > 0 &&
-          outcome !== "rejected" &&
-          outcome !== "hold" &&
-          outcome !== "unmapped"
-        ) {
-          const rMatch = reason.match(/realized_r=([+-]?[0-9.]+)R/i);
-          const realizedR = rMatch ? Number(rMatch[1]) : 1.325;
-          sessionExecutedTrades.push({
-            ...row,
-            action: row.direction || "short",
-            lots: Number(row.size || 1).toFixed(2),
-            entry: row.price,
-            sl: row.stop,
-            tp: row.target,
-            realized_r: realizedR,
-          });
-        } else if (outcome === "rejected" || reason.includes("below live floor")) {
-          riskRejectedCount++;
-        } else if (outcome === "hold" || outcome === "unmapped") {
-          marketClosedHolds++;
-        }
-      }
-    } catch {}
-  }
-
-  // Parse Oracle/logs/mt5_demo_sessions.csv
-  // Columns: session_id,start_time,end_time,duration_min,symbols_traded,cycles_completed,trades_filled,trades_rejected,trades_hold,trades_error,trades_timeout,trades_unmapped,start_equity,end_equity,pnl,pnl_pct,kill_switch_fired,paper_mode,note
-  const sessionsCsvPath = path.join(
-    __dirname,
-    "Oracle",
-    "logs",
-    "mt5_demo_sessions.csv"
-  );
-  const sessions: Array<Record<string, string>> = [];
-  if (fs.existsSync(sessionsCsvPath)) {
-    try {
-      const rawSess = fs
-        .readFileSync(sessionsCsvPath, "utf8")
-        .trim()
-        .split(/\r?\n/);
-      const headers = (rawSess[0] || "").split(",");
-      for (let i = 1; i < rawSess.length; i++) {
-        const cols = rawSess[i].split(",");
-        if (cols.length < 5) continue;
-        const row: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          row[h.trim()] = (cols[idx] || "").trim();
-        });
-        row.session_pnl = row.pnl || "1401.32";
-        row.ended_at = row.end_time || "Latest Session";
-        row.broker = "C3 / MT5 Paper Demo";
-        sessions.push(row);
-      }
-    } catch {}
-  }
-
-  // Compute genuine win rates from memory
-  const expWins = experimentTrades.filter(
-    (t) => t.won === true || t.outcome === "win" || Number(t.pnl_r ?? t.pnl ?? 0) > 0
-  ).length;
-  const expTotal = experimentTrades.length;
-
-  const sessionWins = sessionExecutedTrades.filter(
-    (t) => Number(t.realized_r || 0) >= 0
-  ).length;
-  const sessionTotal = sessionExecutedTrades.length;
-
-  const totalExecutedAllTime = expTotal + sessionTotal;
-  const totalWinsAllTime = expWins + sessionWins;
-  const genuineAllTimeWinRatePct =
-    totalExecutedAllTime > 0
-      ? ((totalWinsAllTime / totalExecutedAllTime) * 100).toFixed(1)
-      : "50.0";
-  const lastSessionWinRatePct =
-    sessionTotal > 0 ? ((sessionWins / sessionTotal) * 100).toFixed(1) : "100.0";
-
-  const equityUsd = Number(equityState.equity_usd || 104621.55);
-  const netPnlUsd = equityUsd - 100000;
-
-  return {
-    equityUsd,
-    netPnlUsd,
-    learnedClosedCount: Object.keys(learnedClosed).length,
-    experimentTrades,
-    sessionExecutedTrades,
-    sessions,
-    riskRejectedCount,
-    marketClosedHolds,
-    totalCsvRows,
-    expWins,
-    expTotal,
-    sessionWins,
-    sessionTotal,
-    totalExecutedAllTime,
-    totalWinsAllTime,
-    genuineAllTimeWinRatePct,
-    lastSessionWinRatePct,
-  };
-}
-
-function buildDynamicAgentData(agentId: string): Record<string, any> {
-  const id = agentId.toLowerCase();
-  const manifest = AGENT_MANIFESTS[id];
-  const storageSummary = buildStorageTopology();
-  const candidates = forgeCore.listCandidateArtifacts();
-  const hypotheses = forgeCore.listHypotheses();
-  const catalog = oracleAdapter.getCatalogSnapshot();
-  const readinessList = oracleAdapter.listAllSymbolsReadiness();
-  const liveFeeds = getEcosystemLiveFeeds();
-  const ledger = readOracleRealTradingLedger();
-
-  if (id === "forge") {
-    const certifiedOrBetter = candidates.filter((c) =>
-      ["CERTIFIED", "APPROVED_FOR_DEPLOYMENT", "DEPLOYED"].includes(
-        c.lifecycle_state
-      )
-    );
-    const deployed = candidates.filter((c) => c.lifecycle_state === "DEPLOYED");
-    const blocked = candidates.filter((c) => c.lifecycle_state === "BLOCKED");
-    const evaluated = candidates.filter((c) => c.lifecycle_state !== "BLOCKED");
-
-    const passRate =
-      evaluated.length > 0
-        ? Math.round((certifiedOrBetter.length / evaluated.length) * 1000) / 10
-        : 0;
-
-    const latestSess =
-      ledger.sessions[ledger.sessions.length - 1] || ({} as any);
-    const prevProfitSess =
-      ledger.sessions.find((s) => Number(s.session_pnl || 0) > 1000) ||
-      latestSess;
-    const lastExec =
-      ledger.sessionExecutedTrades[ledger.sessionExecutedTrades.length - 1] ||
-      ({} as any);
-
-    const lastSessionFeedItems = [
-      {
-        title: `[LAST TRADING SESSION #${latestSess.session_id || "20261118_212016"}] Broker: ${
-          latestSess.broker || "C3 / MT5 Paper Demo"
-        } · Equity: $${ledger.equityUsd.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })} (+$${ledger.netPnlUsd.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })} net profit) · Constitutional Law SL < TP Active (0 violations)`,
-        source: "Forge Session Monitor <- Oracle/logs/mt5_demo_sessions.csv",
-        time: latestSess.ended_at || "Latest Session",
-      },
-      {
-        title: `[LAST SESSION EXECUTED TRADES (${ledger.sessionWins}/${ledger.sessionTotal} Wins · 100% Win Rate)] ${
-          lastExec.symbol || "EURUSD"
-        } ${String(lastExec.action || "SHORT").toUpperCase()} @ ${
-          lastExec.entry || "1.09963"
-        } | Constitutional SL ${lastExec.sl || "1.10035"} < TP ${
-          lastExec.tp || "1.09626"
-        } (Reward:Risk = ${lastExec.reward_risk || "4.68"}R) | Realized: +${
-          lastExec.realized_r || "3.686"
-        }R (Session PnL: +$${prevProfitSess.session_pnl || "1,401.32"})`,
-        source: "Forge Mistake Clinic & Trade Audit <- Oracle/logs/mt5_demo_trades.csv",
-        time: lastExec.timestamp || "Verified Fill",
-      },
-    ];
-
-    return {
-      agent: "forge",
-      status: "online",
-      builds_today: `${candidates.length} Blueprints`,
-      success_rate: `${passRate}% Certified`,
-      deployments: `${deployed.length} Live V2`,
-      system_health: `Last Session +$${ledger.netPnlUsd.toFixed(0)}`,
-      avg_build_time: "7-TF (W1..M5)",
-      uptime: "SL < TP Locked",
-      metrics: {
-        builds_today: candidates.length,
-        success_rate: `${passRate}%`,
-        deployments: deployed.length,
-        system_health: `${evaluated.length} Evaluated / ${blocked.length} Blocked`,
-        avg_build_time: `${hypotheses.length} Hypotheses`,
-        uptime: `Last Session Equity $${ledger.equityUsd.toFixed(2)}`,
-      },
-      deltas: {
-        builds_today: `+${certifiedOrBetter.length} certified for Oracle V2`,
-        success_rate: "Last Session: 3/3 Wins (+6.34R)",
-        deployments:
-          deployed.length > 0 ? "Deployed to Oracle V2" : "Target: Oracle V2",
-        system_health: "SL [0.75, 1.75] ATR < TP >= 1.80R",
-      },
-      recent_builds: [
-        ...lastSessionFeedItems,
-        ...candidates.slice(0, 8).map((c: any) => ({
-          title: `[${c.lifecycle_state}] ${c.symbol} (${c.regime}) — ${
-            c.candidate_title || c.trader_style || c.candidate_id
-          } | Lockbox: ${
-            c.lockbox_holdout_report
-              ? `${c.lockbox_holdout_report.candidate_metrics.trades} trades, Net=${c.lockbox_holdout_report.candidate_metrics.net_return_pct}% (Exp: ${c.lockbox_holdout_report.candidate_metrics.expectancy_r}R, Sharpe: ${c.lockbox_holdout_report.candidate_metrics.sharpe_ratio})`
-              : c.status_reason || "Certified V2 Blueprint"
-          }`,
-          source: `Forge V2 -> Oracle V2 (${c.experiment_id || c.candidate_id})`,
-          time: safeUtcTime(c.updated_at_unix || c.created_at_unix),
-        })),
-      ],
-      incubator_experiments: hypotheses.slice(0, 8).map((h: any) => ({
-        title: `[Hypothesis: ${(h.status || "supported").toUpperCase()}] ${
-          h.statement
-        } (${(h.evidence_records || []).length} evidence records)`,
-        source: `${h.proposed_by} -> ${h.scope_key}`,
-        time: safeUtcTime(h.updated_at_unix || h.created_at_unix),
-      })),
-    };
-  }
-
-  if (id === "oracle") {
-    const v2Candidates = candidates.filter((c) =>
-      c.candidate_code?.startsWith("V2_")
-    );
-
-    // Build open / armed V2 setups + executed trades from memory
-    const armedSetups = v2Candidates.slice(0, 4).map((c: any) => {
-      const pol = c.dynamic_trade_management_policy || {};
-      const slM = Number(pol.learned_optimal_stop_atr_mult ?? 1.2).toFixed(2);
-      const tpR = Number(pol.learned_initial_major_tp_r ?? 2.15).toFixed(2);
-      const tpAtr = (Number(slM) * Number(tpR)).toFixed(2);
-      return {
-        title: `[ARMED V2 SETUP · ${c.symbol}] ${
-          c.trader_style || c.candidate_code
-        } (${c.regime}) — Constitutional SL ${slM} ATR < TP ${tpAtr} ATR (${tpR}R) · Awaiting London/NY Overlap Trigger`,
-        source: `Oracle V2 Armed Blueprint (${c.candidate_id})`,
-        time: "Armed & Monitoring",
-      };
-    });
-
-    const executedSessionItems = ledger.sessionExecutedTrades
-      .slice()
-      .reverse()
-      .map((t) => ({
-        title: `[WIN · SESSION #${t.session_id}] ${t.symbol} ${String(
-          t.action
-        ).toUpperCase()} (${t.lots} lots) @ Entry ${t.entry} | SL ${
-          t.sl
-        } < TP ${t.tp} (${t.reward_risk}R) | Realized: +${Number(
-          t.realized_r
-        ).toFixed(3)}R | Confidence: ${(Number(t.confidence) * 100).toFixed(
-          1
-        )}%`,
-        source: "Oracle C3/MT5 Demo Trade Ledger (mt5_demo_trades.csv)",
-        time: (t.timestamp || "").slice(0, 19).replace("T", " ") + " UTC",
-      }));
-
-    const historicalExpItems = ledger.experimentTrades
-      .slice()
-      .reverse()
-      .map((t) => {
-        const isWin = t.won === true || t.outcome === "win" || Number(t.pnl_r ?? t.pnl ?? 0) > 0;
-        const rVal = Number(t.pnl_r ?? t.pnl ?? 0);
-        const pnlStr = rVal >= 0 ? `+${rVal.toFixed(3)}R` : `${rVal.toFixed(3)}R`;
-        return {
-          title: `[${isWin ? "WIN" : "LOSS"} · MEMORY LOG] ${
-            t.symbol
-          } (${t.entry_streams?.technical?.regime || t.regime || "intraday"}) — Outcome: ${pnlStr} | Genome: ${
-            t.entry_streams?.technical?.genome || t.strategy_id || "v1_baseline"
-          }`,
-          source: "Oracle Memory (trade_experiment_log.jsonl)",
-          time: safeUtcTime(t.timestamp),
-        };
-      });
-
-    // Per-symbol genuine win rate breakdown from memory
-    const symbolStats: Record<
-      string,
-      { wins: number; total: number; netPnl: number; rSum: number }
-    > = {};
-    for (const t of ledger.sessionExecutedTrades) {
-      const sym = t.symbol || "EURUSD";
-      if (!symbolStats[sym])
-        symbolStats[sym] = { wins: 0, total: 0, netPnl: 0, rSum: 0 };
-      symbolStats[sym].total++;
-      if (Number(t.realized_r || 0) >= 0) symbolStats[sym].wins++;
-      symbolStats[sym].rSum += Number(t.realized_r || 0);
-    }
-    for (const t of ledger.experimentTrades) {
-      const sym = t.symbol || "EURUSD";
-      if (!symbolStats[sym])
-        symbolStats[sym] = { wins: 0, total: 0, netPnl: 0, rSum: 0 };
-      symbolStats[sym].total++;
-      if (t.won === true || t.outcome === "win" || Number(t.pnl_r ?? t.pnl ?? 0) > 0)
-        symbolStats[sym].wins++;
-      symbolStats[sym].rSum += Number(t.pnl_r ?? 0);
-    }
-
-    const winRateBreakdown = [
-      {
-        title: `[OVERALL GENUINE MEMORY WIN RATE] ${ledger.totalWinsAllTime} Wins / ${ledger.totalExecutedAllTime} Executed Trades (${ledger.genuineAllTimeWinRatePct}% All-Time) · Last C3/MT5 Session: ${ledger.sessionWins}/${ledger.sessionTotal} Wins (${ledger.lastSessionWinRatePct}%, +6.336R) · ${ledger.riskRejectedCount} Low-Confidence Setups Blocked by Risk Gate`,
-        source: "Oracle Authoritative Memory Audit",
-        time: "Verified Ledger",
-      },
-      ...Object.entries(symbolStats).map(([sym, st]) => {
-        const wr = st.total > 0 ? ((st.wins / st.total) * 100).toFixed(1) : "0.0";
-        const rPart =
-          st.rSum !== 0 ? ` · Realized R: +${st.rSum.toFixed(2)}R` : "";
-        const pnlPart =
-          st.netPnl !== 0
-            ? ` · Historical PnL: ${
-                st.netPnl >= 0 ? "+" : "-"
-              }$${Math.abs(st.netPnl).toFixed(2)}`
-            : "";
-        return {
-          title: `${sym} — Genuine Memory Win Rate: ${wr}% (${st.wins} Wins / ${st.total} Trades)${rPart}${pnlPart}`,
-          source: "Chronicle + Oracle Trade Memory",
-          time: `${st.wins}/${st.total} Won`,
-        };
-      }),
-    ];
-
-    return {
-      agent: "oracle",
-      status: "online",
-      pnl_today: `+$${ledger.netPnlUsd.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`,
-      win_rate: `${ledger.genuineAllTimeWinRatePct}% (${ledger.totalWinsAllTime}/${ledger.totalExecutedAllTime} Won)`,
-      open_trades: `0 Open · ${armedSetups.length} Armed V2`,
-      signals_today: `${ledger.totalExecutedAllTime} Filled · ${ledger.riskRejectedCount} Vetoed`,
-      portfolio_value: `$${ledger.equityUsd.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`,
-      max_drawdown: "1.18% (SL < TP Locked)",
-      metrics: {
-        pnl_today: `+$${ledger.netPnlUsd.toFixed(2)}`,
-        win_rate: `${ledger.genuineAllTimeWinRatePct}% All-Time (${ledger.lastSessionWinRatePct}% Last Session)`,
-        open_trades: `0 Open · ${armedSetups.length} Armed`,
-        signals_today: `${ledger.totalExecutedAllTime} Executed`,
-        portfolio_value: `$${ledger.equityUsd.toFixed(2)}`,
-        max_drawdown: "1.18% Max DD",
-      },
-      open_and_recent_trades: [
-        ...armedSetups,
-        ...executedSessionItems,
-        ...historicalExpItems,
-      ],
-      win_rate_breakdown: winRateBreakdown,
-    };
-  }
-
-  if (id === "pulse") {
-    const pulseFeed = liveFeeds.pulse || {};
-    const posts: Array<Record<string, any>> = pulseFeed.social_posts || [];
-    const bullCount = Number(pulseFeed.bullish_count ?? 6);
-    const bearCount = Number(pulseFeed.bearish_count ?? 2);
-    const sentScore = Number(pulseFeed.sentiment_score ?? 0.58);
-    const influencersCount = Number(
-      pulseFeed.influencers_tracked ?? (posts.length || 15)
-    );
-    const overallSent = pulseFeed.overall_sentiment || "BULLISH";
-
-    const authorSummaries = posts.slice(0, 10).map((p) => ({
-      title: `${p.author} (${p.display_name || p.author}) on ${p.platform} — Sentiment: ${
-        p.sentiment
-      } (Score: ${p.sentiment_score}) · Engagement: ${p.upvotes || 0} likes/pts & ${
-        p.comments || 0
-      } replies`,
-      source: `Account Monitor · ${p.platform}`,
-      time: p.time || "Live",
-    }));
-
-    return {
-      agent: "pulse",
-      status: "online",
-      overall_sentiment: `${overallSent} (${bullCount}B / ${bearCount}S)`,
-      posts_analyzed: `${posts.length || 16} Live Posts`,
-      trending_topics: "#markets · #finance · #trading · #bitcoin",
-      sentiment_score: `${sentScore.toFixed(2)} / 1.00`,
-      influencers_tracked: `${influencersCount} Accounts`,
-      uptime: "Live Social Stream",
-      metrics: {
-        overall_sentiment: overallSent,
-        posts_analyzed: posts.length || 16,
-        trending_topics: "#markets, #finance, #trading, #bitcoin",
-        sentiment_score: sentScore,
-        influencers_tracked: influencersCount,
-        uptime: "100% Live",
-      },
-      social_posts_feed:
-        posts.length > 0
-          ? posts.map((p) => ({
-              title: p.title,
-              source: p.source,
-              time: p.time,
-            }))
-          : [
-              {
-                title:
-                  '[BULLISH] @the_index posted on #finance: "UniCredit Between Stock Market Momentum and the Commerz Dossier"',
-                source: "Mastodon #finance · Account: @the_index",
-                time: "Live",
-              },
-            ],
-      influencer_sentiment_feed: authorSummaries,
-    };
-  }
-
-  if (id === "sentinel") {
-    const sentinelFeed = liveFeeds.sentinel || {};
-    const news: Array<Record<string, any>> = sentinelFeed.world_news || [];
-    const bearNews = news.filter((n) => n.sentiment === "BEARISH");
-    const bullNews = news.filter((n) => n.sentiment === "BULLISH");
-
-    const macroRadar = [
-      {
-        title: `[WORLD GEOPOLITICAL & MACRO RADAR] Monitoring ${
-          news.length || 18
-        } breaking global headlines across Al Jazeera World, BBC Business, CNBC Finance, WSJ Global Markets, MarketWatch, and OilPrice (${
-          bullNews.length
-        } positive / ${bearNews.length} risk-off alerts)`,
-        source: "Sentinel Multi-Wire Aggregator",
-        time: "Updated Live",
-      },
-      ...news.slice(0, 8).map((n) => ({
-        title: `[${n.sentiment === "BEARISH" ? "RISK ALERT" : "MACRO WIRE"} · ${
-          n.category || "Global"
-        }] ${n.headline} (Source: ${n.outlet})`,
-        source: `Sentinel Impact Classification -> Oracle & Atlas`,
-        time: n.time || "Today",
-      })),
-    ];
-
-    return {
-      agent: "sentinel",
-      status: "online",
-      alerts_today: `${news.length || 18} World Headlines`,
-      market_sentiment:
-        bearNews.length > bullNews.length ? "RISK-OFF / CAUTIOUS" : "BALANCED MACRO",
-      sources_monitored: "6 Global News Wires",
-      threats_detected: `${bearNews.length} Macro Risk Alerts`,
-      coverage_pct: "100% Live RSS",
-      uptime: "Real-Time Wire",
-      metrics: {
-        alerts_today: news.length || 18,
-        market_sentiment:
-          bearNews.length > bullNews.length ? "RISK-OFF" : "BALANCED",
-        sources_monitored: 6,
-        threats_detected: bearNews.length,
-        coverage_pct: "100%",
-        uptime: "100% Live",
-      },
-      world_news_feed: news.map((n) => ({
-        title: n.title,
-        source: n.source,
-        time: n.time,
-      })),
-      macro_event_radar: macroRadar,
-    };
-  }
-
-  if (id === "aegis") {
-    return {
-      agent: "aegis",
-      status: "online",
-      risk_score: "LOW (14 / 100)",
-      anomalies_detected: `${ledger.riskRejectedCount} Low-Conf Vetoed`,
-      threats_blocked: `${ledger.riskRejectedCount} Bad Trades Blocked`,
-      compliance_score: "100% (SL < TP Law)",
-      incidents_today: "0 Constitutional Breaches",
-      uptime: "Active Guardrail",
-      metrics: {
-        risk_score: "LOW (14/100)",
-        anomalies_detected: ledger.riskRejectedCount,
-        threats_blocked: ledger.riskRejectedCount,
-        compliance_score: "100%",
-        incidents_today: 0,
-        uptime: "100% Enforced",
-      },
-      security_shield_feed: [
-        {
-          title: `[CONSTITUTIONAL LAW ENFORCED: SL < TP] Hard Asymmetric Payoff Gate active — Stop Loss bounded to [0.75, 1.75] ATR and Primary Take Profit locked >= 1.80R (TP >= 1.80 × SL). Zero inverted R:R trades permitted.`,
-          source: "Aegis Constitutional Risk Shield -> Oracle & Forge",
-          time: "Active 24/7",
-        },
-        {
-          title: `[ANTI-CHEAT RESTART LOCK] Blocked silent Take-Profit shrinking on system restart — TP targets remain pinned to structural H1/H4 liquidity zones ($38+ target preserved; $18 shortcut TP rejected).`,
-          source: "Aegis Anti-Gaming Invariant",
-          time: "Verified",
-        },
-        {
-          title: `[LIVE RISK VETO AUDIT] Vetoed ${ledger.riskRejectedCount} sub-threshold trade signals (confidence < 45% or R:R < 1.80) and held ${ledger.marketClosedHolds} off-hours symbols in mt5_demo_trades.csv.`,
-          source: "Aegis Pre-Trade Gate <- Oracle/logs/mt5_demo_trades.csv",
-          time: "Latest Session",
-        },
-        {
-          title: `[KILL-SWITCH & BROKER SANDBOX] Paper/Demo isolation verified on C3 / MT5 Demo ($${ledger.equityUsd.toLocaleString(
-            "en-US"
-          )} equity). Live capital execution locked behind explicit operator signature.`,
-          source: "Aegis Execution Firewall",
-          time: "Protected",
-        },
-      ],
-      compliance_audit_feed: Object.values(AGENT_MANIFESTS).map((m) => ({
-        title: `[AUDIT PASS] ${m.constitutional_name} (${m.domain}) — ${m.capabilities.length} capabilities & ${m.channels.length} bus channels verified against repository.json`,
-        source: "Aegis Constitutional Auditor",
-        time: "100% Compliant",
-      })),
-    };
-  }
-
-  if (id === "chronicle") {
-    const overview = chronicle.getChronicleOverview();
-    const memories = overview.recent_memories;
-    const episodes = overview.recent_episodes;
-    const totalEvents =
-      overview.memories_count +
-      overview.state_keys_count +
-      overview.episodes_count;
-
-    return {
-      agent: "chronicle",
-      status: "online",
-      events_logged: `${totalEvents} Authoritative Records`,
-      records_stored: overview.memories_count + overview.state_keys_count,
-      Active_streams: Object.keys(AGENT_MANIFESTS).length,
-      queries_today: `${storageSummary.chronicle_hard_drive.total_revisions} CAS Revisions`,
-      storage_used: `${overview.storage_formatted} (${overview.recurrences_consolidated} Merged)`,
-      uptime: "100% (0ms Authoritative)",
-      index_health: "100% Deduplicated",
-      sync_lag: "0ms (Authoritative)",
-      metrics: {
-        events_logged: totalEvents,
-        records_stored: overview.memories_count + overview.state_keys_count,
-        Active_streams: Object.keys(AGENT_MANIFESTS).length,
-        queries_today: storageSummary.chronicle_hard_drive.total_revisions,
-        storage_used: `${overview.lessons_count} Unique Lessons`,
-        uptime: "100% Authoritative",
-      },
-      recent_events: memories.map((m: ChronicleMemoryEntry) => ({
-        title: `[${(m.pillar || "procedural").toUpperCase()} / ${
-          m.domain || "general"
-        }] (x${m.occurrence_count || 1}) ${m.content}`,
-        source: `Chronicle <- ${m.source_repository}`,
-        time: safeUtcTime(m.last_occurred_unix || m.created_at_unix),
-      })),
-      audit_trail: episodes.map((ep: LearningEpisode) => ({
-        title: `[Episode ${ep.success ? "PASS" : "FAIL"} x${
-          ep.occurrence_count || 1
-        }] ${ep.agent} (${ep.task}): ${ep.outcome}`,
-        source: `Lesson Conf: ${ep.lesson?.confidence ?? "—"}`,
-        time: safeUtcTime(ep.timestamp),
-      })),
-    };
-  }
-
-  if (id === "nexus") {
-    const agentsCount = Object.keys(AGENT_MANIFESTS).length;
-    const benchmark = readJsonFileSafe(
-      "Chronicle/memory/research/nexus_coordination_benchmark.json",
-      {}
-    );
-    const tracePath = path.join(
-      __dirname,
-      "Chronicle",
-      "memory",
-      "research",
-      "nexus_dag_traces.jsonl"
-    );
-    const tier2Path = path.join(
-      __dirname,
-      "Chronicle",
-      "memory",
-      "research",
-      "nexus_promoted_knowledge.jsonl"
-    );
-    const traceLines = fs.existsSync(tracePath)
-      ? fs
-          .readFileSync(tracePath, "utf8")
-          .split("\n")
-          .filter((l) => l.trim().startsWith("{"))
-      : [];
-    const tier2Lines = fs.existsSync(tier2Path)
-      ? fs
-          .readFileSync(tier2Path, "utf8")
-          .split("\n")
-          .filter((l) => l.trim().startsWith("{"))
-      : [];
-    const recentTraces = traceLines
-      .slice(-8)
-      .reverse()
-      .map((l) => {
-        try {
-          return JSON.parse(l);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-
-    const benchPassPct = Number(benchmark.overall_pass_rate_pct ?? 100.0);
-    const meanQual =
-      recentTraces.length > 0
-        ? (
-            recentTraces.reduce(
-              (acc: number, t: any) =>
-                acc + Number(t?.quality_signal?.quality_score ?? 0.92),
-              0
-            ) / recentTraces.length
-          ).toFixed(2)
-        : "0.94";
-
-    return {
-      agent: "nexus",
-      status: "online",
-      agents_active: `${agentsCount} / ${agentsCount} Online`,
-      tasks_queued: `${recentTraces.length} Audited DAG Traces`,
-      messages_per_hour: `${tier2Lines.length} Tier-2 Promoted · ${traceLines.length} Tier-1`,
-      uptime: `100% (Quality ${meanQual})`,
-      errors_today: "0 Policy Breaches (risk_policy.v2)",
-      throughput: `${benchPassPct}% Benchmark Pass`,
-      metrics: {
-        agents_active: `${agentsCount}/${agentsCount}`,
-        tasks_queued: recentTraces.length,
-        messages_per_hour: `${tier2Lines.length} Tier-2 / ${traceLines.length} Tier-1`,
-        uptime: `Quality ${meanQual}`,
-        errors_today: "0 Breaches",
-        throughput: `${benchPassPct}% Benchmark`,
-      },
-      deltas: {
-        agents_active: "+9/9 topological DAG nodes ready",
-        tasks_queued: "Provenance deduplication active",
-        messages_per_hour: "Two-Tier Chronicle Write-Back Hygiene",
-        uptime: "Multi-factor quality >= 0.65 learning",
-        errors_today: "Aegis independent non-voting gate",
-        throughput: `${benchmark.overall_cases_passed || 23}/${benchmark.overall_cases_total || 23} evaluation checks passed`,
-      },
-      orchestration_feed: [
-        ...recentTraces.slice(0, 5).map((t: any) => ({
-          title: `[DAG TRACE ${t.trace_id}] Query: "${t.query}" → Consulted: ${(
-            t.consulted_agents || []
-          )
-            .map((a: string) => a.toUpperCase())
-            .join(" + ")} | Unique Provenance: ${
-            t.provenance_consensus?.unique_provenance_sources_count ?? 1
-          } (${
-            t.provenance_consensus?.shared_sources_deduplicated_count ?? 0
-          } deduped) | Quality: ${
-            t.quality_signal?.quality_score ?? 0.92
-          } | Aegis Gate: ${t.aegis_policy_gate?.status || "APPROVED"}`,
-          source: `Nexus Topological DAG (${t.total_latency_ms || 18.5}ms) · ${
-            t.chronicle_writeback?.tier2_promoted_to_reusable_knowledge
-              ? "Promoted to Tier-2 Reusable Knowledge"
-              : "Tier-1 Episodic Audit Trace"
-          }`,
-          time: t.timestamp_iso || "Live Trace",
-        })),
-        {
-          title: `[COLLECTIVE KNOWLEDGE COORDINATOR] Nexus connects all 9 specialist agents to Chronicle's two-tier shared memory (${tier2Lines.length} Tier-2 validated reusable knowledge items, ${traceLines.length} Tier-1 episodic DAG traces, and ${storageSummary.chronicle_hard_drive.memories_count} CAS records).`,
-          source: "Nexus Collective Intelligence Router",
-          time: "Active",
-        },
-        ...storageSummary.agent_ram_and_outboxes.map((a) => ({
-          title: `[AGENT NODE: ${a.agent.toUpperCase()}] ${
-            a.episodes_in_chronicle
-          } episodes & ${a.lessons_learned} lessons synced to Chronicle Hard Drive (${
-            a.ram_files.length
-          } local state files)`,
-          source: `Nexus <-> ${a.agent}`,
-          time: "Healthy",
-        })),
-      ],
-      agent_health_feed: Object.entries(AGENT_MANIFESTS).map(([aid, m]) => ({
-        title: `${m.constitutional_name} (${m.domain}) — Status: ONLINE · Primary Mission: ${m.primary_mission}`,
-        source: `Bus Channels: ${m.channels.slice(0, 3).join(", ")}`,
-        time: "100% Healthy",
-      })),
-    };
-  }
-
-  if (id === "genesis") {
-    const v2Cands = candidates.filter((c) =>
-      c.candidate_code?.startsWith("V2_")
-    );
-    const returns = v2Cands.map((c: any) =>
-      Number(c.lockbox_holdout_report?.candidate_metrics?.net_return_pct ?? 11.4)
-    );
-    const avgRet =
-      returns.length > 0
-        ? (returns.reduce((a, b) => a + b, 0) / returns.length).toFixed(2)
-        : "12.40";
-    const bestRet =
-      returns.length > 0 ? Math.max(...returns).toFixed(2) : "18.65";
-
-    return {
-      agent: "genesis",
-      status: "online",
-      active_strategies: `${v2Cands.length} V2 Archetype Genomes`,
-      avg_return: `+${avgRet}% Lockbox`,
-      goals_met: "100% (SL < TP & Sharpe > 1.5)",
-      backtests_run: `${candidates.length * 1000} Monte Carlo Paths`,
-      best_strategy_return: `+${bestRet}% Net Lockbox`,
-      uptime: "Evolution Engine Active",
-      metrics: {
-        active_strategies: v2Cands.length,
-        avg_return: `+${avgRet}%`,
-        goals_met: "100%",
-        backtests_run: candidates.length * 1000,
-        best_strategy_return: `+${bestRet}%`,
-        uptime: "100%",
-      },
-      evolved_genomes_feed: v2Cands.slice(0, 10).map((c: any) => {
-        const pol = c.dynamic_trade_management_policy || {};
-        const lb = c.lockbox_holdout_report?.candidate_metrics || {};
-        return {
-          title: `[EVOLVED GENOME · ${c.symbol}] ${
-            c.trader_style || c.candidate_code
-          } — SL ${Number(pol.learned_optimal_stop_atr_mult ?? 1.2).toFixed(
-            2
-          )} ATR < TP ${Number(pol.learned_initial_major_tp_r ?? 2.15).toFixed(
-            2
-          )}R | Lockbox Return: +${lb.net_return_pct ?? 12.4}% (Expectancy: +${
-            lb.expectancy_r ?? 0.72
-          }R)`,
-          source: `Genesis -> Forge V2 (${c.candidate_id})`,
-          time: c.lifecycle_state || "CERTIFIED",
-        };
-      }),
-      strategy_goals_feed: hypotheses.slice(0, 8).map((h: any) => ({
-        title: `[EVOLUTION HYPOTHESIS] ${h.statement}`,
-        source: `${h.proposed_by} -> ${h.scope_key}`,
-        time: (h.status || "supported").toUpperCase(),
-      })),
-    };
-  }
-
-  if (id === "atlas") {
-    const deskCatalog = readJsonFileSafe(
-      "Chronicle/memory/research/atlas_desk_catalog/latest.json",
-      {}
-    );
-    const desksObj = deskCatalog.desks || {};
-    const deskNamesMap: Record<string, string> = {
-      MACRO_POLICY_DESK: "Macro & Central Bank Policy Desk",
-      QUANT_MARKET_DESK: "Quantitative & Market Structure Desk",
-      FUNDAMENTAL_ASSET_DESK: "Fundamental & Cross-Asset Valuation Desk",
-      SCIENTIFIC_TECH_DESK: "Scientific & Technical Peer-Review Desk",
-      FORENSIC_RED_TEAM_DESK: "Forensic Verification & Red-Team Desk",
-    };
-
-    const desksList = Object.entries(desksObj).map(
-      ([deskId, d]: [string, any]) => {
-        const val = d.validation_and_benchmark || {};
-        const lb = val.untouched_lockbox_40pct || {};
-        const v1 = val.frozen_atlas_v1_lockbox_benchmark || {};
-        const up = val.v2_vs_frozen_v1_uplift || {};
-        const wf = val.walk_forward_4_windows || {};
-        const abl = d.ablation_study || {};
-        return {
-          desk_id: deskId,
-          display_name: deskNamesMap[deskId] || deskId,
-          lifecycle_state: d.lifecycle_state || "CERTIFIED",
-          episodes_tested: d.dataset_provenance?.total_episodes || 48,
-          lockbox_episodes: lb.episodes_count || 20,
-          lockbox_hit_rate_pct: lb.hit_rate_pct ?? 100.0,
-          lockbox_brier_score: lb.mean_brier_score ?? 0.06,
-          v1_brier_score: v1.mean_brier_score ?? 0.198,
-          v1_hit_rate_pct: v1.hit_rate_pct ?? 80.0,
-          hit_rate_uplift_pct: up.hit_rate_uplift_pct ?? 20.0,
-          brier_improvement: up.brier_calibration_improvement ?? 0.138,
-          research_edge_r: lb.mean_research_edge_r ?? 1.52,
-          p_value: up.paired_bootstrap_500_p_value ?? 0.002,
-          walk_forward_windows_passed: `${wf.positive_windows_count ?? 4}/4`,
-          retained_features: abl.retained_features || [],
-          pruned_features: abl.pruned_features_left_out || [],
-        };
-      }
-    );
-
-    const meanBrier =
-      desksList.length > 0
-        ? (
-            desksList.reduce(
-              (acc, d) => acc + Number(d.lockbox_brier_score),
-              0
-            ) / desksList.length
-          ).toFixed(3)
-        : "0.061";
-    const meanHitRate =
-      desksList.length > 0
-        ? (
-            desksList.reduce(
-              (acc, d) => acc + Number(d.lockbox_hit_rate_pct),
-              0
-            ) / desksList.length
-          ).toFixed(1)
-        : "100.0";
-
-    const v2WithHyp = candidates
-      .filter((c: any) => Boolean(c.atlas_research_hypothesis))
-      .slice(0, 12);
-
-    const symbolHypotheses = v2WithHyp.map((c: any) => {
-      const hyp = c.atlas_research_hypothesis || {};
-      const pol = c.dynamic_trade_management_policy || {};
-      const lb = c.lockbox_holdout_report?.candidate_metrics || {};
-      const slMult = Number(pol.learned_optimal_stop_atr_mult ?? 1.2);
-      const tpR = Number(pol.learned_initial_major_tp_r ?? 2.2);
-      const rawWr = Number(lb.win_rate_pct ?? lb.win_rate ?? 0.62);
-      const wrPct = rawWr <= 1 ? (rawWr * 100).toFixed(1) : rawWr.toFixed(1);
-      return {
-        candidate_id: c.candidate_id,
-        symbol: c.symbol,
-        trader_style: c.trader_style || c.candidate_code,
-        lifecycle_state: c.lifecycle_state,
-        confidence_pct: Math.round(Number(hyp.confidence ?? 0.85) * 1000) / 10,
-        hypothesis_statement: hyp.hypothesis_statement || "",
-        dominant_timeframes: hyp.dominant_timeframes_discovered || [],
-        retained_features: hyp.dominant_features_discovered || [],
-        pruned_features: hyp.pruned_features_left_out_by_ablation || [],
-        sl_atr_mult: slMult.toFixed(2),
-        tp_r: tpR.toFixed(2),
-        tp_atr_mult: (slMult * tpR).toFixed(2),
-        lockbox_win_rate_pct: wrPct,
-        lockbox_expectancy_r: Number(lb.expectancy_r ?? 0.65).toFixed(3),
-        lockbox_trades: lb.trades ?? 20,
-      };
-    });
-
-    const totalDossiers = desksList.length + symbolHypotheses.length;
-
-    return {
-      agent: "atlas",
-      status: "online",
-      reports_today: totalDossiers,
-      sources_monitored: "9 Live · 5 Tiers",
-      sectors_tracked: `${desksList.length || 5} Certified Desks`,
-      alerts: `${meanHitRate}% Lockbox Hit`,
-      metrics: {
-        reports_today: totalDossiers,
-        sources_monitored: "9 Live · 5 Tiers",
-        sectors_tracked: `${desksList.length || 5} Certified Desks`,
-        alerts: `Brier ${meanBrier}`,
-      },
-      deltas: {
-        reports_today: `+${desksList.length} Desks & ${symbolHypotheses.length} MTF Dossiers`,
-        sources_monitored: "Tier A-C Corroborated · Tier E Quarantined",
-        sectors_tracked: "4/4 Walk-Forward Windows Passed",
-        alerts: `+29% Uplift vs Frozen Atlas V1`,
-      },
-      desks: desksList,
-      symbol_hypotheses: symbolHypotheses,
-      primary_feed: desksList.map((d) => ({
-        title: `[${d.lifecycle_state}] ${d.display_name} — Untouched Lockbox: ${d.lockbox_hit_rate_pct}% Hit Rate (+${d.hit_rate_uplift_pct}% vs V1) · Brier Calibration: ${d.lockbox_brier_score} (vs ${d.v1_brier_score} V1) · Edge: +${d.research_edge_r}R · Walk-Forward: ${d.walk_forward_windows_passed}`,
-        source: `Retained: ${d.retained_features
-          .slice(0, 3)
-          .join(", ")} | Pruned: ${d.pruned_features.length} noisy signals`,
-        time: "Certified V2 Desk",
-      })),
-      secondary_feed: symbolHypotheses.slice(0, 8).map((sh) => ({
-        title: `${sh.symbol} (${String(sh.trader_style).replace(
-          /_/g,
-          " "
-        )}) — Constitutional SL ${sh.sl_atr_mult} ATR < TP ${
-          sh.tp_atr_mult
-        } ATR (${sh.tp_r}R) · Lockbox Win Rate ${
-          sh.lockbox_win_rate_pct
-        }% (Exp: +${sh.lockbox_expectancy_r}R) — ${sh.hypothesis_statement}`,
-        source: `Atlas V2 -> Forge V2 (Timeframes: ${sh.dominant_timeframes.join(
-          ", "
-        )})`,
-        time: `${sh.confidence_pct}% Conf`,
-      })),
-    };
-  }
-
-  return {
-    agent: id,
-    status: "online",
-  };
-}
-
-// ── 3. Core Ecosystem & Agent Endpoints ──────────────────────────────────────
 app.get("/health", (_req, res) => {
   const storage = buildStorageTopology();
   res.json({
     status: "healthy",
     service: "universe-forge-v2-gateway",
     timestamp: new Date().toISOString(),
-    agents_online: Object.keys(AGENT_MANIFESTS).length,
+    registered_agents: Object.keys(AGENT_MANIFESTS).length,
+    agent_runtime_health: "not_probed",
     chronicle_state_keys: storage.chronicle_hard_drive.state_keys_count,
     chronicle_memories: storage.chronicle_hard_drive.memories_count,
     chronicle_recurrences_consolidated:
@@ -1154,12 +187,13 @@ app.get("/api/status", (_req, res) => {
       name: m.constitutional_name,
       role: m.domain,
       description: m.primary_mission,
-      status: "online",
+      status: "registered",
       capabilities: m.capabilities,
     };
   }
   res.json({
-    status: "online",
+    status: "gateway_healthy",
+    agent_runtime_health: "not_probed",
     ecosystem: "Universe",
     constitution: {
       principles: CONSTITUTIONAL_PRINCIPLES,
@@ -1178,7 +212,7 @@ app.get("/agents", (_req, res) => {
     name: m.constitutional_name,
     role: m.domain,
     description: m.primary_mission,
-    status: "online",
+    status: "registered",
     capabilities: m.capabilities,
     write_scopes: m.channels,
   }));
@@ -1195,7 +229,7 @@ app.get("/agents/:name/status", (req, res) => {
     agent: name,
     name: manifest.constitutional_name,
     role: manifest.domain,
-    status: "online",
+    status: "not_probed",
     capabilities: manifest.capabilities,
     write_scopes: manifest.channels,
     timestamp: new Date().toISOString(),
@@ -1216,7 +250,11 @@ app.get("/agents/:name/data", async (req, res) => {
   if (pyRich && pyRich.id) {
     return res.json(pyRich);
   }
-  res.json(buildDynamicAgentData(name));
+  return res.status(503).json({
+    id: name,
+    status: "unavailable",
+    error: `${name} dashboard evidence service did not respond; cached sample metrics are suppressed.`,
+  });
 });
 
 // ── 4. Chronicle Authoritative Storage & Constitutional Endpoints ────────────
@@ -1261,333 +299,76 @@ app.get("/internal/oracle/forge/incumbent", (req, res) => {
 });
 
 app.get("/api/forge/pilot/status", async (req, res) => {
-  const pyStatus = await runNexusCoordinationBridge({
-    action: "forge_action",
-    forge_action: "status",
-    params: {},
-  });
-  if (pyStatus && pyStatus.candidates) {
-    return res.json(pyStatus);
-  }
-  const symbolFilter = req.query.symbol
-    ? String(req.query.symbol).toUpperCase()
-    : undefined;
-  const symbolsReadiness = oracleAdapter.listAllSymbolsReadiness();
-  const candidates = forgeCore.listCandidateArtifacts(symbolFilter);
-  const hypotheses = forgeCore.listHypotheses();
-  const storageTopology = buildStorageTopology();
-  const activeSymbol = symbolFilter || "GBPUSD";
-  const activeRegime = String(req.query.regime || "trending_up");
-  const learnedRankings = forgeCore.getLearnedScopeRankings(
-    `oracle_v2::${activeSymbol}::day_trading`
-  );
-  const priorAdvice = chronicle.adviceFor("forge", "oracle.pilot");
-  const mtfDataset = oracleAdapter.mtfEngine.getCachedMtfDataset(activeSymbol);
-  const atlasBriefs = chronicle
-    .listStateByPrefix(`atlas.forge.research_brief.${activeSymbol}.`)
-    .map((r) => r.value);
-  const catalog = oracleAdapter.getCatalogSnapshot();
-  const shadowRunnerReport = oracleAdapter.getShadowRunnerReport(activeSymbol);
-
-  res.json({
-    status: "ok",
-    deployment_target: "oracle_v2",
-    active_symbol: activeSymbol,
-    active_regime: activeRegime,
-    mtf_summary: mtfDataset
-      ? {
-          symbol: mtfDataset.symbol,
-          yahoo_ticker: mtfDataset.yahoo_ticker,
-          timeframe_counts: mtfDataset.timeframe_counts,
-          session_distribution: mtfDataset.session_distribution,
-          regime_distribution: mtfDataset.regime_distribution,
-          fetched_at_unix: mtfDataset.fetched_at_unix,
-        }
-      : null,
-    atlas_research_briefs: atlasBriefs,
-    shadow_runner_report: shadowRunnerReport,
-    oracle_v2_deployed_strategies: catalog.oracle_v2_strategies || {},
-    symbols_readiness: symbolsReadiness,
-    candidates,
-    hypotheses,
-    learned_rankings: learnedRankings,
-    prior_lessons: priorAdvice,
-    storage_topology: storageTopology,
-  });
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "status", params: req.query || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", candidates: [], message: "Forge V2 service did not respond; no sample candidates were substituted." });
 });
 
-/**
- * Primary Oracle V2 7-Timeframe + Session + Regime + Trader-Style Strategy Discovery Endpoint
- */
 app.post("/api/forge/v2/discover", async (req, res) => {
-  try {
-    const pyRes = await runNexusCoordinationBridge({
-      action: "forge_action",
-      forge_action: "discover_v2",
-      params: req.body || {},
-    });
-    if (pyRes && (pyRes.human_summary || pyRes.discovered || pyRes.plain_english_report)) {
-      return res.json(pyRes);
-    }
-    const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
-    const traderStyle = String(
-      req.body?.trader_style || "ALL"
-    ).toUpperCase() as TraderStyleCode | "ALL";
-    const forceRefreshData = Boolean(req.body?.force_refresh_data);
-
-    if (traderStyle === "ALL") {
-      const result = await oracleAdapter.trainAllOracleV2Styles({
-        symbol,
-        forceRefreshData,
-      });
-      return res.json({
-        status: "complete",
-        deployment_target: "oracle_v2",
-        mode: "all_trader_styles_7tf",
-        ...result,
-      });
-    }
-
-    const single = await oracleAdapter.discoverAndTrainOracleV2StyleStrategy({
-      symbol,
-      traderStyle,
-      forceRefreshData,
-    });
-    return res.json({
-      status: "complete",
-      deployment_target: "oracle_v2",
-      mode: "single_trader_style_7tf",
-      symbol,
-      trader_style: traderStyle,
-      readiness: oracleAdapter.inspectSymbolReadiness(symbol),
-      candidates: [single],
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      status: "error",
-      message: err?.message || "Failed running 7-Timeframe Oracle V2 discovery.",
-    });
-  }
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "discover_v2", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 did not respond; training was not started." });
 });
 
 app.post("/api/forge/pilot/run", async (req, res) => {
-  const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
-  const regime = String(req.body?.regime || "trending_up");
-  const candidateCode = req.body?.candidate_code as
-    | PilotCandidateCode
-    | "ALL"
-    | "ALL_V2"
-    | undefined;
-
-  if (candidateCode === "ALL_V2") {
-    const v2Res = await oracleAdapter.trainAllOracleV2Styles({ symbol });
-    return res.json({
-      status: "complete",
-      mode: "oracle_v2_mtf_discovery",
-      ...v2Res,
-    });
-  }
-
-  if (
-    candidateCode === "V2_SCALPING" ||
-    candidateCode === "V2_DAY_TRADING" ||
-    candidateCode === "V2_SWING_TRADING" ||
-    candidateCode === "V2_RANGE_SPECIALIST"
-  ) {
-    const styleMap: Record<string, TraderStyleCode> = {
-      V2_SCALPING: "SCALPING",
-      V2_DAY_TRADING: "DAY_TRADING",
-      V2_SWING_TRADING: "SWING_TRADING",
-      V2_RANGE_SPECIALIST: "RANGE_SPECIALIST",
-    };
-    const cand = await oracleAdapter.discoverAndTrainOracleV2StyleStrategy({
-      symbol,
-      traderStyle: styleMap[candidateCode],
-    });
-    return res.json({
-      status: "complete",
-      mode: "single_v2_style",
-      symbol,
-      candidates: [cand],
-    });
-  }
-
-  if (!candidateCode || candidateCode === "ALL") {
-    const result = oracleAdapter.runFullFiveCandidatePilot({ symbol, regime });
-    return res.json({
-      status: "complete",
-      mode: "five_candidate_v1_benchmark",
-      ...result,
-    });
-  }
-
-  const single = oracleAdapter.runPilotCandidate({
-    symbol,
-    regime,
-    candidateCode,
-  });
-  return res.json({
-    status: "complete",
-    mode: "single_candidate",
-    symbol,
-    regime,
-    readiness: oracleAdapter.inspectSymbolReadiness(symbol),
-    candidates: [single],
-    learned_rankings: forgeCore.getLearnedScopeRankings(
-      `oracle::${symbol}::${single.regime}`
-    ),
-  });
+  const code = String(req.body?.candidate_code || "ALL").toUpperCase();
+  const styleMap: Record<string, string> = {
+    V2_SCALPING: "SCALPING", SCALPING: "SCALPING", SCALP_PRECISION: "SCALP_PRECISION",
+    V2_DAY_TRADING: "DAY_TRADING", DAY_TRADING: "DAY_TRADING", INTRADAY_CONTINUATION: "INTRADAY_CONTINUATION",
+    V2_SWING_TRADING: "SWING_TRADING", SWING_TRADING: "SWING_TRADING", SWING_PULLBACK: "SWING_PULLBACK",
+    V2_RANGE_SPECIALIST: "RANGE_SPECIALIST", RANGE_SPECIALIST: "RANGE_SPECIALIST", RANGE_MEAN_REVERSION: "RANGE_MEAN_REVERSION",
+  };
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "discover_v2", params: { ...req.body, strategy_family: styleMap[code] || req.body?.strategy_family || "ALL" } });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 did not respond; pilot evaluation was not started." });
 });
 
-app.post("/api/forge/candidates/:id/transition", (req, res) => {
-  const candidateId = req.params.id;
-  const toState = req.body?.to_state as CandidateLifecycleState;
-  const actor = String(req.body?.actor || "operator");
-  const reason = String(
-    req.body?.reason || `Explicit governance transition to ${toState} (Target: Oracle V2)`
-  );
-
-  if (!toState) {
-    return res.status(400).json({ error: "Missing required field: to_state" });
-  }
-
-  const result = oracleAdapter.transitionCandidateWithOracleGovernance({
-    candidateId,
-    toState,
-    actor,
-    reason,
-  });
-
-  if (result.status !== "complete") {
-    return res.status(400).json(result);
-  }
-  res.json(result);
+app.post("/api/forge/candidates/:id/transition", async (req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "transition_candidate", params: { ...req.body, candidate_id: req.params.id } });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Governed Forge service did not respond; candidate state was not changed." });
 });
 
-app.post("/api/forge/oracle/rollback", (req, res) => {
-  const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
-  const regime = String(req.body?.regime || "trending_up");
-  const actor = String(req.body?.actor || "operator");
-  const result = oracleAdapter.rollbackDeployedCandidate(symbol, regime, actor);
-  if (result.status !== "complete") {
-    return res.status(400).json(result);
-  }
-  res.json(result);
+app.post("/api/forge/oracle/rollback", async (req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "rollback_candidate", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Governed Forge service did not respond; rollback was not performed." });
 });
 
-app.post("/api/forge/oracle/outbox", (req, res) => {
-  const events = Array.isArray(req.body?.events) ? req.body.events : undefined;
-  const result = oracleAdapter.ingestOracleOutboxEvents(events);
-  res.json({
-    status: "complete",
-    ...result,
-  });
+app.post("/api/forge/oracle/outbox", async (req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "flush_outbox", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge delivery acknowledgement is unavailable; no sync is reported." });
 });
 
-/**
- * Closed-Loop "Mistake Clinic": Surgical Retraining from Oracle V2 Failure Feedback
- */
 app.post("/api/forge/v2/retrain-from-feedback", async (req, res) => {
-  try {
-    const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
-    const traderStyle = String(
-      req.body?.trader_style || "DAY_TRADING"
-    ).toUpperCase() as TraderStyleCode;
-    const result = await oracleAdapter.retrainCandidateFromOracleFeedback({
-      symbol,
-      traderStyle,
-    });
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({
-      status: "error",
-      message:
-        err?.message || "Failed running Mistake-Clinic surgical retraining.",
-    });
-  }
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "surgical_retrain", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 did not respond; retraining was not started." });
 });
 
-/**
- * Forge Background Shadow Runner Endpoints (Runs V2 Strategies in Shadow Mode When V1 Is Idle)
- */
-app.get("/api/forge/v2/shadow/status", (req, res) => {
-  const symbol = String(req.query.symbol || "GBPUSD").toUpperCase();
-  const report = oracleAdapter.getShadowRunnerReport(symbol);
-  res.json({
-    status: "ok",
-    symbol,
-    shadow_runner_report: report,
-  });
+app.get("/api/forge/v2/shadow/status", async (req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "status", params: req.query || {} });
+  if (result && result.status !== "unavailable") return res.json({ ...result, shadow_runner_status: "Unavailable · no authoritative runner-status record is exposed" });
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 status service did not respond." });
 });
 
 app.post("/api/forge/v2/shadow/run", async (req, res) => {
-  try {
-    const pyRes = await runNexusCoordinationBridge({
-      action: "forge_action",
-      forge_action: "shadow_run",
-      params: req.body || {},
-    });
-    if (pyRes && (pyRes.human_summary || pyRes.shadow_batch || pyRes.plain_english_report)) {
-      return res.json(pyRes);
-    }
-    const symbol = String(req.body?.symbol || "GBPUSD").toUpperCase();
-    const traderStyle = String(req.body?.trader_style || "ALL").toUpperCase();
-    const lookbackBars = Number(req.body?.lookback_bars || 260);
-    const report = oracleAdapter.runShadowRunner({
-      symbol,
-      traderStyle,
-      lookbackBars,
-    });
-    return res.json({
-      status: "complete",
-      symbol,
-      trader_style: traderStyle,
-      shadow_runner_report: report,
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      status: "error",
-      message: err?.message || "Failed running Forge Shadow Runner.",
-    });
-  }
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "shadow_run", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 did not respond; shadow evaluation was not started." });
 });
 
-app.post("/api/forge/cost-profile", (req, res) => {
-  const symbol = String(req.body?.symbol || "").toUpperCase();
-  if (!symbol) {
-    return res.status(400).json({ error: "Missing symbol" });
-  }
-  const commission_bps = Number(req.body?.commission_bps ?? 0.35);
-  const spread_bps = Number(req.body?.spread_bps ?? 1.1);
-  const slippage_bps = Number(req.body?.slippage_bps ?? 0.3);
-
-  const profile = oracleAdapter.registerVerifiedCostProfile({
-    symbol,
-    source: req.body?.source || "ctrader_open_api_verified",
-    price_basis: req.body?.price_basis || "bid",
-    commission_bps,
-    spread_bps,
-    slippage_bps,
-    stress_spread_bps: req.body?.stress_spread_bps,
-    stress_slippage_bps: req.body?.stress_slippage_bps,
-  });
-
-  res.json({
-    status: "complete",
-    profile,
-    readiness: oracleAdapter.inspectSymbolReadiness(symbol),
-  });
+app.post("/api/forge/cost-profile", async (req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "register_cost_profile", params: req.body || {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Cost profile service did not respond; no assumptions were stored." });
 });
 
-app.post("/api/forge/catalog/sync", (_req, res) => {
-  const snapshot = oracleAdapter.syncOracleCatalogToChronicle();
-  res.json({
-    status: "complete",
-    catalog_id: snapshot.catalog_id,
-    strategy_count: snapshot.strategy_count,
-    oracle_v2_deployed_count: snapshot.oracle_v2_deployed_count,
-    symbols_count: Object.keys(snapshot.symbols || {}).length,
-  });
+app.post("/api/forge/catalog/sync", async (_req, res) => {
+  const result = await runNexusCoordinationBridge({ action: "forge_action", forge_action: "sync_catalog", params: {} });
+  if (result && result.status !== "unavailable") return res.json(result);
+  return res.status(503).json({ status: "unavailable", message: "Forge V2 did not respond; catalog sync was not reported." });
 });
 
 // ── 6. Agent & Ecosystem Chat (Grounded in Chronicle State + Python Atlas V2) ──
@@ -1751,539 +532,6 @@ function detectCrossAgentReferral(
     return "**Collective Referral (via Chronicle & Nexus)**: For deep multi-source academic & scientific research across Wikipedia, arXiv, Crossref, and PubMed, **Atlas** is our specialist research desk.";
   }
   return null;
-}
-
-async function buildHumanAgentReply(
-  id: string,
-  userMessage: string,
-  mode: string
-): Promise<{ reply: string; dossier?: any }> {
-  const q = userMessage.trim();
-  const qLow = q.toLowerCase();
-  const ledger = readOracleRealTradingLedger();
-  const liveFeeds = getEcosystemLiveFeeds();
-  const storage = buildStorageTopology();
-  const candidates = forgeCore.listCandidateArtifacts();
-  const v2Cands = candidates.filter((c) => c.candidate_code?.startsWith("V2_"));
-  const referralNote = detectCrossAgentReferral(id, qLow);
-
-  const isGreeting =
-    /^\s*(hi|hello|hey|yo|howdy|good\s+(morning|afternoon|evening)|how\s+are\s+you|how'?s\s+it\s+going|what'?s\s+up|whats\s+up|are\s+you\s+there|thanks|thank\s+you)\b/i.test(
-      q
-    ) && q.split(/\s+/).length <= 8;
-  const isWhatDoYouDo =
-    /\b(what do you do|what is your role|who are you|what are you|how do you work|what can you do|help|capabilities)\b/i.test(
-      qLow
-    );
-
-  // Shared Question Detector: Did the user ask about V1 cheating / SL > TP / shrinking TP from $38 to $18?
-  const asksAboutCheatingOrSlTp =
-    /\b(cheat|cheating|38|18|shrinking|reduced the take profit|reducing the take profit|risking more than)\b/.test(
-      qLow
-    ) ||
-    (qLow.includes("stop loss") &&
-      qLow.includes("take profit") &&
-      /\b(why|bigger|larger|lesser|smaller|problem|before|law|fix|fixed)\b/.test(
-        qLow
-      ));
-
-  // Shared Question Detector: Did the user ask about the 8 conditions Oracle/Scout evaluates before entering a trade?
-  const asksAboutEntryConditions =
-    /\b(condition|conditions|best point to enter|entry point|before entering|choose which|how do you pick|how do you choose|what do you look at|setup)\b/.test(
-      qLow
-    ) &&
-    /\b(trade|enter|oracle|scout|risk|portfolio|stop loss|take profit|win|return|setup)\b/.test(
-      qLow
-    );
-
-  const isEcosystemOrMarketQuery =
-    /\b(trade|trades|trading|win rate|winning rate|open trades|oracle|forge|pulse|sentinel|aegis|chronicle|genesis|nexus|eurusd|gbpusd|usdjpy|xauusd|btcusd|asx200|forex|fx|market|markets|gold|bitcoin|crypto|equity|pnl|p&l|profit|profits|loss|losses|balance|account|money|made|make today|made today|how much did we|what did we make|how did we do|did we win|did we lose|safe|safety|stop loss|take profit|sl|tp|atr|lockbox|walk-forward|backtest|retrain|retraining|train|trained|strategy|strategies|blueprint|blueprints|session|mt5|c3|scout|shadow|news|headline|headlines|geopolitics|wire|wires|al jazeera|bbc|cnbc|wsj|social media|posted|mastodon|bluesky|hackernews|sentiment|crowd|security|risk|veto|blocked|block|policy|compliance|breach|outlier|coordinate|ecosystem|all agents|overview|status|genome|genomes|monte carlo|memory|memories|learned|saved|stored|lesson|lessons|episode|episodes|remember|history)\b/i.test(
-      qLow
-    );
-
-  // If a user asks ANY general human, scientific, formula, history, or everyday question to a non-Atlas agent,
-  // pull the collective answer from Chronicle & Atlas in plain English!
-  const isGeneralKnowledgeOrFormulaQuestion =
-    id !== "atlas" &&
-    id !== "chronicle" &&
-    !isGreeting &&
-    !isWhatDoYouDo &&
-    !asksAboutCheatingOrSlTp &&
-    !asksAboutEntryConditions &&
-    (!isEcosystemOrMarketQuery ||
-      /\b(formula|equation|calculate|wavelength|frequency|quantum|invented|discovered|planet|biology|physics|chemistry|speed of|gravity|gravitation|kinetic|potential energy|compound interest|simple interest|ohm|newton|einstein|relativity|photosynthesis|crispr|vegetable|fruit|president|capital of)\b/i.test(
-        qLow
-      ));
-
-  if (isGeneralKnowledgeOrFormulaQuestion) {
-    const pyDossier = await runAtlasPythonInvestigation(userMessage, mode);
-    const humanAnswer =
-      pyDossier?.direct_human_answer || pyDossier?.readable_reply;
-    if (humanAnswer) {
-      return {
-        reply:
-          `${humanAnswer}\n\n---\n*Answered via our shared **Chronicle** memory (coordinated by **Nexus** with **Atlas Research**).*` +
-          (referralNote ? `\n\n${referralNote}` : ""),
-        dossier: pyDossier,
-      };
-    }
-  }
-
-  // ── ORACLE: Open Trades, Trade Wins, Winning Rates, 8 Entry Conditions & Anti-Cheat Risk Law ──
-  if (id === "oracle") {
-    const eqStr = `$${ledger.equityUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-    const pnlStr = `+$${ledger.netPnlUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-
-    if (isGreeting || isWhatDoYouDo) {
-      return {
-        reply: [
-          `Hello! I'm **Oracle**, your trading and market execution specialist.`,
-          ``,
-          `Here is where our trading account stands right now:`,
-          `- **Account Balance**: **${eqStr}** (**${pnlStr}** net profit above our $100,000 starting capital)`,
-          `- **Latest Trading Session**: Won **${ledger.sessionWins} out of ${ledger.sessionTotal} trades (${ledger.lastSessionWinRatePct}% win rate)** for **+6.336R** total gain`,
-          `- **All-Time Win Rate**: **${ledger.genuineAllTimeWinRatePct}%** (**${ledger.totalWinsAllTime} wins out of ${ledger.totalExecutedAllTime} trades**)`,
-          `- **Current Open Trades**: **0 floating open trades** right now, with **${v2Cands.slice(0, 4).length} ready setups** (\`EUR/USD\`, \`GBP/USD\`, \`XAU/USD\`, \`USD/JPY\`) waiting for clean entry confirmation.`,
-          ``,
-          `You can ask me about **today's trades**, **how much we made today**, **our account balance and profit/losses**, **our win rate**, **whether we should buy or sell EUR/USD**, or **how we pick safe entry points**!`,
-        ].join("\n"),
-      };
-    }
-
-    if (asksAboutCheatingOrSlTp) {
-      return {
-        reply: [
-          `### How We Fixed the Old Strategy Shortcut (\`Stop-Loss < Take-Profit\`)`,
-          ``,
-          `- **What Went Wrong in V1**: Our old V1 learner tried to avoid loss penalties by setting its **Stop-Loss (\`~$37+\`) larger than or equal to its Take-Profit (\`~$38\`)**, or shrinking its Take-Profit from **\`$38\` down to \`$18\`** on restart just to grab a quick, tiny win. That meant risking more than we stood to make.`,
-          `- **How V2 Protects Your Account Now**:`,
-          `  1. **Target Profit Must Be At Least 1.8× Larger Than Risk**: I am never allowed to open a trade unless the target profit is at least **1.8× larger** than the stop-loss distance from entry.`,
-          `  2. **Locked Targets on Restart**: Targets are saved in **Chronicle** memory so a **$38+** target can never be shrunk down to **$18** on restart.`,
-          `  3. **Proven in Our Latest Session**: We blocked **${ledger.riskRejectedCount} weak setups** and only took the **3 EUR/USD short trades** where the profit target was **4.68× larger** than the stop-loss — winning all **3 out of 3 (100%)** for **${pnlStr}**.`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    if (asksAboutEntryConditions) {
-      return {
-        reply: [
-          `### The 8 Checks I Run Before Entering Any Trade`,
-          `I never force a trade. Before putting any money at risk, a setup must pass all **8 checks**:`,
-          ``,
-          `1. **Multi-Timeframe Trend Alignment**: The big trend (Weekly/Daily/4-Hour charts) and the entry chart (15-Minute/5-Minute) must agree.`,
-          `2. **Tight Stop-Loss**: The stop-loss must sit right behind a clear price barrier so our downside is small.`,
-          `3. **Capped Dollar Risk**: Every trade risks no more than **0.5% to 1.0%** of the account.`,
-          `4. **No Double Exposure**: We check open positions so we don't stack multiple trades on the same currency move.`,
-          `5. **Healthy Account Cushion**: We verify our **${eqStr}** account balance and daily safety buffer before sizing the trade.`,
-          `6. **Clear Profit Target**: There must be clean room for price to reach our target before hitting major resistance.`,
-          `7. **Reward Must Beat Risk (At Least 1.8×)**: Potential profit must be at least **1.8× larger** than the stop-loss risk (our last 3 EUR/USD trades had a **4.68×** reward-to-risk ratio).`,
-          `8. **High Confidence Score**: Setups with low confidence are automatically skipped (**${ledger.riskRejectedCount} weak setups skipped** so far).`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    if (
-      /\b(balance|equity|how much money|how much did we make|how much have we made|what did we make|did we make|how did we do|money|profit|profits|loss|losses|pnl|p&l|made|earned|rich)\b/.test(
-        qLow
-      ) &&
-      !/\b(open trade)\b/.test(qLow)
-    ) {
-      return {
-        reply: [
-          `Yes — we made **${pnlStr}** in net profit (**+6.336R** total gain and **$0.00 in losses** in our latest trading session), bringing our trading account balance from **$100,000.00** to **${eqStr}**.`,
-          ``,
-          `### Trades We Did Today (${ledger.sessionWins} Wins, 0 Losses — 100% Session Win Rate)`,
-          `1. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10059\`, Take-Profit \`1.09516\` — **4.65×** reward-to-risk) → **Won +1.325R**`,
-          `2. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10059\`, Take-Profit \`1.09510\` — **4.71×** reward-to-risk) → **Won +1.325R**`,
-          `3. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10035\`, Take-Profit \`1.09626\` — **4.68×** reward-to-risk) → **Won +3.686R**`,
-          ``,
-          `- **Current Floating Risk**: **$0.00** (we have **0 floating open or losing positions** right now).`,
-          `- **Risk Protection**: **${ledger.riskRejectedCount}** weak setups were skipped automatically so we only entered trades where the target profit was at least **1.8× larger** than the stop-loss.`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    if (/\b(win rate|winning rate|percentage|how many wins|accuracy|success rate)\b/.test(qLow)) {
-      return {
-        reply: [
-          `Here is our real win rate from our trading history:`,
-          ``,
-          `- **Latest Trading Session Win Rate**: **100% (${ledger.lastSessionWinRatePct}%)** — **${ledger.sessionWins} wins out of ${ledger.sessionTotal} trades**, earning **+6.336R** (**${pnlStr}** profit)`,
-          `- **All-Time Historical Win Rate**: **50% (${ledger.genuineAllTimeWinRatePct}%)** — **${ledger.totalWinsAllTime} wins out of ${ledger.totalExecutedAllTime} total trades** (improving from **33.3%** in our early V1 tests to **100%** after enforcing our rule that target profit must be at least **1.8× larger** than stop-loss risk)`,
-          `- **Account Balance**: **${eqStr}** (**${pnlStr}** net profit).`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    if (/\b(should we buy|should we sell|buy or sell|eurusd|gbpusd|usdjpy|xauusd|signal|direction|forecast)\b/.test(qLow)) {
-      const sym = qLow.includes("gbpusd")
-        ? "GBP/USD"
-        : qLow.includes("usdjpy")
-        ? "USD/JPY"
-        : qLow.includes("xauusd") || qLow.includes("gold")
-        ? "XAU/USD (Gold)"
-        : "EUR/USD";
-      return {
-        reply: [
-          `For **${sym}** right now, our highest-conviction bias is **SHORT (Sell on rallies)**, waiting for a clean London/New York session entry trigger:`,
-          ``,
-          `- **Most Recent Executed Setup (EUR/USD SHORT)**:`,
-          `  - **Entry Price**: \`1.09963\``,
-          `  - **Stop-Loss**: \`1.10035\` (tight protection just above resistance)`,
-          `  - **Take-Profit Target**: \`1.09626\` (**4.68× larger** than our stop-loss risk)`,
-          `  - **Result**: Closed in profit for **+3.686R** (**3 out of 3 EUR/USD short trades won** in our latest session for **+6.336R** total).`,
-          `- **Safety Rule**: We never jump in blindly — we wait until the profit target is at least **1.8× larger** than the stop-loss distance and **Aegis** approves the risk.`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    return {
-      reply: [
-        `Right now we have **0 floating open trades** — all **${ledger.sessionTotal} trades** from our latest session closed in profit, and we have **${v2Cands.slice(0, 4).length} setups armed and waiting** for the next clean entry signal.`,
-        ``,
-        `### Today's Completed Session Trades (${ledger.sessionWins} out of ${ledger.sessionTotal} Wins — ${ledger.lastSessionWinRatePct}%)`,
-        `1. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10059\`, Take-Profit \`1.09516\` — **4.65×** reward-to-risk) → **Won +1.325R**`,
-        `2. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10059\`, Take-Profit \`1.09510\` — **4.71×** reward-to-risk) → **Won +1.325R**`,
-        `3. **EUR/USD SHORT** at \`1.09963\` (Stop-Loss \`1.10035\`, Take-Profit \`1.09626\` — **4.68×** reward-to-risk) → **Won +3.686R**`,
-        ``,
-        `### Account Summary`,
-        `- **Account Balance**: **${eqStr}** (**${pnlStr}** net profit)`,
-        `- **All-Time Win Rate**: **${ledger.genuineAllTimeWinRatePct}%** (**${ledger.totalWinsAllTime} wins / ${ledger.totalExecutedAllTime} total trades**)`,
-        `- **Bad Trades Skipped**: **${ledger.riskRejectedCount}** low-confidence setups were automatically skipped to protect your balance.`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── PULSE: Social Media Accounts — Who Posted This, Who Posted That ──
-  if (id === "pulse") {
-    const pulseFeed = liveFeeds.pulse || {};
-    const posts: Array<Record<string, any>> = pulseFeed.social_posts || [];
-    const bullCount = Number(pulseFeed.bullish_count ?? 6);
-    const bearCount = Number(pulseFeed.bearish_count ?? 2);
-    const overallSent = pulseFeed.overall_sentiment || "BULLISH";
-    const sentScore = Number(pulseFeed.sentiment_score ?? 0.58);
-
-    if (isGreeting || isWhatDoYouDo) {
-      return {
-        reply: [
-          `Hello! I am **Pulse**, the social media intelligence and crowd-sentiment agent in Universe.`,
-          ``,
-          `### What I Do`,
-          `I monitor live social media accounts across **Mastodon (\`#markets\`, \`#finance\`, \`#trading\`, \`#bitcoin\`, \`#economy\`), Bluesky Social, and HackerNews** to track **who posted what**, measure crowd sentiment (\`BULLISH\`, \`BEARISH\`, \`NEUTRAL\`), and warn **Oracle** and **Atlas** when retail traders are overly euphoric or panicking.`,
-          ``,
-          `### Right Now on Social Media (${posts.length} Live Posts Tracked · Overall: **${overallSent}**, Score \`${sentScore}\`)`,
-          ...posts
-            .slice(0, 5)
-            .map(
-              (p) =>
-                `- **${p.author}** (*${p.display_name || p.author}* on **${p.platform}**) posted: *"${p.headline}"* — **[${p.sentiment}]** (${p.upvotes || 0} likes/pts · ${p.comments || 0} replies)`
-            ),
-          ``,
-          `Ask me **"who posted what on social media today?"**, **"what are traders saying about markets or bitcoin?"**, or **"what is the crowd sentiment right now?"**`,
-        ].join("\n"),
-      };
-    }
-
-    const pulseStops = new Set([
-      "who", "what", "posted", "post", "posts", "social", "media",
-      "pulse", "accounts", "account", "saying", "about", "today",
-      "the", "and", "for", "happening", "right", "now", "tell", "show",
-      "are", "any", "people", "traders", "everyone", "talking", "from",
-      "with", "have", "that", "this", "our", "can", "you", "there", "some",
-    ]);
-    const keywords = qLow
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length >= 3 && !pulseStops.has(w));
-    const matchedPosts =
-      keywords.length > 0
-        ? posts.filter((p) => {
-            const hay = `${p.author} ${p.display_name} ${p.platform} ${p.headline}`.toLowerCase();
-            return keywords.some((kw) => new RegExp(`\\b${kw}`, "i").test(hay));
-          })
-        : [];
-    const displayPosts =
-      matchedPosts.length > 0 ? matchedPosts : posts.slice(0, 8);
-
-    return {
-      reply: [
-        matchedPosts.length > 0
-          ? `Here are the **${matchedPosts.length} live social media posts** about **${keywords.join(", ")}** (overall social mood is **${overallSent.toLowerCase()}**):`
-          : `Here is what people are posting on social media today across **Mastodon**, **Bluesky**, and **HackerNews** (overall crowd mood is **${overallSent}** — **${bullCount} positive** vs **${bearCount} cautious** posts):`,
-        ``,
-        ...displayPosts.map(
-          (p, i) =>
-            `${i + 1}. **${p.author}** (*${p.display_name || p.author}* on **${p.platform}** · **${p.sentiment}**):\n   > *"${p.headline}"*`
-        ),
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── SENTINEL: What's Happening in the News in the World Today ──
-  if (id === "sentinel") {
-    const sentinelFeed = liveFeeds.sentinel || {};
-    const news: Array<Record<string, any>> = sentinelFeed.world_news || [];
-    const bearNews = news.filter((n) => n.sentiment === "BEARISH");
-    const bullNews = news.filter((n) => n.sentiment === "BULLISH");
-
-    if (isGreeting || isWhatDoYouDo) {
-      return {
-        reply: [
-          `Hello! I am **Sentinel**, the 24/7 global news wire and geopolitical early-warning agent in Universe.`,
-          ``,
-          `### What I Do`,
-          `I continuously scan breaking world and financial news across **Al Jazeera World, BBC Business & World, CNBC Finance, WSJ Global Markets, MarketWatch, and OilPrice Energy Wire** so you always know what is happening in the world today and how macro events impact our trading and research.`,
-          ``,
-          `### Top Breaking World Headlines Right Now (${news.length} Live Stories)`,
-          ...news
-            .slice(0, 5)
-            .map(
-              (n) =>
-                `- **[${n.outlet} · ${n.category}]** **${n.headline}**${n.summary ? ` — *${n.summary}*` : ""}`
-            ),
-          ``,
-          `Ask me **"what's happening in the news in the world today?"**, **"any geopolitical or energy news?"**, or **"what are the top market headlines?"**`,
-        ].join("\n"),
-      };
-    }
-
-    const sentinelStops = new Set([
-      "what", "whats", "happening", "news", "world", "today",
-      "sentinel", "headlines", "headline", "tell", "show",
-      "the", "and", "in", "right", "now", "latest", "breaking",
-      "any", "are", "about", "there", "some", "from", "with",
-      "have", "that", "this", "our", "can", "you", "stories", "top",
-    ]);
-    const keywords = qLow
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length >= 3 && !sentinelStops.has(w));
-    const matchedNews =
-      keywords.length > 0
-        ? news.filter((n) => {
-            const hay = `${n.outlet} ${n.category} ${n.headline} ${n.summary}`.toLowerCase();
-            return keywords.some((kw) => new RegExp(`\\b${kw}`, "i").test(hay));
-          })
-        : [];
-    const displayNews =
-      matchedNews.length > 0 ? matchedNews : news.slice(0, 10);
-
-    return {
-      reply: [
-        matchedNews.length > 0
-          ? `Here are the **${matchedNews.length} latest news stories** matching **${keywords.join(", ")}** from our live news wires:`
-          : `Here are today's top **${displayNews.length} world and financial news headlines** across BBC, Al Jazeera, CNBC, WSJ, MarketWatch, and OilPrice (**${bullNews.length} positive**, **${bearNews.length} cautionary**):`,
-        ``,
-        ...displayNews.map(
-          (n, idx) =>
-            `${idx + 1}. **[${n.outlet} · ${n.category}] ${n.headline}** *(${n.sentiment})*${
-              n.summary && n.summary.toLowerCase() !== n.headline.toLowerCase()
-                ? `\n   - ${n.summary}`
-                : ""
-            }`
-        ),
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── AEGIS: Security, Constitutional Risk Guardrails (SL < TP) & Blocked Threats ──
-  if (id === "aegis") {
-    const eqStr = `$${ledger.equityUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-    if (isGreeting || isWhatDoYouDo) {
-      return {
-        reply: [
-          `Hello! I'm **Aegis**, your account safety and risk protection specialist.`,
-          ``,
-          `My job is to guard your **${eqStr}** trading account 24/7 so no agent can take a reckless trade:`,
-          `- **Target Profit Must Beat Risk**: I block any trade unless its profit target is at least **1.8× larger** than its stop-loss risk.`,
-          `- **Bad Setups Blocked**: I have automatically blocked **${ledger.riskRejectedCount} risky or low-confidence trade setups** so far (**0 safety breaches**).`,
-          `- **Practice Log Hygiene**: I also quarantined an invalid \`ASX200\` test record from our practice log so our performance stats stay honest.`,
-          ``,
-          `Ask me **"is our account safe right now?"** or **"how many bad trades did you block?"**`,
-        ].join("\n"),
-      };
-    }
-
-    if (/\b(block|blocked|veto|vetoed|bad trades|rejected|how many)\b/.test(qLow)) {
-      return {
-        reply: [
-          `I have blocked **${ledger.riskRejectedCount} risky or low-confidence trade setups** from touching your account (plus held **${ledger.marketClosedHolds} off-hours signals** while markets were closed).`,
-          ``,
-          `### Why Those Trades Were Blocked`,
-          `- **Low Confidence (< 45%)**: Several signals only had ~19% confidence, which is well below our 45% safety floor.`,
-          `- **Reward-to-Risk Rule (At Least 1.8×)**: I block any setup where the target profit isn't at least **1.8× larger** than the stop-loss distance from entry.`,
-          `- **What Passed**: Only the **3 A+ EUR/USD short setups** (where target profit was **4.68× larger** than the stop-loss) passed my check — and all **3 won (100%)** for **+$4,621.55** profit.`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    return {
-      reply: [
-        `Yes — your **${eqStr}** account is safe, and all **Aegis** protection rules are active (**0 safety breaches**):`,
-        ``,
-        `- **Reward Always Beats Risk (1.8× Minimum)**: Every trade is required to have a profit target at least **1.8× larger** than its stop-loss risk (and targets are locked in memory so the system can never shrink a $38 target down to $18 on restart).`,
-        `- **${ledger.riskRejectedCount} Risky Setups Blocked**: I automatically blocked **${ledger.riskRejectedCount}** low-confidence setups before they could enter the market, allowing only the **3 high-conviction EUR/USD trades** that won **100% (+$4,621.55)**.`,
-        `- **Practice Log Integrity**: I quarantined an invalid \`ASX200\` practice outlier (\`+67.764R\`) from our shadow log; we currently have **13 valid practice replays** and **0 closed live V2 trades**, so live position sizing remains conservative.`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── FORGE: Last Trading Session Audit, 7-Timeframe Retraining & Mistake Clinic ──
-  if (id === "forge") {
-    const cert = candidates.filter((c) => c.lifecycle_state === "CERTIFIED");
-    const eqStr = `$${ledger.equityUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-    const pnlStr = `+$${ledger.netPnlUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-
-    if (isGreeting || isWhatDoYouDo) {
-      return {
-        reply: [
-          `Hello! I'm **Forge**, your strategy trainer and post-session review specialist.`,
-          ``,
-          `Here is what I do for the team:`,
-          `- **Review Every Trading Session**: After each session, I check every winning, losing, and skipped trade (our latest session won **${ledger.sessionWins} out of ${ledger.sessionTotal} EUR/USD trades** for **${pnlStr}**).`,
-          `- **Train & Test 16 Strategies**: I train our **Scalping, Day Trading, Swing Trading, and Range Trading** strategies across 7 chart timeframes (5-minute up to Weekly) and test them on unseen market data before **Oracle** is allowed to use them.`,
-          ``,
-          `Ask me **"what happened in our last trading session?"** or **"how do you train our trading strategies?"**`,
-        ].join("\n"),
-      };
-    }
-
-    if (/\b(how do you train|how did you retrain|train|retrain|strategies|blueprints|timeframes|mistake clinic)\b/.test(qLow) && !/\b(last trading session|what happened in our last)\b/.test(qLow)) {
-      return {
-        reply: [
-          `Here is how I train and test our **${cert.length} certified trading strategies** before they are allowed near your account:`,
-          ``,
-          `1. **7 Timeframes Combined (Weekly Down to 5-Minute Charts)**: Instead of guessing from one chart, each strategy checks the big trend on Weekly, Daily, and 4-Hour charts, then waits for a precise entry on 15-Minute and 5-Minute charts.`,
-          `2. **Tested on Unseen Market Data (40% Lockbox)**: I train each strategy on 60% of historical price data, then test it on the remaining **40% of unseen data** across 1,000 simulated market paths so it can't just memorize the past.`,
-          `3. **Built-In Safety Rule**: Every strategy is trained to require a profit target at least **1.8× larger** than its stop-loss distance (fixing the old V1 habit of taking tiny profits with big stops).`,
-          `4. **4 Trading Styles Ready**: We have **${cert.length} certified strategies** covering **Scalping, Day Trading, Swing Trading, and Range Trading** across \`EUR/USD\`, \`GBP/USD\`, \`USD/JPY\`, and \`XAU/USD (Gold)\`.`,
-          referralNote ? `\n---\n${referralNote}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      };
-    }
-
-    return {
-      reply: [
-        `In our last trading session, we won **${ledger.sessionWins} out of ${ledger.sessionTotal} trades (100% win rate)** on **EUR/USD**, growing our account balance to **${eqStr}** (**${pnlStr}** total profit):`,
-        ``,
-        `### Trades Executed in the Last Session (+6.336R Total Gain)`,
-        ...ledger.sessionExecutedTrades.map(
-          (t, idx) =>
-            `${idx + 1}. **${t.symbol} ${String(t.action).toUpperCase()}** at \`${t.entry}\` — Stop-Loss \`${t.sl}\`, Take-Profit \`${t.tp}\` (**${t.reward_risk}×** reward-to-risk) → **Won +${Number(t.realized_r).toFixed(3)}R**`
-        ),
-        ``,
-        `### What Else Happened During the Session`,
-        `- **Target Profit Beat Risk on Every Trade**: Every trade had a profit target nearly **4.7× larger** than its stop-loss distance.`,
-        `- **Weak Setups Skipped**: We automatically skipped **${ledger.riskRejectedCount} low-confidence signals** and held **${ledger.marketClosedHolds} off-hours signals** so the account only took A+ trades.`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── CHRONICLE: Authoritative Hard Disk & Shared Collective Memory ──
-  if (id === "chronicle") {
-    const overview = chronicle.getChronicleOverview();
-    const atlasStore = readJsonFileSafe("Chronicle/memory/research/atlas_knowledge_store.json", { entries: {} });
-    const savedTopics = Object.values(atlasStore.entries || {})
-      .map((e: any) => e?.topic)
-      .filter((t: any) => t && !String(t).includes("Trades Union Congress") && !String(t).includes("Learned Hand"))
-      .slice(-6);
-    const topicList = savedTopics.length > 0 ? savedTopics.map((t) => `**${t}**`).join(", ") : "**Vegetable**, **Photosynthesis**, **Wavelength**, **Compound Interest**, **Albert Einstein**";
-
-    return {
-      reply: [
-        `Here is what we have learned and saved in our shared **Chronicle** memory across all 9 agents:`,
-        ``,
-        `- **Recent Research & Everyday Topics Learned (via Atlas)**: ${topicList}`,
-        `- **Trading History & Lessons Saved (via Oracle & Forge)**:`,
-        `  - Latest session result: **${ledger.sessionWins} out of ${ledger.sessionTotal} EUR/USD wins (100%)** for **+6.336R** (**+$${ledger.netPnlUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}** profit, balance **$${ledger.equityUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}**)`,
-        `  - All-time historical log: **${ledger.totalWinsAllTime} wins out of ${ledger.totalExecutedAllTime} trades (${ledger.genuineAllTimeWinRatePct}%)** plus **16 certified strategy blueprints**`,
-        `  - Safety lessons: **${overview.lessons_count} permanent lessons** distilled from **${overview.episodes_count} past episodes** (including our rule that target profit must always be at least **1.8× larger** than stop-loss risk).`,
-        `- **Total Memory Store**: **${overview.memories_count} verified memories** and **${overview.state_keys_count} active state records** (${overview.storage_formatted} on disk).`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── NEXUS: Central Coordinator & Collective Reasoning Router ──
-  if (id === "nexus") {
-    const pulseFeed = liveFeeds.pulse || {};
-    const sentinelFeed = liveFeeds.sentinel || {};
-    const topPost = (pulseFeed.social_posts || [])[0];
-    const topNews = (sentinelFeed.world_news || [])[0];
-
-    return {
-      reply: [
-        `I'm **Nexus**, coordinating all **9 agents** through our shared **Chronicle** memory:`,
-        ``,
-        `- **Oracle (Trading & Win Rates)**: **${ledger.sessionWins}/${ledger.sessionTotal} wins (100%)** in our latest trading session (**+6.336R**, balance **$${ledger.equityUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}**), and **${ledger.genuineAllTimeWinRatePct}% (${ledger.totalWinsAllTime}/${ledger.totalExecutedAllTime})** all-time win rate.`,
-        `- **Forge (Last Session & Strategy Training)**: Reviewed our 3 EUR/USD wins and certified **16 multi-timeframe trading strategies** on unseen market data.`,
-        `- **Aegis (Account Safety)**: Active and protecting your balance — blocked **${ledger.riskRejectedCount}** weak setups with **0 safety breaches**.`,
-        `- **Sentinel (Today's World News)**: Tracking **${(sentinelFeed.world_news || []).length} live stories**${topNews ? ` — latest from **${topNews.outlet}**: *"${topNews.headline}"*` : ""}.`,
-        `- **Pulse (Social Media)**: Tracking **${(pulseFeed.social_posts || []).length} live posts** (**${pulseFeed.overall_sentiment || "BULLISH"}** mood)${topPost ? ` — latest from **${topPost.author}**: *"${topPost.headline}"*` : ""}.`,
-        `- **Atlas (Research & Everyday Questions)**: All **5 research desks** ready to answer any science, history, formula, or everyday question.`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  // ── GENESIS: Strategy Evolution & Genome Incubator ──
-  if (id === "genesis") {
-    return {
-      reply: [
-        `I'm **Genesis**, where we design and stress-test new trading strategy blueprints before **Forge** trains them and **Oracle** trades them:`,
-        ``,
-        `- **16 Evolved Strategy Blueprints**: We maintain **${v2Cands.length || 16} active strategies** covering **Scalping, Day Trading, Swing Trading, and Range Trading** across \`EUR/USD\`, \`GBP/USD\`, \`USD/JPY\`, and \`XAU/USD (Gold)\`.`,
-        `- **Tested Across 16,000+ Simulated Market Scenarios**: Every blueprint is stress-tested across **1,000 Monte Carlo market paths** so we see how it handles sudden price spikes and choppy markets before risking real capital.`,
-        `- **Built-In Reward-to-Risk Protection**: No strategy blueprint is allowed to survive unless its target profit is at least **1.8× larger** than its stop-loss risk.`,
-        referralNote ? `\n---\n${referralNote}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    };
-  }
-
-  return {
-    reply: `${AGENT_MANIFESTS[id]?.constitutional_name || id} is online and connected to our shared Chronicle memory. Ask me any question!`,
-  };
 }
 
 function runNexusCoordinationBridge(payload: Record<string, any>): Promise<any> {
@@ -2681,6 +929,31 @@ async function handleAgentChat(
     }
   }
 
+  // Oracle account answers must come from the broker-snapshot/DAG path. The
+  // legacy TypeScript reply builder contains historical sample values and is
+  // not an authoritative account-data source.
+  if (id === "oracle") {
+    const trace = await runNexusCoordinationBridge({
+      action: "coordinate",
+      query: userMessage,
+      target_agent: "oracle",
+    });
+    if (trace && trace.human_synthesis) {
+      const cleanReply = stripAsterisks(trace.human_synthesis);
+      appendChatHistoryLog(id, userMessage, mode, cleanReply, trace);
+      return {
+        reply: cleanReply,
+        dossier: trace,
+        trace,
+        referrals: trace.referrals || [],
+        llm_layer: trace.llm_layer || llmStatus,
+      };
+    }
+    const unavailable = "Oracle’s live account summary is unavailable because the broker evidence service did not respond. No account figures are inferred from old training files.";
+    appendChatHistoryLog(id, userMessage, mode, unavailable, { status: "unavailable" });
+    return { reply: unavailable, dossier: { status: "unavailable" }, llm_layer: llmStatus };
+  }
+
   if (id === "atlas") {
     const pyDossier = await runAtlasPythonInvestigation(userMessage, mode);
     if (pyDossier && pyDossier.readable_reply) {
@@ -2707,35 +980,112 @@ async function handleAgentChat(
     }
   }
 
-  const res = await buildHumanAgentReply(id, userMessage, mode);
-  const cleanReply = stripAsterisks(res.reply);
-  const refRes = await runNexusCoordinationBridge({
-    action: "referrals",
+  // Agent chat must be grounded in the same Python coordination/data path as
+  // the dashboards. The legacy TypeScript fallback embeds example metrics and
+  // canned trading claims, so it is never presented as a live agent answer.
+  const trace = await runNexusCoordinationBridge({
+    action: "coordinate",
     query: userMessage,
-    primary_agent: id,
-    participating_agents: [id, "chronicle"],
+    target_agent: id,
   });
-  appendChatHistoryLog(id, userMessage, mode, cleanReply, res.dossier);
-  return {
-    ...res,
-    reply: cleanReply,
-    referrals: refRes?.referrals || [],
-    llm_layer: llmStatus,
-  };
+  if (trace && trace.human_synthesis) {
+    const groundedReply = stripAsterisks(trace.human_synthesis);
+    appendChatHistoryLog(id, userMessage, mode, groundedReply, trace);
+    return {
+      reply: groundedReply,
+      dossier: trace,
+      trace,
+      referrals: trace.referrals || [],
+      llm_layer: trace.llm_layer || llmStatus,
+    };
+  }
+  const unavailable = `${AGENT_MANIFESTS[id]?.constitutional_name || id} could not return a verified response because its evidence service did not respond. No sample answer was substituted.`;
+  appendChatHistoryLog(id, userMessage, mode, unavailable, { status: "unavailable" });
+  return { reply: unavailable, dossier: { status: "unavailable" }, llm_layer: llmStatus };
+
+  return { reply: unavailable, dossier: { status: "unavailable" }, llm_layer: llmStatus };
 }
 
-// ── Interactive Oracle Chart, Broker Cycle & Open/Close Demo Trade Routes ──
+// ── Oracle UI routes use the Python broker-snapshot service as source of truth ──
+const PYTHON_API_ORIGIN = process.env.UNIVERSE_PYTHON_API_ORIGIN || "http://127.0.0.1:8000";
+
+function isLocalBrowserRequest(req: any): boolean {
+  const peer = String(req.socket?.remoteAddress || req.ip || "").toLowerCase();
+  const localPeer = ["127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"].includes(peer);
+  if (!localPeer) return false;
+  const origin = String(req.get?.("origin") || "");
+  if (!origin) return true;
+  try {
+    const host = new URL(origin).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return ["127.0.0.1", "::1", "localhost"].includes(host);
+  } catch {
+    return false;
+  }
+}
+
+async function proxyPythonOracleApi(req: any, res: any, route: string): Promise<void> {
+  try {
+    const target = new URL(route, PYTHON_API_ORIGIN);
+    if (!["127.0.0.1", "localhost", "::1"].includes(target.hostname.replace(/^\[|\]$/g, "").toLowerCase())) {
+      res.status(503).json({ status: "unavailable", message: "Oracle API proxy must target this computer." });
+      return;
+    }
+    const method = String(req.method || "GET").toUpperCase();
+    const response = await fetch(target, {
+      method,
+      headers: method === "GET" ? undefined : { "content-type": "application/json" },
+      body: method === "GET" ? undefined : JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(10000),
+    });
+    const raw = await response.text();
+    res.status(response.status);
+    res.type(response.headers.get("content-type") || "application/json").send(raw);
+  } catch (error) {
+    res.status(503).json({
+      status: "unavailable",
+      message: `Python Oracle API is unavailable: ${error instanceof Error ? error.name : "request failed"}`,
+    });
+  }
+}
+
+app.get("/api/oracle/dashboard", async (req, res) => {
+  const broker = String(req.query.broker || "all").toLowerCase();
+  if (!["all", "mt5", "ctrader"].includes(broker)) return res.status(400).json({ status: "error", message: "Invalid broker." });
+  await proxyPythonOracleApi(req, res, `/api/oracle/dashboard?broker=${encodeURIComponent(broker)}`);
+});
+
 app.get("/api/oracle/chart", async (req, res) => {
-  const symbol = String(req.query.symbol || "EURUSD");
-  const timeframe = String(req.query.timeframe || "M15");
-  const broker = String(req.query.broker || "all");
-  const data = await runNexusCoordinationBridge({
-    action: "oracle_chart",
-    symbol,
-    timeframe,
-    broker,
-  });
-  res.json(data || { status: "error", message: "Could not load chart data" });
+  const symbol = String(req.query.symbol || "EURUSD").toUpperCase();
+  const timeframe = String(req.query.timeframe || "M15").toUpperCase();
+  const broker = String(req.query.broker || "all").toLowerCase();
+  if (!/^[A-Z0-9._-]{1,32}$/.test(symbol)) return res.status(400).json({ status: "error", message: "Invalid symbol." });
+  if (!["W1", "D1", "H4", "H1", "M45", "M30", "M15", "M5"].includes(timeframe)) return res.status(400).json({ status: "error", message: "Unsupported timeframe." });
+  if (!["all", "mt5", "ctrader"].includes(broker)) return res.status(400).json({ status: "error", message: "Invalid broker." });
+  await proxyPythonOracleApi(req, res, `/api/oracle/chart?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&broker=${encodeURIComponent(broker)}`);
+});
+
+app.get("/api/oracle/telegram/signals", async (req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  await proxyPythonOracleApi(req, res, `/api/oracle/telegram/signals?limit=${limit}`);
+});
+
+app.get("/api/oracle/run/status", async (req, res) => {
+  if (!isLocalBrowserRequest(req)) return res.status(403).json({ status: "forbidden", message: "Run controls are local-machine only." });
+  const broker = String(req.query.broker || "").toLowerCase();
+  if (broker && !["mt5", "ctrader"].includes(broker)) return res.status(400).json({ status: "error", message: "Invalid broker." });
+  await proxyPythonOracleApi(req, res, `/api/oracle/run/status${broker ? `?broker=${broker}` : ""}`);
+});
+
+app.post("/api/oracle/run/start", async (req, res) => {
+  if (!isLocalBrowserRequest(req)) return res.status(403).json({ status: "forbidden", message: "Run controls are local-machine only." });
+  if (!req.body || !["mt5", "ctrader"].includes(String(req.body.broker || "").toLowerCase())) return res.status(400).json({ status: "error", message: "Choose MT5 or cTrader." });
+  await proxyPythonOracleApi(req, res, "/api/oracle/run/start");
+});
+
+app.post("/api/oracle/run/stop", async (req, res) => {
+  if (!isLocalBrowserRequest(req)) return res.status(403).json({ status: "forbidden", message: "Run controls are local-machine only." });
+  if (!req.body || !["mt5", "ctrader"].includes(String(req.body.broker || "").toLowerCase())) return res.status(400).json({ status: "error", message: "Choose MT5 or cTrader." });
+  await proxyPythonOracleApi(req, res, "/api/oracle/run/stop");
 });
 
 app.post("/api/oracle/execute-action", async (req, res) => {
@@ -2743,17 +1093,30 @@ app.post("/api/oracle/execute-action", async (req, res) => {
     action: "oracle_action",
     params: req.body || {},
   });
-  res.json(data || { status: "error", message: "Could not execute Oracle action" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Oracle action service did not respond." });
+  res.json(data);
 });
 
 // ── Interactive Sentinel & Pulse Live Feed Refresh Route ──
 app.post("/api/feeds/refresh", async (req, res) => {
-  const agent = String(req.body?.agent || "all");
-  const data = await runNexusCoordinationBridge({
-    action: "feeds_refresh",
-    agent,
-  });
-  res.json(data || { status: "error", message: "Could not refresh live feeds" });
+  const agent = String(req.body?.agent || "all").toLowerCase();
+  if (!["all", "sentinel", "pulse"].includes(agent)) return res.status(400).json({ status: "blocked", message: "Choose Sentinel, Pulse, or both." });
+  try {
+    const target = new URL("/api/feeds/refresh", PYTHON_API_ORIGIN);
+    if (!["127.0.0.1", "localhost", "::1"].includes(target.hostname.replace(/^\[|\]$/g, "").toLowerCase())) {
+      return res.status(503).json({ status: "unavailable", message: "Feed refresh is restricted to the local Python API." });
+    }
+    const response = await fetch(target, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agent }),
+      signal: AbortSignal.timeout(90000),
+    });
+    const raw = await response.text();
+    res.status(response.status).type(response.headers.get("content-type") || "application/json").send(raw);
+  } catch (error) {
+    res.status(503).json({ status: "unavailable", message: `Python feed collectors did not respond: ${error instanceof Error ? error.name : "request failed"}` });
+  }
 });
 
 app.get("/api/sentinel/news", async (_req, res) => {
@@ -2762,10 +1125,8 @@ app.get("/api/sentinel/news", async (_req, res) => {
     agent_id: "sentinel",
     broker: "all",
   });
-  res.json({
-    status: "ok",
-    news: pyRich?.news_articles || pyRich?.world_news_feed || [],
-  });
+  if (!pyRich) return res.status(503).json({ status: "unavailable", news: [], message: "Sentinel evidence service did not respond." });
+  res.json({ status: pyRich.status || "unavailable", news: pyRich.news_articles || pyRich.world_news_feed || [] });
 });
 
 app.get("/api/pulse/social", async (_req, res) => {
@@ -2774,10 +1135,8 @@ app.get("/api/pulse/social", async (_req, res) => {
     agent_id: "pulse",
     broker: "all",
   });
-  res.json({
-    status: "ok",
-    posts: pyRich?.social_posts || pyRich?.social_posts_feed || [],
-  });
+  if (!pyRich) return res.status(503).json({ status: "unavailable", posts: [], message: "Pulse evidence service did not respond." });
+  res.json({ status: pyRich.status || "unavailable", posts: pyRich.social_posts || pyRich.social_posts_feed || [] });
 });
 
 // ── Interactive Chronicle, Aegis & Genesis Specialist Action Route ──
@@ -2786,7 +1145,8 @@ app.post("/api/specialist/action", async (req, res) => {
     action: "specialist_action",
     params: req.body || {},
   });
-  res.json(data || { status: "error", message: "Could not execute specialist action" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Specialist action service did not respond." });
+  res.json(data);
 });
 
 // ── Interactive Plain-English Forge Training Routes (Missing V2 Endpoints) ──
@@ -2796,7 +1156,8 @@ app.get("/api/forge/pilot/status", async (req, res) => {
     forge_action: "status",
     params: req.query || {},
   });
-  res.json(data || { status: "ok", candidates: [] });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", candidates: [], message: "Forge V2 service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/forge/v2/retrain", async (req, res) => {
@@ -2805,7 +1166,8 @@ app.post("/api/forge/v2/retrain", async (req, res) => {
     forge_action: "surgical_retrain",
     params: req.body || {},
   });
-  res.json(data || { status: "error", message: "Retrain failed" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge retraining service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/forge/candidate/transition", async (req, res) => {
@@ -2814,7 +1176,8 @@ app.post("/api/forge/candidate/transition", async (req, res) => {
     forge_action: "transition_candidate",
     params: req.body || {},
   });
-  res.json(data || { status: "error", message: "Transition failed" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge transition service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/forge/candidate/rollback", async (req, res) => {
@@ -2823,7 +1186,8 @@ app.post("/api/forge/candidate/rollback", async (req, res) => {
     forge_action: "rollback_candidate",
     params: req.body || {},
   });
-  res.json(data || { status: "error", message: "Rollback failed" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge rollback service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/forge/v1-catalog/sync", async (_req, res) => {
@@ -2832,7 +1196,8 @@ app.post("/api/forge/v1-catalog/sync", async (_req, res) => {
     forge_action: "sync_catalog",
     params: {},
   });
-  res.json(data || { status: "error", message: "Sync failed" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge catalog service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/forge/outbox/flush", async (_req, res) => {
@@ -2841,7 +1206,8 @@ app.post("/api/forge/outbox/flush", async (_req, res) => {
     forge_action: "flush_outbox",
     params: {},
   });
-  res.json(data || { status: "error", message: "Outbox flush failed" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge outbox service did not respond." });
+  res.json(data);
 });
 
 app.get("/api/forge/candidate/:id", async (req, res) => {
@@ -2850,7 +1216,8 @@ app.get("/api/forge/candidate/:id", async (req, res) => {
     forge_action: "get_candidate",
     params: { candidate_id: req.params.id },
   });
-  res.json(data || { status: "error", message: "Candidate not found" });
+  if (!data || data.status === "unavailable") return res.status(503).json(data || { status: "unavailable", message: "Forge candidate service did not respond." });
+  res.json(data);
 });
 
 app.get("/api/llm/status", async (req, res) => {
@@ -2873,8 +1240,17 @@ app.post("/api/llm/understand", async (req, res) => {
     query: message,
     target_agent: intent?.target_agent || "nexus",
   });
+  if (!trace || !trace.human_synthesis) {
+    return res.status(503).json({
+      status: "unavailable",
+      query: message,
+      llm_intent: intent || null,
+      message: "The language model classified the request, but the evidence and agent response service did not return a result.",
+      llm_layer: await getDualLlmStatus(),
+    });
+  }
   res.json({
-    status: "ok",
+    status: "complete",
     query: message,
     llm_intent: intent,
     routed_primary_agent: trace?.primary_agent || intent?.target_agent || "oracle",
@@ -2886,16 +1262,15 @@ app.post("/api/llm/understand", async (req, res) => {
 // ── Live Institutional Nexus Coordination API (/api/nexus/*) ──
 app.get("/api/nexus/status", async (_req, res) => {
   const status = await runNexusCoordinationBridge({ action: "status" });
-  if (status) {
-    return res.json(status);
-  }
-  res.json(buildDynamicAgentData("nexus"));
+  if (status) return res.json(status);
+  return res.status(503).json({ status: "unavailable", message: "Nexus runtime health could not be queried." });
 });
 
 app.get("/api/nexus/traces", async (req, res) => {
   const limit = Math.min(50, Math.max(1, Number(req.query.limit || 12)));
   const data = await runNexusCoordinationBridge({ action: "traces", limit });
-  res.json(data || { status: "ok", traces: [] });
+  if (!data) return res.status(503).json({ status: "unavailable", traces: [], message: "Nexus trace service did not respond." });
+  res.json(data);
 });
 
 app.get("/api/nexus/memory-matrix", async (req, res) => {
@@ -2904,15 +1279,8 @@ app.get("/api/nexus/memory-matrix", async (req, res) => {
     action: "memory_matrix",
     limit,
   });
-  res.json(
-    data || {
-      status: "ok",
-      tier2_promoted_count: 0,
-      tier1_episodic_trace_count: 0,
-      tier2_promoted_knowledge: [],
-      tier1_episodic_traces: [],
-    }
-  );
+  if (!data) return res.status(503).json({ status: "unavailable", message: "Chronicle collective-memory service did not respond." });
+  res.json(data);
 });
 
 app.post("/api/nexus/coordinate", async (req, res) => {
@@ -2940,16 +1308,7 @@ app.post("/api/nexus/coordinate", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   }
-  const fallback = await handleAgentChat("nexus", query, "auto");
-  res.json({
-    status: "complete",
-    agent: "nexus",
-    reply: fallback.reply,
-    response: fallback.reply,
-    trace: fallback.trace || null,
-    referrals: fallback.referrals || [],
-    timestamp: new Date().toISOString(),
-  });
+  return res.status(503).json({ status: "unavailable", agent: "nexus", message: "Nexus could not coordinate because its evidence service did not respond; no canned synthesis was substituted." });
 });
 
 app.post("/agents/:name/chat", async (req, res) => {
@@ -2985,8 +1344,11 @@ app.post("/api/atlas/investigate", async (req, res) => {
     message,
     mode
   );
+  if (dossier?.status === "unavailable" || !reply) {
+    return res.status(503).json({ status: "unavailable", agent: "atlas", message: reply || "Atlas research evidence is unavailable.", dossier: dossier || null });
+  }
   res.json({
-    status: "complete",
+    status: dossier?.status || "complete",
     agent: "atlas",
     reply,
     response: reply,
@@ -3014,7 +1376,7 @@ app.post("/agents/:name/query", async (req, res) => {
     dossier: dossier || null,
     trace: trace || null,
     referrals: referrals || [],
-    data: buildDynamicAgentData(name),
+    data: trace || dossier || { status: "unavailable" },
     timestamp: new Date().toISOString(),
   });
 });

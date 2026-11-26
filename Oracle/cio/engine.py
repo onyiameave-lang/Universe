@@ -113,15 +113,29 @@ class OracleCIOEngine:
         stop_m = round(min(2.2, max(0.8, float(stop_m))), 3)
         targ_m = round(max(float(targ_m), stop_m * 1.5, stop_m + 0.5), 3)
 
-        rm.risk_per_trade = risk_frac
-        rm.max_positions = max(rm.max_positions, slot_budget)
-        rm.max_drawdown = max_dd
-        rm.daily_loss_limit = daily_loss
-        rm.confidence_floor = conv_floor
-        rm.max_currency_pct = max_curr
+        rm.risk_per_trade = min(float(getattr(rm, "hard_risk_per_trade", rm.risk_per_trade)), risk_frac)
+        rm.max_positions = min(
+            int(getattr(rm, "hard_max_positions", rm.max_positions)),
+            max(1, int(slot_budget)),
+        )
+        rm.max_drawdown = min(float(getattr(rm, "hard_max_drawdown", rm.max_drawdown)), max_dd)
+        rm.daily_loss_limit = min(
+            float(getattr(rm, "hard_daily_loss_limit", rm.daily_loss_limit)), daily_loss
+        )
+        # Keep the environment-configured floor as the immutable baseline.
+        # OracleAgent passes this learned Scout floor to RiskManager.evaluate
+        # per proposal, where it can tighten (never lower) the configured floor.
+        # Do not write it onto the shared RiskManager: doing so would let a
+        # learned value below the configured floor weaken the safety gate.
+        rm.max_currency_pct = min(
+            float(getattr(rm, "hard_max_currency_pct", rm.max_currency_pct)), max_curr
+        )
         rm.loss_cooldown_sec = loss_cd
         rm.win_cooldown_sec = win_cd
-        rm.max_trades_per_symbol_per_day = max(1, daily_budget // 2)
+        rm.max_trades_per_symbol_per_day = min(
+            int(getattr(rm, "hard_max_trades_per_symbol_per_day", rm.max_trades_per_symbol_per_day)),
+            max(1, daily_budget // 2),
+        )
         rm.stop_mult = stop_m
         rm.target_mult = targ_m
         rm.reward_risk = round(targ_m / max(0.1, stop_m), 3)

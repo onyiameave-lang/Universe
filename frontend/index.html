@@ -152,8 +152,6 @@
       },
     ];
 
-    const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || 'http://localhost:8000';
-
     // ── Connection check ──
     async function checkConnection() {
       const badge = document.getElementById('connBadge');
@@ -162,12 +160,12 @@
         const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
         if (r.ok) {
           badge.className = 'conn-badge online';
-          text.textContent = 'Live';
+          text.textContent = 'API online';
           return true;
         }
       } catch (e) { }
       badge.className = 'conn-badge offline';
-      text.textContent = 'Offline';
+      text.textContent = 'API offline';
       return false;
     }
 

@@ -15,10 +15,12 @@ from Oracle.core.v2_cio_engine import (
     SCOUT_DIMENSIONS,
 )
 from Oracle.intelligence.decision_ledger import OracleDecisionLedger
+from Oracle.intelligence.strategy_genome import StrategyGenome
 
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
+import pytest
 
 
 def _make_trending_series(symbol: str, start_price: float = 1.1000, step: float = 0.0020, n: int = 80) -> Series:
@@ -286,7 +288,6 @@ def test_cross_sectional_scout_tournament_ranks_setups_and_logs_unentered_trades
         storage_dir=tmp_path,
         decision_ledger=oracle.decision_ledger,
     )
-
     # Confirm lazy loading: legacy V1 evolution/lab/backtester are NOT instantiated in RAM
     assert oracle._backtester is None
     assert oracle._lab is None
@@ -301,7 +302,7 @@ def test_cross_sectional_scout_tournament_ranks_setups_and_logs_unentered_trades
         "USDJPY": _make_trending_series("USDJPY", 150.0, 0.30),
         "BTCUSD": _make_trending_series("BTCUSD", 65000.0, 220.0),
     }
-    oracle.data.get = lambda sym: {
+    oracle.data.get = lambda sym, **_kwargs: {
         "status": "complete",
         "symbol": sym.upper(),
         "source": "unit_test",
@@ -360,7 +361,22 @@ def test_counterfactual_replay_and_atlas_forge_deficiency_loop(tmp_path: Path):
     )
 
     series = _make_trending_series("EURUSD", 1.1000, 0.0030, n=90)
-    oracle.data.get = lambda sym: {
+    # The replay requires an ordered observation path after the decision.
+    # Build a deterministic rising M15 sequence rather than relying on the
+    # general signal fixture's repeated day-of-month timestamps.
+    replay_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    series.bars = [
+        Bar(
+            ts=(replay_start + timedelta(minutes=15 * index)).isoformat(),
+            open=1.1000 + index * 0.0010,
+            high=1.1000 + (index + 1) * 0.0010 + 0.0002,
+            low=1.1000 + index * 0.0010 - 0.0002,
+            close=1.1000 + (index + 1) * 0.0010,
+            volume=1000.0,
+        )
+        for index in range(90)
+    ]
+    oracle.data.get = lambda sym, **_kwargs: {
         "status": "complete",
         "symbol": sym.upper(),
         "source": "unit_test",
@@ -374,27 +390,35 @@ def test_counterfactual_replay_and_atlas_forge_deficiency_loop(tmp_path: Path):
 
     # 2. Record an unentered trade and replay it counterfactually against bars
     last_bar_close = series.bars[-1].close
-    oracle.decision_ledger.record_trade_not_entered(
-        symbol="EURUSD",
-        direction="long",
-        rejection_stage="below_learned_conviction_floor",
-        primary_reason="scout_score 0.49 < floor 0.52",
-        reasons=["scout_score 0.49 < floor 0.52"],
-        scout_score=0.49,
-        entry_confidence=0.49,
-        learned_conviction_floor=0.52,
-        regime="trending_up",
-        hypothetical_entry_price=series.bars[10].close,
-        hypothetical_stop=series.bars[10].close - 0.0050,
-        hypothetical_target=series.bars[10].close + 0.0075,
-        atr=0.0025,
-    )
+    # The fixture bars are from January 2026. Backdate the synthetic decision
+    # so the replay has a valid post-decision observation window even when the
+    # test suite runs later in the year.
+    replay_decision_time = (
+        replay_start + timedelta(minutes=15 * 11)
+    ).timestamp()
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr("Oracle.intelligence.decision_ledger.time.time", lambda: replay_decision_time)
+        oracle.decision_ledger.record_trade_not_entered(
+            symbol="EURUSD",
+            direction="long",
+            rejection_stage="below_learned_conviction_floor",
+            primary_reason="scout_score 0.49 < floor 0.52",
+            reasons=["scout_score 0.49 < floor 0.52"],
+            scout_score=0.49,
+            entry_confidence=0.49,
+            learned_conviction_floor=0.52,
+            regime="trending_up",
+            hypothetical_entry_price=series.bars[10].close,
+            hypothetical_stop=series.bars[10].close - 0.0050,
+            hypothetical_target=series.bars[10].close + 0.0075,
+            atr=0.0025,
+        )
     assert last_bar_close > series.bars[10].close + 0.0075
 
     replay_res = oracle.act("cio.counterfactual_replay", {"max_records": 10})
     assert replay_res["status"] == "complete"
     assert replay_res["replayed_count"] >= 1
-    assert replay_res["missed_winners"] >= 1
+    assert replay_res["missed_winners"] >= 1, replay_res
 
     # 3. Record realized losses and verify Oracle queries Atlas and dispatches a mandate to Forge
     for i in range(3):
@@ -446,6 +470,10 @@ def test_trade_learning_delegates_reevolution_to_forge_and_updates_cio(tmp_path:
         storage_dir=tmp_path,
         decision_ledger=oracle.decision_ledger,
     )
+    oracle._lab = SimpleNamespace(champion_info=lambda symbol, regime: (
+        {"genome": StrategyGenome(genome_id="champ-eurusd-v1").to_dict()}
+        if regime == "trending_up" else None
+    ))
 
     tracker = ChampionConfidenceTracker(store_path=tmp_path / "champion_confidence.json")
     benchmark = TradingBenchmark(storage_dir=tmp_path)
@@ -459,6 +487,7 @@ def test_trade_learning_delegates_reevolution_to_forge_and_updates_cio(tmp_path:
         symbol="EURUSD",
         direction=SimpleNamespace(value="buy"),
         entry_price=1.1000,
+        size=1000.0,
         initial_stop=1.0950,
         initial_target=1.1100,
         entry_confidence=0.68,

@@ -166,6 +166,7 @@ class MT5Broker:
         self.paper = _cfg.oracle_paper_trading if paper is None else paper
         self._paper_positions = {}  # for paper trading mode: {ticket: position_dict}
         self._next_ticket = 1000000  # paper trading ticket counter
+        self._positions_last_refresh_ok = False
 
     @property
     def available(self) -> bool:
@@ -443,20 +444,104 @@ class MT5Broker:
                 "volume_units_raw": raw_units,
             }
 
+        # Price-distance sizing is only an estimate for instruments whose
+        # profit currency differs from the account currency. Ask the MT5
+        # terminal to calculate the loss at the actual stop using the broker's
+        # contract specification and account-currency conversion.
+        risk_budget = plan.get("risk_amount")
+        calculator = getattr(mt5, "order_calc_profit", None)
+        if (not isinstance(risk_budget, (int, float))
+                or not math.isfinite(float(risk_budget)) or risk_budget <= 0
+                or not callable(calculator)):
+            return {
+                "status": "rejected",
+                "reason": "broker-currency stop-risk calculation is unavailable",
+                "symbol": symbol,
+            }
+        info = mt5.symbol_info(symbol)
+        volume_min = float(getattr(info, "volume_min", 0.0) or 0.0)
+        volume_step = float(getattr(info, "volume_step", 0.0) or 0.0)
+        if volume_min <= 0 or volume_step <= 0:
+            return {"status": "rejected", "reason": "invalid broker volume limits", "symbol": symbol}
+        try:
+            loss_at_stop = calculator(order_type, symbol, volume, price, stop)
+            if not isinstance(loss_at_stop, (int, float)) or not math.isfinite(float(loss_at_stop)):
+                raise ValueError("non-finite calculation")
+            loss_at_stop = abs(float(loss_at_stop))
+            if loss_at_stop > float(risk_budget):
+                raw_safe_volume = volume * float(risk_budget) / loss_at_stop
+                safe_steps = math.floor(raw_safe_volume / volume_step + 1e-12)
+                safe_volume = round(safe_steps * volume_step, 8)
+                if safe_volume < volume_min:
+                    return {
+                        "status": "rejected",
+                        "reason": "minimum broker volume would exceed the account-currency stop-risk budget",
+                        "symbol": symbol,
+                        "estimated_stop_loss_account_currency": round(loss_at_stop, 2),
+                        "risk_budget_account_currency": round(float(risk_budget), 2),
+                    }
+                volume = safe_volume
+                loss_at_stop = calculator(order_type, symbol, volume, price, stop)
+                if (not isinstance(loss_at_stop, (int, float))
+                        or not math.isfinite(float(loss_at_stop))
+                        or abs(float(loss_at_stop)) > float(risk_budget) + 1e-8):
+                    return {
+                        "status": "rejected",
+                        "reason": "broker volume step cannot satisfy the account-currency stop-risk budget",
+                        "symbol": symbol,
+                    }
+                loss_at_stop = abs(float(loss_at_stop))
+        except Exception as exc:
+            log.warning("MT5 broker stop-risk calculation failed for %s: %s", symbol, type(exc).__name__)
+            return {
+                "status": "rejected",
+                "reason": "broker-currency stop-risk calculation failed",
+                "symbol": symbol,
+            }
+
         request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol,
                   "volume": volume, "type": order_type, "price": price,
                   "sl": stop, "tp": target,
                   "deviation": 20, "magic": 770077, "comment": "OracleAI",
                   "type_time": mt5.ORDER_TIME_GTC, "type_filling": filling}
-        result = mt5.order_send(request)
-        if result is None: return {"status": "error", "reason": f"order_send returned None: {mt5.last_error()}"}
+        try:
+            result = mt5.order_send(request)
+        except Exception as exc:
+            log.error("MT5 order outcome is unknown for %s after order_send raised %s",
+                      symbol, type(exc).__name__)
+            return {"status": "unknown",
+                    "reason": "order outcome is uncertain; reconcile broker positions before retrying",
+                    "symbol": symbol}
+        if result is None:
+            return {"status": "unknown",
+                    "reason": f"order outcome is uncertain after order_send returned None: {mt5.last_error()}",
+                    "symbol": symbol}
         retcode = getattr(result, "retcode", None)
         comment = str(getattr(result, "comment", "") or "")
-        ok = retcode == mt5.TRADE_RETCODE_DONE
-        reason = "" if ok else (
+        done_code = getattr(mt5, "TRADE_RETCODE_DONE", None)
+        partial_code = getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", None)
+        is_full_fill = retcode == done_code
+        is_partial_fill = partial_code is not None and retcode == partial_code
+        confirmed_volume = getattr(result, "volume", None)
+        if is_partial_fill:
+            if (not isinstance(confirmed_volume, (int, float))
+                    or not math.isfinite(float(confirmed_volume)) or confirmed_volume <= 0):
+                return {"status": "unknown", "retcode": retcode,
+                        "reason": "partial fill reported without a confirmed filled volume; reconcile broker positions",
+                        "symbol": symbol}
+            volume_filled = float(confirmed_volume)
+        elif is_full_fill:
+            volume_filled = (float(confirmed_volume)
+                             if isinstance(confirmed_volume, (int, float))
+                             and math.isfinite(float(confirmed_volume))
+                             and confirmed_volume > 0 else volume)
+        else:
+            volume_filled = 0.0
+        ok = is_full_fill or is_partial_fill
+        reason = "partial fill" if is_partial_fill else ("" if ok else (
             f"MT5 order rejected (retcode={retcode}, "
             f"comment={comment or 'no broker comment'})"
-        )
+        ))
         if not ok:
             log.warning(
                 "%s symbol=%s volume=%.4f lots price=%.8f sl=%.8f tp=%.8f "
@@ -467,11 +552,14 @@ class MT5Broker:
         return {"status": "filled" if ok else "rejected", "retcode": retcode,
                "reason": reason,
                "account_type": self.status.account_type, "symbol": symbol,
-               "volume": volume, "price": getattr(result, "price", price),
+               "volume": volume_filled, "price": getattr(result, "price", price),
                "order": getattr(result, "order", None), "sl": stop, "tp": target,
                "comment": comment,
                "filling_mode": filling, "volume_raw": raw_units,
-               "volume_units_raw": raw_units, "volume_lots": volume}
+               "volume_units_raw": raw_units, "volume_lots": volume_filled,
+               "partial_fill": is_partial_fill,
+               "estimated_stop_loss_account_currency": round(loss_at_stop, 2),
+               "risk_budget_account_currency": round(float(risk_budget), 2)}
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -496,6 +584,7 @@ class MT5Broker:
         In live mode, queries MT5 via positions_get().
         """
         if self.paper:
+            self._positions_last_refresh_ok = True
             # Paper trading mode: return from internal state
             result = list(self._paper_positions.values())
             if symbol:
@@ -503,10 +592,16 @@ class MT5Broker:
             return result
         
         if not self.status.connected:
+            self._positions_last_refresh_ok = False
             return []
         
         try:
-            poss = self._mt5.positions_get() or []
+            poss = self._mt5.positions_get()
+            if poss is None:
+                self._positions_last_refresh_ok = False
+                log.warning("positions(): MT5 positions_get returned None; position state is unknown")
+                return []
+            self._positions_last_refresh_ok = True
             result = []
             for p in poss:
                 pos_dict = {
@@ -514,6 +609,7 @@ class MT5Broker:
                     "volume": p.volume,
                     "type": "buy" if p.type == 0 else "sell",
                     "price_open": p.price_open,
+                    "price_current": getattr(p, "price_current", None),
                     "sl": p.sl,
                     "tp": p.tp,
                     "profit": p.profit,
@@ -526,6 +622,7 @@ class MT5Broker:
             
             return result
         except Exception as exc:
+            self._positions_last_refresh_ok = False
             log.warning("positions(): %s", exc)
             return []
 
@@ -798,12 +895,14 @@ class MT5Broker:
         Returns [] if not connected, symbol not found, or no positions.
         """
         if self.paper:
+            self._positions_last_refresh_ok = True
             # Paper mode: use internal dict filtered by symbol prefix
             prefix = symbol.upper()[:6]
             return [p for p in self._paper_positions.values()
                     if p.get("symbol", "").upper().startswith(prefix)]
 
         if not self.status.connected or self._mt5 is None:
+            self._positions_last_refresh_ok = False
             log.debug("get_positions_by_symbol(%s): not connected", symbol)
             return []
 
@@ -820,13 +919,18 @@ class MT5Broker:
             if raw is None:
                 # Fallback: fetch all and filter manually (handles broker symbol
                 # variants like BTCUSDm vs BTCUSD)
-                all_pos = mt5.positions_get() or []
+                all_pos = mt5.positions_get()
+                if all_pos is None:
+                    self._positions_last_refresh_ok = False
+                    log.warning("get_positions_by_symbol(%s): broker position state is unknown", symbol)
+                    return []
                 prefix = symbol.upper()[:6]
                 raw = [p for p in all_pos
                        if p.symbol.upper().startswith(prefix)]
                 log.debug("get_positions_by_symbol(%s): fallback all-positions filter "
                           "found %d matches", symbol, len(raw))
 
+            self._positions_last_refresh_ok = True
             result = []
             for p in (raw or []):
                 result.append({
@@ -842,6 +946,7 @@ class MT5Broker:
             return result
 
         except Exception as exc:
+            self._positions_last_refresh_ok = False
             log.warning("get_positions_by_symbol(%s): %s", symbol, exc)
             return []
 
@@ -853,14 +958,19 @@ class MT5Broker:
         configured for paper trading.
         """
         if not self.status.connected or self._mt5 is None:
+            self._positions_last_refresh_ok = False
             return []
         try:
             self._mt5.symbol_select(symbol, True)
             raw = self._mt5.positions_get(symbol=symbol)
-            if not raw:
+            if raw is None:
                 prefix = symbol.upper()[:6]
-                raw = [p for p in (self._mt5.positions_get() or [])
-                       if p.symbol.upper().startswith(prefix)]
+                all_pos = self._mt5.positions_get()
+                if all_pos is None:
+                    self._positions_last_refresh_ok = False
+                    return []
+                raw = [p for p in all_pos if p.symbol.upper().startswith(prefix)]
+            self._positions_last_refresh_ok = True
             return [{
                 "symbol": p.symbol,
                 "volume": p.volume,
@@ -873,6 +983,7 @@ class MT5Broker:
                 "time": float(getattr(p, "time", 0.0)) or None,
             } for p in (raw or [])]
         except Exception as exc:
+            self._positions_last_refresh_ok = False
             log.warning("observed_positions_by_symbol(%s): %s", symbol, exc)
             return []
 
@@ -933,6 +1044,107 @@ class MT5Broker:
             self.status.connected = False
             self.status.reason = "MT5 account_info unavailable"
         return self.status.to_dict()
+
+    def fetch_execution_rates(
+        self, symbol: str, broker_symbol: Optional[str] = None, bar_count: int = 500
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch M15 execution candles and a timestamped live quote from MT5.
+
+        This is intentionally narrower than ``fetch_7tf_rates``: the trading
+        signal path needs fresh M15 execution data, while Forge owns the slower
+        multi-timeframe research request. It avoids seven terminal history
+        calls for every symbol scan.
+        """
+        if self._mt5 is None and self.available:
+            self.connect()
+        if not self.status.connected or self._mt5 is None:
+            return None
+
+        mt5 = self._mt5
+        canonical = str(symbol).strip().upper()
+        bsym = broker_symbol or self.symbol_map.get(canonical, canonical)
+        try:
+            selected = bool(mt5.symbol_select(bsym, True))
+            if not selected:
+                prefix = canonical[:6]
+                for item in mt5.symbols_get() or []:
+                    candidate = str(getattr(item, "name", ""))
+                    if candidate.upper().startswith(prefix) and mt5.symbol_select(candidate, True):
+                        bsym = candidate
+                        selected = True
+                        break
+            if not selected:
+                log.warning("MT5 market data symbol unavailable: %s (canonical %s)", bsym, canonical)
+                return None
+
+            timeframe = getattr(mt5, "TIMEFRAME_M15", 15)
+            count = max(100, min(int(bar_count), 5000))
+            rates = mt5.copy_rates_from_pos(bsym, timeframe, 0, count)
+            if rates is None or len(rates) == 0:
+                log.warning("MT5 returned no M15 rates for %s (last_error=%s)", bsym, mt5.last_error())
+                return None
+
+            import datetime as _dt
+            bars: List[Dict[str, Any]] = []
+            for row in rates:
+                try:
+                    unix_sec = int(row["time"])
+                    open_price = float(row["open"])
+                    high = float(row["high"])
+                    low = float(row["low"])
+                    close = float(row["close"])
+                    volume = float(row["tick_volume"])
+                except Exception:
+                    unix_sec = int(getattr(row, "time", 0))
+                    open_price = float(getattr(row, "open", 0.0))
+                    high = float(getattr(row, "high", 0.0))
+                    low = float(getattr(row, "low", 0.0))
+                    close = float(getattr(row, "close", 0.0))
+                    volume = float(getattr(row, "tick_volume", 0.0) or 0.0)
+                if (unix_sec <= 0 or not all(math.isfinite(v) for v in
+                        (open_price, high, low, close, volume)) or close <= 0 or
+                        high < max(open_price, close) or low > min(open_price, close) or
+                        high < low or volume < 0):
+                    continue
+                stamp = _dt.datetime.fromtimestamp(unix_sec, tz=_dt.timezone.utc)
+                bars.append({
+                    "ts": stamp.isoformat().replace("+00:00", "Z"),
+                    "unix_sec": unix_sec,
+                    "open": open_price, "high": high, "low": low,
+                    "close": close, "volume": volume,
+                })
+            bars.sort(key=lambda item: item["unix_sec"])
+            if len(bars) < 75:
+                log.warning("MT5 returned only %d valid M15 bars for %s", len(bars), bsym)
+                return None
+
+            tick = mt5.symbol_info_tick(bsym)
+            bid = float(getattr(tick, "bid", 0.0) or 0.0) if tick is not None else 0.0
+            ask = float(getattr(tick, "ask", 0.0) or 0.0) if tick is not None else 0.0
+            tick_time_msc = int(getattr(tick, "time_msc", 0) or 0) if tick is not None else 0
+            tick_time = int(getattr(tick, "time", 0) or 0) if tick is not None else 0
+            quote_time = (tick_time_msc / 1000.0) if tick_time_msc > 0 else float(tick_time)
+            if bid <= 0 or ask < bid or quote_time <= 0:
+                log.warning("MT5 returned invalid quote for %s (bid=%s ask=%s)", bsym, bid, ask)
+                return None
+
+            observed_at = _dt.datetime.fromtimestamp(
+                quote_time, tz=_dt.timezone.utc
+            ).isoformat().replace("+00:00", "Z")
+            return {
+                "symbol": canonical,
+                "broker_symbol": bsym,
+                "source": f"mt5_terminal_live:{bsym}",
+                "price_basis": "bid",
+                "live_bid": bid,
+                "live_ask": ask,
+                "quote_observed_at": observed_at,
+                "quote_time_unix": quote_time,
+                "raw_series": {"M15": bars},
+            }
+        except Exception as exc:
+            log.warning("fetch_execution_rates(%s): %s", canonical, exc)
+            return None
 
     def fetch_7tf_rates(
         self, symbol: str, broker_symbol: Optional[str] = None

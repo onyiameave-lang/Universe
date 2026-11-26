@@ -7,14 +7,20 @@
 // ── BASE URL ──────────────────────────────────────────────────────────────────
 const BASE_URL = (() => {
   if (typeof window.UNIVERSE_API_BASE !== 'undefined') return window.UNIVERSE_API_BASE.replace(/\/$/, '');
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+  // Broker snapshots, Oracle process controls, and the truthful dashboard
+  // contract are owned by the Python API. Select it before the initial page
+  // request so dashboard loads do not race the asynchronous service probe.
+  if (isLocal && ['3000', '5173', '5500', '5501', '8080'].includes(port)) {
+    return 'http://127.0.0.1:8000';
+  }
+  if (isLocal && port === '8000') return window.location.origin.replace(/\/$/, '');
   const stored = localStorage.getItem('universe-api-base');
   if (stored && /^https?:\/\//i.test(stored)) return stored.replace(/\/$/, '');
   const origin = window.location.origin;
   if (!origin || origin === 'null' || window.location.protocol === 'file:') {
-    return 'http://localhost:3000';
-  }
-  const port = window.location.port;
-  if (port === '5500' || port === '5501' || port === '8080' || port === '5173') {
     return 'http://localhost:3000';
   }
   return origin.replace(/\/$/, '');
@@ -26,25 +32,39 @@ const CONFIG = {
 window.CONFIG = CONFIG;
 window.API_BASE = BASE_URL;
 
-// Auto-probe fallback between localhost:3000 (Express) and localhost:8000 (FastAPI) when running locally
+// Probe only the Python API locally. It owns authenticated broker snapshots,
+// Oracle process controls, and the frontend's authoritative dashboard routes.
 (async function autoProbeLocalBackend() {
-  try {
-    const res = await fetch(`${window.API_BASE}/health`, { signal: AbortSignal.timeout(2500) });
-    if (res.ok) return;
-  } catch (e) {}
-  for (const candidate of ['http://localhost:3000', 'http://localhost:8000', 'http://127.0.0.1:3000', 'http://127.0.0.1:8000']) {
-    if (candidate === window.API_BASE) continue;
+  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+  const candidates = isLocal
+    ? ['http://127.0.0.1:8000', 'http://localhost:8000']
+    : [];
+  if (!isLocal) {
     try {
-      const r = await fetch(`${candidate}/health`, { signal: AbortSignal.timeout(2000) });
-      if (r.ok) {
-        window.API_BASE = candidate;
-        window.CONFIG.API_BASE = candidate;
-        API.base = candidate;
-        API.agents = `${candidate}/agents`;
-        API.health = `${candidate}/health`;
-        API.ecosystemChat = `${candidate}/ecosystem/chat`;
-        break;
+      const res = await fetch(`${window.API_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+      if (res.ok) return;
+    } catch (e) {}
+  }
+  for (const candidate of candidates) {
+    try {
+      const health = await fetch(`${candidate}/health`, { signal: AbortSignal.timeout(1800) });
+      if (!health.ok) continue;
+      // Prefer the Python API locally: it owns the broker snapshots and Oracle
+      // run lifecycle. Health alone is insufficient because the Express gateway
+      // may be alive while these authoritative routes are unavailable.
+      if (candidate.endsWith(':8000')) {
+        const oracle = await fetch(`${candidate}/api/oracle/dashboard?broker=ctrader`, { signal: AbortSignal.timeout(2500) });
+        if (!oracle.ok) continue;
+        const payload = await oracle.json();
+        if (!payload || !payload.brokers || !payload.positions_status) continue;
       }
+      window.API_BASE = candidate;
+      window.CONFIG.API_BASE = candidate;
+      API.base = candidate;
+      API.agents = `${candidate}/agents`;
+      API.health = `${candidate}/health`;
+      API.ecosystemChat = `${candidate}/ecosystem/chat`;
+      break;
     } catch (e) {}
   }
 })();

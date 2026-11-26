@@ -65,18 +65,18 @@
             <div>
               <div style="font-size:13.5px;font-weight:800;color:var(--text)">Interactive Strategy Blueprint Designer</div>
               <div id="genesisActionBanner" style="font-size:12px;color:var(--text-muted);margin-top:3px">
-                Tap the button on the right to have Genesis design a brand-new trading blueprint, stress-test its risk-to-reward rule, and post the plain-English blueprint below.
+                Blueprint generation is unavailable until Genesis is connected to its governed proposal and stress-test pipeline. No candidate is created by this control.
               </div>
             </div>
-            <button id="btnGenesisDesign" type="button" onclick="runGenesisBlueprint()" style="padding:9px 16px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">
-              + Design &amp; Stress-Test New Strategy Blueprint
+            <button id="btnGenesisDesign" type="button" disabled title="Genesis proposal and stress-test workflow is not connected" style="padding:9px 16px;border-radius:8px;border:none;background:#475569;color:#cbd5e1;font-size:12.5px;font-weight:800;cursor:not-allowed">
+              Blueprint workflow unavailable
             </button>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Certified Strategy Blueprints (Plain-English Summary)</span>
+            <span class="card-title">Recorded Genesis Artifacts (Status Shown in Each Record)</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -88,7 +88,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Stress-Test Audit &amp; Forge Promotion Pipeline</span>
+            <span class="card-title">Genesis Activity Records</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -142,7 +142,6 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'genesis';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   function escHtml(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -153,16 +152,16 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function offlinePanel(id) {
@@ -173,8 +172,8 @@
   }
 
   function renderFeedItem(item) {
-    const title = item.title || item.name || item.text || item.headline || 'Strategy Blueprint';
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escHtml(title) + '</div><div class="feed-meta"><span>' + escHtml(item.source || item.agent || 'Genesis Strategy Architect') + '</span><span>' + escHtml(item.time || item.timestamp || 'Active') + '</span></div></div></div>';
+    const title = item.title || item.name || item.text || item.headline || 'Title unavailable';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escHtml(title) + '</div><div class="feed-meta"><span>' + escHtml(item.source || item.agent || 'Source unavailable') + '</span><span>' + escHtml(item.time || item.timestamp || 'Timestamp unavailable') + '</span></div></div></div>';
   }
 
   async function runGenesisBlueprint() {
@@ -192,11 +191,11 @@
       });
       const d = await r.json();
       if (banner) {
-        banner.style.color = '#10b981';
+        banner.style.color = r.ok && d.status === 'complete' ? '#10b981' : '#f59e0b';
         banner.style.fontWeight = '700';
-        banner.textContent = d.human_summary || 'New strategy blueprint designed and stress-tested.';
+        banner.textContent = d.human_summary || d.message || 'Genesis did not confirm blueprint creation or stress testing.';
       }
-      await loadDashboard();
+      if (r.ok && d.status === 'complete') await loadDashboard();
     } catch (e) {
       if (banner) {
         banner.style.color = '#f59e0b';
@@ -204,8 +203,8 @@
       }
     } finally {
       if (btn) {
-        btn.disabled = false;
-        btn.textContent = '+ Design & Stress-Test New Strategy Blueprint';
+        btn.disabled = true;
+        btn.textContent = 'Blueprint workflow unavailable';
       }
     }
   }
@@ -222,17 +221,15 @@
       setKpi('best_strategy_return', d['best_strategy_return'] != null ? d['best_strategy_return'] : (d.metrics && d.metrics['best_strategy_return'] != null ? d.metrics['best_strategy_return'] : null), d.deltas && d.deltas['best_strategy_return']);
       setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
 
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
-        const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
-        const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+      const artifacts = Array.isArray(d.strategy_blueprints) ? d.strategy_blueprints : [];
+      const activities = Array.isArray(d.activity_feed) ? d.activity_feed : [];
+      const primary = document.getElementById('section_primary');
+      const secondary = document.getElementById('section_secondary');
+      if (primary) primary.innerHTML = artifacts.length ? artifacts.slice(0, 8).map(renderFeedItem).join('') : '<div class="offline-msg">No Genesis strategy records are available.</div>';
+      if (secondary) secondary.innerHTML = activities.length ? activities.slice(0, 6).map(renderFeedItem).join('') : '<div class="offline-msg">No separate Genesis activity records are available.</div>';
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
+      ['active_strategies', 'avg_return', 'goals_met', 'backtests_run', 'best_strategy_return', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
       offlinePanel('section_primary');
       offlinePanel('section_secondary');
     }

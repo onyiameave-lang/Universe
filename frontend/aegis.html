@@ -43,7 +43,7 @@
             <div class="kpi-delta pos" id="kpid_threats_blocked"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Compliance</div>
+            <div class="kpi-label">Compliance Score</div>
             <div class="kpi-value" id="kpi_compliance_score">—</div>
             <div class="kpi-delta pos" id="kpid_compliance_score"></div>
           </div>
@@ -60,7 +60,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Active Safety Rules &amp; Blocked Risky Trades</span>
+            <span class="card-title">Recorded Safety and Integrity Diagnostics</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -73,7 +73,7 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title">All 9 Agents Safety &amp; Health Status</span>
+            <span class="card-title">Ledger and Synchronization Records</span>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
           <div class="card-body">
@@ -128,23 +128,28 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'aegis';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   async function checkConn() {
     const badge = document.getElementById('connBadge');
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function offlinePanel(id) {
@@ -155,7 +160,7 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escapeHtml(item.title||item.name||item.text||item.headline||JSON.stringify(item)) + '</div><div class="feed-meta"><span>' + escapeHtml(item.source||item.agent||'') + '</span><span>' + escapeHtml(item.time||item.timestamp||'') + '</span></div></div></div>';
   }
 
   async function loadDashboard() {
@@ -170,18 +175,15 @@
       setKpi('compliance_score', d['compliance_score'] != null ? d['compliance_score'] : (d.metrics && d.metrics['compliance_score'] != null ? d.metrics['compliance_score'] : null), d.deltas && d.deltas['compliance_score']);
       setKpi('incidents_today', d['incidents_today'] != null ? d['incidents_today'] : (d.metrics && d.metrics['incidents_today'] != null ? d.metrics['incidents_today'] : null), d.deltas && d.deltas['incidents_today']);
       setKpi('uptime', d['uptime'] != null ? d['uptime'] : (d.metrics && d.metrics['uptime'] != null ? d.metrics['uptime'] : null), d.deltas && d.deltas['uptime']);
-      // Primary section: first array found in data
-      const keys = Object.keys(d).filter(k => Array.isArray(d[k]) && d[k].length > 0);
-      if (keys.length > 0) {
-        const el = document.getElementById('section_primary');
-        if (el) { el.innerHTML = d[keys[0]].slice(0,8).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_primary'); }
-      if (keys.length > 1) {
-        const el2 = document.getElementById('section_secondary');
-        if (el2) { el2.innerHTML = d[keys[1]].slice(0,6).map(renderFeedItem).join(''); }
-      } else { offlinePanel('section_secondary'); }
+      const primary = Array.isArray(d.security_shield_feed) ? d.security_shield_feed : [];
+      const secondary = Array.isArray(d.compliance_audit_feed) ? d.compliance_audit_feed : [];
+      const primaryEl = document.getElementById('section_primary');
+      const secondaryEl = document.getElementById('section_secondary');
+      if (primaryEl) primaryEl.innerHTML = primary.length ? primary.slice(0, 8).map(renderFeedItem).join('') : '<div class="offline-msg">No safety diagnostic records are available.</div>';
+      if (secondaryEl) secondaryEl.innerHTML = secondary.length ? secondary.slice(0, 6).map(renderFeedItem).join('') : '<div class="offline-msg">No ledger or synchronization records are available.</div>';
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
+      ['risk_score', 'anomalies_detected', 'threats_blocked', 'compliance_score', 'incidents_today', 'uptime'].forEach(key => setKpi(key, 'Unavailable'));
       offlinePanel('section_primary');
       offlinePanel('section_secondary');
     }
@@ -209,7 +211,7 @@
 
   function addMsg(role, text) {
     const d=document.createElement('div'); d.className='chat-msg '+role;
-    d.innerHTML='<div class="chat-bubble">'+text+'</div>';
+    d.innerHTML='<div class="chat-bubble">'+escapeHtml(text)+'</div>';
     chatMsg.appendChild(d); chatMsg.scrollTop=chatMsg.scrollHeight; return d;
   }
   function addTyping() {
@@ -229,9 +231,10 @@
         body:JSON.stringify({message:text}), signal:AbortSignal.timeout(60000)
       });
       t.remove();
+      if (!r.ok) throw new Error('Aegis request failed (HTTP ' + r.status + ').');
       const data=await r.json();
-      addMsg('agent', data.response||data.message||'The oracle has spoken.');
-    } catch(e) { t.remove(); addMsg('agent','The backend is still working or reconnecting. Please try again in a moment.'); }
+      addMsg('agent', data.response||data.message||'Aegis returned no response.');
+    } catch(e) { t.remove(); addMsg('agent', e.message || 'Aegis is unavailable. Please try again in a moment.'); }
   });
 
   checkConn();

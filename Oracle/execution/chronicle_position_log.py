@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -99,6 +100,19 @@ _DEFAULT_LOCAL_FALLBACK_PATH = (
     )).expanduser()
 )
 _LOCAL_FALLBACK_LOCK = threading.Lock()
+
+
+def adverse_slippage_price(direction: str, decision_entry: Any, fill_price: Any) -> Optional[float]:
+    """Return signed adverse price movement; negative values are price improvement."""
+    try:
+        expected = float(decision_entry)
+        fill = float(fill_price)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not all(map(math.isfinite, (expected, fill))):
+        return None
+    value = fill - expected if str(direction).lower() in ("long", "buy") else expected - fill
+    return round(value, 10)
 
 
 class ChroniclePositionLog:
@@ -132,7 +146,8 @@ class ChroniclePositionLog:
 
     def log_opened(self, symbol: str, broker_sym: str, ticket: int,
                    direction: str, volume: float,
-                   price: float = 0.0, sl: float = 0.0, tp: float = 0.0) -> None:
+                   price: float = 0.0, sl: float = 0.0, tp: float = 0.0,
+                   execution: Optional[Dict[str, Any]] = None) -> None:
         """Record that a position was opened."""
         self._write({
             "event":      "position_opened",
@@ -144,6 +159,7 @@ class ChroniclePositionLog:
             "price":      price,
             "sl":         sl,
             "tp":         tp,
+            "execution":  dict(execution or {}),
         })
 
     def log_closed(self, symbol: str, broker_sym: str, ticket: int,
@@ -171,7 +187,8 @@ class ChroniclePositionLog:
 
     # ── read / query ──────────────────────────────────────────────────────────
 
-    def has_open_position(self, symbol: str, broker_sym: str = "") -> bool:
+    def has_open_position(self, symbol: str, broker_sym: str = "",
+                          max_age_sec: Optional[float] = None) -> bool:
         """
         Return True if Chronicle has a recent 'position_opened' event for
         *symbol* that has NOT been followed by a 'position_closed' event.
@@ -191,17 +208,34 @@ class ChroniclePositionLog:
             # Walk events newest-first; if we see a 'closed' before an 'opened'
             # for the same ticket, the position is closed.
             open_tickets: set = set()
+            opened_at: Dict[int, float] = {}
             closed_tickets: set = set()
 
             for ev in sorted(events, key=lambda e: e.get("ts", 0)):
                 evt  = ev.get("event", "")
                 tick = ev.get("ticket")
                 if evt == "position_opened" and tick is not None:
-                    open_tickets.add(int(tick))
+                    ticket = int(tick)
+                    open_tickets.add(ticket)
+                    try:
+                        opened_at[ticket] = float(ev.get("ts") or 0.0)
+                    except (TypeError, ValueError):
+                        opened_at[ticket] = 0.0
                 elif evt == "position_closed" and tick is not None:
                     closed_tickets.add(int(tick))
 
             still_open = open_tickets - closed_tickets
+            if max_age_sec is not None:
+                # A recent Chronicle event is a short-lived cross-process
+                # in-flight guard. Older unmatched opens may be stale; callers
+                # with a successful broker reconciliation should not let them
+                # block a symbol forever.
+                now = time.time()
+                max_age = max(0.0, float(max_age_sec))
+                still_open = {
+                    ticket for ticket in still_open
+                    if 0.0 <= now - opened_at.get(ticket, 0.0) <= max_age
+                }
             if still_open:
                 log.info("has_open_position(%s): Chronicle shows %d open ticket(s): %s",
                          symbol, len(still_open), still_open)

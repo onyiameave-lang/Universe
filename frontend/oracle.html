@@ -31,8 +31,8 @@
           <div class="card-body" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
               <div>
-                <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">1. Select Trading Account &amp; Run Live Broker Cycles</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Switch between MetaTrader 5 (MT5), cTrader, or All Accounts — and trigger live market scans or place demo trades directly from here</div>
+                <div style="font-size:13px;font-weight:800;letter-spacing:0.03em;color:var(--text);text-transform:uppercase">1. Select Account &amp; Run Oracle</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Start the local broker trader for a chosen number of cycles. Oracle uses the existing account safety settings.</div>
               </div>
               <div id="brokerSwitcherBtns" style="display:flex;gap:8px;flex-wrap:wrap">
                 <button type="button" class="broker-tab-btn" data-broker="all" onclick="selectBroker('all')" style="padding:8px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">All Accounts (MT5 + cTrader)</button>
@@ -41,48 +41,33 @@
               </div>
             </div>
 
-            <!-- Action Buttons Row: Run cTrader Cycle, Run MT5 Cycle, Place New Demo Trade -->
+            <!-- Local broker process controls -->
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px;border-radius:10px;background:rgba(2,6,23,0.55);border:1px solid rgba(255,255,255,0.08)">
+              <label for="oracleCycleCount" style="font-size:12px;color:var(--text-muted);font-weight:700">Cycles</label>
+              <input id="oracleCycleCount" type="number" min="1" max="10000" value="1" style="width:88px;padding:8px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16)">
               <button type="button" id="btnRunCtrader" onclick="runBrokerCycle('ctrader')" style="padding:9px 15px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.18);color:#38bdf8;font-weight:700;font-size:12.5px;cursor:pointer">
-                ▶ Run cTrader Market Scan &amp; Cycle
+                ▶ Start cTrader Trader
               </button>
               <button type="button" id="btnRunMt5" onclick="runBrokerCycle('mt5')" style="padding:9px 15px;border-radius:8px;border:1px solid #10b981;background:rgba(16,185,129,0.18);color:#10b981;font-weight:700;font-size:12.5px;cursor:pointer">
-                ▶ Run MetaTrader 5 (MT5) Scan &amp; Cycle
+                ▶ Start MT5 Trader
               </button>
-              <div style="height:24px;width:1px;background:rgba(255,255,255,0.12);margin:0 4px"></div>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1">
-                <span style="font-size:12px;font-weight:700;color:var(--text-muted)">Quick Demo Trade:</span>
-                <select id="tradeBrokerSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
-                  <option value="ctrader">cTrader Demo</option>
-                  <option value="mt5">MetaTrader 5 (MT5)</option>
-                </select>
-                <select id="tradeSymbolSelect" onchange="selectChartSymbol(this.value)" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
-                  <option value="EURUSD">EUR/USD</option>
-                  <option value="GBPUSD">GBP/USD</option>
-                  <option value="XAUUSD">XAU/USD (Gold)</option>
-                  <option value="USDJPY">USD/JPY</option>
-                  <option value="BTCUSD">BTC/USD</option>
-                </select>
-                <select id="tradeDirSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
-                  <option value="BUY">BUY (Long)</option>
-                  <option value="SELL">SELL (Short)</option>
-                </select>
-                <select id="tradeLotsSelect" style="padding:7px 10px;border-radius:7px;background:rgba(15,23,42,0.9);color:var(--text);border:1px solid rgba(255,255,255,0.16);font-size:12px">
-                  <option value="0.15">0.15 Lots</option>
-                  <option value="0.25" selected>0.25 Lots</option>
-                  <option value="0.50">0.50 Lots</option>
-                  <option value="1.00">1.00 Lot</option>
-                </select>
-                <button type="button" id="btnPlaceTrade" onclick="placeDemoTradeFromUI()" style="padding:8px 14px;border-radius:8px;border:1px solid #f59e0b;background:rgba(245,158,11,0.22);color:#fbbf24;font-weight:700;font-size:12.5px;cursor:pointer">
-                  + Place Demo Trade Now (SL &lt; TP Auto-Protected)
-                </button>
-              </div>
+              <button type="button" id="btnStopCtrader" onclick="stopBrokerRun('ctrader')" style="padding:9px 15px;border-radius:8px;border:1px solid rgba(248,113,113,.5);background:rgba(248,113,113,.12);color:#fca5a5;font-weight:700;font-size:12.5px;cursor:pointer">■ Stop cTrader</button>
+              <button type="button" id="btnStopMt5" onclick="stopBrokerRun('mt5')" style="padding:9px 15px;border-radius:8px;border:1px solid rgba(248,113,113,.5);background:rgba(248,113,113,.12);color:#fca5a5;font-weight:700;font-size:12.5px;cursor:pointer">■ Stop MT5</button>
+              <span id="oracleRunStatus" style="font-size:12px;color:var(--text-muted)">Checking trader status…</span>
+            </div>
+
+            <div style="padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.08);border-left:3px solid #f59e0b;font-size:12px;line-height:1.5;color:var(--text-muted)">
+              Manual quick-order and close controls are unavailable here because they are not connected to the running broker session. No order is submitted from this dashboard.
             </div>
 
             <div id="oracleActionFeedbackBanner" style="display:none;padding:11px 14px;border-radius:8px;background:rgba(56,189,248,0.12);border-left:3px solid #38bdf8;font-size:13px;line-height:1.5;color:var(--text)"></div>
 
             <div id="brokerPlainSummaryBox" style="padding:10px 14px;border-radius:8px;background:rgba(16,185,129,0.09);border-left:3px solid #10b981;font-size:13px;line-height:1.5;color:var(--text)">
               Loading your MetaTrader 5 (MT5) and cTrader account summary…
+            </div>
+            <div style="padding:12px 14px;border-radius:8px;background:rgba(15,23,42,.62);border:1px solid rgba(255,255,255,.08)">
+              <div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px">Telegram signal and delivery log</div>
+              <div id="telegramSignalFeed" style="display:flex;flex-direction:column;gap:7px;color:var(--text-muted);font-size:12px">Waiting for recorded Telegram delivery events…</div>
             </div>
           </div>
         </div>
@@ -121,15 +106,15 @@
           </div>
         </div>
 
-        <!-- 3. Live Interactive cTrader / MT5 Candlestick Chart + Live Trade Output Readings Dock -->
+        <!-- 3. Stored OHLC chart + broker snapshot positions -->
         <div class="card" style="margin-bottom:16px;border:1px solid rgba(56,189,248,0.32)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <span class="card-title" id="chartHeaderTitle">Live Candlestick Chart &amp; Trade Output Readings — EUR/USD (M15)</span>
-                <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,0.16);color:#34d399;border:1px solid rgba(16,185,129,0.35)">● Live Trade Outputs Streaming</span>
+                <span class="card-title" id="chartHeaderTitle">OHLC History — EUR/USD (M15)</span>
+                <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,0.16);color:#34d399;border:1px solid rgba(16,185,129,0.35)">● Broker Snapshot Feed</span>
               </div>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">Real-time OHLC candlesticks with active Entry (Blue), Profit Target (Green), and Stop-Loss (Red) lines + live pip &amp; dollar output readings</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">Stored OHLC history with its source and age; position values are shown only when reported by the broker snapshot.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <div id="chartSymbolBtns" style="display:flex;gap:5px;flex-wrap:wrap">
@@ -141,11 +126,13 @@
               </div>
               <div style="height:18px;width:1px;background:rgba(255,255,255,0.15)"></div>
               <div id="chartTfBtns" style="display:flex;gap:4px">
-                <button type="button" class="chart-tf-btn" data-tf="M5" onclick="selectChartTimeframe('M5')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">M5</button>
-                <button type="button" class="chart-tf-btn" data-tf="M15" onclick="selectChartTimeframe('M15')" style="padding:5px 8px;border-radius:6px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-size:11px;font-weight:700;cursor:pointer">M15</button>
-                <button type="button" class="chart-tf-btn" data-tf="H1" onclick="selectChartTimeframe('H1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H1</button>
-                <button type="button" class="chart-tf-btn" data-tf="H4" onclick="selectChartTimeframe('H4')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H4</button>
+                <button type="button" class="chart-tf-btn" data-tf="W1" onclick="selectChartTimeframe('W1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">W1</button>
                 <button type="button" class="chart-tf-btn" data-tf="D1" onclick="selectChartTimeframe('D1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">D1</button>
+                <button type="button" class="chart-tf-btn" data-tf="H4" onclick="selectChartTimeframe('H4')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H4</button>
+                <button type="button" class="chart-tf-btn" data-tf="H1" onclick="selectChartTimeframe('H1')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">H1</button>
+                <button type="button" class="chart-tf-btn" data-tf="M45" onclick="selectChartTimeframe('M45')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">M45</button>
+                <button type="button" class="chart-tf-btn" data-tf="M30" onclick="selectChartTimeframe('M30')" style="padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);font-size:11px;font-weight:600;cursor:pointer">M30</button>
+                <button type="button" class="chart-tf-btn" data-tf="M15" onclick="selectChartTimeframe('M15')" style="padding:5px 8px;border-radius:6px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#fff;font-size:11px;font-weight:700;cursor:pointer">M15</button>
               </div>
             </div>
           </div>
@@ -154,7 +141,7 @@
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                 <strong style="color:#38bdf8;font-family:var(--font-mono)" id="chartBidAskLabel">Bid: — / Ask: —</strong>
                 <span id="chartSpreadLabel" style="color:var(--text-muted)">Spread: —</span>
-                <span id="chartLiveTickStamp" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.12);color:#7dd3fc;font-family:var(--font-mono)">Tick: Live</span>
+                <span id="chartLiveTickStamp" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.12);color:#7dd3fc;font-family:var(--font-mono)">Market data: checking</span>
               </div>
               <div style="display:flex;gap:14px;flex-wrap:wrap;color:var(--text-muted)">
                 <span id="chartRegimeLabel">Market Trend: —</span>
@@ -170,8 +157,8 @@
               <!-- Left Column: Candlestick Canvas + On-Chart Active Trade HUD -->
               <div style="position:relative;min-height:360px;border-radius:12px;overflow:hidden;background:#060b16;border:1px solid rgba(56,189,248,0.22);display:flex;flex-direction:column">
                 <div id="chartActiveOutputHud" style="padding:8px 12px;background:linear-gradient(90deg,rgba(16,185,129,0.16),rgba(15,23,42,0.85));border-bottom:1px solid rgba(16,185,129,0.25);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-variant-numeric:tabular-nums">
-                  <span style="color:#34d399;font-weight:700">📡 Active Chart Position Output: Loading live trade readings…</span>
-                  <span style="color:#94a3b8;font-size:11px">SL &lt; TP Enforced</span>
+                    <span style="color:#34d399;font-weight:700">Broker position snapshot: loading…</span>
+                  <span style="color:#94a3b8;font-size:11px">Values are source-backed</span>
                 </div>
                 <div style="position:relative;flex:1;width:100%;height:330px">
                   <canvas id="oracleLiveChartCanvas" width="980" height="330" style="width:100%;height:330px;display:block"></canvas>
@@ -183,9 +170,9 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:9px">
                   <div>
                     <div style="font-size:12.5px;font-weight:800;color:#f8fafc;letter-spacing:0.04em;text-transform:uppercase">📡 Live Trade Output Readings</div>
-                    <div style="font-size:11px;color:var(--text-muted)">Real-time pip gain/loss, distance to Profit Target, SL cushion &amp; floating P&amp;L</div>
+                    <div style="font-size:11px;color:var(--text-muted)">Broker-reported position fields; unsupported values are marked unavailable</div>
                   </div>
-                  <span id="liveReadingsCountBadge" style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.35)">3 Active</span>
+                  <span id="liveReadingsCountBadge" style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.35)">0 Verified Positions</span>
                 </div>
 
                 <!-- Individual Live Trade Reading Cards -->
@@ -193,7 +180,7 @@
                   <div class="skeleton skeleton-card"></div>
                 </div>
 
-                <!-- Live Broker Output Stream Log (Timestamped Tick Readings) -->
+                <!-- Broker snapshot summary -->
                 <div style="margin-top:auto;padding:9px 11px;border-radius:9px;background:rgba(4,7,17,0.85);border:1px solid rgba(56,189,248,0.2);font-family:var(--font-mono);font-size:11px;line-height:1.55;color:#cbd5e1;max-height:92px;overflow-y:auto" id="liveExecutionStreamBox">
                   <div style="color:#38bdf8;font-weight:700">[ORACLE STREAM] Initializing live cTrader &amp; MetaTrader 5 trade output readings…</div>
                 </div>
@@ -202,12 +189,12 @@
           </div>
         </div>
 
-        <!-- 4. Live Open Trades Running Right Now (Interactive Close & Chart Inspect) -->
+        <!-- 4. Live Open Trades from authenticated broker snapshots -->
         <div class="card" style="margin-bottom:16px;border:1px solid rgba(16,185,129,0.28)">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
             <div>
               <span class="card-title">Live Open Trades &amp; Detailed Output Ledger (cTrader &amp; MetaTrader 5)</span>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Click "Show on Chart" to inspect live candlesticks &amp; SL/TP lines, or click "Close Trade &amp; Lock Profit" to realize profit</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Positions and broker-reported values refresh from the selected account snapshot. Missing values remain unavailable.</div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="loadDashboard()"><span data-icon="ui:refresh" class="icon-sm"></span></button>
           </div>
@@ -288,12 +275,18 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'oracle';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
   let ACTIVE_BROKER = 'all';
   let CHART_SYMBOL = 'EURUSD';
   let CHART_TF = 'M15';
   let LAST_CHART_DATA = null;
-  let LIVE_TICK_COUNTER = 0;
+  let dashboardRequestId = 0;
+  let chartRequestKey = '';
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  }
 
   function showOracleFeedback(msg, isError) {
     const box = document.getElementById('oracleActionFeedbackBanner');
@@ -382,66 +375,73 @@
   async function runBrokerCycle(broker) {
     const btn = document.getElementById(broker === 'ctrader' ? 'btnRunCtrader' : 'btnRunMt5');
     const origText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running ' + (broker === 'ctrader' ? 'cTrader' : 'MT5') + ' Scan…'; }
+    const cycles = Number(document.getElementById('oracleCycleCount')?.value || 1);
+    if (!Number.isInteger(cycles) || cycles < 1 || cycles > 10000) {
+      showOracleFeedback('Enter a whole number of cycles from 1 to 10,000.', true);
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Starting ' + (broker === 'ctrader' ? 'cTrader' : 'MT5') + '…'; }
     try {
-      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
+      const r = await fetch(API_BASE + '/api/oracle/run/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run_broker_cycle', broker: broker })
+        body: JSON.stringify({ broker, cycles })
       });
       const res = await r.json();
-      showOracleFeedback(res.human_summary || 'Completed live broker scan and updated active positions.', false);
+      if (!r.ok) throw new Error(res.detail || res.message || ('HTTP ' + r.status));
+      showOracleFeedback(res.message || 'Oracle trader starting. Check account and status below.', false);
       await loadDashboard();
       await loadOracleChart();
+      await loadOracleRunStatus();
     } catch (e) {
-      showOracleFeedback('Could not run broker cycle: ' + e.message, true);
+      showOracleFeedback('Could not start Oracle: ' + e.message, true);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = origText; }
     }
   }
 
-  async function placeDemoTradeFromUI() {
-    const broker = document.getElementById('tradeBrokerSelect').value || 'ctrader';
-    const symbol = document.getElementById('tradeSymbolSelect').value || 'EURUSD';
-    const direction = document.getElementById('tradeDirSelect').value || 'BUY';
-    const volume = parseFloat(document.getElementById('tradeLotsSelect').value || '0.25');
-    const btn = document.getElementById('btnPlaceTrade');
-    const origText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing Demo Trade…'; }
+  async function stopBrokerRun(broker) {
     try {
-      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'open_trade', broker, symbol, direction, volume })
+      const r = await fetch(API_BASE + '/api/oracle/run/stop', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ broker })
       });
       const res = await r.json();
-      showOracleFeedback(res.human_summary || 'Opened new demo trade with Stop-Loss < Profit Target protection.', false);
-      CHART_SYMBOL = symbol;
-      updateChartSelectorButtonsUI();
-      await loadDashboard();
-      await loadOracleChart();
+      if (!r.ok) throw new Error(res.detail || ('HTTP ' + r.status));
+      showOracleFeedback(res.message || 'Oracle stop requested.', false);
+      await loadOracleRunStatus();
     } catch (e) {
-      showOracleFeedback('Failed placing demo trade: ' + e.message, true);
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = origText; }
+      showOracleFeedback('Could not stop Oracle: ' + e.message, true);
     }
   }
 
-  async function closeOpenTradeFromUI(tradeId) {
+  async function loadOracleRunStatus() {
+    const el = document.getElementById('oracleRunStatus');
+    if (!el) return;
     try {
-      showOracleFeedback('Closing position ' + tradeId + ' and locking profit/loss in ledger…', false);
-      const r = await fetch(API_BASE + '/api/oracle/execute-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'close_trade', trade_id: tradeId })
+      const r = await fetch(API_BASE + '/api/oracle/run/status', { signal: AbortSignal.timeout(8000) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || ('HTTP ' + r.status));
+      const runners = data.runners || {};
+      el.textContent = ['ctrader', 'mt5'].map(key => {
+        const row = runners[key] || {};
+        return key.toUpperCase() + ': ' + (row.status || 'stopped') + (row.cycles ? ' (' + row.cycles + ' cycle' + (row.cycles === 1 ? '' : 's') + ')' : '');
+      }).join(' · ');
+      ['ctrader', 'mt5'].forEach(key => {
+        const run = document.getElementById(key === 'ctrader' ? 'btnRunCtrader' : 'btnRunMt5');
+        const stop = document.getElementById(key === 'ctrader' ? 'btnStopCtrader' : 'btnStopMt5');
+        const active = ['running', 'starting', 'connected_external', 'stopping'].includes((runners[key] || {}).status);
+        if (run) run.disabled = active;
+        if (stop) stop.disabled = !['running', 'stopping'].includes((runners[key] || {}).status);
       });
-      const res = await r.json();
-      showOracleFeedback(res.human_summary || ('Closed trade ' + tradeId), false);
-      await loadDashboard();
-      await loadOracleChart();
     } catch (e) {
-      showOracleFeedback('Failed closing trade: ' + e.message, true);
+      el.textContent = 'Trader status unavailable: ' + e.message;
     }
+  }
+
+  function shown(value, digits) {
+    if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return 'Unavailable';
+    return digits ? Number(value).toFixed(digits) : String(value);
   }
 
   function renderChartLiveOutputReadings(data) {
@@ -452,121 +452,111 @@
     const hud = document.getElementById('chartActiveOutputHud');
     const badge = document.getElementById('liveReadingsCountBadge');
     const allOpen = data.all_open_trades || data.open_trades || [];
-    const symOpen = (data.open_trades || []);
+    const symOpen = data.open_trades || [];
+    const verifiedOpenCount = allOpen.filter(t => t.status === 'OPEN').length;
+    const lastKnownCount = allOpen.length - verifiedOpenCount;
+    if (badge) badge.textContent = data.positions_status === 'unavailable_or_stale'
+      ? (lastKnownCount ? lastKnownCount + ' Last-Known Position' + (lastKnownCount === 1 ? '' : 's') + ' · not confirmed open' : 'Position data unavailable or stale')
+      : data.positions_status === 'partial'
+        ? verifiedOpenCount + ' Verified Open · ' + lastKnownCount + ' Last-Known (not confirmed) · partial broker coverage'
+        : verifiedOpenCount + ' Verified Open Position' + (verifiedOpenCount === 1 ? '' : 's');
 
     const emeraldTxt = isLight ? '#047857' : '#34d399';
     const cyanTxt = isLight ? '#0369a1' : '#38bdf8';
-    const coralTxt = isLight ? '#b91c1c' : '#fca5a5';
     const primaryTxt = isLight ? '#0f172a' : '#f8fafc';
     const mutedTxt = isLight ? '#475569' : '#94a3b8';
 
     if (badge) {
-      badge.textContent = allOpen.length + ' Active Position' + (allOpen.length === 1 ? '' : 's');
       badge.style.color = emeraldTxt;
       badge.style.background = isLight ? 'rgba(5,150,105,0.14)' : 'rgba(16,185,129,0.18)';
     }
 
-    // Update top-of-chart active position HUD
     if (hud) {
       hud.style.background = isLight
         ? 'linear-gradient(90deg, rgba(5,150,105,0.14), rgba(250,247,239,0.96))'
         : 'linear-gradient(90deg, rgba(16,185,129,0.16), rgba(15,23,42,0.85))';
-      const focusTrade = symOpen[0] || allOpen[0];
-      if (focusTrade) {
-        const pnl = Number(focusTrade.floating_pnl_usd || 0);
-        const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-        const pipStr = focusTrade.pip_change_str || ((focusTrade.pip_change >= 0 ? '+' : '') + (focusTrade.pip_change || 13.0) + ' pips');
-        hud.innerHTML =
-          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-            '<span style="font-weight:800;color:' + emeraldTxt + '">📡 LIVE TRADE OUTPUT [' + (focusTrade.broker_badge || focusTrade.broker) + ']:</span>' +
-            '<span style="color:' + primaryTxt + ';font-weight:700">' + focusTrade.direction + ' ' + focusTrade.volume + 'L ' + focusTrade.symbol + '</span>' +
-            '<span style="color:' + mutedTxt + '">Entry <strong>' + focusTrade.entry + '</strong> → Live <strong>' + focusTrade.current_price + '</strong></span>' +
-            '<span style="padding:2px 7px;border-radius:5px;background:rgba(16,185,129,0.16);color:' + emeraldTxt + ';font-weight:800">' + pipStr + ' · ' + pnlStr + ' (' + (focusTrade.floating_r || '+0.48R') + ')</span>' +
-          '</div>' +
-          '<div style="font-size:11px;color:' + cyanTxt + ';font-weight:700">' +
-            (focusTrade.pips_to_tp || '55.0') + ' pips to TP (' + focusTrade.tp + ') · ' + (focusTrade.pips_from_sl || '40.0') + ' pips above SL (' + focusTrade.sl + ')' +
-          '</div>';
+      const trade = symOpen[0] || null;
+      if (trade) {
+        const pnl = trade.floating_pnl_usd;
+        hud.innerHTML = '<strong style="color:' + emeraldTxt + '">' +
+          escapeHtml(trade.snapshot_status === 'stale' ? 'Last-known broker snapshot' : 'Broker snapshot') +
+          ' · ' + escapeHtml(trade.broker_badge || trade.broker) + '</strong> · ' +
+          escapeHtml(trade.direction) + ' ' + escapeHtml(trade.symbol) +
+          ' · Entry ' + shown(trade.entry) + ' · Current ' + shown(trade.current_price) +
+          ' · Floating P/L ' + (pnl == null ? 'Unavailable' : shown(pnl, 2) + ' ' + escapeHtml(trade.currency || '')) +
+          '<div style="font-size:11px;color:' + mutedTxt + '">Snapshot time: ' +
+          (trade.snapshot_updated_at_unix ? new Date(trade.snapshot_updated_at_unix * 1000).toLocaleString() : 'Unavailable') + '</div>';
       } else {
-        hud.innerHTML =
-          '<span style="color:' + cyanTxt + ';font-weight:700">📡 Live Chart Output Ready — Watching ' + (data.symbol || CHART_SYMBOL) + ' @ ' + (data.live_bid || '—') + '</span>' +
-          '<span style="color:' + mutedTxt + ';font-size:11px">Use "+ Place Demo Trade Now" above to open a live position</span>';
+        hud.textContent = data.positions_status !== 'fresh' && data.positions_status !== 'partial'
+          ? 'No recent broker position snapshot is available.'
+          : 'No open broker positions in the latest verified snapshot.';
       }
     }
-
     if (dock) {
-      if (!allOpen.length) {
-        dock.innerHTML = '<div style="padding:12px;border-radius:8px;background:var(--bg-well);color:var(--text-muted);font-size:12px">No open positions right now. Place a demo trade above to stream live position output readings here.</div>';
-      } else {
-        dock.innerHTML = allOpen.map(t => {
-          const isCurrentSym = String(t.symbol || '').toUpperCase() === String(data.symbol || CHART_SYMBOL).toUpperCase();
-          const pnl = Number(t.floating_pnl_usd || 0);
-          const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-          const pnlColor = pnl >= 0 ? emeraldTxt : (isLight ? '#dc2626' : '#f87171');
-          const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 12.5) + ' pips');
-          const prog = Math.min(100, Math.max(8, Number(t.progress_to_tp_pct || 48)));
-          const bColor = t.broker === 'mt5' ? emeraldTxt : cyanTxt;
-          const cardBg = isCurrentSym
-            ? (isLight ? 'rgba(5,150,105,0.10)' : 'rgba(16,185,129,0.11)')
-            : (isLight ? '#ffffff' : 'rgba(15,23,42,0.75)');
-          const cardBorder = isCurrentSym
-            ? (isLight ? 'rgba(5,150,105,0.45)' : 'rgba(16,185,129,0.45)')
-            : (isLight ? 'rgba(140,108,45,0.24)' : 'rgba(255,255,255,0.09)');
-          const innerGridBg = isLight ? '#f4f0e4' : 'rgba(2,6,23,0.5)';
-          return (
-            '<div style="padding:10px 12px;border-radius:10px;background:' + cardBg + ';border:1px solid ' + cardBorder + ';display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums">' +
-              '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
-                '<div style="display:flex;align-items:center;gap:6px">' +
-                  '<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.15);color:' + bColor + '">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + '</span>' +
-                  '<strong style="font-size:12.5px;color:' + primaryTxt + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + 'L)</strong>' +
-                '</div>' +
-                '<span style="font-size:13px;font-weight:800;color:' + pnlColor + '">' + pipStr + ' · ' + pnlStr + ' (' + (t.floating_r || '+0.48R') + ')</span>' +
-              '</div>' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:' + mutedTxt + ';background:' + innerGridBg + ';padding:6px 8px;border-radius:6px">' +
-                '<div>Entry: <strong style="color:' + cyanTxt + '">' + t.entry + '</strong> → Now: <strong style="color:' + primaryTxt + '">' + t.current_price + '</strong></div>' +
-                '<div style="text-align:right">R:R Ratio: <strong style="color:' + emeraldTxt + '">' + (t.rr_ratio || '1:2.5') + '</strong></div>' +
-                '<div style="color:' + emeraldTxt + '">🎯 To TP (' + t.tp + '): <strong>' + (t.pips_to_tp ?? t.tp_pips) + ' pips</strong></div>' +
-                '<div style="color:' + coralTxt + ';text-align:right">🛡️ Above SL (' + t.sl + '): <strong>' + (t.pips_from_sl ?? t.sl_pips) + ' pips</strong></div>' +
-              '</div>' +
-              '<div style="display:flex;align-items:center;gap:8px">' +
-                '<div style="flex:1;height:6px;border-radius:4px;background:' + (isLight ? 'rgba(140,108,45,0.18)' : 'rgba(255,255,255,0.08)') + ';overflow:hidden">' +
-                  '<div style="width:' + prog + '%;height:100%;background:linear-gradient(90deg,#0ea5e9,#10b981);border-radius:4px"></div>' +
-                '</div>' +
-                '<span style="font-size:10px;color:' + mutedTxt + ';font-weight:700">' + prog.toFixed(0) + '% to TP</span>' +
-                (!isCurrentSym ? '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(2,132,199,0.4);background:rgba(2,132,199,0.12);color:' + cyanTxt + ';font-size:10px;font-weight:700;cursor:pointer">View Chart</button>' : '<span style="font-size:10px;color:' + emeraldTxt + ';font-weight:700">● On Chart</span>') +
-              '</div>' +
-            '</div>'
-          );
-        }).join('');
-      }
+      dock.innerHTML = allOpen.length ? allOpen.map(t => '<div style="padding:10px 12px;border-radius:9px;background:rgba(15,23,42,.75);border:1px solid rgba(255,255,255,.1)"><strong>' +
+        escapeHtml(t.broker_badge || t.broker) + ' · ' + escapeHtml(t.direction) + ' ' + escapeHtml(t.symbol) + ' · ' + (t.status === 'OPEN' ? 'Verified open' : 'Last known - not confirmed open') + '</strong><div style="margin-top:5px;color:var(--text-muted)">Ticket ' + escapeHtml(t.trade_id) + ' · Size ' + shown(t.volume) + (t.broker === 'ctrader' ? ' units' : ' lots') +
+        ' · Entry ' + shown(t.entry) + ' · Current ' + shown(t.current_price) + ' · SL ' + shown(t.sl) + ' · TP ' + shown(t.tp) +
+        ' · Floating P/L ' + (t.floating_pnl_usd == null ? 'Unavailable' : shown(t.floating_pnl_usd, 2) + ' ' + escapeHtml(t.currency || '')) + '</div></div>').join('')
+        : '<div style="padding:12px;color:var(--text-muted)">No open positions in a recent authenticated broker snapshot.</div>';
     }
-
     if (streamBox) {
       streamBox.style.background = isLight ? '#f4f0e4' : 'rgba(4,7,17,0.85)';
       streamBox.style.color = isLight ? '#1e293b' : '#cbd5e1';
-      const nowStr = new Date().toLocaleTimeString();
-      const lines = allOpen.map(t => {
-        const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
-        const pnl = Number(t.floating_pnl_usd || 0);
-        const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-        return '<div style="margin-bottom:3px"><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:' + cyanTxt + ';font-weight:700">' + (t.broker === 'mt5' ? 'MT5' : 'cTrader') + ' ' + t.symbol + '</span> ' + t.direction + ' @ ' + t.entry + ' → <strong style="color:' + primaryTxt + '">' + t.current_price + '</strong> (<span style="color:' + emeraldTxt + ';font-weight:700">' + pipStr + ' / ' + pnlStr + '</span> · ' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)</div>';
-      });
-      if (!lines.length) {
-        lines.push('<div><span style="color:#64748b">[' + nowStr + ']</span> <span style="color:' + cyanTxt + '">ORACLE STREAM:</span> Watching ' + (data.symbol || CHART_SYMBOL) + ' Bid ' + (data.live_bid || '—') + ' / Ask ' + (data.live_ask || '—') + ' — waiting for next entry trigger.</div>');
-      }
-      streamBox.innerHTML = lines.join('');
+      const stamp = data.updated_at_unix ? new Date(data.updated_at_unix * 1000).toLocaleString() : 'Unavailable';
+      streamBox.innerHTML = '<div>Broker position snapshot: ' + escapeHtml(stamp) + '</div><div>Market history: ' + escapeHtml(data.data_status || 'unavailable') +
+        ' · source ' + escapeHtml(data.data_source || 'Unavailable') + ' · last stored bar ' + shown(data.last_price) + '</div>' +
+        (allOpen.length ? allOpen.map(t => '<div>' + escapeHtml((t.broker || '').toUpperCase()) + ' ' + escapeHtml(t.symbol) + ' ' + escapeHtml(t.direction) + ' · P/L ' +
+          (t.floating_pnl_usd == null ? 'Unavailable' : shown(t.floating_pnl_usd, 2) + ' ' + (t.currency || '')) + '</div>').join('') : '');
     }
   }
 
   async function loadOracleChart() {
+    const requestKey = [CHART_SYMBOL, CHART_TF, ACTIVE_BROKER].join('|');
+    chartRequestKey = requestKey;
     try {
       const url = API_BASE + '/api/oracle/chart?symbol=' + encodeURIComponent(CHART_SYMBOL) + '&timeframe=' + encodeURIComponent(CHART_TF) + '&broker=' + encodeURIComponent(ACTIVE_BROKER);
       const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) return;
       const data = await r.json();
+      if (chartRequestKey !== requestKey) return;
+      if (!r.ok) throw new Error(data.detail || ('HTTP ' + r.status));
       LAST_CHART_DATA = data;
       drawCandlestickChart(data);
       renderChartLiveOutputReadings(data);
-    } catch (e) {}
+    } catch (e) {
+      if (chartRequestKey !== requestKey) return;
+      const unavailable = {status:'unavailable',data_status:'unavailable',symbol:CHART_SYMBOL,timeframe:CHART_TF,bars:[],open_trades:[],all_open_trades:[],data_source:'API unavailable',positions_status:'unavailable_or_stale'};
+      LAST_CHART_DATA = unavailable;
+      drawCandlestickChart(unavailable);
+      renderChartLiveOutputReadings(unavailable);
+    }
+  }
+
+  async function loadTelegramSignals() {
+    const el = document.getElementById('telegramSignalFeed');
+    if (!el) return;
+    try {
+      const r = await fetch(API_BASE + '/api/oracle/telegram/signals?limit=80', { signal: AbortSignal.timeout(8000) });
+      const data = await r.json();
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (data.status !== 'ok') {
+        el.textContent = 'Telegram delivery history is unavailable; no signal delivery can be verified yet.';
+        return;
+      }
+      const items = data.items || [];
+      if (!items.length) {
+        el.textContent = 'No Telegram delivery events have been recorded yet. Signals are not inferred from broker positions.';
+        return;
+      }
+      el.innerHTML = items.slice(0, 20).map(item => {
+        const at = item.timestamp_unix ? new Date(item.timestamp_unix * 1000).toLocaleString() : 'Time unavailable';
+        const status = String(item.status || 'unknown').toUpperCase();
+        const color = status === 'SENT' ? '#34d399' : '#fbbf24';
+        const message = String(item.message || '');
+        return '<div style="padding:8px 10px;border-radius:7px;background:rgba(255,255,255,.035)"><strong style="color:' + color + '">' + escapeHtml(status) + '</strong> · ' + escapeHtml(at) + '<div style="margin-top:4px;white-space:normal">' + escapeHtml(message).replace(/\n/g, '<br>') + '</div></div>';
+      }).join('');
+    } catch (e) {
+      el.textContent = 'Telegram delivery history unavailable: ' + e.message;
+    }
   }
 
   function drawCandlestickChart(data) {
@@ -574,8 +564,12 @@
     const isLight = isLightTheme();
     const titleEl = document.getElementById('chartHeaderTitle');
     if (titleEl) {
-      titleEl.textContent = 'Live Candlestick Chart & Trade Output Readings — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')';
+      const chartLabel = data.data_status === 'fresh' ? 'Fresh OHLC History' : data.data_status === 'stale' ? 'Stored OHLC History (Stale)' : 'OHLC History Unavailable';
+      const updatedLabel = data.updated_at_unix ? ' · updated ' + new Date(data.updated_at_unix * 1000).toLocaleString() : '';
+      titleEl.textContent = chartLabel + ' — ' + (data.symbol || CHART_SYMBOL) + ' (' + (data.timeframe || CHART_TF) + ')' + updatedLabel;
     }
+    const tickStamp = document.getElementById('chartLiveTickStamp');
+    if (tickStamp) tickStamp.textContent = 'Market data: ' + (data.data_status || 'unavailable');
     const bidAskEl = document.getElementById('chartBidAskLabel');
     if (bidAskEl) {
       bidAskEl.textContent = 'Live Bid: ' + (data.live_bid ?? '—') + '  /  Ask: ' + (data.live_ask ?? '—');
@@ -583,15 +577,15 @@
     }
     const spreadEl = document.getElementById('chartSpreadLabel');
     if (spreadEl) {
-      spreadEl.textContent = 'Spread: ' + (data.spread_pips ?? 0.8) + ' pips · Session: ' + String(data.session || 'LONDON_NY').replace(/_/g, ' ');
+      spreadEl.textContent = 'Spread: ' + (data.spread_pips ?? 'Unavailable') + ' pips · Session: ' + String(data.session || 'Unavailable').replace(/_/g, ' ');
     }
     const regEl = document.getElementById('chartRegimeLabel');
     if (regEl) {
-      regEl.textContent = 'Market Trend: ' + String(data.regime || 'TREND_CONTINUATION').replace(/_/g, ' ');
+      regEl.textContent = 'Market Trend: ' + String(data.regime || 'Unavailable').replace(/_/g, ' ');
     }
     const rsiEl = document.getElementById('chartRsiLabel');
     if (rsiEl) {
-      rsiEl.textContent = 'Momentum (RSI-14): ' + (data.rsi14 ?? '54.2');
+      rsiEl.textContent = 'Momentum (RSI-14): ' + (data.rsi14 ?? 'Unavailable');
     }
 
     const canvas = document.getElementById('oracleLiveChartCanvas');
@@ -610,7 +604,13 @@
     ctx.fillRect(0, 0, W, H);
 
     const bars = (data.bars || []).slice(-42);
-    if (!bars.length) return;
+    if (!bars.length) {
+      ctx.fillStyle = '#94a3b8'; ctx.font = '14px system-ui';
+      ctx.fillText('No stored OHLC bars are available for this symbol and timeframe.', 20, 42);
+      ctx.font = '11px system-ui';
+      ctx.fillText('Source: ' + (data.data_source || 'Unavailable') + ' · Status: ' + (data.data_status || 'unavailable'), 20, 64);
+      return;
+    }
 
     const openTrades = data.open_trades || [];
     let minP = Infinity, maxP = -Infinity;
@@ -736,19 +736,23 @@
 
     openTrades.forEach(t => {
       const bTag = t.broker === 'mt5' ? 'MT5' : 'cTrader';
-      const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + 'p');
-      drawPriceLevelLine(t.tp, tpTagColor, '🎯 PROFIT TARGET (' + bTag + '): ' + Number(t.tp).toFixed(decimals) + ' (' + (t.pips_to_tp ?? t.tp_pips) + 'p to TP)', tagTxt);
-      drawPriceLevelLine(t.entry, entryTagColor, '🔵 ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + 'L): ' + Number(t.entry).toFixed(decimals) + ' → ' + pipStr + ' (' + (t.floating_r || '+0.48R') + ')', tagTxt);
-      drawPriceLevelLine(t.sl, slTagColor, '🛡️ STOP-LOSS (' + bTag + ' Protected): ' + Number(t.sl).toFixed(decimals) + ' (' + (t.pips_from_sl ?? t.sl_pips) + 'p safety)', '#ffffff');
+      if (typeof t.tp === 'number') drawPriceLevelLine(t.tp, tpTagColor, 'PROFIT TARGET (' + bTag + '): ' + Number(t.tp).toFixed(decimals), tagTxt);
+      if (typeof t.entry === 'number') drawPriceLevelLine(t.entry, entryTagColor, 'ENTRY (' + bTag + ' ' + t.direction + ' ' + t.volume + '): ' + Number(t.entry).toFixed(decimals), tagTxt);
+      if (typeof t.sl === 'number') drawPriceLevelLine(t.sl, slTagColor, 'STOP LOSS (' + bTag + '): ' + Number(t.sl).toFixed(decimals), tagTxt);
     });
   }
 
-  function renderLiveOpenTrades(trades) {
+  function renderLiveOpenTrades(trades, positionsStatus) {
     const container = document.getElementById('liveOpenTradesContainer');
     if (!container) return;
     const isLight = isLightTheme();
     if (!Array.isArray(trades) || trades.length === 0) {
-      container.innerHTML = '<div style="padding:14px;border-radius:8px;background:var(--bg-well);color:var(--text-muted);font-size:13px">No open trades on this filter right now. Use "+ Place Demo Trade Now" above to open a live cTrader or MetaTrader 5 demo position.</div>';
+      const message = positionsStatus === 'fresh'
+        ? 'No open broker positions in the latest authenticated snapshot.'
+        : positionsStatus === 'partial'
+          ? 'No positions were returned by the fresh broker snapshot. Other broker data is unavailable or stale.'
+          : 'Position data is unavailable or stale. This must not be read as zero open trades.';
+      container.textContent = message;
       return;
     }
     const emeraldTxt = isLight ? '#047857' : '#10b981';
@@ -756,41 +760,24 @@
     const redTxt = isLight ? '#b91c1c' : '#ef4444';
 
     container.innerHTML = trades.map(t => {
-      const pnl = Number(t.floating_pnl_usd || 0);
-      const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-      const pnlColor = pnl >= 0 ? emeraldTxt : redTxt;
       const dirColor = t.direction === 'BUY' ? emeraldTxt : (isLight ? '#b45309' : '#f59e0b');
       const brokerColor = t.broker === 'mt5' ? emeraldTxt : cyanTxt;
-      const pipStr = t.pip_change_str || ((Number(t.pip_change || 0) >= 0 ? '+' : '') + (t.pip_change || 13.0) + ' pips');
-      const rowBg = isLight ? '#faf7ef' : 'rgba(15,23,42,0.78)';
-      const rowBorder = isLight ? 'rgba(140,108,45,0.24)' : 'rgba(255,255,255,0.1)';
-      return (
-        '<div style="padding:14px 16px;border-radius:12px;background:' + rowBg + ';border:1px solid ' + rowBorder + ';display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-variant-numeric:tabular-nums">' +
-          '<div style="display:flex;flex-direction:column;gap:5px;min-width:260px;flex:1">' +
-            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.15);color:' + brokerColor + '">' + (t.broker_badge || t.broker) + '</span>' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:' + dirColor + '">' + t.direction + ' ' + t.symbol + ' (' + t.volume + ' Lots)</span>' +
-              '<span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.14);color:' + emeraldTxt + '">Live Output: ' + pipStr + '</span>' +
-              '<span style="font-size:12px;color:var(--text-muted)">ID: ' + t.trade_id + '</span>' +
-            '</div>' +
-            '<div style="font-size:13px;color:var(--text);margin-top:2px">' +
-              'Entry: <strong>' + t.entry + '</strong> → Live Price: <strong>' + t.current_price + '</strong> · ' +
-              '<span style="color:' + redTxt + ';font-weight:600">Stop-Loss: ' + t.sl + ' (' + (t.pips_from_sl ?? t.sl_pips) + ' pips cushion)</span> · ' +
-              '<span style="color:' + emeraldTxt + ';font-weight:600">Profit Target: ' + t.tp + ' (' + (t.pips_to_tp ?? t.tp_pips) + ' pips to TP · ' + t.rr_ratio + ')</span>' +
-            '</div>' +
-            '<div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">' + (t.live_output_reading || t.reason || '') + '</div>' +
-          '</div>' +
-          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
-            '<div style="text-align:right">' +
-              '<div style="font-size:15px;font-weight:800;color:' + pnlColor + '">' + pnlStr + ' (' + (t.floating_r || '+0.45R') + ')</div>' +
-              '<div style="font-size:11px;color:' + emeraldTxt + ';font-weight:700">SL &lt; TP Verified ✓</div>' +
-            '</div>' +
-            '<button type="button" onclick="selectChartSymbol(\'' + t.symbol + '\')" style="padding:7px 11px;border-radius:7px;border:1px solid rgba(2,132,199,0.4);background:rgba(2,132,199,0.12);color:' + cyanTxt + ';font-size:12px;font-weight:700;cursor:pointer">Show on Chart</button>' +
-            '<button type="button" onclick="closeOpenTradeFromUI(\'' + t.trade_id + '\')" style="padding:7px 12px;border-radius:7px;border:1px solid rgba(220,38,38,0.42);background:rgba(220,38,38,0.14);color:' + redTxt + ';font-size:12px;font-weight:700;cursor:pointer">Close Trade &amp; Lock Profit</button>' +
-          '</div>' +
-        '</div>'
-      );
+      const pnl = t.floating_pnl_usd;
+      const pnlText = pnl == null ? 'Unavailable' : shown(pnl, 2) + ' ' + (t.currency || '');
+      const rowBg = isLight ? '#ffffff' : 'rgba(15,23,42,.78)';
+      const rowBorder = isLight ? 'rgba(140,108,45,.24)' : 'rgba(255,255,255,.1)';
+      const sizeUnit = t.broker === 'mt5' ? 'lots' : 'units';
+      return '<div style="padding:14px 16px;border-radius:12px;background:' + rowBg + ';border:1px solid ' + rowBorder + ';display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-variant-numeric:tabular-nums">' +
+        '<div><span style="font-weight:800;color:' + brokerColor + '">' + escapeHtml(t.broker_badge || t.broker) + '</span> · <strong style="color:' + dirColor + '">' + escapeHtml(t.direction) + ' ' + escapeHtml(t.symbol) + '</strong>' +
+        '<div style="margin-top:6px">Ticket ' + escapeHtml(t.trade_id) + ' · Size ' + shown(t.volume) + ' ' + sizeUnit + ' · Entry ' + shown(t.entry) + ' · Current ' + shown(t.current_price) +
+        ' · SL ' + shown(t.sl) + ' · TP ' + shown(t.tp) + ' · Floating P/L ' + pnlText + '</div>' +
+        '<div style="font-size:11px;color:#94a3b8;margin-top:4px">' + (t.snapshot_status === 'stale' ? 'Last-known broker source: ' : 'Verified broker source: ') + escapeHtml(t.data_source || 'broker snapshot') + ' · Updated ' +
+        (t.snapshot_updated_at_unix ? new Date(t.snapshot_updated_at_unix * 1000).toLocaleString() : 'time unavailable') + '</div></div>' +
+          '<button type="button" data-chart-symbol="' + escapeHtml(t.symbol) + '" style="padding:7px 11px;border-radius:7px;border:1px solid rgba(56,189,248,.4);background:rgba(56,189,248,.14);color:' + cyanTxt + ';font-size:12px;font-weight:700;cursor:pointer">Show on Chart</button></div>';
     }).join('');
+    container.querySelectorAll('[data-chart-symbol]').forEach(button => {
+      button.addEventListener('click', () => selectChartSymbol(button.getAttribute('data-chart-symbol')));
+    });
   }
 
   async function checkConn() {
@@ -798,16 +785,16 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) { de.textContent = delta; de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu'); }
+    if (de) { de.textContent = delta || ''; de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu'); }
   }
 
   function offlinePanel(id) {
@@ -818,37 +805,40 @@
   }
 
   function renderFeedItem(item) {
-    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + (item.title||item.name||item.text||item.headline||'') + '</div><div class="feed-meta"><span>' + (item.source||item.agent||'') + '</span><span>' + (item.time||item.timestamp||'') + '</span></div></div></div>';
+    return '<div class="feed-item"><div class="feed-dot"></div><div class="feed-body"><div class="feed-title">' + escapeHtml(item.title||item.name||item.text||item.headline||'') + '</div><div class="feed-meta"><span>' + escapeHtml(item.source||item.agent||'') + '</span><span>' + escapeHtml(item.time||item.timestamp||'') + '</span></div></div></div>';
   }
 
   async function loadDashboard() {
+    const requestId = ++dashboardRequestId;
+    const requestedBroker = ACTIVE_BROKER;
     try {
-      const r = await fetch(API_BASE + '/agents/' + AGENT_ID + '/data?broker=' + encodeURIComponent(ACTIVE_BROKER), { signal: AbortSignal.timeout(10000) });
+      const r = await fetch(API_BASE + '/api/oracle/dashboard?broker=' + encodeURIComponent(requestedBroker), { signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
+      if (requestId !== dashboardRequestId || requestedBroker !== ACTIVE_BROKER) return;
 
       // Update Broker Plain-English Summary Box
       const sumBox = document.getElementById('brokerPlainSummaryBox');
       if (sumBox && d.brokers && d.brokers[ACTIVE_BROKER]) {
         const bInfo = d.brokers[ACTIVE_BROKER];
-        sumBox.innerHTML =
-          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">' +
-            '<strong style="color:var(--agent-color);font-size:13.5px">Viewing: ' + (bInfo.name || ACTIVE_BROKER.toUpperCase()) + '</strong>' +
-            '<span style="font-size:11.5px;padding:2px 9px;border-radius:6px;background:rgba(16,185,129,0.16);color:var(--agent-color);font-weight:700">' + (bInfo.account_mode || 'Connected') + '</span>' +
-          '</div>' +
-          '<div>' + (bInfo.plain_summary || d.overview || '') + '</div>';
+        const summary = ACTIVE_BROKER === 'all'
+          ? ['mt5', 'ctrader'].map(key => { const row = d.brokers[key] || {}; return (row.name || key.toUpperCase()) + ': ' + (row.connected ? 'balance ' + (row.balance ?? 'Unavailable') + ' ' + (row.currency || '') + ', equity ' + (row.equity ?? 'Unavailable') + ', open positions ' + (row.open_position_count ?? 'stale') : 'data unavailable or stale'); }).join(' · ')
+          : bInfo.connected
+            ? 'Verified demo account. Balance: ' + (bInfo.balance ?? 'Unavailable') + ' ' + (bInfo.currency || '') + '; equity: ' + (bInfo.equity ?? 'Unavailable') + '. Open positions: ' + (bInfo.open_position_count ?? 'Unavailable or stale') + '. Closed-deal history: ' + (bInfo.history_status || 'unavailable') + '.'
+            : 'Broker account data unavailable or stale. Start/reconnect the broker trader; no simulated values are shown.';
+        sumBox.textContent = 'Viewing: ' + (bInfo.name || ACTIVE_BROKER.toUpperCase()) + ' · ' + (bInfo.account_mode || 'Unavailable') + ' · ' + summary;
       } else if (sumBox && d.overview) {
         sumBox.textContent = d.overview;
       }
 
       // Render Live Open Trades
-      renderLiveOpenTrades(d.live_open_trades || []);
+      renderLiveOpenTrades(d.live_open_trades || [], d.positions_status);
 
       // Update section headers for active broker
       const bTitle = ACTIVE_BROKER === 'mt5' ? 'MetaTrader 5 (MT5)' : (ACTIVE_BROKER === 'ctrader' ? 'cTrader Account' : 'All Accounts (MT5 + cTrader)');
       const pTitle = document.getElementById('primaryCardTitle');
       const sTitle = document.getElementById('secondaryCardTitle');
-      if (pTitle) pTitle.textContent = 'Live Open, Completed & Watchlist Trades — ' + bTitle;
+      if (pTitle) pTitle.textContent = 'Broker Positions & Completed Deals — ' + bTitle;
       if (sTitle) sTitle.textContent = 'Win Rate & Profit Breakdown by Currency Pair — ' + bTitle;
 
       // KPIs
@@ -859,8 +849,28 @@
       setKpi('portfolio_value', d['portfolio_value'] != null ? d['portfolio_value'] : (d.metrics && d.metrics['portfolio_value'] != null ? d.metrics['portfolio_value'] : null), d.deltas && d.deltas['portfolio_value']);
       setKpi('max_drawdown', d['max_drawdown'] != null ? d['max_drawdown'] : (d.metrics && d.metrics['max_drawdown'] != null ? d.metrics['max_drawdown'] : null), d.deltas && d.deltas['max_drawdown']);
 
-      const primaryArr = d.open_and_recent_trades || [];
-      const secondaryArr = d.win_rate_breakdown || [];
+      const primaryArr = (d.closed_trades || []).slice().reverse().map(t => ({
+        title: (t.broker || '').toUpperCase() + ' ' + (t.symbol || '') + ' · ' + (t.outcome || 'closed') + ' · ' + (t.net_pnl ?? '—') + ' ' + (t.currency || ''),
+        source: 'Authenticated broker closed-deal history',
+        time: t.closed_at_unix ? new Date(t.closed_at_unix * 1000).toLocaleString() : ''
+      }));
+      const symbolTotals = {};
+      if (d.history_status === 'complete') {
+        (d.closed_trades || []).forEach(trade => {
+          const symbol = String(trade.symbol || 'Unknown');
+          const pnl = Number(trade.net_pnl);
+          if (!Number.isFinite(pnl)) return;
+          if (!symbolTotals[symbol]) symbolTotals[symbol] = {wins:0,total:0,net:0,currency:trade.currency || ''};
+          symbolTotals[symbol].total += 1;
+          symbolTotals[symbol].net += pnl;
+          if (pnl > 0) symbolTotals[symbol].wins += 1;
+        });
+      }
+      const secondaryArr = Object.entries(symbolTotals).map(([symbol, stats]) => ({
+        title: symbol + ' · ' + (stats.wins / stats.total * 100).toFixed(1) + '% (' + stats.wins + '/' + stats.total + ') · Net ' + stats.net.toFixed(2) + ' ' + stats.currency,
+        source: 'Authenticated broker closed-deal history',
+        time: 'Recorded sample: ' + stats.total + ' closed deals'
+      }));
       if (primaryArr.length > 0) {
         const el = document.getElementById('section_primary');
         if (el) { el.innerHTML = primaryArr.slice(0, 14).map(renderFeedItem).join(''); }
@@ -876,6 +886,11 @@
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
+      if (requestId !== dashboardRequestId || requestedBroker !== ACTIVE_BROKER) return;
+      const sumBox = document.getElementById('brokerPlainSummaryBox');
+      if (sumBox) sumBox.textContent = 'Oracle account data is unavailable. No simulated values are shown.';
+      renderLiveOpenTrades([], 'unavailable_or_stale');
+      ['pnl_today','win_rate','open_trades','signals_today','portfolio_value','max_drawdown'].forEach(key => setKpi(key, 'Unavailable'));
       offlinePanel('section_primary');
       offlinePanel('section_secondary');
     }
@@ -942,66 +957,15 @@
     }
   });
 
-  function stepLiveTradeOutputTick() {
-    if (!LAST_CHART_DATA) return;
-    LIVE_TICK_COUNTER++;
-    const sym = String(LAST_CHART_DATA.symbol || CHART_SYMBOL).toUpperCase();
-    const step = sym.includes('BTC') ? 3.5 : (sym.includes('XAU') ? 0.25 : (sym.includes('JPY') ? 0.008 : 0.00006));
-    const decimals = sym.includes('BTC') || sym.includes('XAU') ? 2 : (sym.includes('JPY') ? 3 : 5);
-    const delta = Math.sin(LIVE_TICK_COUNTER * 0.9) * step;
-
-    if (typeof LAST_CHART_DATA.live_bid === 'number') {
-      LAST_CHART_DATA.live_bid = Number((LAST_CHART_DATA.live_bid + delta).toFixed(decimals));
-      LAST_CHART_DATA.live_ask = Number((LAST_CHART_DATA.live_bid + step * 1.4).toFixed(decimals));
-    }
-    if (Array.isArray(LAST_CHART_DATA.bars) && LAST_CHART_DATA.bars.length) {
-      const lastB = LAST_CHART_DATA.bars[LAST_CHART_DATA.bars.length - 1];
-      lastB.close = LAST_CHART_DATA.live_bid;
-      if (lastB.close > lastB.high) lastB.high = lastB.close;
-      if (lastB.close < lastB.low) lastB.low = lastB.close;
-    }
-
-    const allOpen = LAST_CHART_DATA.all_open_trades || LAST_CHART_DATA.open_trades || [];
-    allOpen.forEach((t, idx) => {
-      const tSym = String(t.symbol || 'EURUSD').toUpperCase();
-      const tStep = tSym.includes('BTC') ? 3.5 : (tSym.includes('XAU') ? 0.25 : (tSym.includes('JPY') ? 0.008 : 0.00006));
-      const tDec = tSym.includes('BTC') || tSym.includes('XAU') ? 2 : (tSym.includes('JPY') ? 3 : 5);
-      const pipMult = tSym.includes('BTC') ? 1.0 : (tSym.includes('XAU') ? 10.0 : (tSym.includes('JPY') ? 100.0 : 10000.0));
-      const tDelta = Math.sin((LIVE_TICK_COUNTER + idx) * 0.85) * tStep;
-      const curP = Number((Number(t.current_price || t.entry) + tDelta).toFixed(tDec));
-      t.current_price = curP;
-      const entry = Number(t.entry || curP);
-      const sl = Number(t.sl || entry);
-      const tp = Number(t.tp || entry);
-      const dir = String(t.direction || 'BUY').toUpperCase();
-      const diff = dir === 'BUY' ? (curP - entry) : (entry - curP);
-      const pipChg = Number((diff * pipMult).toFixed(1));
-      const slPips = Number((Math.abs(entry - sl) * pipMult).toFixed(1)) || 25.0;
-      const tpPips = Number((Math.abs(tp - entry) * pipMult).toFixed(1)) || 65.0;
-      t.pip_change = pipChg;
-      t.pip_change_str = (pipChg >= 0 ? '+' : '') + pipChg.toFixed(1) + ' pips';
-      t.pips_to_tp = Number(Math.max(0, tpPips - pipChg).toFixed(1));
-      t.pips_from_sl = Number(Math.max(0, slPips + pipChg).toFixed(1));
-      const rMult = diff / Math.max(Math.abs(entry - sl), 1e-5);
-      t.floating_r = (rMult >= 0 ? '+' : '') + rMult.toFixed(2) + 'R';
-      t.floating_pnl_usd = Number((rMult * (Number(t.volume || 0.25) * 320.0)).toFixed(2));
-      t.progress_to_tp_pct = Number(Math.min(100, Math.max(6, ((pipChg + slPips) / Math.max(tpPips + slPips, 1)) * 100)).toFixed(1));
-    });
-
-    const tickStamp = document.getElementById('chartLiveTickStamp');
-    if (tickStamp) tickStamp.textContent = 'Tick: ' + new Date().toLocaleTimeString();
-    drawCandlestickChart(LAST_CHART_DATA);
-    renderChartLiveOutputReadings(LAST_CHART_DATA);
-    renderLiveOpenTrades(allOpen);
-  }
 
   updateBrokerButtonsUI();
   updateChartSelectorButtonsUI();
   checkConn();
   loadDashboard();
   loadOracleChart();
-  setInterval(stepLiveTradeOutputTick, 4500);
-  setInterval(() => { loadDashboard(); loadOracleChart(); }, 30000);
+  loadOracleRunStatus();
+  loadTelegramSignals();
+  setInterval(() => { loadDashboard(); loadOracleChart(); loadOracleRunStatus(); loadTelegramSignals(); }, 15000);
   setInterval(checkConn, 30000);
   </script>
 </body>

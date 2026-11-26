@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import sys
 import time
@@ -102,18 +103,28 @@ for p in (_REPO_ROOT, _ECO_ROOT):
         sys.path.insert(0, str(p))
 
 from execution.mt5_broker import MT5Broker  # type: ignore
-from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore  # FIX-DEDUP
+from execution.account_risk_state import AccountRiskState  # type: ignore
+from execution.chronicle_position_log import (  # type: ignore  # FIX-DEDUP
+    ChroniclePositionLog, adverse_slippage_price,
+)
 from execution.trade_manager import (  # type: ignore  # Continuous Trade Manager
     TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
 )
 from execution.telegram_notifier import (  # type: ignore
     TelegramNotifier, RecentSignalCache, signal_only_enabled,
-    format_entry_alert, format_position_alert,
+    format_entry_alert, format_execution_alert, format_position_alert,
 )
-from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
-from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
-from intelligence.trade_learning import TradeLearningEngine  # type: ignore  # Demo Trade Learning
-from core.risk import Position as RiskPosition  # type: ignore  # Portfolio Awareness sync (roadmap Phase 2 item 9)
+try:
+    from intelligence.news_impact import assess_news_impact  # type: ignore  # News Intelligence
+    from intelligence.social_risk import assess_social_risk  # type: ignore  # Social Risk (Pulse)
+    from intelligence.trade_learning import TradeLearningEngine  # type: ignore  # Demo Trade Learning
+except ModuleNotFoundError as exc:
+    if exc.name not in {"intelligence", "intelligence.news_impact", "intelligence.social_risk", "intelligence.trade_learning"}:
+        raise
+    from Oracle.intelligence.news_impact import assess_news_impact
+    from Oracle.intelligence.social_risk import assess_social_risk
+    from Oracle.intelligence.trade_learning import TradeLearningEngine
+from Oracle.core.risk import Position as RiskPosition  # Portfolio Awareness sync (roadmap Phase 2 item 9)
 
 log = logging.getLogger("oracle.live")
 
@@ -430,7 +441,7 @@ class LiveTrader:
         self.max_trades   = max_trades if max_trades is not None else _env_int(
             "ORACLE_MAX_TRADES_PER_SESSION", 10)
         self.confirm_live = confirm_live
-        self.signal_only = signal_only_enabled()
+        self.signal_only = signal_only_enabled("ORACLE_MT5_SIGNAL_ONLY")
         self.telegram = TelegramNotifier()
         self._recent_signals = RecentSignalCache()
         if self.signal_only and not self.telegram.enabled:
@@ -439,6 +450,9 @@ class LiveTrader:
         self.broker = MT5Broker()
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
+        self._risk_day_key = time.strftime("%Y-%m-%d", time.gmtime())
+        self._risk_day_start_equity: Optional[float] = None
+        self._account_risk_state: Optional[AccountRiskState] = None
         self._open_context: Dict[str, Dict] = {}   # canonical symbol -> streams at entry
 
         # FIX-2: per-symbol timeout
@@ -451,6 +465,7 @@ class LiveTrader:
         self._ks_equity_ttl:   float = _ks_ttl
         self._ks_equity_cache: Optional[float] = None
         self._ks_equity_ts:    float = 0.0
+        self._ks_check_unavailable: bool = False
         # FIX-6: latch so double-check in run() always sees the fired state
         self._ks_fired: bool = False
 
@@ -488,6 +503,7 @@ class LiveTrader:
         from agents.oracle_agent import OracleAgent  # type: ignore
         self.oracle = OracleAgent(chronicle_client=self.chronicle, sentinel_client=self.sentinel,
                                  pulse_client=self.pulse, atlas_client=self.atlas)
+        self.oracle._mt5_execution_broker = self.broker
         self.oracle.start()
         # Use the ONE Chronicle-wired champion confidence tracker OracleAgent
         # already built, instead of TradeLearningEngine's own separate,
@@ -508,6 +524,25 @@ class LiveTrader:
         status = self.broker.connect()
         if status.get("connected"):
             self._start_equity = status.get("equity") or status.get("balance")
+            if isinstance(self._start_equity, (int, float)) and math.isfinite(float(self._start_equity)) and self._start_equity > 0:
+                self._ks_equity_cache = float(self._start_equity)
+                self._ks_equity_ts = time.time()
+                try:
+                    self._account_risk_state = AccountRiskState({
+                        "broker": "mt5", "login": status.get("login"),
+                        "server": status.get("server"), "account_type": status.get("account_type"),
+                        "currency": status.get("currency"),
+                    })
+                    risk_state = self._account_risk_state.load_or_initialize(self._start_equity)
+                    self._risk_day_key = risk_state["utc_day"]
+                    self._risk_day_start_equity = risk_state["day_start_equity"]
+                    self._start_equity = risk_state["day_start_equity"]
+                    self._ks_fired = risk_state["kill_switch_latched"]
+                except Exception as exc:
+                    self._ks_check_unavailable = True
+                    self._start_equity = None
+                    log.error("Cannot restore MT5 account risk guard state; entries are blocked: %s",
+                              type(exc).__name__)
             log.info("Connected: %s account, equity %.2f %s", status["account_type"],
                      self._start_equity or 0, status.get("currency", ""))
 
@@ -931,6 +966,10 @@ class LiveTrader:
             if self._kill_switch_check():
                 summary["kill_switch"] = True
                 return summary
+            if self._ks_check_unavailable:
+                summary["errors"] += 1
+                log.warning("Skipping new entries because fresh MT5 account equity is unavailable")
+                return summary
 
             # FIX-5: skip expensive signal call once session cap is reached
             # FIX-9: resolve broker symbol before doing anything
@@ -950,6 +989,11 @@ class LiveTrader:
             # for any position it has registered. The slow full-symbol scan
             # just needs to avoid opening a second position on top of it.
             existing_pos = self._get_open_position(broker_sym)
+            if not getattr(self.broker, "_positions_last_refresh_ok", False):
+                summary["errors"] += 1
+                log.error("[%s] MT5 position reconciliation unavailable; stopping scan before new orders",
+                          symbol)
+                return summary
             if existing_pos is not None:
                 summary["managed"] += 1
                 summary["holds"] += 1
@@ -1071,6 +1115,7 @@ class LiveTrader:
 
         # ── Phase 2: CIO Cross-Sectional Tournament & Portfolio Selection ──────
         if approved_candidates:
+            scout_enabled = bool(getattr(self.oracle, "scout_enabled", True))
             approved_candidates.sort(
                 key=lambda item: (
                     float(item[2].get("scout_score", item[2].get("effective_confidence", 0.0))),
@@ -1084,16 +1129,24 @@ class LiveTrader:
                 cio.portfolio.learned_session_slot_budget()
                 if cio is not None else self.max_trades
             )
-            session_slot_cap = min(self.max_trades, learned_slots) if self.max_trades else learned_slots
+            session_slot_cap = min(
+                max(0, int(self.max_trades)),
+                max(0, int(learned_slots)),
+                max(0, int(getattr(self.oracle.risk, "hard_max_positions",
+                                   self.oracle.risk.max_positions))),
+            )
+            execution_outcome_uncertain = False
 
             if len(approved_candidates) > 1:
                 ranking_preview = ", ".join(
-                    f"#{idx} {sym} (scout={cand.get('scout_score', cand.get('effective_confidence', 0.0)):.3f})"
+                    f"#{idx} {sym} ({'scout' if scout_enabled else 'confidence'}="
+                    f"{cand.get('scout_score', cand.get('effective_confidence', 0.0)):.3f})"
                     for idx, (sym, _, cand) in enumerate(approved_candidates, start=1)
                 )
-                log.info("CIO Scout Tournament ranked %d setups (session slot budget=%d): %s",
+                ranking_label = "CIO Scout Tournament" if scout_enabled else "Oracle confidence ranking"
+                log.info("%s ranked %d setups (session slot budget=%d): %s", ranking_label,
                          len(approved_candidates), session_slot_cap, ranking_preview)
-                print(f"  [CIO Scout Tournament] Ranked {len(approved_candidates)} setups "
+                print(f"  [{ranking_label}] Ranked {len(approved_candidates)} setups "
                       f"(slot cap={session_slot_cap}): {ranking_preview}")
 
             for rank, (symbol, broker_sym, sig) in enumerate(approved_candidates, start=1):
@@ -1101,7 +1154,12 @@ class LiveTrader:
                 s = sig["signal"]
                 scout_score = float(sig.get("scout_score", sig.get("effective_confidence", s.get("confidence", 0.0))))
                 eff_conf = float(sig.get("effective_confidence", s.get("confidence", 0.0)))
-                conf_str = f"scout={scout_score:.3f} conf={eff_conf:.3f} rank=#{rank}/{len(approved_candidates)}"
+                score_label = "scout" if scout_enabled else "confidence"
+                conf_str = f"{score_label}={scout_score:.3f} conf={eff_conf:.3f} rank=#{rank}/{len(approved_candidates)}"
+
+                if execution_outcome_uncertain:
+                    summary["holds"] += 1
+                    continue
 
                 # Check if session slot budget is now full after higher-ranked fills
                 if len(self._managed_positions) >= session_slot_cap:
@@ -1220,6 +1278,14 @@ class LiveTrader:
                         ticket = result.get("order") or result.get("ticket") or 0
                         fill_price = float(result.get("price") or plan.get("entry", 0.0))
                         fill_vol = float(result.get("volume", plan.get("size", 0.0)))
+                        execution_proposal = {
+                            **sig,
+                            "plan": {**plan, "broker_symbol": broker_sym},
+                        }
+                        self.telegram.send(
+                            format_execution_alert(symbol, execution_proposal, result, "MT5"),
+                            f"filled:mt5:{ticket or symbol + ':' + str(plan.get('direction', ''))}",
+                        )
                         self._pos_log.log_opened(
                             symbol, broker_sym, ticket,
                             direction=plan["direction"],
@@ -1227,6 +1293,19 @@ class LiveTrader:
                             price=fill_price,
                             sl=plan.get("stop", 0.0),
                             tp=plan.get("target", 0.0),
+                            execution={
+                                "broker": "mt5",
+                                "decision_entry_price": plan.get("entry"),
+                                "fill_price": fill_price,
+                                "adverse_slippage_price": adverse_slippage_price(
+                                    plan["direction"], plan.get("entry"), fill_price),
+                                "requested_volume_units": result.get("volume_units_raw", plan.get("size")),
+                                "filled_volume_lots": result.get("volume_lots", fill_vol),
+                                "estimated_stop_loss_account_currency": result.get(
+                                    "estimated_stop_loss_account_currency"),
+                                "risk_budget_account_currency": result.get(
+                                    "risk_budget_account_currency", plan.get("risk_amount")),
+                            },
                         )
                         self._register_position(
                             symbol, plan["direction"],
@@ -1263,6 +1342,22 @@ class LiveTrader:
                                 entry_streams=dict(sig.get("_streams") or {}),
                                 journal_id=getattr(pos_obj, "journal_id", None),
                             )
+                    elif res_status == "unknown":
+                        execution_outcome_uncertain = True
+                        summary["errors"] += 1
+                        log.error("[%s] broker order outcome uncertain; stopping new order submissions for this scan",
+                                  symbol)
+                        try:
+                            refreshed = self.broker.positions()
+                            if getattr(self.broker, "_positions_last_refresh_ok", False):
+                                log.warning("Confirmed %d MT5 position(s) while reconciling the uncertain order; "
+                                            "remaining entries are stopped for this scan",
+                                            len(refreshed))
+                            else:
+                                log.error("MT5 position snapshot is not confirmed after uncertain order")
+                        except Exception as exc:
+                            log.error("Position reconciliation after uncertain MT5 order failed: %s",
+                                      type(exc).__name__)
                     else:
                         summary["rejects"] += 1
                         if ledger is not None:
@@ -1274,11 +1369,11 @@ class LiveTrader:
                                 symbol=symbol,
                             )
                 else:
-                    log.info("[%s→%s] TRADE  direction=%s %s (execution disabled: MT5 not connected)",
+                    log.info("[%s→%s] SIGNAL READY  direction=%s %s (MT5 not connected; no order sent)",
                              symbol, broker_sym, plan["direction"], conf_str)
-                    print(f"[{symbol}→{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
-                          f"  (execution disabled: MT5 not connected)")
-                    summary["trades"] += 1
+                    print(f"[{symbol}→{broker_sym}] SIGNAL READY  direction={plan['direction']}  {conf_str}"
+                          f"  (MT5 not connected; no order sent)")
+                    summary["signals"] += 1
 
         return summary
 
@@ -1288,17 +1383,54 @@ class LiveTrader:
         # FIX-6: once fired, stay fired
         if self._ks_fired:
             return True
+        self._ks_check_unavailable = False
         if self._start_equity is None or not self.broker.status.connected:
+            self._ks_check_unavailable = True
             return False
         _now = time.time()
         if self._ks_equity_cache is None or (_now - self._ks_equity_ts) >= self._ks_equity_ttl:
             acct = self.broker.account()
-            self._ks_equity_cache = acct.get("equity", self._start_equity)
+            equity = acct.get("equity")
+            if (acct.get("connected") is not True
+                    or not isinstance(equity, (int, float))
+                    or not math.isfinite(float(equity)) or float(equity) <= 0):
+                self._ks_check_unavailable = True
+                log.warning("MT5 account risk refresh unavailable; blocking new entries")
+                return False
+            self._ks_equity_cache = float(equity)
             self._ks_equity_ts = _now
         equity = self._ks_equity_cache
+        today = time.strftime("%Y-%m-%d", time.gmtime(_now))
+        if today != self._risk_day_key or self._risk_day_start_equity is None:
+            try:
+                state = self._account_risk_state.load_or_initialize(float(equity), now=_now)
+                self._risk_day_key = state["utc_day"]
+                self._risk_day_start_equity = state["day_start_equity"]
+                self._start_equity = state["day_start_equity"]
+                self._ks_fired = state["kill_switch_latched"]
+            except Exception as exc:
+                self._ks_check_unavailable = True
+                log.error("Cannot roll MT5 account risk state to a new UTC day: %s",
+                          type(exc).__name__)
+                return False
+        self.oracle.risk.sync_broker_account(
+            equity=float(equity),
+            daily_pnl=float(equity) - float(self._risk_day_start_equity),
+        )
         loss = (self._start_equity - equity) / self._start_equity if self._start_equity else 0
         if loss >= self.session_max_loss_pct:
             self._ks_fired = True
+        try:
+            self._ks_fired = self._account_risk_state.save({
+                "utc_day": self._risk_day_key,
+                "day_start_equity": self._risk_day_start_equity,
+                "kill_switch_latched": self._ks_fired,
+            })
+        except Exception as exc:
+            self._ks_check_unavailable = True
+            log.error("Cannot persist MT5 account risk state; entries are blocked: %s",
+                      type(exc).__name__)
+            return False
         return self._ks_fired
 
     # ── learning ──────────────────────────────────────────────────────────────

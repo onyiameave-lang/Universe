@@ -179,6 +179,11 @@ def execute_cio_tournament_cycle(
         if max_session_slots_override is not None
         else learned_slots
     )
+    if rm is not None:
+        session_slot_cap = min(
+            int(session_slot_cap),
+            int(getattr(rm, "hard_max_positions", rm.max_positions)),
+        )
     available_slots = max(0, session_slot_cap - len(current_open))
     daily_budget = cio_engine.portfolio.learned_daily_trade_budget(candidate_universe_size=len(clean_symbols))
     opened_today_total = sum((rm.portfolio.trades_today or {}).values()) if rm else 0
@@ -241,10 +246,14 @@ def execute_cio_tournament_cycle(
             continue
 
         if rm is not None:
-            rm.risk_per_trade = cio_engine.portfolio.learned_risk_fraction(
+            learned_risk_fraction = cio_engine.portfolio.learned_risk_fraction(
                 effective_confidence=cand.effective_confidence,
                 current_drawdown_fraction=dd_now,
                 asset_class=cand.asset_class,
+            )
+            rm.risk_per_trade = min(
+                float(getattr(rm, "hard_risk_per_trade", rm.risk_per_trade)),
+                float(learned_risk_fraction),
             )
             plan = rm.evaluate(
                 cand.symbol,

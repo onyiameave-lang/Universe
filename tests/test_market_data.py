@@ -5,9 +5,10 @@ from types import SimpleNamespace
 import pandas as pd
 
 from Oracle.core import market_data
+from Oracle.core.market_data import Bar, Series
 
 
-def test_yfinance_discards_invalid_bars_and_keeps_valid_history(monkeypatch, caplog):
+def test_yfinance_rejects_incomplete_history_with_invalid_bars(monkeypatch, caplog):
     history = pd.DataFrame(
         {
             "Open": [1.10, 1.20],
@@ -26,12 +27,12 @@ def test_yfinance_discards_invalid_bars_and_keeps_valid_history(monkeypatch, cap
             history=lambda **_kwargs: history)),
     )
 
-    with caplog.at_level(logging.WARNING, logger="oracle.market_data"):
+    with caplog.at_level(logging.ERROR, logger="oracle.market_data"):
         series = market_data.YFinanceSource().fetch("EURUSD")
 
-    assert series is not None
-    assert [bar.ts for bar in series.bars] == ["2026-01-02"]
-    assert "discarding 1/2 invalid yfinance bars" in caplog.text
+    assert series is None
+    assert "rejecting incomplete yfinance history" in caplog.text
+    assert "1/2 invalid bars" in caplog.text
 
 
 def test_yfinance_returns_no_series_when_all_bars_are_invalid(monkeypatch):
@@ -75,3 +76,32 @@ def test_yfinance_history_uses_configured_request_timeout(monkeypatch):
     assert seen["timeout"] == 4.0
     assert seen["period"] == "6mo"
     assert seen["interval"] == "1d"
+
+
+def test_execution_data_request_rejects_stale_in_memory_disk_fallback(tmp_path, monkeypatch):
+    series = Series(
+        symbol="GBPUSD",
+        bars=[Bar("2026-11-20", 1.30, 1.31, 1.29, 1.305, 0.0)],
+        source="cache:yfinance",
+    )
+    monkeypatch.setitem(
+        market_data._market_data_mem_cache,
+        "GBPUSD|6mo|1d",
+        {
+            "result": {
+                "status": "complete",
+                "series": series,
+                "source": "cache:yfinance",
+                "bars": 1,
+                "cache_age_hours": 66.9,
+            },
+            "ts": market_data.time.time(),
+        },
+    )
+    data = market_data.MarketData(cache_dir=tmp_path)
+    data.sources = []
+
+    result = data.get("GBPUSD", allow_cache_fallback=False)
+
+    assert result["status"] == "error"
+    assert result["series"] is None

@@ -19,6 +19,8 @@ function formatReadableMarkdown(raw) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
     .replace(/\[\[B\]\]/g, '<strong>')
     .replace(/\[\[\/B\]\]/g, '</strong>')
     .replace(/\[\[I\]\]/g, '<em>')
@@ -429,8 +431,8 @@ const AGENT_STUDIO_PROFILES = {
   },
   aegis: {
     name: 'Aegis',
-    subtitle: 'Your account safety guardian — blocks risky trades and makes sure target profit is always bigger than stop-loss risk',
-    welcome: 'Hello! I am **Aegis**, your account safety guardian. My job is to protect your money: I block any trade where the potential profit isn\'t at least **1.8× bigger** than the stop-loss risk, and I automatically skipped **57 weak or unclear trade setups** in our latest session so they couldn\'t hurt your balance.',
+    subtitle: 'Governance assistant. Check recorded policy and ledger diagnostics; enforcement must be verified from Oracle decision records.',
+    welcome: 'Hello! I am **Aegis**, the ecosystem governance and safety agent. Ask me about recorded policy checks or audit evidence. I will report unavailable whenever the relevant audit record is missing.',
     prompts: [
       { label: 'Is Our Account Safe?', text: 'Is our trading account safe right now and how do your safety rules protect our money?' },
       { label: 'Why Were Weak Trades Skipped?', text: 'How many weak or risky trade setups did you block to protect our balance?' },
@@ -441,7 +443,7 @@ const AGENT_STUDIO_PROFILES = {
   forge: {
     name: 'Forge',
     subtitle: 'Your strategy trainer — reviews our last trading session, learns from mistakes, and tests strategies before Oracle trades them',
-    welcome: 'Hello! I am **Forge**, your strategy trainer. Ask me in plain English about **our last trading session** (**3 wins out of 3 EUR/USD trades** on MetaTrader 5 for **+$4,621.55** profit, bringing the account to **$104,621.55**), or how we test strategies across 7 chart timeframes before risking a single dollar.',
+    welcome: 'Hello! I am **Forge**, the strategy training and evaluation agent. Ask about recorded candidates, experiment results, or their current evaluation status. Candidate records alone do not prove a strategy is profitable or approved.',
     prompts: [
       { label: 'Review Our Last Trading Session', text: 'Tell me about the last trading session we just did and how our trades performed' },
       { label: 'How We Train & Test Strategies', text: 'How do you test trading strategies in plain English before Oracle uses them?' },
@@ -452,7 +454,7 @@ const AGENT_STUDIO_PROFILES = {
   chronicle: {
     name: 'Chronicle',
     subtitle: 'Our shared team memory — remembers every lesson learned, past trade, and research answer in plain English',
-    welcome: 'Hello! I am **Chronicle**, the shared memory for all **9 agents**. Whenever Oracle completes a trade, Forge tests a new strategy rule, or Atlas researches a question, the lesson is saved here in plain English so the whole team gets smarter every day.',
+    welcome: 'Hello! I am **Chronicle**, the ecosystem memory service. I can show records that are actually present in the connected store; missing or unverified records will be identified as such.',
     prompts: [
       { label: 'What Lessons Have We Learned?', text: 'What key trading and research lessons are saved in our shared Chronicle memory?' },
       { label: 'How All 9 Agents Share Memory', text: 'How do all 9 agents share what they learn through Chronicle?' },
@@ -471,8 +473,8 @@ const AGENT_STUDIO_PROFILES = {
   },
   genesis: {
     name: 'Genesis',
-    subtitle: 'Your strategy designer — creates new trading ideas and stress-tests them across 1,000 simulated market scenarios',
-    welcome: 'Hello! I am **Genesis**, your strategy designer. I design new trading blueprints for Scalping, Day Trading, Swing Trading, and Range Trading, and test each idea across **1,000 simulated market conditions** before handing the safest ones to Forge and Oracle.',
+    subtitle: 'Strategy artifact registry. A saved candidate is not described as tested, active, or promoted unless its records show that state.',
+    welcome: 'Hello! I am **Genesis**, the strategy design agent. Ask about saved strategy artifacts and their recorded lifecycle state. Stored ideas are not assumed to have passed testing or promotion.',
     prompts: [
       { label: 'Show Our Best Trading Blueprints', text: 'What trading strategy blueprints have you designed and how well did they perform in testing?' },
       { label: 'What Do You Do?', text: 'What do you do?' },
@@ -482,15 +484,19 @@ const AGENT_STUDIO_PROFILES = {
 
 function renderCrossAgentReferralCards(referrals) {
   if (!Array.isArray(referrals) || referrals.length === 0) return '';
+  const escape = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const cards = referrals.slice(0, 3).map((r) => {
     const toAgent = String(r.to_agent || 'nexus').toLowerCase();
-    const title = String(r.to_agent_title || toAgent.toUpperCase());
-    const reason = String(r.reason || 'Ask this specialist for more details.');
+    const title = escape(r.to_agent_title || toAgent.toUpperCase());
+    const reason = escape(r.reason || 'Ask this specialist for more details.');
+    const hrefAgent = /^[a-z0-9_-]+$/.test(toAgent) ? toAgent : 'nexus';
     return `
       <div style="flex:1;min-width:210px;background:rgba(15,23,42,0.45);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
           <span style="font-weight:700;font-size:12.5px;color:#38bdf8">${title}</span>
-          <a href="${toAgent}.html" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(56,189,248,0.15);color:#38bdf8;text-decoration:none;border:1px solid rgba(56,189,248,0.28)">Talk to ${title} →</a>
+          <a href="${hrefAgent}.html" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(56,189,248,0.15);color:#38bdf8;text-decoration:none;border:1px solid rgba(56,189,248,0.28)">Talk to ${title} →</a>
         </div>
         <div style="font-size:11.5px;color:var(--text-muted,#cbd5e1);line-height:1.45">${reason}</div>
       </div>
@@ -507,21 +513,28 @@ window.renderCrossAgentReferralCards = renderCrossAgentReferralCards;
 
 function renderCompactDagTraceBadge(trace) {
   if (!trace || !Array.isArray(trace.dag_levels)) return '';
+  const escape = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const gate = trace.aegis_policy_gate || {};
   const cons = trace.provenance_consensus || {};
   const wb = trace.chronicle_writeback || {};
-  const qual = (trace.quality_signal || {}).quality_score ?? 0.92;
-  const consulted = (trace.consulted_agents || []).map((a) => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
-  const lvlText = trace.dag_levels.map((l) => `${l.level_name} [${(l.nodes || []).map((n) => n.agent_title).join(', ')}]`).join(' → ');
+  const qual = (trace.quality_signal || {}).quality_score;
+  const consulted = (trace.consulted_agents || []).map((a) => escape(String(a).charAt(0).toUpperCase() + String(a).slice(1))).join(', ');
+  const lvlText = trace.dag_levels.map((l) => `${escape(l.level_name || 'Level unavailable')} [${(l.nodes || []).map((n) => escape(n.agent_title || n.agent || 'Agent unavailable')).join(', ')}]`).join(' → ');
+  const latency = Number.isFinite(Number(trace.total_latency_ms)) ? `${escape(trace.total_latency_ms)}ms` : 'latency unavailable';
+  const savedState = wb.tier2_promoted_to_reusable_knowledge === true
+    ? 'Tier-2 promotion recorded'
+    : wb.tier2_promoted_to_reusable_knowledge === false ? 'Tier-1 trace only' : 'Memory state unavailable';
   return `
     <details style="margin-top:10px;padding:7px 11px;border-radius:8px;background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#94a3b8">
       <summary style="cursor:pointer;font-weight:600;color:#94a3b8;outline:none">
-        Coordinated with ${consulted || 'Chronicle & Atlas'} in ${trace.total_latency_ms || 18}ms <span style="opacity:0.75;font-weight:400">(view technical routing details)</span>
+        Coordinated with ${consulted || 'agent list unavailable'} in ${latency} <span style="opacity:0.75;font-weight:400">(view technical routing details)</span>
       </summary>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px;font-size:11px">
-        <div><strong>Trace ID:</strong> <code>${trace.trace_id || 'NEXUS-DAG'}</code> · <strong>Route:</strong> ${lvlText}</div>
-        <div><strong>Verified Sources:</strong> ${cons.unique_provenance_sources_count ?? 1} (${cons.shared_sources_deduplicated_count ?? 0} duplicates merged) · <strong>Quality Score:</strong> ${Number(qual).toFixed(2)}</div>
-        <div><strong>Safety Gate:</strong> ${gate.status || 'APPROVED'} · <strong>Memory:</strong> ${wb.tier2_promoted_to_reusable_knowledge ? 'Saved to Shared Team Knowledge' : 'Saved to Activity Log'}</div>
+        <div><strong>Trace ID:</strong> <code>${escape(trace.trace_id || 'Unavailable')}</code> · <strong>Route:</strong> ${lvlText}</div>
+        <div><strong>Provenance sources:</strong> ${cons.unique_provenance_sources_count ?? 'Unavailable'} (${cons.shared_sources_deduplicated_count ?? 'Unavailable'} duplicates recorded) · <strong>Quality score:</strong> ${qual != null && Number.isFinite(Number(qual)) ? Number(qual).toFixed(2) : 'Unavailable'}</div>
+        <div><strong>Safety Gate:</strong> ${escape(gate.status || 'Unavailable')} · <strong>Memory:</strong> ${savedState}</div>
       </div>
     </details>
   `;

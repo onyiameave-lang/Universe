@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import sys
 import time
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -151,373 +153,37 @@ def _format_style_human(style: str, regime: str = "") -> str:
     return f"{st_label} — {reg_label}" if reg_label else st_label
 
 
-def _load_mt5_trades_and_vetoes() -> Tuple[List[Dict[str, Any]], int]:
-    """Load all executed and blocked trades from MT5 CSV logs (both Oracle/logs and Oracle/memory/logs)."""
-    mt5_trades: List[Dict[str, Any]] = []
-    seen_keys: set[str] = set()
-    risk_vetoed = 0
-
-    for csv_path in (MT5_TRADES_CSV, MT5_MEM_TRADES_CSV):
-        if not csv_path.exists():
-            continue
-        try:
-            lines = [ln.strip() for ln in csv_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-            headers = [h.strip() for h in (lines[0].split(",") if lines else [])]
-            for ln in lines[1:]:
-                cols = [c.strip() for c in ln.split(",")]
-                if len(cols) < 14:
-                    continue
-                row = dict(zip(headers, cols))
-                outcome = (row.get("outcome") or "").lower()
-                reason = row.get("reason") or ""
-                price = float(row.get("price") or 0.0)
-                ts = row.get("timestamp") or ""
-                sess_id = row.get("session_id") or "20261118"
-                sym = (row.get("symbol") or "EURUSD").upper()
-                dedup_key = f"{sess_id}:{ts}:{sym}:{price}"
-                if price > 0 and outcome not in ("rejected", "hold", "unmapped"):
-                    if dedup_key in seen_keys:
-                        continue
-                    seen_keys.add(dedup_key)
-                    m = re.search(r"realized_r=([+-]?[0-9.]+)R", reason, re.I)
-                    realized_r = float(m.group(1)) if m else 1.325
-                    # Approximate dollar profit from realized_r on $100k account (~0.73% risk unit per 1R -> $728.95/R)
-                    dollar_pnl = round(realized_r * 729.41, 2)
-                    mt5_trades.append({
-                        "broker": "mt5",
-                        "broker_label": "MetaTrader 5 (MT5)",
-                        "symbol": sym,
-                        "symbol_human": _format_pair_human(sym),
-                        "direction": (row.get("direction") or "SHORT").upper(),
-                        "action_human": "Sold (Short)" if (row.get("direction") or "short").lower() in ("short", "sell", "-1") else "Bought (Long)",
-                        "entry": float(row.get("price") or 1.09963),
-                        "sl": float(row.get("stop") or 1.10035),
-                        "tp": float(row.get("target") or 1.09626),
-                        "reward_risk": float(row.get("reward_risk") or 4.68),
-                        "realized_r": realized_r,
-                        "pnl_usd": dollar_pnl,
-                        "won": realized_r >= 0,
-                        "confidence": float(row.get("confidence") or 0.68),
-                        "session_id": sess_id,
-                        "timestamp": ts or "2026-11-18T21:20:16Z",
-                    })
-                elif outcome == "rejected" or "below live floor" in reason:
-                    risk_vetoed += 1
-        except Exception:
-            pass
-
-    # If the user's local CSV didn't have the 3 verified MT5 EUR/USD session trades yet, ensure they are available
-    if not mt5_trades:
-        default_mt5 = [
-            ("20261118_195457", "2026-11-18T19:54:57Z", 1.09963, 1.10059, 1.09516, 4.65, 1.325, 966.47),
-            ("20261118_195535", "2026-11-18T19:55:35Z", 1.09963, 1.10059, 1.09510, 4.71, 1.325, 966.47),
-            ("20261118_212016", "2026-11-18T21:20:16Z", 1.09963, 1.10035, 1.09626, 4.68, 3.686, 2688.61),
-        ]
-        for sid, ts, ent, sl_v, tp_v, rr, r_val, usd_val in default_mt5:
-            mt5_trades.append({
-                "broker": "mt5",
-                "broker_label": "MetaTrader 5 (MT5)",
-                "symbol": "EURUSD",
-                "symbol_human": _format_pair_human("EURUSD"),
-                "direction": "SHORT",
-                "action_human": "Sold (Short)",
-                "entry": ent,
-                "sl": sl_v,
-                "tp": tp_v,
-                "reward_risk": rr,
-                "realized_r": r_val,
-                "pnl_usd": usd_val,
-                "won": True,
-                "confidence": 0.68,
-                "session_id": sid,
-                "timestamp": ts,
-            })
-    if risk_vetoed == 0:
-        risk_vetoed = 57
-    return mt5_trades, risk_vetoed
-
-
-def _load_ctrader_trades() -> List[Dict[str, Any]]:
-    """
-    Load cTrader account trades from:
-      1. ~/.universe/oracle/position_events_fallback.jsonl (ChroniclePositionLog events from ctrader_demo_trader)
-      2. Oracle/memory/trade_experiment_log.jsonl (if present on disk)
-      3. Oracle/memory/learned_closed_trades.json (if present on disk)
-      4. Oracle/memory/champion_confidence.json (per-symbol cTrader trade memory)
-    """
-    ctrader_trades: List[Dict[str, Any]] = []
-    pos_fallback_path = Path(
-        os.getenv(
-            "ORACLE_POSITION_EVENT_FALLBACK_PATH",
-            str(Path.home() / ".universe" / "oracle" / "position_events_fallback.jsonl"),
-        )
-    ).expanduser()
-    for idx, ev in enumerate(_read_jsonl_safe(pos_fallback_path, limit=200)):
-        if not isinstance(ev, dict):
-            continue
-        trader_id = str(ev.get("trader_id") or "").lower()
-        if "mt5" in trader_id:
-            continue
-        if ev.get("event") in ("position_opened", "position_closed"):
-            sym = str(ev.get("symbol") or "EURUSD").upper()
-            is_short = str(ev.get("direction") or "buy").lower() in ("sell", "short", "-1")
-            ent = float(ev.get("price") or 1.0850)
-            sl_v = float(ev.get("sl") or (ent * 1.003 if is_short else ent * 0.997))
-            tp_v = float(ev.get("tp") or (ent * 0.993 if is_short else ent * 1.007))
-            ctrader_trades.append({
-                "broker": "ctrader",
-                "broker_label": "cTrader Account",
-                "symbol": sym,
-                "symbol_human": _format_pair_human(sym),
-                "direction": "SHORT" if is_short else "LONG",
-                "action_human": "Sold (Short)" if is_short else "Bought (Long)",
-                "entry": round(ent, 5),
-                "sl": round(sl_v, 5),
-                "tp": round(tp_v, 5),
-                "reward_risk": 2.00,
-                "realized_r": 1.65,
-                "pnl_usd": 412.50,
-                "won": True,
-                "confidence": 0.72,
-                "session_id": f"ctrader_ticket_{ev.get('ticket', idx+1)}",
-                "timestamp": "cTrader Live/Demo Event",
-            })
-
-    exp_rows = _read_jsonl_safe(TRADE_EXP_LOG_PATH, limit=200)
-    for idx, t in enumerate(exp_rows):
-        if not isinstance(t, dict):
-            continue
-        sym = str(t.get("symbol") or "EURUSD").upper()
-        # Filter out known synthetic ASX200 outlier if present
-        if sym == "ASX200" and abs(float(t.get("pnl_r") or t.get("realized_r") or 0.0)) > 20.0:
-            continue
-        won = bool(
-            t.get("won") is True
-            or str(t.get("outcome") or "").lower() in ("win", "won", "profit", "tp")
-            or float(t.get("pnl_r") or t.get("realized_r") or t.get("pnl") or 0.0) > 0
-        )
-        raw_r = float(t.get("pnl_r") or t.get("realized_r") or (1.45 if won else -1.0))
-        pnl_usd = float(t.get("pnl_usd") or t.get("pnl") or round(raw_r * 250.0, 2))
-        direction = str(t.get("direction") or t.get("side") or "LONG").upper()
-        is_short = direction in ("SHORT", "SELL", "-1")
-        entry = float(t.get("entry_price") or t.get("entry") or t.get("price") or 1.0850)
-        sl = float(t.get("stop_loss") or t.get("sl") or t.get("stop") or (entry * 1.003 if is_short else entry * 0.997))
-        tp = float(t.get("take_profit") or t.get("tp") or t.get("target") or (entry * 0.993 if is_short else entry * 1.007))
-        rr = float(t.get("reward_risk") or 2.10)
-        ctrader_trades.append({
-            "broker": "ctrader",
-            "broker_label": "cTrader Account",
-            "symbol": sym,
-            "symbol_human": _format_pair_human(sym),
-            "direction": "SHORT" if is_short else "LONG",
-            "action_human": "Sold (Short)" if is_short else "Bought (Long)",
-            "entry": round(entry, 5),
-            "sl": round(sl, 5),
-            "tp": round(tp, 5),
-            "reward_risk": round(rr, 2),
-            "realized_r": round(raw_r, 3),
-            "pnl_usd": round(pnl_usd, 2),
-            "won": won,
-            "confidence": float(t.get("confidence") or 0.65),
-            "session_id": str(t.get("session_id") or f"ctrader_{idx+1}"),
-            "timestamp": str(t.get("timestamp") or t.get("closed_at") or "cTrader Demo Session"),
-        })
-
-    if not ctrader_trades:
-        # Build from Oracle/memory/champion_confidence.json (recorded cTrader demo learning memory)
-        champ = _read_json_safe(CHAMPION_CONF_PATH, {})
-        sample_prices = {
-            "EURUSD": ("LONG", 1.08420, 1.08150, 1.08960, 2.00),
-            "GBPUSD": ("LONG", 1.26840, 1.26420, 1.27680, 2.00),
-            "USDJPY": ("SHORT", 154.620, 155.120, 153.620, 2.00),
-            "XAUUSD": ("LONG", 2642.50, 2628.00, 2671.50, 2.00),
-            "BTCUSD": ("LONG", 88450.0, 87200.0, 90950.0, 2.00),
-            "AAPL": ("LONG", 226.40, 223.80, 231.60, 2.00),
-            "NVDA": ("LONG", 138.20, 135.50, 143.60, 2.00),
-        }
-        if isinstance(champ, dict):
-            for sym, rec in champ.items():
-                if not isinstance(rec, dict):
-                    continue
-                wins = int(rec.get("wins") or 0)
-                losses = int(rec.get("losses") or 0)
-                direction, ent, sl_v, tp_v, rr_v = sample_prices.get(sym.upper(), ("LONG", 1.0850, 1.0810, 1.0930, 2.0))
-                is_short = direction == "SHORT"
-                for w_i in range(wins):
-                    ctrader_trades.append({
-                        "broker": "ctrader",
-                        "broker_label": "cTrader Account",
-                        "symbol": sym.upper(),
-                        "symbol_human": _format_pair_human(sym.upper()),
-                        "direction": direction,
-                        "action_human": "Sold (Short)" if is_short else "Bought (Long)",
-                        "entry": ent,
-                        "sl": sl_v,
-                        "tp": tp_v,
-                        "reward_risk": rr_v,
-                        "realized_r": 1.85,
-                        "pnl_usd": 462.50,
-                        "won": True,
-                        "confidence": 0.71,
-                        "session_id": f"ctrader_{sym.lower()}_w{w_i+1}",
-                        "timestamp": "cTrader Demo Session",
-                    })
-                for l_i in range(losses):
-                    ctrader_trades.append({
-                        "broker": "ctrader",
-                        "broker_label": "cTrader Account",
-                        "symbol": sym.upper(),
-                        "symbol_human": _format_pair_human(sym.upper()),
-                        "direction": direction,
-                        "action_human": "Sold (Short)" if is_short else "Bought (Long)",
-                        "entry": ent,
-                        "sl": sl_v,
-                        "tp": tp_v,
-                        "reward_risk": rr_v,
-                        "realized_r": -1.0,
-                        "pnl_usd": -250.00,
-                        "won": False,
-                        "confidence": 0.56,
-                        "session_id": f"ctrader_{sym.lower()}_l{l_i+1}",
-                        "timestamp": "cTrader Demo Session",
-                    })
-    return ctrader_trades
-
-
 def _load_oracle_ledger_snapshot(broker: str = "all") -> Dict[str, Any]:
-    broker_key = (broker or "all").strip().lower()
-    if broker_key not in ("all", "mt5", "ctrader"):
-        broker_key = "all"
+    """Compatibility adapter over authenticated broker snapshots only."""
+    from Nexus.api.interactive_actions import get_oracle_dashboard_data
 
-    eq_data = _read_json_safe(EQUITY_STATE_PATH, {"equity_usd": 104621.55})
-    mt5_equity_usd = float(eq_data.get("equity_usd") or 104621.55)
-    mt5_net_pnl = round(mt5_equity_usd - 100000.0, 2)
-
-    mt5_trades, mt5_vetoed = _load_mt5_trades_and_vetoes()
-    mt5_wins = sum(1 for t in mt5_trades if t.get("won"))
-    mt5_total = len(mt5_trades)
-    mt5_wr = round((mt5_wins / max(1, mt5_total)) * 100.0, 1)
-
-    ctrader_trades = _load_ctrader_trades()
-    ct_wins = sum(1 for t in ctrader_trades if t.get("won"))
-    ct_total = len(ctrader_trades)
-    ct_wr = round((ct_wins / max(1, ct_total)) * 100.0, 1)
-    ct_net_pnl = round(sum(float(t.get("pnl_usd") or 0.0) for t in ctrader_trades), 2)
-    ct_equity_usd = round(100000.0 + ct_net_pnl, 2)
-
-    mt5_configured = bool(os.getenv("MT5_LOGIN") and os.getenv("MT5_SERVER"))
-    ct_configured = bool(os.getenv("CTRADER_ACCOUNT_ID") or os.getenv("CTRADER_CLIENT_ID"))
-    ct_account_id = os.getenv("CTRADER_ACCOUNT_ID") or "Demo Account"
-    mt5_server = os.getenv("MT5_SERVER") or "MetaQuotes-Demo"
-
-    brokers_summary = {
-        "mt5": {
-            "id": "mt5",
-            "name": "MetaTrader 5 (MT5)",
-            "account_mode": f"Live MT5 Terminal ({mt5_server})" if mt5_configured else "MT5 Paper / Demo Account (MetaQuotes-Demo)",
-            "configured_in_env": mt5_configured,
-            "equity_usd": mt5_equity_usd,
-            "starting_balance_usd": 100000.00,
-            "net_pnl_usd": mt5_net_pnl,
-            "wins": mt5_wins,
-            "losses": max(0, mt5_total - mt5_wins),
-            "total_trades": mt5_total,
-            "win_rate_pct": mt5_wr,
-            "skipped_low_confidence": mt5_vetoed,
-            "plain_summary": (
-                f"MetaTrader 5 has {mt5_wins} wins out of {mt5_total} completed trades ({mt5_wr}% win rate), "
-                f"making +${mt5_net_pnl:,.2f} profit for an account balance of ${mt5_equity_usd:,.2f}. "
-                f"{mt5_vetoed} weak setups were automatically skipped to protect your money."
-            ),
-        },
-        "ctrader": {
-            "id": "ctrader",
-            "name": "cTrader Account",
-            "account_mode": f"cTrader Open API ({ct_account_id})" if ct_configured else "cTrader Demo / Strategy Training Account",
-            "configured_in_env": ct_configured,
-            "equity_usd": ct_equity_usd,
-            "starting_balance_usd": 100000.00,
-            "net_pnl_usd": ct_net_pnl,
-            "wins": ct_wins,
-            "losses": max(0, ct_total - ct_wins),
-            "total_trades": ct_total,
-            "win_rate_pct": ct_wr,
-            "skipped_low_confidence": 14,
-            "plain_summary": (
-                f"cTrader has {ct_wins} wins and {max(0, ct_total - ct_wins)} losses out of {ct_total} completed trades "
-                f"({ct_wr}% win rate), with net profit/loss of "
-                f"{'+' if ct_net_pnl >= 0 else '-'}${abs(ct_net_pnl):,.2f} (balance: ${ct_equity_usd:,.2f})."
-            ),
-        },
-    }
-
-    combined_trades = mt5_trades + ctrader_trades
-    comb_wins = mt5_wins + ct_wins
-    comb_total = mt5_total + ct_total
-    comb_wr = round((comb_wins / max(1, comb_total)) * 100.0, 1)
-    comb_pnl = round(mt5_net_pnl + max(0.0, ct_net_pnl), 2) if broker_key == "all" else mt5_net_pnl
-    brokers_summary["all"] = {
-        "id": "all",
-        "name": "All Accounts (MT5 + cTrader)",
-        "account_mode": "Combined View: MetaTrader 5 + cTrader Demo Accounts",
-        "configured_in_env": mt5_configured or ct_configured,
-        "equity_usd": mt5_equity_usd,
-        "starting_balance_usd": 100000.00,
-        "net_pnl_usd": mt5_net_pnl,
-        "wins": comb_wins,
-        "losses": max(0, comb_total - comb_wins),
-        "total_trades": comb_total,
-        "win_rate_pct": comb_wr,
-        "skipped_low_confidence": mt5_vetoed,
-        "plain_summary": (
-            f"Viewing both brokers together: MetaTrader 5 is {mt5_wins}/{mt5_total} won ({mt5_wr}% win rate, +${mt5_net_pnl:,.2f} profit, "
-            f"${mt5_equity_usd:,.2f} balance) and cTrader is {ct_wins}/{ct_total} won ({ct_wr}% win rate). "
-            f"Click 'MetaTrader 5 (MT5)' or 'cTrader Account' above to inspect each broker separately."
-        ),
-    }
-
-    if broker_key == "mt5":
-        active_trades = mt5_trades
-        active_wins = mt5_wins
-        active_total = mt5_total
-        active_wr = mt5_wr
-        active_equity = mt5_equity_usd
-        active_pnl = mt5_net_pnl
-        active_vetoed = mt5_vetoed
-    elif broker_key == "ctrader":
-        active_trades = ctrader_trades
-        active_wins = ct_wins
-        active_total = ct_total
-        active_wr = ct_wr
-        active_equity = ct_equity_usd
-        active_pnl = ct_net_pnl
-        active_vetoed = 14
-    else:
-        active_trades = combined_trades
-        active_wins = comb_wins
-        active_total = comb_total
-        active_wr = comb_wr
-        active_equity = mt5_equity_usd
-        active_pnl = mt5_net_pnl
-        active_vetoed = mt5_vetoed
-
+    selected = (broker or "all").strip().lower()
+    if selected not in ("all", "mt5", "ctrader"):
+        selected = "all"
+    snapshot = get_oracle_dashboard_data(selected)
+    brokers = snapshot.get("brokers") if isinstance(snapshot.get("brokers"), dict) else {}
+    closed = snapshot.get("closed_trades") if isinstance(snapshot.get("closed_trades"), list) else []
+    opened = snapshot.get("live_open_trades") if isinstance(snapshot.get("live_open_trades"), list) else []
+    complete = snapshot.get("history_status") == "complete"
+    wins = sum(1 for item in closed if isinstance(item, dict) and item.get("outcome") == "win")
+    total = len(closed) if complete else None
     return {
-        "active_broker": broker_key,
-        "brokers": brokers_summary,
-        "equity_usd": active_equity,
-        "net_pnl_usd": active_pnl,
-        "session_trades": mt5_trades,
-        "ctrader_trades": ctrader_trades,
-        "active_trades": active_trades,
-        "session_wins": mt5_wins,
-        "session_total": mt5_total,
-        "last_session_win_rate_pct": mt5_wr,
-        "all_time_wins": active_wins,
-        "all_time_total": active_total,
-        "all_time_win_rate_pct": active_wr,
-        "risk_vetoed_count": active_vetoed,
+        "active_broker": selected,
+        "brokers": brokers,
+        "equity_usd": snapshot.get("portfolio_value_numeric"),
+        "net_pnl_usd": snapshot.get("pnl_today_numeric"),
+        "active_trades": opened if snapshot.get("positions_status") in ("fresh", "partial") else [],
+        "session_trades": closed,
+        "session_wins": wins if complete else None,
+        "session_total": total,
+        "all_time_wins": wins if complete else None,
+        "all_time_total": total,
+        "all_time_win_rate_pct": round(100 * wins / total, 1) if total else None,
+        "risk_vetoed_count": None,
+        "status": snapshot.get("status", "unavailable"),
+        "positions_status": snapshot.get("positions_status", "unavailable_or_stale"),
+        "history_status": snapshot.get("history_status", "unavailable_or_stale"),
     }
-
 
 def build_cross_agent_referrals(
     query: str,
@@ -673,7 +339,7 @@ def _is_casual_nexus_message(query: str) -> Optional[str]:
     return None
 
 
-def _build_casual_nexus_reply(intent: str, ledger: Dict[str, Any]) -> str:
+def _build_casual_nexus_reply(intent: str) -> str:
     if intent == "thanks":
         return (
             "You're very welcome! Feel free to ask me anything — whether it's an everyday question, "
@@ -691,15 +357,14 @@ def _build_casual_nexus_reply(intent: str, ledger: Dict[str, Any]) -> str:
             "- **Everyday Questions, Science, History & Formulas** → I ask **Atlas** to check our shared memory (**Chronicle**) or research it live, and give you a direct answer.\n"
             "- **Today's World & Financial News** → I check with **Sentinel** for the latest headlines.\n"
             "- **What People Are Posting on Social Media** → I check with **Pulse** across Mastodon, Bluesky, and HackerNews.\n"
-            f"- **Our Open Trades, Win Rates & Account Balance** → I check with **Oracle** (currently **${ledger['equity_usd']:,.2f}** balance, **{ledger['session_wins']}/{ledger['session_total']} wins** in our latest trading session, and **{ledger['all_time_win_rate_pct']}%** all-time genuine win rate).\n"
+            "- **Open Trades, Win Rates & Account Balance** → I request Oracle's latest broker-authenticated snapshot; if it is missing or stale, I report that instead of guessing.\n"
             "- **Our Last Trading Session & Strategy Training** → I check with **Forge**.\n"
             "- **Account Safety & Risk Protection** → I check with **Aegis** to make sure we never risk more than we stand to win.\n\n"
             "Just ask your question normally, and I'll coordinate the answer for you!"
         )
     if intent == "how_are_you":
         return (
-            f"I'm doing great, thank you for asking! All **9 agents** are online and connected to our shared memory (**Chronicle**).\n\n"
-            f"- Our trading account balance is **${ledger['equity_usd']:,.2f}** (**+${ledger['net_pnl_usd']:,.2f}** profit), winning **{ledger['session_wins']} out of {ledger['session_total']} trades (100%)** in our latest session.\n"
+            "I'm here and ready to help. Ask me for the current system status or a broker-verified trading snapshot, and I’ll report what the connected services can verify.\n\n"
             "- **Atlas**, **Sentinel**, and **Pulse** are ready to research any question, check today's world news, or show you what people are posting on social media.\n\n"
             "What would you like to know or talk about today?"
         )
@@ -713,296 +378,144 @@ def _build_casual_nexus_reply(intent: str, ledger: Dict[str, Any]) -> str:
 
 
 def _build_specialist_domain_output(domain: str, query: str) -> Tuple[str, str, Dict[str, Any], float]:
-    """
-    Execute a bounded, evidence-backed specialist domain retrieval from the live
-    ecosystem data stores (Chronicle, Oracle MT5 ledger, Forge V2 artifacts,
-    Sentinel live news wires, Pulse social feed, Atlas live research, Aegis risk audit).
-    Returns (agent_name, task_name, raw_output_dict, latency_ms).
-    """
+    """Build a concise response from recorded sources; never manufacture metrics or feed items."""
     t0 = time.time()
     q_low = (query or "").lower()
-    ledger = _load_oracle_ledger_snapshot()
     feeds = _read_json_safe(LIVE_FEEDS_PATH, {})
-
-    if domain == "memory":
-        promoted = _read_jsonl_safe(TIER2_KNOWLEDGE_PATH, limit=10)
-        atlas_store = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "research" / "atlas_knowledge_store.json", {})
-        entries_dict = atlas_store.get("entries") if isinstance(atlas_store, dict) else {}
-        saved_topics = []
-        if isinstance(entries_dict, dict):
-            for v in list(entries_dict.values())[-5:]:
-                if isinstance(v, dict) and v.get("topic"):
-                    t_name = str(v["topic"])
-                    if "Trades Union Congress" not in t_name and "Learned Hand" not in t_name:
-                        saved_topics.append(t_name)
-        topics_str = ", ".join(f"**{t}**" for t in saved_topics[:4]) if saved_topics else "**Vegetable**, **Photosynthesis**, **Wavelength**, **Compound Interest**"
-        summary = (
-            f"Our shared **Chronicle** memory currently holds **{len(promoted) + len(saved_topics) + 12} verified records** across all 9 agents:\n"
-            f"- **Recent Research Topics Saved**: {topics_str}\n"
-            f"- **Trading & Strategy Lessons Saved**: Last trading session audit (**{ledger['session_wins']}/{ledger['session_total']} EUR/USD wins**, **+6.336R**), "
-            f"**{ledger['all_time_total']}** historical trade experiments (**{ledger['all_time_win_rate_pct']}%** win rate), and **16 certified strategy blueprints**."
-        )
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.94,
-            "sources": [
-                {
-                    "title": "Chronicle Shared Memory Store",
-                    "url_or_identifier": "chronicle-cas-store-v2",
-                    "source_tier": "Tier A",
-                    "excerpt": summary,
-                }
-            ],
-        }
-        return ("chronicle", "memory.retrieve", out, (time.time() - t0) * 1000.0 + 4.2)
+    if not isinstance(feeds, dict):
+        feeds = {}
 
     if domain in ("trading", "prediction"):
-        last_t = ledger["session_trades"][-1] if ledger["session_trades"] else {
-            "symbol": "EURUSD", "direction": "SHORT", "entry": 1.09963,
-            "sl": 1.10035, "tp": 1.09626, "reward_risk": 4.68, "realized_r": 3.686,
-        }
-        mt5_info = (ledger.get("brokers") or {}).get("mt5") or {}
-        ct_info = (ledger.get("brokers") or {}).get("ctrader") or {}
-        mt5_w = int(mt5_info.get("wins") or ledger["session_wins"])
-        mt5_t = int(mt5_info.get("total_trades") or ledger["session_total"])
-        mt5_wr = float(mt5_info.get("win_rate_pct") or 100.0)
-        ct_w = int(ct_info.get("wins") or 0)
-        ct_t = int(ct_info.get("total_trades") or 0)
-        ct_wr = float(ct_info.get("win_rate_pct") or 0.0)
-        ct_pnl = float(ct_info.get("net_pnl_usd") or 0.0)
-        ct_pnl_str = f"+${abs(ct_pnl):,.2f}" if ct_pnl >= 0 else f"-${abs(ct_pnl):,.2f}"
-
-        trades_list = "; ".join(
-            f"**#{i+1} Sold {t.get('symbol_human') or t['symbol']}** at `{t['entry']}` "
-            f"(Stop-Loss `{t['sl']}`, Profit Target `{t['tp']}` — made **+${float(t.get('pnl_usd') or 966.47):,.2f}**)"
-            for i, t in enumerate(ledger["session_trades"][:3])
-        )
-        if any(
-            w in q_low
-            for w in (
-                "money", "made", "make", "balance", "profit", "losses", "loss",
-                "pnl", "p&l", "equity", "rich", "earned", "earn", "how much did we",
-                "how did we do", "mt5", "ctrader",
+        from Nexus.api.interactive_actions import get_oracle_dashboard_data
+        dashboard = get_oracle_dashboard_data("all")
+        broker_rows = dashboard.get("brokers") or {}
+        lines = ["Oracle broker evidence (authenticated snapshots):"]
+        for key in ("mt5", "ctrader"):
+            row = broker_rows.get(key) or {}
+            state = "current demo snapshot" if row.get("connected") else "unavailable or stale"
+            balance = row.get("balance")
+            currency = row.get("currency") or ""
+            count = row.get("open_position_count")
+            history_state = row.get("history_status") or "unavailable_or_stale"
+            lines.append(
+                f"- {row.get('name') or key.upper()}: {state}; "
+                f"balance {balance if balance is not None else 'Unavailable'} {currency}; "
+                f"open positions {count if count is not None else 'Unavailable'}; history {history_state}."
             )
-        ):
-            summary = (
-                f"Yes — on **MetaTrader 5 (MT5)** we made **+${ledger['net_pnl_usd']:,.2f}** in net profit "
-                f"(with **$0.00 in losses** in our latest trading session), bringing our MT5 account balance from **$100,000.00** to **${ledger['equity_usd']:,.2f}**.\n"
-                f"- **MetaTrader 5 (MT5) Account**: **{mt5_w} wins out of {mt5_t} trades ({mt5_wr:.1f}% Win Rate)** — {trades_list}.\n"
-                f"- **cTrader Account**: **{ct_w} wins out of {ct_t} trades ({ct_wr:.1f}% Win Rate)**, net result **{ct_pnl_str}** (Balance: **${float(ct_info.get('equity_usd') or 100000.0):,.2f}**).\n"
-                f"- **Combined Record (MT5 + cTrader)**: **{ledger['all_time_wins']} wins out of {ledger['all_time_total']} total trades ({ledger['all_time_win_rate_pct']}% Win Rate)**, with **0 open trades** currently at risk."
-            )
-        elif any(w in q_low for w in ("win rate", "winning rate", "percentage", "accurate", "success rate")):
-            summary = (
-                f"Here are our real win rates across both **MetaTrader 5 (MT5)** and **cTrader**:\n"
-                f"- **MetaTrader 5 (MT5) Win Rate**: **{mt5_wr:.1f}%** (**{mt5_w} wins out of {mt5_t} trades**, making **+${ledger['net_pnl_usd']:,.2f}** profit, balance **${ledger['equity_usd']:,.2f}**)\n"
-                f"- **cTrader Account Win Rate**: **{ct_wr:.1f}%** (**{ct_w} wins out of {ct_t} trades**, net result **{ct_pnl_str}**)\n"
-                f"- **Combined All-Time Win Rate (MT5 + cTrader)**: **{ledger['all_time_win_rate_pct']}%** (**{ledger['all_time_wins']} wins out of {ledger['all_time_total']} total trades**)."
-            )
-        else:
-            summary = (
-                f"Right now we have **0 open trades at risk** and **4 currency pairs on our watchlist** waiting for a clean entry.\n"
-                f"- **MetaTrader 5 (MT5) Completed Trades ({mt5_w}/{mt5_t} Wins — {mt5_wr:.1f}%)**: {trades_list}.\n"
-                f"- **cTrader Account Completed Trades ({ct_w}/{ct_t} Wins — {ct_wr:.1f}%)**: Net result **{ct_pnl_str}**.\n"
-                f"- **MT5 Account Balance**: **${ledger['equity_usd']:,.2f}** (**+${ledger['net_pnl_usd']:,.2f}** profit) | **Combined Win Rate**: **{ledger['all_time_win_rate_pct']}% ({ledger['all_time_wins']}/{ledger['all_time_total']} Won)**."
-            )
+        lines.append(f"- Today realized P/L: {dashboard.get('pnl_today', 'Unavailable')}.")
+        lines.append(f"- Verified closed-history win rate: {dashboard.get('win_rate', 'Unavailable')}.")
+        lines.append(f"- Position coverage: {dashboard.get('positions_status', 'unavailable_or_stale')}.")
+        summary = "\n".join(lines)
+        has_current_evidence = any(bool((broker_rows.get(key) or {}).get("connected")) for key in ("mt5", "ctrader"))
         out = {
-            "status": "complete",
+            "status": "complete" if has_current_evidence else "blocked",
             "summary": summary,
             "human_section": summary,
-            "confidence": 0.88,
-            "prediction": {
-                "symbol": last_t["symbol"],
-                "direction": last_t["direction"],
-                "confidence": 0.88,
-            },
-            "sources": [
-                {
-                    "title": "Oracle C3/MT5 Demo Trade Ledger (mt5_demo_trades.csv)",
-                    "url_or_identifier": "universe://oracle/logs/mt5_demo_trades.csv",
-                    "source_tier": "Tier A",
-                    "excerpt": summary,
-                },
-                {
-                    "title": "Oracle Historical Experiment Log (trade_experiment_log.jsonl)",
-                    "url_or_identifier": "universe://oracle/memory/trade_experiment_log.jsonl",
-                    "source_tier": "Tier A",
-                    "excerpt": f"All-time executed: {ledger['all_time_wins']}/{ledger['all_time_total']} wins ({ledger['all_time_win_rate_pct']}%).",
-                },
-            ],
+            "confidence": None,
+            "sources": [{
+                "title": "Authenticated Oracle broker dashboard snapshots",
+                "url_or_identifier": "universe://oracle/memory/*_dashboard_snapshot.json",
+                "source_tier": "Tier A",
+                "excerpt": summary,
+            }],
+            "account_data_status": dashboard.get("positions_status"),
+            "history_status": dashboard.get("history_status"),
+            "prediction": None,
         }
-        return ("oracle", "trade.signal", out, (time.time() - t0) * 1000.0 + 11.4)
+        return ("oracle", "trade.account_evidence", out, (time.time() - t0) * 1000.0)
+
+    if domain == "memory":
+        memories = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "store" / "memories.json", [])
+        episodes = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "store" / "episodes.json", [])
+        memories = memories if isinstance(memories, list) else []
+        episodes = episodes if isinstance(episodes, list) else []
+        summary = f"Chronicle currently contains {len(memories)} memory records and {len(episodes)} recorded episodes. This count does not imply every record is independently verified."
+        out = {"status": "complete", "summary": summary, "human_section": summary,
+               "confidence": None, "sources": [{"title": "Chronicle local memory store",
+               "url_or_identifier": "universe://Chronicle/memory/store", "source_tier": "Tier A", "excerpt": summary}]}
+        return ("chronicle", "memory.retrieve", out, (time.time() - t0) * 1000.0)
 
     if domain == "training":
-        summary = (
-            f"Reviewed our last trading session (**{ledger['session_wins']}/{ledger['session_total']} EUR/USD wins**, **+6.336R** profit, "
-            f"and zero trades where risk exceeded reward). We also have **16 trained trading strategies** across 7 timeframes "
-            f"(from 5-minute charts up to weekly charts) covering Scalping, Day Trading, Swing Trading, and Range Trading — all tested on "
-            f"unseen market data so every strategy aims for a profit target at least **1.8× larger** than its stop-loss."
-        )
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.90,
-            "sources": [
-                {
-                    "title": "Forge V2 7-Timeframe Lockbox Certification Catalog",
-                    "url_or_identifier": "universe://forge/v2/lockbox_catalog",
-                    "source_tier": "Tier A",
-                    "excerpt": summary,
-                },
-                {
-                    "title": "Forge Session Audit (mt5_demo_sessions.csv)",
-                    "url_or_identifier": "universe://oracle/logs/mt5_demo_sessions.csv",
-                    "source_tier": "Tier A",
-                    "excerpt": f"Session equity ${ledger['equity_usd']:,.2f} (+${ledger['net_pnl_usd']:,.2f}).",
-                },
-            ],
-        }
-        return ("forge", "training.run", out, (time.time() - t0) * 1000.0 + 9.8)
+        kv = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "store" / "kv_state.json", {})
+        kv = kv if isinstance(kv, dict) else {}
+        candidates = [value.get("value") for key, value in kv.items()
+                      if key.startswith("forge.core.candidate.") and isinstance(value, dict)
+                      and isinstance(value.get("value"), dict)]
+        states: Dict[str, int] = {}
+        for candidate in candidates:
+            state = str(candidate.get("lifecycle_state") or "UNKNOWN")
+            states[state] = states.get(state, 0) + 1
+        state_summary = ", ".join(f"{name}: {count}" for name, count in sorted(states.items())) or "no candidate states recorded"
+        summary = f"Forge candidate records found in Chronicle: {len(candidates)}. Recorded lifecycle states: {state_summary}. This is an artifact count, not evidence of live profitability."
+        out = {"status": "complete" if candidates else "unavailable", "summary": summary,
+               "human_section": summary, "confidence": None,
+               "candidate_count": len(candidates), "candidate_states": states,
+               "sources": [{"title": "Forge candidate records in Chronicle",
+               "url_or_identifier": "universe://Chronicle/memory/store/kv_state.json", "source_tier": "Tier A", "excerpt": summary}]}
+        return ("forge", "training.status", out, (time.time() - t0) * 1000.0)
 
-    if domain == "news":
-        news_list = ((feeds.get("sentinel") or {}).get("world_news") or [])
-        top_n = news_list[0] if news_list else {
-            "outlet": "CNBC Finance",
-            "category": "Global Markets",
-            "headline": "Central banks maintain data-dependent rate stance amid resilient global services activity",
-            "sentiment": "NEUTRAL",
-            "url": "https://www.cnbc.com/world-markets",
-        }
-        bear_c = sum(1 for n in news_list if n.get("sentiment") == "BEARISH")
-        bull_c = sum(1 for n in news_list if n.get("sentiment") == "BULLISH")
-        top_headlines = "; ".join(
-            f"**{n.get('outlet', 'News')}**: *\"{n.get('headline', '')}\"*"
-            for n in news_list[:3]
-        ) or f"**{top_n.get('outlet', 'Global Wire')}**: *\"{top_n.get('headline', '')}\"*"
-        summary = (
-            f"Tracking **{len(news_list) or 18} live world and financial news stories** today "
-            f"({bull_c} positive updates, {bear_c} cautionary alerts). Latest headlines: {top_headlines}."
-        )
-        sources = []
-        for idx, item in enumerate(news_list[:3]):
-            sources.append({
-                "title": f"[{item.get('outlet', 'News Wire')}] {item.get('headline', '')}",
-                "url_or_identifier": item.get("url") or f"https://sentinel.wire/{idx}",
-                "source_tier": "Tier B",
-                "excerpt": item.get("summary") or item.get("headline") or "",
-            })
-        if not sources:
-            sources.append({
-                "title": f"[{top_n.get('outlet')}] {top_n.get('headline')}",
-                "url_or_identifier": top_n.get("url") or "https://www.cnbc.com/world-markets",
-                "source_tier": "Tier B",
-                "excerpt": summary,
-            })
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.84,
-            "sentiment": {
-                "sentiment_label": "BEARISH" if bear_c > bull_c else "BULLISH",
-                "article_count": len(news_list) or 18,
-                "confidence": 0.84,
-            },
-            "sources": sources,
-        }
-        return ("sentinel", "news.report", out, (time.time() - t0) * 1000.0 + 14.1)
-
-    if domain == "social":
-        pulse_data = feeds.get("pulse") or {}
-        posts = pulse_data.get("social_posts") or []
-        top_p = posts[0] if posts else {
-            "author": "@the_index",
-            "platform": "Mastodon #finance",
-            "headline": "Institutional FX flows rotating toward high-carry and structural H1/H4 liquidity zones",
-            "sentiment": "BULLISH",
-        }
-        overall_sent = pulse_data.get("overall_sentiment") or "BULLISH"
-        top_posts_txt = "; ".join(
-            f"**{p.get('author')}** on {p.get('platform')}: *\"{p.get('headline', '')[:120]}\"*"
-            for p in posts[:2]
-        ) or f"**{top_p.get('author')}** on {top_p.get('platform')}: *\"{top_p.get('headline')}\"*"
-        summary = (
-            f"Monitoring **{len(posts) or 16} live social media posts** across Mastodon, Bluesky, and HackerNews "
-            f"(overall crowd mood is **{overall_sent.title()}**). Recent posts: {top_posts_txt}."
-        )
-        sources = []
-        for idx, p in enumerate(posts[:3]):
-            sources.append({
-                "title": f"{p.get('author')} on {p.get('platform')}: {p.get('headline', '')[:90]}",
-                "url_or_identifier": p.get("url") or f"https://pulse.social/{p.get('platform', 'mastodon')}/{idx}",
-                "source_tier": "Tier B",
-                "excerpt": p.get("headline") or "",
-            })
-        if not sources:
-            sources.append({
-                "title": f"{top_p.get('author')} on {top_p.get('platform')}",
-                "url_or_identifier": "https://mastodon.social/tags/finance",
-                "source_tier": "Tier B",
-                "excerpt": summary,
-            })
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.79,
-            "social_sentiment": {
-                "sentiment_label": overall_sent,
-                "post_count": len(posts) or 16,
-                "confidence": 0.79,
-            },
-            "sources": sources,
-        }
-        return ("pulse", "social.sentiment", out, (time.time() - t0) * 1000.0 + 12.6)
+    if domain in ("news", "social"):
+        now = time.time()
+        feed_key = "sentinel" if domain == "news" else "pulse"
+        feed_block = feeds.get(feed_key) if isinstance(feeds.get(feed_key), dict) else {}
+        try:
+            updated_dt = datetime.fromisoformat(str(feed_block.get("updated_at") or "").replace("Z", "+00:00"))
+            if updated_dt.tzinfo is None:
+                updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+            age_sec = max(0.0, now - updated_dt.timestamp())
+        except (TypeError, ValueError, OverflowError):
+            age_sec = None
+        fresh = age_sec is not None and age_sec <= 15 * 60
+        if domain == "news":
+            items = ((feeds.get("sentinel") or {}).get("world_news") or [])
+            owner, task = "sentinel", "news.report"
+            source_name = "Sentinel persisted news feed"
+        else:
+            items = ((feeds.get("pulse") or {}).get("social_posts") or [])
+            owner, task = "pulse", "social.sentiment"
+            source_name = "Pulse persisted social feed"
+        items = [item for item in items if isinstance(item, dict)]
+        if not items or age_sec is None:
+            summary = f"{source_name} is unavailable or has no verifiable collection timestamp. No current headlines or posts are being inferred."
+            state = "unavailable"
+        else:
+            age_label = f"{age_sec / 60:.0f} minutes old" if age_sec < 3600 else f"{age_sec / 3600:.1f} hours old"
+            label = "news stories" if domain == "news" else "social posts"
+            state = "complete" if fresh else "stale"
+            sample = "; ".join(str(item.get("headline") or item.get("title") or "")[:180] for item in items[:3])
+            summary = f"{len(items)} {label} are present in the persisted feed, collected {age_label}. Feed status: {state}. Latest records: {sample or 'No readable text.'}"
+        out = {"status": state, "summary": summary, "human_section": summary,
+               "confidence": None, "item_count": len(items),
+               "feed_age_seconds": age_sec,
+               "sources": [{"title": source_name, "url_or_identifier": "universe://Chronicle/memory/research/ecosystem_live_feeds.json",
+               "source_tier": "Tier B", "excerpt": summary}] if items else []}
+        return (owner, task, out, (time.time() - t0) * 1000.0)
 
     if domain == "governance":
         integrity = inspect_scout_and_ledger_integrity()
         summary = (
-            f"Yes — your account is safe and all **Aegis** protection rules are active:\n"
-            f"- **Bad Trades Blocked**: Aegis automatically blocked **{ledger['risk_vetoed_count']}** low-confidence or inverted-risk trade setups before they could touch the account (**0 safety breaches**).\n"
-            f"- **Reward-to-Risk Protection**: Every trade is required to have a target profit at least **1.8× larger** than its stop-loss distance from entry (our last 3 EUR/USD trades had a **4.68×** reward-to-risk ratio).\n"
-            f"- **Practice Log Hygiene**: We quarantined an invalid `ASX200` test outlier (`+67.764R`) from our practice log; currently **{integrity['settled_shadow_replays']}** valid practice replays are settled and **{integrity['v2_trades_closed']}** live V2 trades have closed."
+            "Aegis and Scout integrity diagnostics are available, but this read does not establish that the trading account is safe or that every protection rule was applied to each order. "
+            f"Recorded ledger synchronization: {integrity.get('synced', 'unavailable')}; "
+            f"settled shadow replays: {integrity.get('settled_shadow_replays', 'unavailable')}; "
+            f"closed V2 trades: {integrity.get('v2_trades_closed', 'unavailable')}."
         )
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.96,
-            "sources": [
-                {
-                    "title": "Aegis Constitutional Risk Policy v2 & Decision Ledger Audit",
-                    "url_or_identifier": "universe://aegis/risk_policy.v2",
-                    "source_tier": "Tier A",
-                    "excerpt": summary,
-                }
-            ],
-        }
-        return ("aegis", "audit.action", out, (time.time() - t0) * 1000.0 + 6.5)
+        out = {"status": "complete", "summary": summary, "human_section": summary,
+               "confidence": None, "sources": [{"title": "Scout and decision-ledger integrity diagnostics",
+               "url_or_identifier": "universe://aegis/integrity", "source_tier": "Tier A", "excerpt": summary}]}
+        return ("aegis", "audit.status", out, (time.time() - t0) * 1000.0)
 
     if domain == "creation":
-        summary = (
-            "Maintaining 16 evolved trading strategy blueprints across Scalping, Day Trading, Swing Trading, and Range Trading, "
-            "each tested across 1,000 simulated market scenarios so we never risk more than we stand to win."
-        )
-        out = {
-            "status": "complete",
-            "summary": summary,
-            "human_section": summary,
-            "confidence": 0.86,
-            "sources": [
-                {
-                    "title": "Genesis V2 Strategy Genome Catalog",
-                    "url_or_identifier": "universe://genesis/v2_genome_catalog",
-                    "source_tier": "Tier A",
-                    "excerpt": summary,
-                }
-            ],
-        }
-        return ("genesis", "agent.create", out, (time.time() - t0) * 1000.0 + 8.3)
+        kv = _read_json_safe(ROOT_DIR / "Chronicle" / "memory" / "store" / "kv_state.json", {})
+        kv = kv if isinstance(kv, dict) else {}
+        candidates = [value.get("value") for key, value in kv.items()
+                      if key.startswith("forge.core.candidate.") and isinstance(value, dict)
+                      and isinstance(value.get("value"), dict)]
+        summary = f"Chronicle contains {len(candidates)} Forge strategy candidate records. Candidate storage alone does not establish that any candidate passed an independent evaluation or was promoted."
+        out = {"status": "complete" if candidates else "unavailable", "summary": summary,
+               "human_section": summary, "confidence": None,
+               "candidate_count": len(candidates),
+               "sources": [{"title": "Forge candidate records in Chronicle", "url_or_identifier": "universe://Chronicle/memory/store/kv_state.json", "source_tier": "Tier A", "excerpt": summary}] if candidates else []}
+        return ("genesis", "agent.create", out, (time.time() - t0) * 1000.0)
 
     # Default / research -> Atlas V2
     # Run Atlas's live human research engine on general human / factual / formula questions,
@@ -1034,15 +547,8 @@ def _build_specialist_domain_output(domain: str, query: str) -> Tuple[str, str, 
                     "summary": first_line[:260],
                     "human_section": direct_ans,
                     "chronicle_status": dossier.get("chronicle_status", "live_research"),
-                    "confidence": float(dossier.get("confidence") or 0.92),
-                    "sources": mapped_srcs or [
-                        {
-                            "title": "Atlas V2 Multi-Source Verification Engine",
-                            "url_or_identifier": "universe://atlas/v2_verification_engine",
-                            "source_tier": "Tier A",
-                            "excerpt": first_line[:240],
-                        }
-                    ],
+                    "confidence": dossier.get("confidence"),
+                    "sources": mapped_srcs,
                 }
                 return ("atlas", "research.investigate", out, (time.time() - t0) * 1000.0)
         except Exception:
@@ -1050,23 +556,23 @@ def _build_specialist_domain_output(domain: str, query: str) -> Tuple[str, str, 
 
     catalog = _read_json_safe(ATLAS_CATALOG_PATH, {})
     desks = catalog.get("desks") or {}
+    desk_count = len(desks) if isinstance(desks, dict) else 0
     summary = (
-        f"All **{len(desks) or 5} research desks** are certified on our unseen test dataset (**100% accuracy** on test cases, "
-        f"up +29% over V1) and connected to Wikipedia, arXiv, Crossref, PubMed, and our shared Chronicle memory."
+        f"Atlas catalog entries recorded: {desk_count}. No validated benchmark result is available in this response."
     )
     out = {
-        "status": "complete",
+        "status": "available" if desk_count else "unavailable",
         "summary": summary,
         "human_section": summary,
-        "confidence": 0.92,
-        "sources": [
+        "confidence": None,
+        "sources": ([
             {
-                "title": "Atlas V2 5-Desk Untouched 40% Lockbox Catalog",
+                "title": "Atlas research desk catalog",
                 "url_or_identifier": "universe://chronicle/atlas_desk_catalog/latest.json",
                 "source_tier": "Tier A",
                 "excerpt": summary,
             }
-        ],
+        ] if desk_count else []),
     }
     return ("atlas", "research.investigate", out, (time.time() - t0) * 1000.0 + 10.2)
 
@@ -1201,7 +707,7 @@ def _format_human_friendly_synthesis(
     strictly presenting ONLY the requested specialist(s) in primary-agent-first order.
     """
     if casual_intent is not None:
-        return _build_casual_nexus_reply(casual_intent, ledger)
+        return _build_casual_nexus_reply(casual_intent)
 
     # Case 1: Normal human / factual / science / formula / encyclopedic question (e.g. "What is a vegetable")
     if not is_ecosystem_or_market and participating_domains == ["research"] and "atlas" in raw_outputs_by_agent:
@@ -1315,7 +821,9 @@ def coordinate_query(
     t0 = time.time()
     clean_q = (query or "Ecosystem coordination status and collective synthesis").strip()
     q_low = clean_q.lower()
-    ledger = _load_oracle_ledger_snapshot()
+    # Specialist answers obtain current Oracle facts from broker snapshots;
+    # never preload legacy trade ledgers for casual or general replies.
+    ledger: Dict[str, Any] = {}
 
     casual_intent = _is_casual_nexus_message(clean_q)
     explicit_domains = _detect_explicit_domains(clean_q)
@@ -1635,22 +1143,7 @@ def coordinate_query(
     return trace_record
 
 
-def ensure_seed_traces_exist() -> None:
-    """Seed realistic multi-agent DAG traces if the trace log is empty so the workspace is populated immediately."""
-    existing = _read_jsonl_safe(TRACE_LOG_PATH, limit=5)
-    if len(existing) >= 3:
-        return
-    seed_queries = [
-        "Coordinate EURUSD trading setup across Sentinel news, Pulse social sentiment, Oracle execution ledger, and Forge 7-timeframe lockbox",
-        "Audit Oracle V2 Scout shadow replay state, ASX200 price-scale invalidation, and Aegis risk_policy.v2 directional Long/Short R:R compliance",
-        "Compare Atlas V2 5-desk research lockbox calibration with Forge V2 Mistake Clinic retraining results",
-    ]
-    for sq in seed_queries:
-        coordinate_query(sq, user_id="system_bootstrap", target_agent="nexus")
-
-
 def get_recent_dag_traces(limit: int = 12) -> List[Dict[str, Any]]:
-    ensure_seed_traces_exist()
     rows = _read_jsonl_safe(TRACE_LOG_PATH, limit=limit)
     rows.reverse()
     return rows
@@ -1662,7 +1155,6 @@ def get_collective_memory_matrix(limit: int = 12) -> Dict[str, Any]:
       - Tier 2: Promoted, provenance-verified reusable semantic knowledge shared across agents.
       - Tier 1: Auditable episodic DAG routing traces (kept separate so noisy chat turns don't pollute shared memory).
     """
-    ensure_seed_traces_exist()
     tier2_rows = _read_jsonl_safe(TIER2_KNOWLEDGE_PATH, limit=limit)
     tier2_rows.reverse()
     tier1_traces = _read_jsonl_safe(TRACE_LOG_PATH, limit=limit)
@@ -1682,9 +1174,9 @@ def get_collective_memory_matrix(limit: int = 12) -> Dict[str, Any]:
                 "timestamp_iso": t.get("timestamp_iso"),
                 "query": t.get("query"),
                 "consulted_agents": t.get("consulted_agents"),
-                "quality_score": (t.get("quality_signal") or {}).get("quality_score", 0.0),
-                "unique_provenance_sources_count": (t.get("provenance_consensus") or {}).get("unique_provenance_sources_count", 0),
-                "aegis_gate_status": (t.get("aegis_policy_gate") or {}).get("status", "APPROVED"),
+                "quality_score": (t.get("quality_signal") or {}).get("quality_score"),
+                "unique_provenance_sources_count": (t.get("provenance_consensus") or {}).get("unique_provenance_sources_count"),
+                "aegis_gate_status": (t.get("aegis_policy_gate") or {}).get("status", "Unavailable"),
                 "promoted_to_tier2": (t.get("chronicle_writeback") or {}).get("tier2_promoted_to_reusable_knowledge", False),
                 "writeback_reason": (t.get("chronicle_writeback") or {}).get("reason", ""),
                 "total_latency_ms": t.get("total_latency_ms", 0.0),
@@ -1699,7 +1191,6 @@ def get_live_nexus_status() -> Dict[str, Any]:
     """
     Return real runtime telemetry for `/api/nexus/status` (replacing hardcoded sample metrics).
     """
-    ensure_seed_traces_exist()
     traces = get_recent_dag_traces(limit=15)
     matrix = get_collective_memory_matrix(limit=15)
     benchmark = _read_json_safe(BENCHMARK_PATH, {})
@@ -1707,36 +1198,41 @@ def get_live_nexus_status() -> Dict[str, Any]:
     graph_stats = graph.stats()
     ledger_integrity = inspect_scout_and_ledger_integrity()
 
-    latencies = [float(t.get("total_latency_ms") or 20.0) for t in traces]
-    qualities = [float((t.get("quality_signal") or {}).get("quality_score") or 0.85) for t in traces]
-    mean_lat = round(sum(latencies) / max(1, len(latencies)), 1)
-    mean_qual = round(sum(qualities) / max(1, len(qualities)), 3)
+    latencies = [float(t["total_latency_ms"]) for t in traces if isinstance(t.get("total_latency_ms"), (int, float)) and math.isfinite(float(t["total_latency_ms"]))]
+    qualities = [float((t.get("quality_signal") or {})["quality_score"]) for t in traces
+                 if isinstance((t.get("quality_signal") or {}).get("quality_score"), (int, float))
+                 and math.isfinite(float((t.get("quality_signal") or {})["quality_score"]))]
+    mean_lat = round(sum(latencies) / len(latencies), 1) if latencies else None
+    mean_qual = round(sum(qualities) / len(qualities), 3) if qualities else None
+    benchmark_pass = benchmark.get("overall_pass_rate_pct") if isinstance(benchmark, dict) else None
+    cases_passed = benchmark.get("overall_cases_passed") if isinstance(benchmark, dict) else None
+    cases_total = benchmark.get("overall_cases_total") if isinstance(benchmark, dict) else None
 
     return {
         "agent": "nexus",
-        "status": "online",
+        "status": "available",
         "institutional_standard": "nexus.coordination.v2",
         "metrics": {
-            "active_specialists": "9 / 9 Online",
-            "mean_dag_latency_ms": f"{mean_lat}ms",
+            "active_specialists": "Unavailable · live health not queried",
+            "mean_dag_latency_ms": f"{mean_lat}ms" if mean_lat is not None else "Unavailable",
             "mean_coordination_quality": mean_qual,
-            "benchmark_pass_rate_pct": benchmark.get("overall_pass_rate_pct", 100.0),
+            "benchmark_pass_rate_pct": benchmark_pass,
             "tier2_promoted_knowledge_count": matrix["tier2_promoted_count"],
             "tier1_episodic_traces_count": matrix["tier1_episodic_trace_count"],
-            "aegis_policy_version": "risk_policy.v2",
+            "aegis_policy_version": benchmark.get("aegis_policy_version") if isinstance(benchmark, dict) else None,
             "scout_ledger_synced": ledger_integrity["synced"],
             "collaboration": ["chronicle", "atlas", "oracle", "forge", "sentinel", "pulse", "aegis", "genesis"],
         },
         "collaboration_graph": graph_stats,
         "benchmark_summary": {
-            "benchmark_id": benchmark.get("benchmark_id", "nexus_v2_benchmark"),
-            "overall_pass_rate_pct": benchmark.get("overall_pass_rate_pct", 100.0),
-            "overall_cases_passed": f"{benchmark.get('overall_cases_passed', 23)}/{benchmark.get('overall_cases_total', 23)}",
+            "benchmark_id": benchmark.get("benchmark_id") if isinstance(benchmark, dict) else None,
+            "overall_pass_rate_pct": benchmark_pass,
+            "overall_cases_passed": f"{cases_passed}/{cases_total}" if cases_passed is not None and cases_total is not None else "Unavailable",
             "dimensions": {
                 k: {
-                    "accuracy_pct": v.get("accuracy_pct", 100.0),
-                    "cases_passed": v.get("cases_passed", 0),
-                    "cases_total": v.get("cases_total", 0),
+                    "accuracy_pct": v.get("accuracy_pct"),
+                    "cases_passed": v.get("cases_passed"),
+                    "cases_total": v.get("cases_total"),
                 }
                 for k, v in (benchmark.get("dimensions") or {}).items()
             },
@@ -1907,7 +1403,7 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
     hypotheses.sort(key=lambda h: float(h.get("updated_at_unix") or h.get("created_at_unix") or 0), reverse=True)
 
     v2_candidates = [c for c in candidates if str(c.get("candidate_code") or "").startswith("V2_")]
-    ledger = _load_oracle_ledger_snapshot(broker=broker)
+    ledger = {} if aid == "oracle" else _load_oracle_ledger_snapshot(broker=broker)
     feeds = _read_json_safe(LIVE_FEEDS_PATH, {})
     if not isinstance(feeds, dict):
         feeds = {}
@@ -1917,883 +1413,298 @@ def build_rich_agent_dashboard_data(agent_id: str, broker: str = "all") -> Dict[
     active_broker_info = brokers_map.get(active_broker) or {}
     broker_display_name = active_broker_info.get("name") or "All Accounts (MT5 + cTrader)"
 
-    balance_val = float(ledger.get("equity_usd") or 104621.55)
-    pnl_val = float(ledger.get("net_pnl_usd") or 4621.55)
+    balance_val = ledger.get("equity_usd")
+    pnl_val = ledger.get("net_pnl_usd")
     active_trades = list(ledger.get("active_trades") or [])
     session_trades = list(ledger.get("session_trades") or [])
-    c3_wins = int(ledger.get("session_wins") or 3)
-    c3_total = int(ledger.get("session_total") or 3)
-    all_wr = float(ledger.get("all_time_win_rate_pct") or 100.0)
-    all_wins = int(ledger.get("all_time_wins") or 3)
-    all_total = int(ledger.get("all_time_total") or 3)
-    risk_vetoed = int(ledger.get("risk_vetoed_count") or 57)
+    c3_wins = ledger.get("session_wins")
+    c3_total = ledger.get("session_total")
+    all_wr = ledger.get("all_time_win_rate_pct")
+    all_wins = ledger.get("all_time_wins")
+    all_total = ledger.get("all_time_total")
+    risk_vetoed = ledger.get("risk_vetoed_count")
 
     if aid == "oracle":
-        from Nexus.api.interactive_actions import get_live_open_trades, get_oracle_chart_data
-        live_open_trades = get_live_open_trades(active_broker)
-        chart_preview = get_oracle_chart_data("EURUSD", "M15", active_broker)
+        from Nexus.api.interactive_actions import get_oracle_dashboard_data
+        dashboard = get_oracle_dashboard_data(broker)
+        active_broker = str(dashboard.get("active_broker") or broker or "all").lower()
+        brokers_map = dashboard.get("brokers") or {}
+        active_info = brokers_map.get(active_broker) or {}
+        live_open_trades = dashboard.get("live_open_trades") or []
+        closed_trades = dashboard.get("closed_trades") or []
+        history_complete = dashboard.get("history_status") == "complete"
 
-        live_open_feed_items: List[Dict[str, Any]] = []
-        for ot in live_open_trades:
-            b_badge = ot.get("broker_badge") or ("MetaTrader 5" if ot.get("broker") == "mt5" else "cTrader Live Demo")
-            sym_human = _format_pair_human(str(ot.get("symbol") or "EURUSD"))
-            f_pnl = float(ot.get("floating_pnl_usd") or 0.0)
-            f_pnl_str = f"+${abs(f_pnl):,.2f}" if f_pnl >= 0 else f"-${abs(f_pnl):,.2f}"
-            live_open_feed_items.append({
-                "trade_id": ot.get("trade_id"),
-                "is_open": True,
-                "broker": ot.get("broker"),
-                "symbol": ot.get("symbol"),
-                "title": (
-                    f"🟢 LIVE OPEN TRADE ({b_badge}): {ot.get('direction', 'BUY')} {sym_human} ({ot.get('volume', 0.2)} lots) "
-                    f"@ {ot.get('entry')} → Now {ot.get('current_price')} ({f_pnl_str} / {ot.get('floating_r', '+0.45R')})"
-                ),
-                "source": (
-                    f"Stop-Loss Protected at {ot.get('sl')} ({ot.get('sl_pips')} pips) · Profit Target at {ot.get('tp')} "
-                    f"({ot.get('tp_pips')} pips · {ot.get('rr_ratio', '1:2.5')} Reward-to-Risk)"
-                ),
-                "time": f"OPEN NOW · {f_pnl_str}",
+        recent_items: List[Dict[str, Any]] = []
+        for trade in live_open_trades:
+            snapshot_state = "Last-known position from a stale authenticated broker snapshot" if trade.get("snapshot_status") == "stale" else "Open in the latest fresh authenticated broker snapshot"
+            recent_items.append({
+                "title": f"{'LAST KNOWN' if trade.get('snapshot_status') == 'stale' else 'OPEN'} · {trade.get('broker_badge') or trade.get('broker')} · {trade.get('direction')} {trade.get('symbol')}",
+                "source": f"{snapshot_state} · ticket {trade.get('trade_id') or 'unavailable'} · entry {trade.get('entry') if trade.get('entry') is not None else 'unavailable'} · stop {trade.get('sl') if trade.get('sl') is not None else 'unavailable'} · target {trade.get('tp') if trade.get('tp') is not None else 'unavailable'}",
+                "time": f"Position snapshot at {trade.get('snapshot_updated_at_unix')}" if trade.get("snapshot_updated_at_unix") else "Snapshot time unavailable",
+            })
+        for trade in reversed(closed_trades[-50:]):
+            pnl = trade.get("net_pnl")
+            recent_items.append({
+                "title": f"{str(trade.get('broker') or '').upper()} · {trade.get('symbol') or 'Unknown'} · {trade.get('outcome') or 'Closed'} · net {pnl if pnl is not None else 'unavailable'} {trade.get('currency') or ''}",
+                "source": "Broker-reported closed-deal history",
+                "time": "Broker-reported close timestamp" if trade.get("closed_at_unix") else "Close time unavailable",
             })
 
-        executed_items: List[Dict[str, Any]] = []
-        for t in reversed(active_trades):
-            b_name = t.get("broker_label") or ("MetaTrader 5" if t.get("broker") == "mt5" else "cTrader")
-            won = bool(t.get("won", True))
-            pnl_u = float(t.get("pnl_usd") or 0.0)
-            r_mult = float(t.get("realized_r") or 1.325)
-            rr_target = float(t.get("reward_risk") or 2.2)
-            sym_human = t.get("symbol_human") or _format_pair_human(str(t.get("symbol") or "EURUSD"))
-            act_human = t.get("action_human") or "Sold (Short)"
-            status_icon = "✅ Won Trade" if won else "❌ Closed at Stop-Loss"
-            pnl_str = f"+${abs(pnl_u):,.2f}" if pnl_u >= 0 else f"-${abs(pnl_u):,.2f}"
-            r_str = f"+{r_mult:.2f}× Risk" if r_mult >= 0 else f"{r_mult:.2f}× Risk"
-            executed_items.append({
-                "title": (
-                    f"{status_icon} ({b_name}): {act_human} {sym_human} at {t.get('entry')} "
-                    f"→ {pnl_str} ({r_str})"
-                ),
-                "source": (
-                    f"Stop-Loss was protected at {t.get('sl')} · Profit Target was {t.get('tp')} "
-                    f"(Potential profit was {rr_target:.1f}× larger than the risk)"
-                ),
-                "time": f"{'MT5' if t.get('broker') == 'mt5' else 'cTrader'} · {'Won' if won else 'Loss'} {pnl_str}",
+        symbol_groups: Dict[str, Dict[str, Any]] = {}
+        if history_complete:
+            for trade in closed_trades:
+                try:
+                    pnl = float(trade.get("net_pnl"))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(pnl):
+                    continue
+                symbol = str(trade.get("symbol") or "Unknown")
+                group = symbol_groups.setdefault(symbol, {"wins": 0, "count": 0, "net": 0.0, "currency": trade.get("currency") or ""})
+                group["count"] += 1
+                group["wins"] += int(pnl > 0)
+                group["net"] += pnl
+
+        breakdown = []
+        for symbol, group in symbol_groups.items():
+            if not group["count"]:
+                continue
+            pct = 100.0 * group["wins"] / group["count"]
+            breakdown.append({
+                "title": f"{symbol} · {pct:.1f}% ({group['wins']}/{group['count']}) · net {group['net']:.2f} {group['currency']}",
+                "source": "Broker-reported closed-deal history",
+                "time": f"Sample: {group['count']} closed deals",
             })
 
-        armed_setups: List[Dict[str, Any]] = []
-        for c in v2_candidates[:4]:
-            pol = c.get("dynamic_trade_management_policy") or {}
-            tp_r = float(pol.get("learned_initial_major_tp_r") or 2.15)
-            sym_human = _format_pair_human(str(c.get("symbol") or "EURUSD"))
-            style_human = _format_style_human(str(c.get("trader_style") or "DAY_TRADER"), str(c.get("regime") or ""))
-            armed_setups.append({
-                "title": f"⏳ Watching for Entry: {sym_human} — {style_human}",
-                "source": (
-                    f"Safety Rule Active: Target profit is set {tp_r:.1f}× larger than the maximum stop-loss risk "
-                    f"· Waiting for a clean entry during the London/New York session"
-                ),
-                "time": "Ready on Watchlist",
-            })
-
-        # Show LIVE open trades FIRST, then completed trades, then watchlist setups
-        open_trades_feed = live_open_feed_items + executed_items + armed_setups
-
-        symbol_stats: Dict[str, Dict[str, Any]] = {}
-        for t in active_trades:
-            sym = str(t.get("symbol") or "EURUSD")
-            st = symbol_stats.setdefault(sym, {
-                "wins": 0,
-                "total": 0,
-                "pnl_usd": 0.0,
-                "brokers": set(),
-            })
-            st["total"] += 1
-            if t.get("won"):
-                st["wins"] += 1
-            st["pnl_usd"] += float(t.get("pnl_usd") or 0.0)
-            st["brokers"].add("MT5" if t.get("broker") == "mt5" else "cTrader")
-
-        pnl_prefix = "+" if pnl_val >= 0 else "-"
-        win_rate_feed: List[Dict[str, Any]] = [
-            {
-                "title": (
-                    f"📊 {broker_display_name} Summary: {all_wins} Wins out of {all_total} Completed Trades "
-                    f"({all_wr:.1f}% Win Rate) · Net Profit/Loss: {pnl_prefix}${abs(pnl_val):,.2f}"
-                ),
-                "source": (
-                    str(active_broker_info.get("plain_summary") or "")
-                ),
-                "time": f"{all_wr:.1f}% Win Rate",
-            }
-        ]
-        for sym, st in symbol_stats.items():
-            wr = (st["wins"] / max(1, st["total"])) * 100.0
-            sym_human = _format_pair_human(sym)
-            s_pnl = float(st["pnl_usd"])
-            s_pnl_str = f"+${abs(s_pnl):,.2f}" if s_pnl >= 0 else f"-${abs(s_pnl):,.2f}"
-            b_tags = " + ".join(sorted(list(st["brokers"])))
-            win_rate_feed.append({
-                "title": (
-                    f"{sym_human} — Won {int(st['wins'])} of {int(st['total'])} Trades ({wr:.1f}% Win Rate) · Net Result: {s_pnl_str}"
-                ),
-                "source": f"Traded on: {b_tags} · Every trade had a profit target larger than its stop-loss",
-                "time": f"{int(st['wins'])}/{int(st['total'])} Won ({wr:.0f}%)",
-            })
-
+        account_connected = bool(active_info.get("connected")) if active_broker != "all" else bool(active_info.get("connected"))
+        overview = (
+            f"Viewing {active_info.get('name') or active_broker.upper()}: authenticated demo account data is current."
+            if account_connected
+            else f"Viewing {active_info.get('name') or active_broker.upper()}: broker data is unavailable or stale; the dashboard is suppressing balances, positions, and performance claims that cannot be verified."
+        )
         metrics = {
-            "pnl_today": f"{pnl_prefix}${abs(pnl_val):,.2f}",
-            "win_rate": f"{all_wr:.1f}% ({all_wins}/{all_total} Won)",
-            "open_trades": f"{len(live_open_trades)} Open · {len(armed_setups)} Watching",
-            "signals_today": f"{all_total} Traded · {risk_vetoed} Skipped",
-            "portfolio_value": f"${balance_val:,.2f}",
-            "max_drawdown": "1.18% Max Dip (Safe)",
+            "pnl_today": dashboard.get("pnl_today", "Unavailable"),
+            "win_rate": dashboard.get("win_rate", "Unavailable"),
+            "open_trades": dashboard.get("open_trades", "Unavailable"),
+            "signals_today": dashboard.get("signals_today", "Unavailable"),
+            "portfolio_value": dashboard.get("portfolio_value", "Unavailable"),
+            "max_drawdown": dashboard.get("max_drawdown", "Unavailable"),
         }
         return {
+            **dashboard,
             "id": "oracle",
             "agent": "oracle",
             "name": "Oracle",
             "repository": "Oracle",
             "domain": "Markets & Trading (MetaTrader 5 & cTrader)",
-            "status": "online",
-            "running": True,
-            "active_broker": active_broker,
-            "brokers": brokers_map,
-            "live_open_trades": live_open_trades,
-            "chart_preview": chart_preview,
-            "overview": (
-                f"Viewing {broker_display_name}: {len(live_open_trades)} live open trade(s) running now, "
-                f"{all_wins}/{all_total} completed trades won ({all_wr:.1f}% win rate), "
-                f"{pnl_prefix}${abs(pnl_val):,.2f} net profit, and ${balance_val:,.2f} account balance."
-            ),
-            **metrics,
+            "running": None,
+            "overview": overview,
             "metrics": metrics,
-            "open_and_recent_trades": open_trades_feed,
-            "win_rate_breakdown": win_rate_feed,
+            "open_and_recent_trades": recent_items,
+            "win_rate_breakdown": breakdown if history_complete else [],
+            "positions_status": dashboard.get("positions_status", "unavailable_or_stale"),
         }
+
+    # Non-Oracle dashboards are built only from persisted records. Missing feed
+    # timestamps, evaluations, or service health remain unavailable; no sample
+    # metrics are presented as live data.
+    def feed_state(feed_key: str) -> tuple[dict, list, str]:
+        block = feeds.get(feed_key) if isinstance(feeds.get(feed_key), dict) else {}
+        rows = block.get("social_posts" if feed_key == "pulse" else "world_news") or []
+        if not isinstance(rows, list):
+            rows = []
+        try:
+            stamp = datetime.fromisoformat(str(block.get("updated_at") or "").replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age = max(0.0, time.time() - stamp.timestamp())
+            state = "current" if age <= 900 else "stale"
+        except (TypeError, ValueError, OverflowError):
+            state = "unavailable"
+        return block, [row for row in rows if isinstance(row, dict)], state
 
     if aid == "forge":
-        certified = [c for c in candidates if c.get("lifecycle_state") in ("CERTIFIED", "APPROVED_FOR_DEPLOYMENT", "DEPLOYED")]
-        deployed = [c for c in candidates if c.get("lifecycle_state") == "DEPLOYED"]
-        blocked = [c for c in candidates if c.get("lifecycle_state") == "BLOCKED"]
-        evaluated = [c for c in candidates if c.get("lifecycle_state") != "BLOCKED"]
-        pass_rate = round((len(certified) / max(1, len(evaluated))) * 100.0, 1)
-
-        recent_builds: List[Dict[str, Any]] = [
-            {
-                "title": (
-                    f"🏆 Last Trading Session Review (MetaTrader 5): Won {c3_wins} out of {c3_total} EUR/USD trades "
-                    f"(100% Win Rate) · Made +${pnl_val:,.2f} profit (Balance: ${balance_val:,.2f})"
-                ),
-                "source": "Every trade followed our safety rule: target profit was over 4.6× bigger than the stop-loss risk",
-                "time": "Latest Session",
-            },
-            {
-                "title": (
-                    f"🛡️ Why {risk_vetoed} Weak Signals Were Skipped: Forge and Aegis automatically skipped {risk_vetoed} "
-                    f"unclear setups where win confidence was below 50%, protecting your balance from unnecessary losses."
-                ),
-                "source": "Forge Mistake Clinic & Pre-Trade Filter",
-                "time": "Account Protected",
-            },
-        ]
-        for c in candidates[:8]:
-            lb_rep = (c.get("lockbox_holdout_report") or {}).get("candidate_metrics") or {}
-            sym_human = _format_pair_human(str(c.get("symbol") or "EURUSD"))
-            style_human = _format_style_human(str(c.get("trader_style") or "DAY_TRADER"), str(c.get("regime") or ""))
-            state = str(c.get("lifecycle_state") or "CERTIFIED")
-            if state == "BLOCKED":
-                title_txt = (
-                    f"🚫 Blocked Unsafe Strategy on {sym_human}: Rejected during training because the stop-loss risk "
-                    f"was larger than the profit target."
-                )
-                sub_txt = "Forge Safety Filter — Prevented this strategy from ever trading on your account"
-                badge_txt = "Blocked for Safety"
-            else:
-                trades_cnt = lb_rep.get("trades") or 20
-                net_ret = lb_rep.get("net_return_pct") or 11.8
-                title_txt = (
-                    f"✅ Trained & Verified Strategy for {sym_human}: {style_human} — "
-                    f"Earned +{net_ret}% across {trades_cnt} practice test trades"
-                )
-                sub_txt = "Passed 7-timeframe testing (5-minute to Weekly charts) · Ready for Oracle trading"
-                badge_txt = "Approved & Active" if state == "DEPLOYED" else "Verified in Lab"
-            recent_builds.append({
-                "title": title_txt,
-                "source": sub_txt,
-                "time": badge_txt,
+        states: Dict[str, int] = {}
+        for candidate in candidates:
+            state = str(candidate.get("lifecycle_state") or "unknown").upper()
+            states[state] = states.get(state, 0) + 1
+        evaluated = sum(count for state, count in states.items() if state not in {"BLOCKED", "UNKNOWN"})
+        promoted = sum(count for state, count in states.items() if state in {"CERTIFIED", "APPROVED_FOR_DEPLOYMENT", "DEPLOYED"})
+        recent = []
+        for candidate in candidates[:20]:
+            metrics = ((candidate.get("lockbox_holdout_report") or {}).get("candidate_metrics") or {})
+            trades = metrics.get("trades")
+            ret = metrics.get("net_return_pct")
+            details = []
+            if trades is not None:
+                details.append(f"{trades} recorded holdout trades")
+            if ret is not None:
+                details.append(f"net return {ret}%")
+            recent.append({
+                "title": f"{candidate.get('candidate_code') or candidate.get('candidate_id') or 'Candidate'} · {candidate.get('symbol') or 'symbol unavailable'} · {candidate.get('lifecycle_state') or 'state unavailable'}",
+                "source": "; ".join(details) if details else "Candidate artifact; no holdout metrics recorded.",
+                "time": str(candidate.get("updated_at_unix") or candidate.get("created_at_unix") or "Timestamp unavailable"),
             })
-
-        inc_experiments: List[Dict[str, Any]] = []
-        for h in hypotheses[:8]:
-            stmt = str(h.get("statement") or "Testing multi-timeframe trend confirmation before entry.")
-            ev_count = len(h.get("evidence_records") or [])
-            inc_experiments.append({
-                "title": f"🔬 Strategy Rule Confirmed: {stmt}",
-                "source": f"Tested by Forge across {ev_count or 4} historical market periods before live use",
-                "time": "Proven Rule",
-            })
-
+        experiments = [{
+            "title": str(h.get("statement") or h.get("hypothesis") or "Recorded hypothesis; no statement provided"),
+            "source": f"{len(h.get('evidence_records') or [])} linked evidence records",
+            "time": str(h.get("updated_at_unix") or h.get("created_at_unix") or "Timestamp unavailable"),
+        } for h in hypotheses[:20]]
         metrics = {
-            "builds_today": f"{len(candidates)} Strategies Tested",
-            "success_rate": f"{pass_rate}% Passed Testing",
-            "deployments": f"{len(deployed)} Active in Oracle",
-            "system_health": f"+${pnl_val:,.0f} Last Session",
-            "avg_build_time": "7 Chart Timeframes",
-            "uptime": "100% Safety Checked",
+            "builds_today": f"{len(candidates)} recorded candidates (all time)",
+            "success_rate": f"{(100 * promoted / evaluated):.1f}% in promoted lifecycle states" if evaluated else "Unavailable",
+            "deployments": str(states.get("DEPLOYED", 0)),
+            "system_health": "Unavailable · Oracle broker state is separate",
+            "avg_build_time": "Unavailable",
+            "uptime": "Unavailable",
         }
-        return {
-            "id": "forge",
-            "agent": "forge",
-            "name": "Forge",
-            "repository": "Forge",
-            "domain": "Strategy Trainer & Last-Session Reviewer",
-            "status": "online",
-            "running": True,
-            "overview": f"Forge has trained and tested {len(candidates)} trading strategies ({len(deployed)} active in Oracle, {len(blocked)} unsafe ones blocked).",
-            **metrics,
-            "metrics": metrics,
-            "recent_builds": recent_builds,
-            "incubator_experiments": inc_experiments,
-        }
+        return {"id": aid, "agent": aid, "name": "Forge", "repository": "Forge", "domain": "Strategy Training",
+                "status": "available" if candidates or hypotheses else "unavailable", "running": None,
+                "overview": f"Chronicle contains {len(candidates)} candidate artifacts and {len(hypotheses)} hypotheses. Artifact presence does not establish strategy quality or profitability.",
+                "metrics": metrics, **metrics, "recent_builds": recent, "incubator_experiments": experiments,
+                "candidate_states": states}
 
     if aid == "pulse":
-        from Nexus.api.interactive_actions import enrich_pulse_social_items
-        pulse_feed = feeds.get("pulse") if isinstance(feeds.get("pulse"), dict) else {}
-        raw_posts = list(pulse_feed.get("social_posts") or feeds.get("pulse_social") or [])
-        enriched_posts = enrich_pulse_social_items([
-            {
-                "platform": p.get("platform", "Public Social"),
-                "handle": p.get("handle") or p.get("author") or "@community",
-                "topic": p.get("topic") or p.get("category") or "Trending Discussion",
-                "post": p.get("post") or p.get("headline") or p.get("title") or "",
-                "sentiment": p.get("sentiment") or "NEUTRAL",
-                "engagement": p.get("engagement") or f"{p.get('upvotes', 24)} likes · {p.get('comments', 8)} replies",
-                "time": p.get("time") or "Today",
-                "url": p.get("url") or "",
-                "avatar_url": p.get("avatar_url") or "",
-                "image_url": p.get("image_url") or "",
-            }
-            for p in raw_posts[:16]
-        ])
-        sent_score = float(pulse_feed.get("sentiment_score") or 0.62)
-        influencers_count = int(pulse_feed.get("influencers_tracked") or (len(enriched_posts) or 15))
-        overall_sent = str(pulse_feed.get("overall_sentiment") or "BULLISH")
-        mood_human = "Upbeat & Engaged" if overall_sent.upper() == "BULLISH" else ("Thoughtful & Debating" if overall_sent.upper() == "BEARISH" else "Balanced Discussion")
-
-        social_posts_feed = []
-        for ep in enriched_posts[:14]:
-            social_posts_feed.append({
-                **ep,
-                "title": f"💬 {ep['handle']} on {ep['platform']}: \"{ep['post']}\"",
-                "source": (
-                    f"{ep['platform']} · Topic: {ep['topic']} · {ep['engagement']} · Click to read full thread"
-                ),
-            })
-
-        influencer_feed = [
-            {
-                **ep,
-                "title": (
-                    f"👤 {ep['handle']} ({ep['platform']}) — {ep['topic']} · {ep['engagement']}"
-                ),
-                "source": f"Public conversation on {ep['platform']} · Optional market impact available inside",
-            }
-            for ep in enriched_posts[:10]
-        ]
-
-        metrics = {
-            "overall_sentiment": f"{mood_human}",
-            "posts_analyzed": f"{len(enriched_posts) or 16} Live Posts",
-            "trending_topics": "Tech · World · Culture · Economy",
-            "sentiment_score": f"{int(round(sent_score * 100))}% Positive Vibe",
-            "influencers_tracked": f"{influencers_count} Creators & Voices",
-            "uptime": "Live Social Stream",
-            "sentiment": f"{mood_human}",
-            "trending": "Tech · World · Culture",
-            "posts_hr": f"{(len(enriched_posts) or 15) * 14}/hr",
-            "platforms": "Mastodon · Bluesky · HN",
-            "discussions": f"{len(enriched_posts) or 16} Active Threads",
-        }
-        normalized_social_cards = [
-            {
-                **ep,
-                "author": ep.get("handle") or ep.get("author") or "@community",
-                "topic_label": ep.get("topic") or "Community Discussion",
-                "title": ep.get("post") or ep.get("headline") or ep.get("title") or "Community Thread",
-                "summary": (ep.get("full_post_paragraphs") or [ep.get("post") or ""])[0],
-                "body_paragraphs": ep.get("full_post_paragraphs") or [ep.get("post") or ""],
-            }
-            for ep in enriched_posts
-        ]
-        return {
-            "id": "pulse",
-            "agent": "pulse",
-            "name": "Pulse",
-            "repository": "Pulse",
-            "domain": "Live Social Media & Community Discovery",
-            "status": "online",
-            "running": True,
-            "overview": f"Pulse curates {len(enriched_posts)} live public posts and discussions across Mastodon, Bluesky, and HackerNews (Community vibe: {mood_human}). Click any post to read the full discussion, or optionally view how it could affect markets.",
-            **metrics,
-            "metrics": metrics,
-            "kpis": metrics,
-            "social_posts": normalized_social_cards,
-            "social_posts_feed": social_posts_feed,
-            "influencer_sentiment_feed": influencer_feed,
-            "feed": social_posts_feed,
-            "sentiment_breakdown": [
-                {"platform": "🐘 Mastodon Public Timeline", "positive_pct": 76},
-                {"platform": "🦋 Bluesky Firehose & Tech", "positive_pct": 82},
-                {"platform": "🟧 HackerNews Frontpage", "positive_pct": 71},
-            ],
-            "trending": [
-                {"topic": ep.get("topic") or "Open Tech & AI", "mentions": 48 + idx * 17, "sentiment": "Engaged Discussion", "velocity": f"+{18 + idx * 5}%/hr"}
-                for idx, ep in enumerate(enriched_posts[:6])
-            ],
-        }
+        block, rows, state = feed_state("pulse")
+        cards = []
+        for row in rows[:100]:
+            text = str(row.get("post") or row.get("text") or row.get("title") or row.get("headline") or "").strip()
+            if not text:
+                continue
+            cards.append({**row, "title": text, "source": str(row.get("platform") or row.get("source") or "Source unavailable"),
+                          "time": str(row.get("published_at") or row.get("time") or "Timestamp unavailable"),
+                          "post": text, "handle": row.get("handle") or row.get("author") or "Author unavailable"})
+        metrics = {"overall_sentiment": str(block.get("overall_sentiment") or "Unavailable"),
+                   "posts_analyzed": str(len(cards)) if state == "current" else "Unavailable · feed stale or missing",
+                   "trending_topics": "Unavailable", "sentiment_score": str(block.get("sentiment_score") or "Unavailable"),
+                   "influencers_tracked": str(block.get("influencers_tracked") or "Unavailable"),
+                   "uptime": state, "sentiment": str(block.get("overall_sentiment") or "Unavailable"),
+                   "trending": "Unavailable", "posts_hr": "Unavailable", "platforms": "Unavailable",
+                   "discussions": str(len(cards)) if state == "current" else "Unavailable"}
+        return {"id": aid, "agent": aid, "name": "Pulse", "repository": "Pulse", "domain": "Social Feed",
+                "status": state, "running": None, "overview": f"Persisted social feed status: {state}; recorded items: {len(cards)}.",
+                "metrics": metrics, "kpis": metrics, **metrics, "social_posts": cards, "social_posts_feed": cards,
+                "influencer_sentiment_feed": cards, "feed": cards, "sentiment_breakdown": [], "trending": []}
 
     if aid == "sentinel":
-        from Nexus.api.interactive_actions import enrich_sentinel_news_items
-        sentinel_feed = feeds.get("sentinel") if isinstance(feeds.get("sentinel"), dict) else {}
-        raw_news = list(sentinel_feed.get("world_news") or feeds.get("sentinel_news") or [])
-        enriched_news = enrich_sentinel_news_items(raw_news[:18])
-        bear_news = [n for n in enriched_news if "BEAR" in str(n.get("sentiment", "")).upper() or "CAUTIOUS" in str(n.get("sentiment", "")).upper()]
-        bull_news = [n for n in enriched_news if "BULL" in str(n.get("sentiment", "")).upper() or "POSITIVE" in str(n.get("sentiment", "")).upper()]
-
-        world_news_feed = [
-            {
-                **n,
-                "title": f"📰 {n['outlet']}: {n['headline']}",
-                "source": f"{n['category']} · {n['summary']}",
-            }
-            for n in enriched_news[:14]
-        ]
-        macro_radar = [
-            {
-                "title": (
-                    f"🌍 Today's Global Newsroom Edition: Curating {len(enriched_news) or 18} major stories with editorial photography across BBC, CNBC, "
-                    f"Al Jazeera, Wall Street Journal, MarketWatch, and OilPrice."
-                ),
-                "source": "Sentinel Global Newsroom · Click any headline or photo to open the full magazine reader",
-                "time": "Live Edition",
-            }
-        ] + [
-            {
-                **n,
-                "title": (
-                    f"📌 {n['outlet']} ({n['category']}): {n['headline']}"
-                ),
-                "source": f"{n['summary']} · Optional market & trade impact available on click",
-            }
-            for n in enriched_news[:8]
-        ]
-
-        metrics = {
-            "alerts_today": f"{len(enriched_news) or 18} Top Stories",
-            "market_sentiment": "Global Newsroom Edition",
-            "sources_monitored": "6 Major News Desks",
-            "threats_detected": f"{len(bear_news)} Developing Alerts",
-            "coverage_pct": "100% Illustrated",
-            "uptime": "24/7 Live Wire",
-        }
-        return {
-            "id": "sentinel",
-            "agent": "sentinel",
-            "name": "Sentinel",
-            "repository": "Sentinel",
-            "domain": "Global Journalism & World Newsroom",
-            "status": "online",
-            "running": True,
-            "overview": f"Sentinel curates {len(enriched_news)} live global news articles with photography across BBC, CNBC, WSJ, Al Jazeera, MarketWatch, and OilPrice. Read every story purely as journalism, or click the optional market button if you want to see how it affects trades.",
-            **metrics,
-            "metrics": metrics,
-            "kpis": metrics,
-            "news_articles": enriched_news,
-            "world_news_feed": world_news_feed,
-            "macro_event_radar": macro_radar,
-        }
+        block, rows, state = feed_state("sentinel")
+        cards = []
+        for row in rows[:100]:
+            headline = str(row.get("headline") or row.get("title") or "").strip()
+            if not headline:
+                continue
+            cards.append({**row, "title": headline, "headline": headline,
+                          "source": str(row.get("outlet") or row.get("source") or "Source unavailable"),
+                          "time": str(row.get("published_at") or row.get("time") or "Timestamp unavailable"),
+                          "summary": str(row.get("summary") or "Summary unavailable")})
+        metrics = {"alerts_today": str(len(cards)) if state == "current" else "Unavailable · feed stale or missing",
+                   "market_sentiment": str(block.get("market_sentiment") or "Unavailable"),
+                   "sources_monitored": str(block.get("sources_monitored") or "Unavailable"),
+                   "threats_detected": str(block.get("threats_detected") or "Unavailable"),
+                   "coverage_pct": "Unavailable", "uptime": state}
+        return {"id": aid, "agent": aid, "name": "Sentinel", "repository": "Sentinel", "domain": "News Feed",
+                "status": state, "running": None, "overview": f"Persisted news feed status: {state}; recorded items: {len(cards)}.",
+                "metrics": metrics, "kpis": metrics, **metrics, "news_articles": cards, "world_news_feed": cards,
+                "macro_event_radar": cards}
 
     if aid == "aegis":
-        security_shield_feed = [
-            {
-                "title": (
-                    "🛡️ Golden Safety Rule Active: Oracle is never allowed to open a trade unless the target profit "
-                    "is at least 1.8× bigger than the maximum stop-loss risk."
-                ),
-                "source": "Aegis Account Protection · Zero unsafe trades allowed through",
-                "time": "Active 24/7",
-            },
-            {
-                "title": (
-                    "🔒 Profit-Target Lock Active: Once a trade is opened with a full profit target, the system is locked "
-                    "from nervously cutting the profit target short on restart."
-                ),
-                "source": "Aegis Anti-Shortcut Protection",
-                "time": "Protected",
-            },
-            {
-                "title": (
-                    f"🚫 Blocked {risk_vetoed} Weak Trade Setups: Automatically skipped {risk_vetoed} low-confidence "
-                    f"market signals (where confidence was under 50%) so they couldn't risk your balance."
-                ),
-                "source": "Aegis Pre-Trade Safety Filter (MetaTrader 5 & cTrader)",
-                "time": "Latest Session",
-            },
-            {
-                "title": (
-                    f"🏦 Demo Account Sandbox Verified: Trading safely in Demo Mode (${balance_val:,.2f} balance) — "
-                    f"real money cannot be risked without your manual approval."
-                ),
-                "source": "Aegis Broker Firewall (MT5 & cTrader)",
-                "time": "Safe Mode",
-            },
-        ]
-        role_descriptions = {
-            "Nexus": "Team Coordinator — Routes your questions to the right specialist",
-            "Oracle": "Trading Specialist — Tracks MT5 & cTrader trades, win rates, and account balance",
-            "Atlas": "Research Specialist — Answers questions with verified facts and sources",
-            "Sentinel": "News Specialist — Watches world and financial news headlines",
-            "Pulse": "Social Media Specialist — Tracks what people are posting online",
-            "Forge": "Strategy Trainer — Tests trading strategies and reviews past sessions",
-            "Aegis": "Safety Guardian — Blocks risky trades and protects your account",
-            "Chronicle": "Shared Team Memory — Logs every experiment, lesson, and past trade",
-            "Genesis": "Strategy Creator — Designs and stress-tests new trading ideas",
-        }
-        compliance_audit_feed = [
-            {
-                "title": f"✅ {ag} ({desc}) — Safety check passed & working normally",
-                "source": "Aegis Daily Team Health Check",
-                "time": "100% Healthy",
-            }
-            for ag, desc in role_descriptions.items()
-        ]
-        metrics = {
-            "risk_score": "Low Risk (Safe)",
-            "anomalies_detected": f"{risk_vetoed} Weak Setups Skipped",
-            "threats_blocked": f"{risk_vetoed} Bad Trades Blocked",
-            "compliance_score": "100% Protected",
-            "incidents_today": "0 Safety Breaches",
-            "uptime": "24/7 Protection",
-        }
-        return {
-            "id": "aegis",
-            "agent": "aegis",
-            "name": "Aegis",
-            "repository": "Aegis",
-            "domain": "Account Safety & Risk Protection",
-            "status": "online",
-            "running": True,
-            "overview": f"Aegis automatically blocked {risk_vetoed} weak trade setups before they could touch your account, with 0 safety breaches.",
-            **metrics,
-            "metrics": metrics,
-            "kpis": metrics,
-            "security_shield_feed": security_shield_feed,
-            "compliance_audit_feed": compliance_audit_feed,
-        }
+        integrity = inspect_scout_and_ledger_integrity()
+        observed = {key: integrity.get(key) for key in ("synced", "settled_shadow_replays", "v2_trades_closed")}
+        available = any(value is not None for value in observed.values())
+        security_feed = [{"title": f"Settled shadow replay outcomes: {observed['settled_shadow_replays'] if observed['settled_shadow_replays'] is not None else 'Unavailable'}",
+                         "source": "Local decision-ledger count; not a policy audit", "time": "Read at request time"},
+                        {"title": f"Recorded anomalies: {integrity.get('anomalies_detected') if integrity.get('anomalies_detected') is not None else 'Unavailable'}",
+                         "source": "Local Scout/decision-ledger diagnostic", "time": "Read at request time"}]
+        ledger_feed = [{"title": f"Scout synchronization records: {observed['synced'] if observed['synced'] is not None else 'Unavailable'}",
+                        "source": "Local Scout/decision-ledger integrity diagnostic", "time": "Read at request time"},
+                       {"title": f"Closed V2 trades recorded: {observed['v2_trades_closed'] if observed['v2_trades_closed'] is not None else 'Unavailable'}",
+                        "source": "Local decision-ledger count; not broker reconciliation", "time": "Read at request time"}]
+        metrics = {"risk_score": "Unavailable", "anomalies_detected": str(integrity.get("anomalies_detected", "Unavailable")),
+                   "threats_blocked": "Unavailable", "compliance_score": "Unavailable",
+                   "incidents_today": "Unavailable", "uptime": "Unavailable"}
+        return {"id": aid, "agent": aid, "name": "Aegis", "repository": "Aegis", "domain": "Governance Diagnostics",
+                "status": "available" if available else "unavailable", "running": None,
+                "overview": "Local integrity diagnostics are shown as recorded. This endpoint does not attest that every broker action passed every policy.",
+                "metrics": metrics, "kpis": metrics, **metrics, "security_shield_feed": security_feed,
+                "compliance_audit_feed": ledger_feed, "integrity": integrity}
 
     if aid == "chronicle":
-        from Nexus.api.interactive_actions import get_live_open_trades, _load_forge_candidates_store
-        live_open_now = get_live_open_trades("all")
-        forge_store_cands = _load_forge_candidates_store()
-        raw_exp_jsonl = _read_jsonl_safe(TRADE_EXP_LOG_PATH, limit=200)
-        research_exp_jsonl = _read_jsonl_safe(ROOT_DIR / "Chronicle" / "memory" / "research" / "trade_experiment_log.jsonl", limit=200)
+        events = [_humanize_chronicle_memory_item(m) for m in memories[:30] if isinstance(m, dict)]
+        audits = [_humanize_episode_item(ep) for ep in episodes[:30] if isinstance(ep, dict)]
+        total = len(memories) + len(episodes) + len(kv)
+        metrics = {"experiments_logged": "Unavailable", "events_logged": str(total),
+                   "queries_today": "Unavailable", "storage_used": "Unavailable", "uptime": "Unavailable"}
+        return {"id": aid, "agent": aid, "name": "Chronicle", "repository": "Chronicle", "domain": "Durable Memory",
+                "status": "available" if total else "unavailable", "running": None,
+                "overview": f"Local Chronicle files contain {len(memories)} memory records, {len(episodes)} episodes, and {len(kv)} key/value records. Counts do not prove semantic correctness.",
+                "metrics": metrics, **metrics, "recent_events": events, "audit_trail": audits, "experiment_cards": []}
 
-        trade_experiments_count = max(all_total + len(live_open_now) + len(raw_exp_jsonl) + len(research_exp_jsonl), 15)
-        strategy_experiments_count = max(len(candidates) + len(forge_store_cands) + len(hypotheses), 24)
-        research_audits_count = max(len(episodes) + 5, 19)
-        memories_count = max(len(memories), 16)
-        total_experiments_logged = trade_experiments_count + strategy_experiments_count + research_audits_count
+    if aid in ("genesis", "atlas"):
+        if aid == "atlas":
+            catalog = _read_json_safe(ATLAS_CATALOG_PATH, {})
+            desks = catalog.get("desks") if isinstance(catalog, dict) and isinstance(catalog.get("desks"), dict) else {}
+            rows = []
+            for key, value in list(desks.items())[:30]:
+                if not isinstance(value, dict):
+                    continue
+                validation = value.get("validation_and_benchmark") if isinstance(value.get("validation_and_benchmark"), dict) else {}
+                lockbox = validation.get("untouched_lockbox_40pct") if isinstance(validation.get("untouched_lockbox_40pct"), dict) else {}
+                uplift = validation.get("v2_vs_frozen_v1_uplift") if isinstance(validation.get("v2_vs_frozen_v1_uplift"), dict) else {}
+                walk_forward = validation.get("walk_forward_4_windows") if isinstance(validation.get("walk_forward_4_windows"), dict) else {}
+                provenance = value.get("dataset_provenance") if isinstance(value.get("dataset_provenance"), dict) else {}
+                rows.append({
+                    "desk_id": str(value.get("desk") or key),
+                    "display_name": str(value.get("display_name") or str(value.get("desk") or key).replace("_", " ").title()),
+                    "lifecycle_state": str(value.get("lifecycle_state") or "State unavailable"),
+                    "created_at": value.get("created_at"),
+                    "dataset_hash": provenance.get("dataset_hash"),
+                    "lockbox_hit_rate_pct": lockbox.get("hit_rate_pct"),
+                    "lockbox_episodes": lockbox.get("episodes_count", provenance.get("lockbox_episodes")),
+                    "hit_rate_uplift_pct": uplift.get("hit_rate_uplift_pct"),
+                    "positive_walk_forward_windows": walk_forward.get("positive_windows_count"),
+                    "walk_forward_window_count": len(walk_forward.get("windows")) if isinstance(walk_forward.get("windows"), list) else None,
+                    "paired_bootstrap_p_value": uplift.get("paired_bootstrap_500_p_value"),
+                })
+            lockbox_records = sum(
+                row.get("lockbox_hit_rate_pct") is not None and row.get("lockbox_episodes") is not None
+                for row in rows
+            )
+            metrics = {"reports_today": "Unavailable", "sources_monitored": "Unavailable",
+                       "sectors_tracked": str(len(rows)),
+                       "alerts": f"{lockbox_records}/{len(rows)}" if rows else "Unavailable"}
+            return {"id": aid, "agent": aid, "name": "Atlas", "repository": "Atlas", "domain": "Research Catalog",
+                    "status": "available" if rows else "unavailable", "running": None,
+                    "overview": f"Atlas catalog entries recorded: {len(rows)}. No accuracy claim is made without a validated benchmark record.",
+                    "metrics": metrics, **metrics, "primary_feed": rows, "secondary_feed": [], "desks": rows,
+                    "symbol_hypotheses": []}
+        blueprints = []
+        for candidate in candidates[:30]:
+            blueprints.append({"title": str(candidate.get("candidate_code") or candidate.get("candidate_id") or "Candidate"),
+                               "source": f"{candidate.get('symbol') or 'Symbol unavailable'} · {candidate.get('lifecycle_state') or 'State unavailable'}",
+                               "time": str(candidate.get("updated_at_unix") or candidate.get("created_at_unix") or "Timestamp unavailable")})
+        metrics = {"active_strategies": "Unavailable", "avg_return": "Unavailable", "goals_met": "Unavailable",
+                   "backtests_run": "Unavailable", "best_strategy_return": "Unavailable"}
+        return {"id": aid, "agent": aid, "name": "Genesis", "repository": "Genesis", "domain": "Strategy Records",
+                "status": "available" if blueprints else "unavailable", "running": None,
+                "overview": f"Chronicle candidate records available to Genesis: {len(blueprints)}. Candidate storage is not evidence of validation.",
+                "metrics": metrics, **metrics, "strategy_blueprints": blueprints, "feed": blueprints}
 
-        total_events = len(memories) + len(kv) + len(episodes)
-        recurrences = sum(max(0, int(m.get("occurrence_count", 1)) - 1) for m in memories if isinstance(m, dict))
-        recent_events = [
-            _humanize_chronicle_memory_item(m)
-            for m in memories[:12]
-            if isinstance(m, dict)
-        ]
-        audit_trail = [
-            _humanize_episode_item(ep)
-            for ep in episodes[:10]
-            if isinstance(ep, dict)
-        ]
+    if aid == "nexus":
+        traces = _read_jsonl_safe(TRACE_LOG_PATH, limit=20)
+        tier2 = _read_jsonl_safe(TIER2_KNOWLEDGE_PATH, limit=20)
+        orchestration = [{"title": str(row.get("query") or "Recorded coordination event"),
+                          "source": f"Agents: {', '.join(map(str, row.get('consulted_agents') or [])) or 'Unavailable'} · gate: {((row.get('aegis_policy_gate') or {}).get('status') or 'Unavailable')}",
+                          "time": str(row.get("timestamp_iso") or "Timestamp unavailable")} for row in reversed(traces[-10:])]
+        metrics = {"agents_active": "Unavailable · live health not queried", "tasks_queued": str(len(orchestration)),
+                   "messages_per_hour": "Unavailable", "uptime": "Unavailable", "errors_today": "Unavailable",
+                   "throughput": "Unavailable"}
+        return {"id": aid, "agent": aid, "name": "Nexus", "repository": "Nexus", "domain": "Coordination Records",
+                "status": "available" if traces or tier2 else "unavailable", "running": None,
+                "overview": f"Recorded local coordination traces: {len(traces)}; promoted knowledge records: {len(tier2)}. These counts do not indicate current agent health.",
+                "metrics": metrics, **metrics, "orchestration_feed": orchestration, "agent_health_feed": []}
 
-        # Build rich, colorful experiment cards across 4 vibrant categories
-        experiment_cards: List[Dict[str, Any]] = []
-        # 1. Live & Historical Trade Experiments (Emerald)
-        for idx, t in enumerate(session_trades[:3]):
-            sym_h = t.get("symbol_human") or _format_pair_human(str(t.get("symbol") or "EURUSD"))
-            pnl_u = float(t.get("pnl_usd") or 966.47)
-            r_m = float(t.get("realized_r") or 1.325)
-            experiment_cards.append({
-                "exp_id": f"EXP-TRD-MT5-{idx+1}",
-                "category": "TRADE_EXPERIMENT",
-                "category_label": "Live Trade Experiment",
-                "accent": "emerald",
-                "badge": f"WON +${pnl_u:,.2f} (+{r_m:.2f}R)",
-                "title": f"MetaTrader 5 Experiment #{idx+1}: {t.get('action_human', 'Sold')} {sym_h} @ {t.get('entry')}",
-                "summary": f"Protected Stop-Loss at {t.get('sl')} and Profit Target at {t.get('tp')} ({t.get('reward_risk', 4.68)}x reward-to-risk). Verified zero SL > TP violation.",
-                "metric_pill": f"1:{t.get('reward_risk', 4.68)} R:R · 100% Rule Pass",
-                "timestamp": str(t.get("timestamp") or "Verified Session"),
-            })
-        for idx, ot in enumerate(live_open_now[:3]):
-            sym_h = _format_pair_human(str(ot.get("symbol") or "EURUSD"))
-            experiment_cards.append({
-                "exp_id": str(ot.get("trade_id") or f"EXP-LIVE-{idx+1}"),
-                "category": "TRADE_EXPERIMENT",
-                "category_label": "Active Open Trade Experiment",
-                "accent": "emerald",
-                "badge": f"LIVE {ot.get('pip_change_str', '+13.0 pips')} ({ot.get('floating_r', '+0.48R')})",
-                "title": f"{ot.get('broker_badge', 'cTrader')} Live Position: {ot.get('direction', 'BUY')} {sym_h} @ {ot.get('entry')}",
-                "summary": str(ot.get("live_output_reading") or ot.get("reason") or ""),
-                "metric_pill": f"{ot.get('pips_to_tp', 55.0)} pips to TP · {ot.get('rr_ratio', '1:2.5')}",
-                "timestamp": "Running Live Now",
-            })
-        # 2. Forge Strategy Training Experiments (Cyan)
-        for idx, fc in enumerate(forge_store_cands[:4]):
-            val = fc.get("validation") or {}
-            wr = val.get("win_rate_pct", 61.5)
-            pf = val.get("profit_factor", 1.82)
-            tr_cnt = val.get("total_trades", 48)
-            experiment_cards.append({
-                "exp_id": str(fc.get("candidate_id") or f"EXP-FRG-{idx+1}"),
-                "category": "STRATEGY_TRAINING",
-                "category_label": "Forge Strategy Lab Experiment",
-                "accent": "cyan",
-                "badge": f"{wr}% Win Rate ({tr_cnt} Tests)",
-                "title": f"{fc.get('name', 'Multi-Timeframe Strategy Experiment')} [{fc.get('symbol', 'EURUSD')}]",
-                "summary": f"Walk-forward & untouched 40% lockbox experiment across 7 chart timeframes (M5–W1). Earned {pf}x profit factor with strict SL < TP.",
-                "metric_pill": f"Profit Factor {pf}x · Max Dip {val.get('max_drawdown_pct', 3.1)}%",
-                "timestamp": str(fc.get("lifecycle_state") or "CERTIFIED"),
-            })
-        # 3. Aegis Risk & Safety Audits (Amber)
-        experiment_cards.append({
-            "exp_id": "EXP-AEGIS-GATE-01",
-            "category": "SAFETY_AUDIT",
-            "category_label": "Aegis Safety & Risk Experiment",
-            "accent": "amber",
-            "badge": f"{risk_vetoed} Weak Setups Filtered",
-            "title": f"Pre-Trade Confidence & SL < TP Gate Audit ({risk_vetoed} Low-Edge Signals Blocked)",
-            "summary": "Chronicle logged every pre-trade veto where signal confidence was under 50% or reward-to-risk was below 1.8x, preventing capital erosion.",
-            "metric_pill": "0 Safety Breaches · 100% Protected",
-            "timestamp": "Continuous Audit",
-        })
-        # 4. Research & Team Lessons (Violet)
-        for idx, mem in enumerate(recent_events[:4]):
-            experiment_cards.append({
-                "exp_id": f"EXP-MEM-{idx+1}",
-                "category": "RESEARCH_MEMORY",
-                "category_label": "Shared Team Lesson",
-                "accent": "violet",
-                "badge": str(mem.get("time") or "Saved Lesson"),
-                "title": str(mem.get("title") or "Verified Team Lesson"),
-                "summary": str(mem.get("source") or "Stored in Chronicle Content-Addressable Memory"),
-                "metric_pill": "Tier-2 Promoted Memory",
-                "timestamp": "Permanent Store",
-            })
-
-        metrics = {
-            "experiments_logged": f"{total_experiments_logged} Experiments Logged",
-            "events_logged": f"{total_experiments_logged} Experiments Logged",
-            "queries_today": f"{trade_experiments_count} Trade · {strategy_experiments_count} Strategy Lab",
-            "storage_used": f"{memories_count} Lessons · {research_audits_count} Audits",
-            "uptime": "100% Synced & Ready",
-        }
-        return {
-            "id": "chronicle",
-            "agent": "chronicle",
-            "name": "Chronicle",
-            "repository": "Chronicle",
-            "domain": "Shared Team Memory & Experiment Vault",
-            "status": "online",
-            "running": True,
-            "overview": (
-                f"Chronicle has logged {total_experiments_logged} total experiments across the ecosystem "
-                f"({trade_experiments_count} trade experiments, {strategy_experiments_count} Forge strategy lab trainings, "
-                f"and {research_audits_count} research & safety audits) plus {memories_count} permanent team lessons."
-            ),
-            **metrics,
-            "metrics": metrics,
-            "kpis": metrics,
-            "experiment_breakdown": {
-                "total_experiments_logged": total_experiments_logged,
-                "trade_experiments_count": trade_experiments_count,
-                "strategy_experiments_count": strategy_experiments_count,
-                "research_audits_count": research_audits_count,
-                "memories_count": memories_count,
-            },
-            "experiment_cards": experiment_cards,
-            "recent_events": recent_events,
-            "audit_trail": audit_trail,
-        }
-
-    if aid == "genesis":
-        returns = [
-            float(((c.get("lockbox_holdout_report") or {}).get("candidate_metrics") or {}).get("net_return_pct") or 11.4)
-            for c in v2_candidates
-        ]
-        avg_ret = round(sum(returns) / max(1, len(returns)), 2) if returns else 12.40
-        best_ret = round(max(returns), 2) if returns else 18.65
-
-        evolved_genomes_feed = []
-        for c in v2_candidates[:10]:
-            pol = c.get("dynamic_trade_management_policy") or {}
-            lb = (c.get("lockbox_holdout_report") or {}).get("candidate_metrics") or {}
-            tp_r = float(pol.get("learned_initial_major_tp_r") or 2.15)
-            sym_human = _format_pair_human(str(c.get("symbol") or "EURUSD"))
-            style_human = _format_style_human(str(c.get("trader_style") or "DAY_TRADER"), str(c.get("regime") or ""))
-            net_ret_val = float(lb.get("net_return_pct") if lb.get("net_return_pct") is not None else 12.4)
-            net_ret_str = f"+{net_ret_val:.2f}%" if net_ret_val >= 0 else f"{net_ret_val:.2f}%"
-            evolved_genomes_feed.append({
-                "title": (
-                    f"🌱 Strategy Blueprint for {sym_human}: {style_human} — "
-                    f"Result in historical stress-testing: {net_ret_str}"
-                ),
-                "source": f"Safety Rule: Target profit is {tp_r:.1f}× larger than stop-loss risk · Passed 1,000 simulated market tests",
-                "time": "Verified Blueprint",
-            })
-
-        strategy_goals_feed = [
-            {
-                "title": f"🎯 Design Goal Confirmed: {h.get('statement')}",
-                "source": "Genesis Strategy Designer · Handed off to Forge for multi-timeframe testing",
-                "time": "Proven Idea",
-            }
-            for h in hypotheses[:8]
-        ]
-
-        metrics = {
-            "active_strategies": f"{len(v2_candidates)} Trading Blueprints",
-            "avg_return": f"+{avg_ret:.2f}% Avg Test Return",
-            "goals_met": "100% Passed Safety Rules",
-            "backtests_run": f"{len(candidates) * 1000:,} Market Simulations",
-            "best_strategy_return": f"+{best_ret:.2f}% Best Test Return",
-            "uptime": "Strategy Lab Online",
-        }
-        return {
-            "id": "genesis",
-            "agent": "genesis",
-            "name": "Genesis",
-            "repository": "Genesis",
-            "domain": "New Trading Strategy Designer",
-            "status": "online",
-            "running": True,
-            "overview": f"Genesis designs and stress-tests {len(v2_candidates)} trading strategy blueprints (+{avg_ret:.2f}% average return in historical testing).",
-            **metrics,
-            "metrics": metrics,
-            "evolved_genomes_feed": evolved_genomes_feed,
-            "strategy_goals_feed": strategy_goals_feed,
-        }
-
-    if aid == "atlas":
-        desk_cat = _read_json_safe(ATLAS_CATALOG_PATH, {})
-        desks_obj = (desk_cat.get("desks") or {}) if isinstance(desk_cat, dict) else {}
-        desk_names_map = {
-            "MACRO_POLICY_DESK": "Central Bank & Interest Rate Research Desk",
-            "QUANT_MARKET_DESK": "Price Trend & Market Timing Research Desk",
-            "FUNDAMENTAL_ASSET_DESK": "Currency, Gold & Stock Valuation Desk",
-            "SCIENTIFIC_TECH_DESK": "Science, Math & Fact-Checking Research Desk",
-            "FORENSIC_RED_TEAM_DESK": "Devil's Advocate & Risk Double-Check Desk",
-        }
-        desk_plain_explain = {
-            "MACRO_POLICY_DESK": "Tracks Federal Reserve & central bank interest rate decisions, inflation, and GDP reports.",
-            "QUANT_MARKET_DESK": "Checks whether price trends across 5-minute to weekly charts are strong enough to trade.",
-            "FUNDAMENTAL_ASSET_DESK": "Compares the true economic value of currencies, gold, crypto, and major stocks.",
-            "SCIENTIFIC_TECH_DESK": "Answers general knowledge, science, history, and math questions using Wikipedia, PubMed & arXiv.",
-            "FORENSIC_RED_TEAM_DESK": "Double-checks every claim for hidden risks or contradictions before we trust it.",
-        }
-        desks_list: List[Dict[str, Any]] = []
-        for desk_id, d in desks_obj.items():
-            if not isinstance(d, dict):
-                continue
-            val = d.get("validation_and_benchmark") or {}
-            lb = val.get("untouched_lockbox_40pct") or {}
-            v1 = val.get("frozen_atlas_v1_lockbox_benchmark") or {}
-            up = val.get("v2_vs_frozen_v1_uplift") or {}
-            wf = val.get("walk_forward_4_windows") or {}
-            abl = d.get("ablation_study") or {}
-            disp_name = desk_names_map.get(desk_id, desk_id)
-            hit_rate = lb.get("hit_rate_pct") if lb.get("hit_rate_pct") is not None else 100.0
-            uplift = up.get("hit_rate_uplift_pct") if up.get("hit_rate_uplift_pct") is not None else 20.0
-            ep_tested = (d.get("dataset_provenance") or {}).get("total_episodes") or 48
-            plain_desc = desk_plain_explain.get(desk_id, "Verified multi-source research desk.")
-            desks_list.append({
-                "desk_id": desk_id,
-                "display_name": disp_name,
-                "lifecycle_state": d.get("lifecycle_state") or "CERTIFIED",
-                "episodes_tested": ep_tested,
-                "lockbox_episodes": lb.get("episodes_count") or 20,
-                "lockbox_hit_rate_pct": hit_rate,
-                "lockbox_brier_score": lb.get("mean_brier_score") if lb.get("mean_brier_score") is not None else 0.06,
-                "v1_brier_score": v1.get("mean_brier_score") if v1.get("mean_brier_score") is not None else 0.198,
-                "v1_hit_rate_pct": v1.get("hit_rate_pct") if v1.get("hit_rate_pct") is not None else 80.0,
-                "hit_rate_uplift_pct": uplift,
-                "brier_improvement": up.get("brier_calibration_improvement") if up.get("brier_calibration_improvement") is not None else 0.138,
-                "research_edge_r": lb.get("mean_research_edge_r") if lb.get("mean_research_edge_r") is not None else 1.52,
-                "p_value": up.get("paired_bootstrap_500_p_value") if up.get("paired_bootstrap_500_p_value") is not None else 0.002,
-                "walk_forward_windows_passed": f"{wf.get('positive_windows_count', 4)}/4",
-                "retained_features": abl.get("retained_features") or [],
-                "pruned_features": abl.get("pruned_features_left_out") or [],
-                # Also attach plain-English title/source/time directly so generic feed renderers NEVER print raw JSON
-                "title": f"✅ {disp_name} — {hit_rate}% Accuracy on Unseen Test Cases (+{uplift}% better than V1)",
-                "source": f"{plain_desc} (Tested across {ep_tested} real-world cases)",
-                "time": "100% Verified Desk",
-            })
-
-        mean_hit_rate = (
-            round(sum(float(d["lockbox_hit_rate_pct"]) for d in desks_list) / len(desks_list), 1)
-            if desks_list else 100.0
-        )
-        v2_with_hyp = [c for c in candidates if c.get("atlas_research_hypothesis")][:12]
-        symbol_hypotheses: List[Dict[str, Any]] = []
-        for c in v2_with_hyp:
-            hyp = c.get("atlas_research_hypothesis") or {}
-            pol = c.get("dynamic_trade_management_policy") or {}
-            lb = (c.get("lockbox_holdout_report") or {}).get("candidate_metrics") or {}
-            sl_mult = float(pol.get("learned_optimal_stop_atr_mult") or 1.2)
-            tp_r = float(pol.get("learned_initial_major_tp_r") or 2.2)
-            raw_wr = float(lb.get("win_rate_pct") or lb.get("win_rate") or 0.62)
-            wr_pct = f"{raw_wr * 100:.1f}" if raw_wr <= 1.0 else f"{raw_wr:.1f}"
-            sym_human = _format_pair_human(str(c.get("symbol") or "EURUSD"))
-            style_human = _format_style_human(str(c.get("trader_style") or "DAY_TRADER"), str(c.get("regime") or ""))
-            conf_pct = round(float(hyp.get("confidence") or 0.85) * 100.0, 1)
-            tfs = ", ".join(hyp.get("dominant_timeframes_discovered") or ["15m", "1h", "4h"])
-            symbol_hypotheses.append({
-                "candidate_id": c.get("candidate_id"),
-                "symbol": c.get("symbol"),
-                "trader_style": c.get("trader_style") or c.get("candidate_code"),
-                "lifecycle_state": c.get("lifecycle_state"),
-                "confidence_pct": conf_pct,
-                "hypothesis_statement": hyp.get("hypothesis_statement") or "",
-                "dominant_timeframes": hyp.get("dominant_timeframes_discovered") or [],
-                "retained_features": hyp.get("dominant_features_discovered") or [],
-                "pruned_features": hyp.get("pruned_features_left_out_by_ablation") or [],
-                "sl_atr_mult": f"{sl_mult:.2f}",
-                "tp_r": f"{tp_r:.2f}",
-                "tp_atr_mult": f"{sl_mult * tp_r:.2f}",
-                "lockbox_win_rate_pct": wr_pct,
-                "lockbox_expectancy_r": f"{float(lb.get('expectancy_r') or 0.65):.3f}",
-                "lockbox_trades": lb.get("trades") or 20,
-                "title": (
-                    f"📈 {sym_human} ({style_human}) — {wr_pct}% Historical Win Rate · "
-                    f"Target profit is set {tp_r:.1f}× larger than stop-loss risk"
-                ),
-                "source": f"Best chart timeframes discovered by Atlas: {tfs} · Shared with Forge & Oracle",
-                "time": f"{conf_pct}% Confidence",
-            })
-
-        primary_feed = [
-            {
-                "title": d["title"],
-                "source": d["source"],
-                "time": d["time"],
-            }
-            for d in desks_list
-        ]
-        secondary_feed = [
-            {
-                "title": sh["title"],
-                "source": sh["source"],
-                "time": sh["time"],
-            }
-            for sh in symbol_hypotheses[:8]
-        ]
-
-        total_dossiers = len(desks_list) + len(symbol_hypotheses)
-        metrics = {
-            "reports_today": f"{total_dossiers} Research Reports",
-            "sources_monitored": "9 Trusted Sources",
-            "sectors_tracked": f"{len(desks_list) or 5} Research Desks",
-            "alerts": f"{mean_hit_rate}% Test Accuracy",
-        }
-        # NOTE: primary_feed and secondary_feed are placed FIRST so any generic dashboard loader
-        # that reads the first array key renders clean human text instead of raw desk objects.
-        return {
-            "id": "atlas",
-            "agent": "atlas",
-            "name": "Atlas",
-            "repository": "Atlas",
-            "domain": "Deep Fact-Checking & Market Research",
-            "status": "online",
-            "running": True,
-            "overview": f"Atlas runs {len(desks_list)} specialized research desks ({mean_hit_rate}% test accuracy) and answers any general or market question in plain English.",
-            **metrics,
-            "metrics": metrics,
-            "primary_feed": primary_feed,
-            "secondary_feed": secondary_feed,
-            "desks": desks_list,
-            "symbol_hypotheses": symbol_hypotheses,
-        }
-
-    # Default: Nexus (Command & Coordination)
-    traces = _read_jsonl_safe(TRACE_LOG_PATH, limit=50)
-    tier2 = _read_jsonl_safe(TIER2_KNOWLEDGE_PATH, limit=50)
-    benchmark = _read_json_safe(BENCHMARK_PATH, {})
-    bench_pass = float(benchmark.get("overall_pass_rate_pct") or 100.0) if isinstance(benchmark, dict) else 100.0
-    recent_traces = list(reversed(traces[-8:]))
-
-    orchestration_feed: List[Dict[str, Any]] = [
-        {
-            "title": (
-                f"🧭 Answered Question: \"{t.get('query')}\" — Coordinated with "
-                f"{', '.join(str(a).title() for a in (t.get('consulted_agents') or ['Nexus']))}"
-            ),
-            "source": (
-                f"Safety Check: {'Approved by Aegis' if (t.get('aegis_policy_gate') or {}).get('status') != 'BLOCKED' else 'Blocked for Safety'} "
-                f"· Response time: {round(float(t.get('total_latency_ms') or 18.5), 1)}ms"
-            ),
-            "time": "Completed",
-        }
-        for t in recent_traces[:5]
-    ] + [
-        {
-            "title": (
-                f"🤝 Team Coordinator Active: Nexus connects all 9 specialist agents to our shared Chronicle memory "
-                f"({len(tier2)} verified team takeaways and {len(memories)} saved lessons)."
-            ),
-            "source": "Ask Nexus any question in plain English and it will bring in the right specialist automatically",
-            "time": "Online 24/7",
-        }
-    ]
-    agent_health_feed: List[Dict[str, Any]] = [
-        {
-            "title": f"✅ {ag} — {role}",
-            "source": "Connected to Nexus & Shared Chronicle Memory",
-            "time": "Online & Ready",
-        }
-        for ag, role in (
-            ("Nexus (Team Coordinator)", "Routes your questions to the right specialist in plain English"),
-            ("Oracle (Trading Desk)", f"MetaTrader 5 & cTrader connected ({c3_wins}/{c3_total} MT5 wins, +${pnl_val:,.2f} profit, ${balance_val:,.2f} balance)"),
-            ("Atlas (Research Desk)", "5 verified research desks for market, science, math & general questions"),
-            ("Sentinel (News Desk)", "Watching 6 major global news wires (BBC, CNBC, WSJ, Al Jazeera, MarketWatch, OilPrice)"),
-            ("Pulse (Social Media Desk)", "Reading live trader posts on Mastodon, Bluesky & HackerNews"),
-            ("Forge (Strategy Trainer)", f"Tested {len(candidates)} trading strategies across 7 chart timeframes"),
-            ("Aegis (Safety Guardian)", f"Protecting your account 24/7 ({risk_vetoed} weak trade setups automatically skipped)"),
-            ("Chronicle (Shared Memory)", f"Remembers {len(memories)} key lessons learned from past trades and research"),
-            ("Genesis (Strategy Designer)", f"Created and stress-tested {len(v2_candidates)} trading strategy blueprints"),
-        )
-    ]
-    metrics = {
-        "agents_active": "9 / 9 Agents Online",
-        "tasks_queued": f"{len(recent_traces)} Questions Answered",
-        "messages_per_hour": f"{len(tier2)} Team Takeaways Saved",
-        "uptime": "100% Online & Ready",
-        "errors_today": "0 Safety Breaches",
-        "throughput": f"{bench_pass:.0f}% Accuracy Score",
-    }
-    return {
-        "id": "nexus",
-        "agent": "nexus",
-        "name": "Nexus",
-        "repository": "Nexus",
-        "domain": "Team Coordinator & Plain-English Assistant",
-        "status": "online",
-        "running": True,
-        "overview": f"Nexus is coordinating all 9 specialist agents in plain English ({len(traces)} questions answered, {len(tier2)} verified takeaways saved).",
-        **metrics,
-        "metrics": metrics,
-        "orchestration_feed": orchestration_feed,
-        "agent_health_feed": agent_health_feed,
-    }
-
+    return {"id": aid, "agent": aid, "name": aid.title(), "status": "unavailable", "running": None,
+            "overview": "No authoritative dashboard data source is configured for this agent.", "metrics": {}}
 
 def _cli_main() -> None:
     raw = sys.stdin.read().strip()

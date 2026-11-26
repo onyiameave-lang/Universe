@@ -226,12 +226,12 @@
         <!-- Top KPI Row -->
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label">Active Dossiers</div>
+            <div class="kpi-label">New Dossiers Today</div>
             <div class="kpi-value" id="kpi_reports_today">—</div>
             <div class="kpi-delta pos" id="kpid_reports_today"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Evidence Sources</div>
+            <div class="kpi-label">Live Evidence Sources</div>
             <div class="kpi-value" id="kpi_sources_monitored">—</div>
             <div class="kpi-delta neu" id="kpid_sources_monitored"></div>
           </div>
@@ -241,9 +241,9 @@
             <div class="kpi-delta pos" id="kpid_sectors_tracked"></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Out-of-Sample Accuracy</div>
+            <div class="kpi-label">Desk Records with Lockbox Data (Catalog)</div>
             <div class="kpi-value" id="kpi_alerts">—</div>
-            <div class="kpi-delta pos" id="kpid_alerts"></div>
+            <div class="kpi-delta neu" id="kpid_alerts">Catalog-reported, not independently verified</div>
           </div>
         </div>
 
@@ -393,18 +393,17 @@
   <script src="shared/chat.js?v=5"></script>
   <script>
   const AGENT_ID = 'atlas';
-  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE) || window.location.origin;
 
   function renderReadableReply(text) {
     if (typeof window.formatReadableMarkdown === 'function') {
       return window.formatReadableMarkdown(text);
     }
-    return String(text || '').replace(/\n/g, '<br>');
+    return escapeHtml(text || '').replace(/\n/g, '<br>');
   }
 
   function renderDossierFooter(dossier) {
     if (!dossier) return '';
-    const conf = dossier.overall_confidence != null ? dossier.overall_confidence + '%' : 'Verified';
+    const conf = dossier.overall_confidence != null ? escapeHtml(dossier.overall_confidence + '%') : 'Unavailable';
     const desk = dossier.active_desk_label || dossier.active_desk || 'Research Desk';
     const srcCount = Array.isArray(dossier.sources) ? dossier.sources.length : 0;
     const scenarios = Array.isArray(dossier.scenarios) ? dossier.scenarios : [];
@@ -412,21 +411,23 @@
     let scenHtml = '';
     if (scenarios.length > 0) {
       scenHtml = '<div class="atlas-scenario-grid">' + scenarios.map(function(s) {
-        const name = String(s.scenario_name || 'case').toUpperCase();
-        const prob = Math.round(Number(s.probability || 0) * 1000) / 10;
-        const impact = s.expected_impact_range || '';
-        return '<div class="atlas-scenario-box"><div style="font-weight:700;color:var(--text)">' + name + ' · ' + prob + '%</div><div style="color:var(--text-muted);margin-top:2px">' + impact + '</div></div>';
+        const name = escapeHtml(String(s.scenario_name || 'case').toUpperCase());
+        const rawProbability = Number(s.probability);
+        const prob = Number.isFinite(rawProbability) && rawProbability >= 0 && rawProbability <= 1
+          ? Math.round(rawProbability * 1000) / 10 : null;
+        const impact = escapeHtml(s.expected_impact_range || 'Impact unavailable');
+        return '<div class="atlas-scenario-box"><div style="font-weight:700;color:var(--text)">' + name + (prob == null ? '' : ' · ' + prob + '%') + '</div><div style="color:var(--text-muted);margin-top:2px">' + impact + '</div></div>';
       }).join('') + '</div>';
     }
 
     return (
       scenHtml +
       '<div class="atlas-meta-bar">' +
-        '<span><strong>Research Desk:</strong> ' + desk + '</span>' +
+        '<span><strong>Research Desk:</strong> ' + escapeHtml(desk) + '</span>' +
         '<span>·</span>' +
-        '<span><strong>Confidence Level:</strong> ' + conf + '</span>' +
+        '<span><strong>Reported confidence:</strong> ' + conf + '</span>' +
         '<span>·</span>' +
-        '<span><strong>Trusted Sources Checked:</strong> ' + srcCount + '</span>' +
+        '<span><strong>Sources listed:</strong> ' + srcCount + '</span>' +
       '</div>'
     );
   }
@@ -436,19 +437,23 @@
     const text  = document.getElementById('connText');
     try {
       const r = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(8000) });
-      if (r.ok) { badge.className='conn-badge online'; text.textContent='Live'; return true; }
+      if (r.ok) { badge.className='conn-badge online'; text.textContent='API online'; return true; }
     } catch(e) {}
-    badge.className='conn-badge offline'; text.textContent='Offline'; return false;
+    badge.className='conn-badge offline'; text.textContent='API offline'; return false;
   }
 
   function setKpi(key, val, delta) {
     const el = document.getElementById('kpi_' + key);
     const de = document.getElementById('kpid_' + key);
     if (el) el.textContent = val != null ? val : '—';
-    if (de && delta) {
-      de.textContent = delta;
-      de.className = 'kpi-delta ' + (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu');
+    if (de) {
+      de.textContent = delta || '';
+      de.className = 'kpi-delta ' + (delta ? (delta.startsWith('+') ? 'pos' : delta.startsWith('-') ? 'neg' : 'neu') : 'neu');
     }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function renderDeskCard(d) {
@@ -459,21 +464,39 @@
       'FORENSIC_RISK_DESK': 'Fact-checks claims and filters out rumors, hype, or unreliable news sources.',
       'SCIENTIFIC_LITERATURE_DESK': 'Searches peer-reviewed scientific papers, encyclopedias, and verified databases.'
     };
-    const plainWhatItDoes = deskDescMap[d.desk_id] || 'Verifies facts across multiple independent sources before trusting them.';
-    const promptText = 'Tell me in plain English what the ' + d.display_name + ' does and what its latest findings are.';
+    const plainWhatItDoes = deskDescMap[d.desk_id] || 'Research desk description unavailable.';
+    const deskName = d.display_name || d.desk_id || 'research desk';
+    const promptText = 'Tell me in plain English what the ' + deskName + ' does and what its latest findings are.';
+    const rate = d.lockbox_hit_rate_pct == null ? NaN : Number(d.lockbox_hit_rate_pct);
+    const episodes = d.lockbox_episodes == null ? NaN : Number(d.lockbox_episodes);
+    const uplift = d.hit_rate_uplift_pct == null ? NaN : Number(d.hit_rate_uplift_pct);
+    const pValue = d.paired_bootstrap_p_value == null ? NaN : Number(d.paired_bootstrap_p_value);
+    const rateText = Number.isFinite(rate) && Number.isFinite(episodes)
+      ? 'Recorded untouched-lockbox hit rate: ' + rate + '% (n=' + episodes + ' episodes). This is benchmark evidence, not live trading performance.'
+      : 'Untouched-lockbox result unavailable.';
+    const upliftText = Number.isFinite(uplift)
+      ? 'Recorded uplift vs frozen V1: ' + (uplift > 0 ? '+' : '') + uplift + ' percentage points' + (Number.isFinite(pValue) ? ' (paired bootstrap p=' + pValue + ')' : '') + '.'
+      : 'V1 comparison unavailable.';
+    const windows = d.walk_forward_window_count == null ? NaN : Number(d.walk_forward_window_count);
+    const positiveWindows = d.positive_walk_forward_windows == null ? NaN : Number(d.positive_walk_forward_windows);
+    const walkForwardText = Number.isFinite(windows) && Number.isFinite(positiveWindows)
+      ? 'Walk-forward windows positive: ' + positiveWindows + '/' + windows
+      : 'Walk-forward results unavailable.';
     return (
       '<div class="atlas-desk-card">' +
         '<div class="atlas-desk-title">' +
-          '<span>' + d.display_name + '</span>' +
-          '<span style="font-size:11px;color:#10b981;font-weight:700">VERIFIED &amp; ACTIVE</span>' +
+          '<span>' + escapeHtml(d.display_name || d.desk_id || 'Research desk') + '</span>' +
+          '<span style="font-size:11px;color:var(--text-muted);font-weight:700">CATALOG STATE: ' + escapeHtml(d.lifecycle_state || 'Unavailable') + '</span>' +
         '</div>' +
         '<div class="atlas-desk-metrics">' +
-          '<div style="margin-bottom:4px;color:var(--text)">' + plainWhatItDoes + '</div>' +
-          '<div><strong>Accuracy on Unseen Test Questions:</strong> ' + d.lockbox_hit_rate_pct + '% <span style="color:#10b981">(+' + d.hit_rate_uplift_pct + '% more accurate than the older version)</span></div>' +
-          '<div><strong>Real Questions Tested:</strong> ' + (d.episodes_tested || 48) + ' test cases (passed ' + (d.walk_forward_windows_passed || '4/4') + ' rounds of testing)</div>' +
+          '<div style="margin-bottom:4px;color:var(--text)">' + escapeHtml(plainWhatItDoes) + '</div>' +
+          '<div>' + escapeHtml(rateText) + '</div>' +
+          '<div>' + escapeHtml(upliftText) + '</div>' +
+          '<div>' + escapeHtml(walkForwardText) + '</div>' +
+          '<div style="color:var(--text-muted)">Catalog certification is not a live runtime-health check.</div>' +
         '</div>' +
         '<div style="margin-top:auto;padding-top:6px">' +
-          '<button class="atlas-prompt-btn" style="width:100%;text-align:center;font-weight:600" onclick="sendAtlasQuery(' + JSON.stringify(promptText).replace(/"/g, '&quot;') + ')">Ask This Desk →</button>' +
+          '<button class="atlas-prompt-btn" data-atlas-desk="' + escapeHtml(promptText) + '" style="width:100%;text-align:center;font-weight:600">Ask This Desk →</button>' +
         '</div>' +
       '</div>'
     );
@@ -484,8 +507,8 @@
       '<div class="feed-item">' +
         '<div class="feed-dot"></div>' +
         '<div class="feed-body">' +
-          '<div class="feed-title">' + (item.title || item.name || item.text || '') + '</div>' +
-          '<div class="feed-meta"><span>' + (item.source || '') + '</span><span>' + (item.time || '') + '</span></div>' +
+        '<div class="feed-title">' + escapeHtml(item.title || item.name || item.text || '') + '</div>' +
+        '<div class="feed-meta"><span>' + escapeHtml(item.source || '') + '</span><span>' + escapeHtml(item.time || '') + '</span></div>' +
         '</div>' +
       '</div>'
     );
@@ -507,18 +530,28 @@
           elPrimary.innerHTML = d.desks.map(renderDeskCard).join('');
         } else if (Array.isArray(d.primary_feed) && d.primary_feed.length > 0) {
           elPrimary.innerHTML = d.primary_feed.map(renderFeedItem).join('');
+        } else {
+          elPrimary.textContent = 'No Atlas catalog or feed records are available.';
         }
+        elPrimary.querySelectorAll('[data-atlas-desk]').forEach(btn => btn.addEventListener('click', () => sendAtlasQuery(btn.getAttribute('data-atlas-desk'))));
       }
 
       const elSecondary = document.getElementById('section_secondary');
       if (elSecondary) {
         if (Array.isArray(d.secondary_feed) && d.secondary_feed.length > 0) {
           elSecondary.innerHTML = d.secondary_feed.map(renderFeedItem).join('');
+        } else {
+          elSecondary.textContent = 'No secondary Atlas feed is available.';
         }
       }
       if (typeof injectIcons === 'function') injectIcons();
     } catch(e) {
       console.warn('Dashboard load warning:', e);
+      ['reports_today', 'sources_monitored', 'sectors_tracked', 'alerts'].forEach(key => setKpi(key, 'Unavailable', null));
+      const primary = document.getElementById('section_primary');
+      const secondary = document.getElementById('section_secondary');
+      if (primary) primary.textContent = 'Atlas dashboard data is unavailable.';
+      if (secondary) secondary.textContent = 'Atlas dashboard data is unavailable.';
     }
   }
 

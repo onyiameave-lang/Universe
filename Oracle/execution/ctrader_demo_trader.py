@@ -72,14 +72,29 @@ for p in (_REPO_ROOT, _ECO_ROOT):
         sys.path.insert(0, str(p))
 
 from execution.ctrader_broker import CTraderBroker  # type: ignore
-from execution.chronicle_position_log import ChroniclePositionLog  # type: ignore
+from execution.account_risk_state import AccountRiskState  # type: ignore
+from execution.chronicle_position_log import ChroniclePositionLog, adverse_slippage_price  # type: ignore
 from execution.trade_manager import (  # type: ignore
     TradeManager, TradeManagerConfig, Position, MarketSnapshot, Direction, Action,
 )
-from intelligence.news_impact import assess_news_impact  # type: ignore
-from intelligence.social_risk import assess_social_risk  # type: ignore
-from intelligence.trade_learning import TradeLearningEngine  # type: ignore
-from core.risk import Position as RiskPosition  # type: ignore
+from execution.telegram_notifier import (  # type: ignore
+    TelegramNotifier, signal_only_enabled,
+    format_entry_alert, format_execution_alert, format_position_alert,
+)
+try:
+    from intelligence.news_impact import assess_news_impact  # type: ignore
+    from intelligence.social_risk import assess_social_risk  # type: ignore
+    from intelligence.trade_learning import TradeLearningEngine  # type: ignore
+except ModuleNotFoundError as exc:
+    # Other agents also expose a top-level ``intelligence`` package. When one
+    # was imported first, resolve Oracle's modules through the unambiguous
+    # package path instead of failing trader startup.
+    if exc.name not in {"intelligence", "intelligence.news_impact", "intelligence.social_risk", "intelligence.trade_learning"}:
+        raise
+    from Oracle.intelligence.news_impact import assess_news_impact
+    from Oracle.intelligence.social_risk import assess_social_risk
+    from Oracle.intelligence.trade_learning import TradeLearningEngine
+from Oracle.core.risk import Position as RiskPosition
 
 log = logging.getLogger("oracle.ctrader_demo")
 
@@ -103,6 +118,10 @@ def _env_int(name: str, default: int) -> int:
 _DEFAULT_MANAGE_INTERVAL = 15   # seconds
 _TRADER_ID: str = os.getenv("TRADER_ID", "ctrader_demo")
 _DEFAULT_SYMBOL_TIMEOUT = 60
+_DASHBOARD_SNAPSHOT_PATH = Path(os.getenv(
+    "ORACLE_CTRADER_DASHBOARD_SNAPSHOT_PATH",
+    str(_ECO_ROOT / "Oracle" / "memory" / "ctrader_dashboard_snapshot.json"),
+)).expanduser()
 
 # ── Shared evolution + execution watchlist ────────────────────────────────────
 DEFAULT_SYMBOLS: List[str] = [
@@ -456,6 +475,11 @@ class CTraderDemoTrader:
         self.session_max_loss_pct = session_max_loss_pct
         self.max_trades = max_trades
         self.confirm_live = confirm_live
+        self.signal_only = signal_only_enabled("ORACLE_CTRADER_SIGNAL_ONLY")
+        self.telegram = TelegramNotifier()
+        if self.signal_only and not self.telegram.enabled:
+            log.warning("Signal-only mode is ON, but Telegram credentials are missing; "
+                        "approved cTrader signals will be printed locally only")
         # Shadow mode supplements live cTrader execution after its configured
         # live-position capacity is reached.
         self.shadow_mode = os.getenv("ORACLE_CTRADER_SHADOW_MODE", "false").strip().lower() in {
@@ -464,6 +488,9 @@ class CTraderDemoTrader:
         self.broker = CTraderBroker()
         self._trades_this_session = 0
         self._start_equity: Optional[float] = None
+        self._risk_day_key = time.strftime("%Y-%m-%d", time.gmtime())
+        self._risk_day_start_equity: Optional[float] = None
+        self._account_risk_state: Optional[AccountRiskState] = None
         self._open_context: Dict[str, Dict] = {}
         self._trading_disabled_symbols = set()
 
@@ -476,6 +503,15 @@ class CTraderDemoTrader:
         self._ks_equity_ts: float = 0.0
         self._ks_check_unavailable = False
         self._ks_fired = False
+        self._dashboard_positions: List[Dict[str, Any]] = []
+        self._dashboard_positions_updated_at_unix: Optional[float] = None
+        self._dashboard_closed_trades: List[Dict[str, Any]] = []
+        self._dashboard_history_status = "pending"
+        self._dashboard_history_updated_at_unix: Optional[float] = None
+        self._dashboard_history_lookback_days = 90
+        self._dashboard_history_lock = threading.Lock()
+        self._dashboard_snapshot_lock = threading.Lock()
+        self._dashboard_history_last_started = 0.0
 
         self._sym_mapper = SymbolMapper()
 
@@ -487,6 +523,9 @@ class CTraderDemoTrader:
         self._manage_lock = threading.Lock()
         self._manage_stop_event = threading.Event()
         self._manage_thread: Optional[threading.Thread] = None
+        self._position_state_lock = threading.Lock()
+        self._broker_position_signature: Optional[Tuple[Tuple[str, str], ...]] = None
+        self._capacity_release_event = threading.Event()
 
         _unload_conflicting_modules()
         self.chronicle = _load("Chronicle", "agents/chronicle_agent.py", "ChronicleAgent",
@@ -508,7 +547,7 @@ class CTraderDemoTrader:
         # Keep any explicit CLI override for compatibility; otherwise mirror
         # RL_MAX_POSITIONS as loaded by Oracle's risk configuration.
         if self.max_trades is None:
-            self.max_trades = max(1, int(self.oracle.risk.max_positions))
+            self.max_trades = max(0, int(self.oracle.risk.max_positions))
         self.oracle.start()
         self._trade_learning.confidence = self.oracle._champion_confidence
 
@@ -532,6 +571,22 @@ class CTraderDemoTrader:
                 self._start_equity = float(starting_equity)
                 self._ks_equity_cache = self._start_equity
                 self._ks_equity_ts = time.time()
+                try:
+                    self._account_risk_state = AccountRiskState({
+                        "broker": "ctrader", "login": status.get("login"),
+                        "server": status.get("server"), "account_type": status.get("account_type"),
+                        "currency": status.get("currency"),
+                    })
+                    risk_state = self._account_risk_state.load_or_initialize(self._start_equity)
+                    self._risk_day_key = risk_state["utc_day"]
+                    self._risk_day_start_equity = risk_state["day_start_equity"]
+                    self._start_equity = risk_state["day_start_equity"]
+                    self._ks_fired = risk_state["kill_switch_latched"]
+                except Exception as exc:
+                    self._ks_check_unavailable = True
+                    self._start_equity = None
+                    log.error("Cannot restore cTrader account risk guard state; entries are blocked: %s",
+                              type(exc).__name__)
                 log.info("Connected: %s account, equity %.2f %s",
                          status["account_type"], self._start_equity,
                          status.get("currency", ""))
@@ -540,6 +595,7 @@ class CTraderDemoTrader:
                 log.warning(
                     "Connected to cTrader but initial account equity is unavailable; "
                     "new entries will wait for a valid account refresh")
+            self._persist_dashboard_snapshot()
             self._build_symbol_map()
             mapped_symbols = [self._sym_mapper.translate(symbol) for symbol in self.symbols]
             try:
@@ -550,6 +606,159 @@ class CTraderDemoTrader:
             log.warning("cTrader not connected: %s", status.get("reason"))
             self._build_symbol_map(broker_symbols=[])
         return status
+
+    def _persist_dashboard_snapshot(self, positions=None) -> None:
+        """Persist only account facts confirmed by this authenticated cTrader session."""
+        status = self.broker.status.to_dict()
+        balance = status.get("balance")
+        equity = status.get("equity")
+        if (status.get("account_info_available") is not True
+                or not isinstance(balance, (int, float))
+                or not math.isfinite(balance) or balance <= 0
+                or not isinstance(equity, (int, float))
+                or not math.isfinite(equity) or equity <= 0):
+            return
+
+        if positions is not None:
+            normalized_positions = []
+            for position in positions:
+                if not isinstance(position, dict):
+                    continue
+                normalized_positions.append({
+                    "ticket": position.get("ticket"),
+                    "symbol": str(position.get("symbol") or "").upper(),
+                    "direction": str(position.get("type") or "").lower(),
+                    "volume": position.get("volume"),
+                    "entry_price": position.get("price_open", position.get("price")),
+                    "stop_loss": position.get("sl"),
+                    "take_profit": position.get("tp"),
+                })
+            self._dashboard_positions = normalized_positions
+            self._dashboard_positions_updated_at_unix = time.time()
+
+        now = time.time()
+        snapshot = {
+            "schema": "oracle.ctrader_dashboard_snapshot.v1",
+            "source": "authenticated_ctrader_open_api",
+            "account_type": status.get("account_type"),
+            "account_info_available": True,
+            "connected": bool(status.get("connected")),
+            "balance": float(balance),
+            "equity": float(equity),
+            "currency": str(status.get("currency") or "").upper(),
+            "account_updated_at_unix": float(self._ks_equity_ts or now),
+            "positions": self._dashboard_positions,
+            "positions_updated_at_unix": self._dashboard_positions_updated_at_unix,
+            "history_status": self._dashboard_history_status,
+            "history_lookback_days": self._dashboard_history_lookback_days,
+            "history_updated_at_unix": self._dashboard_history_updated_at_unix,
+            "closed_trades": self._dashboard_closed_trades,
+            "snapshot_written_at_unix": now,
+        }
+        try:
+            _DASHBOARD_SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = _DASHBOARD_SNAPSHOT_PATH.with_suffix(
+                _DASHBOARD_SNAPSHOT_PATH.suffix + f".{os.getpid()}.tmp")
+            with self._dashboard_snapshot_lock:
+                tmp_path.write_text(json.dumps(snapshot, allow_nan=False), encoding="utf-8")
+                os.replace(tmp_path, _DASHBOARD_SNAPSHOT_PATH)
+        except (OSError, TypeError, ValueError) as exc:
+            log.warning("Could not persist verified cTrader dashboard snapshot: %s",
+                        type(exc).__name__)
+
+    def _schedule_dashboard_history_refresh(self) -> None:
+        """Fetch verified close-deal outcomes off the trading/management threads."""
+        configured_interval = max(120, _env_int("ORACLE_CTRADER_DASHBOARD_HISTORY_REFRESH_SEC", 900))
+        interval = configured_interval if self._dashboard_history_status == "complete" else min(configured_interval, 120)
+        now = time.time()
+        if now - self._dashboard_history_last_started < interval:
+            return
+        if not self._dashboard_history_lock.acquire(blocking=False):
+            return
+        self._dashboard_history_last_started = now
+        threading.Thread(target=self._refresh_dashboard_history, daemon=True,
+                         name="ctrader-dashboard-history").start()
+
+    def _refresh_dashboard_history(self) -> None:
+        try:
+            days = max(1, min(3650, _env_int("ORACLE_CTRADER_DASHBOARD_HISTORY_DAYS", 90)))
+            now_ms = int(time.time() * 1000)
+            start_ms = now_ms - days * 24 * 60 * 60 * 1000
+            result = self.broker.historical_deals(start_ms, now_ms, max_rows=10000, timeout=30.0)
+            if not isinstance(result, dict) or result.get("status") != "complete":
+                self._dashboard_history_status = "incomplete"
+                self._dashboard_history_updated_at_unix = time.time()
+                log.warning("cTrader dashboard deal history is unavailable or incomplete")
+                self._persist_dashboard_snapshot()
+                return
+
+            current_positions = self.broker.positions()
+            if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                self._dashboard_history_status = "incomplete"
+                self._dashboard_history_updated_at_unix = time.time()
+                log.warning("cTrader dashboard history omitted: current position reconciliation failed")
+                self._persist_dashboard_snapshot()
+                return
+            open_ids = {int(p["ticket"]) for p in current_positions if p.get("ticket") is not None}
+            grouped: Dict[int, Dict[str, Any]] = {}
+            for deal in result.get("deals", []):
+                if not isinstance(deal, dict) or deal.get("deal_status") not in (2, 3):
+                    continue
+                close = deal.get("close_detail")
+                position_id = int(deal.get("position_id") or 0)
+                if not isinstance(close, dict) or not position_id:
+                    continue
+                digits = close.get("money_digits")
+                if isinstance(digits, bool) or not isinstance(digits, int) or not 0 <= digits <= 12:
+                    continue
+                scale = 10 ** digits
+                record = grouped.setdefault(position_id, {
+                    "position_id": position_id,
+                    "symbol": str(deal.get("symbol") or "").upper(),
+                    "gross_profit": 0.0,
+                    "swap": 0.0,
+                    "commission": 0.0,
+                    "conversion_fee": 0.0,
+                    "closed_at_unix": 0.0,
+                    "closed_deal_count": 0,
+                })
+                record["gross_profit"] += float(close.get("gross_profit_raw") or 0) / scale
+                record["swap"] += float(close.get("swap_raw") or 0) / scale
+                record["commission"] += float(close.get("commission_raw") or 0) / scale
+                record["conversion_fee"] += float(close.get("pnl_conversion_fee_raw") or 0) / scale
+                record["closed_deal_count"] += 1
+                record["closed_at_unix"] = max(
+                    record["closed_at_unix"],
+                    float(deal.get("execution_timestamp_ms") or 0) / 1000.0,
+                )
+
+            closed_trades = []
+            for position_id, record in grouped.items():
+                if position_id in open_ids:
+                    continue
+                net = (record["gross_profit"] + record["swap"]
+                       + record["commission"] + record["conversion_fee"])
+                closed_trades.append({
+                    **record,
+                    "net_pnl": round(net, 8),
+                    "outcome": "win" if net > 0 else "loss" if net < 0 else "breakeven",
+                    "currency": str(self.broker.status.currency or "").upper(),
+                })
+            closed_trades.sort(key=lambda item: (item["closed_at_unix"], item["position_id"]))
+            self._dashboard_closed_trades = closed_trades[-1000:]
+            self._dashboard_history_lookback_days = days
+            self._dashboard_history_status = "complete"
+            self._dashboard_history_updated_at_unix = time.time()
+            self._persist_dashboard_snapshot(positions=current_positions)
+            log.info("cTrader dashboard history refreshed: %d completed positions in last %d days",
+                     len(self._dashboard_closed_trades), days)
+        except Exception as exc:
+            self._dashboard_history_status = "error"
+            self._dashboard_history_updated_at_unix = time.time()
+            log.warning("cTrader dashboard history refresh failed: %s", type(exc).__name__)
+            self._persist_dashboard_snapshot()
+        finally:
+            self._dashboard_history_lock.release()
 
     def _get_broker_symbols(self):
         try:
@@ -583,6 +792,66 @@ class CTraderDemoTrader:
         if not positions:
             return None
         return positions[0]
+
+    def _observe_broker_positions(self, positions) -> bool:
+        """Flag a capacity release when a fresh broker snapshot loses positions."""
+        signature = tuple(sorted(
+            (str(position.get("ticket") or position.get("id") or ""),
+             str(position.get("symbol") or "").upper())
+            for position in positions if isinstance(position, dict)
+        ))
+        with self._position_state_lock:
+            previous = self._broker_position_signature
+            self._broker_position_signature = signature
+            released = previous is not None and len(signature) < len(previous)
+        if released:
+            self._capacity_release_event.set()
+        return released
+
+    def _sync_risk_positions_from_broker(self, positions) -> None:
+        """Make cTrader's confirmed positions authoritative for the risk book.
+
+        Keep realized PnL, cooldowns, and daily trade counts intact; only replace
+        the in-memory open-position list so closed positions stop consuming slots.
+        """
+        observed = []
+        for position in positions:
+            if not isinstance(position, dict):
+                continue
+            broker_symbol = str(position.get("symbol") or "").upper()
+            if not broker_symbol:
+                continue
+            symbol = broker_symbol
+            for candidate in self.symbols:
+                mapped = self._sym_mapper.translate(candidate)
+                if mapped and (broker_symbol == mapped.upper()
+                               or broker_symbol.startswith(mapped.upper()[:6])):
+                    symbol = candidate
+                    break
+            direction = str(position.get("type") or "").lower()
+            if direction in {"buy", "long", "1"}:
+                direction = "long"
+            elif direction in {"sell", "short", "2"}:
+                direction = "short"
+            else:
+                log.warning("Ignoring cTrader position with unknown direction: %s", broker_symbol)
+                continue
+            try:
+                entry = float(position.get("price_open") or position.get("price") or 0.0)
+                size = float(position.get("volume") or 0.0)
+                stop = float(position.get("sl") or 0.0)
+                target = float(position.get("tp") or 0.0)
+            except (TypeError, ValueError):
+                log.warning("Ignoring malformed cTrader position for %s", broker_symbol)
+                continue
+            if not math.isfinite(entry) or not math.isfinite(size) or entry <= 0 or size <= 0:
+                log.warning("Ignoring cTrader position with invalid size/entry for %s", broker_symbol)
+                continue
+            observed.append(RiskPosition(symbol, direction, size, entry, stop, target))
+
+        # Risk evaluation and the CTM both touch this account's open book.
+        with self._manage_lock:
+            self.oracle.risk.portfolio.positions = observed
 
     def _register_position(self, symbol, direction, entry_price, stop, target, confidence, size=0.0,
                             news_level="none", news_reason="", social_level="none", social_reason=""):
@@ -642,6 +911,10 @@ class CTraderDemoTrader:
         if not getattr(self.broker, "_positions_last_refresh_ok", True):
             log.warning("cTrader position reconciliation failed; skipping CTM pass to avoid false closes")
             return
+        self._observe_broker_positions(open_positions)
+        self._sync_risk_positions_from_broker(open_positions)
+        self._persist_dashboard_snapshot(positions=open_positions)
+        self._schedule_dashboard_history_refresh()
         with self._manage_lock:
             symbols = list(self._managed_positions.keys())
         for symbol in symbols:
@@ -694,6 +967,25 @@ class CTraderDemoTrader:
                                    social_risk=social_assessment.level, atr=current_atr)
             decision = self._trade_manager.evaluate(pos, snap)
             pos_id = live_pos.get("ticket") or live_pos.get("id")
+            if self.signal_only:
+                prior_stop = pos.current_stop
+                if decision.action == Action.TIGHTEN_STOP:
+                    pos.current_stop = prior_stop
+                    stop_key = f"{float(decision.new_stop or 0.0):.8f}"
+                    self.telegram.send(
+                        format_position_alert(symbol, pos_id, "tighten_stop", decision,
+                                               pos.initial_stop, pos.initial_target),
+                        f"position:{pos_id}:tighten:{stop_key}",
+                    )
+                elif decision.action == Action.CLOSE:
+                    self.telegram.send(
+                        format_position_alert(symbol, pos_id, "close", decision,
+                                               pos.initial_stop, pos.initial_target),
+                        f"position:{pos_id}:close",
+                    )
+                # Signal-only management stays advisory; never change or close
+                # a broker position from the cTrader management loop.
+                continue
             if decision.action == Action.HOLD:
                 if decision.reason != pos.last_journaled_hold_reason:
                     self.oracle.trade_journal.log_hold(
@@ -767,6 +1059,9 @@ class CTraderDemoTrader:
             self._manage_thread.join(timeout=5)
 
     def _close_all_positions(self):
+        if self.signal_only:
+            return {"status": "signal_only", "message":
+                    "Oracle is in signal-only mode; manage positions manually."}
         results = []
         try:
             for pos in self.broker.positions():
@@ -789,7 +1084,7 @@ class CTraderDemoTrader:
         print(f"Account: {status.get('account_type')} | login={status.get('login')} | "
               f"currency={status.get('currency', '?')}")
         print(f"Symbol timeout: {self._symbol_timeout}s | max open positions: {self.max_trades} | "
-              f"overflow shadow={self.shadow_mode}")
+              f"signal_only={self.signal_only} | overflow shadow={self.shadow_mode}")
         print(f"CTM: polling every {self._manage_interval:.0f}s")
         print("Press Ctrl+C to stop.\n")
         self.start_trade_manager()
@@ -804,17 +1099,26 @@ class CTraderDemoTrader:
                 summary = self._tick()
                 print(f"\nCycle {cycle_label} done — scanned {summary['scanned']} symbols | "
                       f"{summary['trades']} trade(s) | {summary['holds']} hold | "
+                      f"{summary['signals']} signal(s) | "
                       f"{summary['rejects']} reject | {summary['errors']} error | "
                       f"{summary['timeouts']} timeout | {summary['unmapped']} unmapped | "
                         f"{summary['shadowed']} shadowed | "
                         f"{summary['managed']} managed | {summary['market_closed']} not open")
                 if summary["kill_switch"]:
-                    print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
-                    print(self._close_all_positions())
+                    if self.signal_only:
+                        print("KILL SWITCH: session loss limit hit. Stopping signals; "
+                              "signal-only mode will not close broker positions.")
+                    else:
+                        print("KILL SWITCH: session loss limit hit. Flattening + stopping.")
+                        print(self._close_all_positions())
                     break
+                if (summary.get("capacity_released")
+                        and summary.get("open_positions_after_scan", 0) < self.max_trades):
+                    print("A cTrader slot opened during the scan; immediately rescanning all symbols for fresh setups.")
+                    continue
                 if cycles is None or cycle < cycles:
-                    print(f"Sleeping {self.interval}s until next cycle...")
-                    time.sleep(self.interval)
+                    print(f"Waiting up to {self.interval}s for the next cycle or a cTrader slot to open...")
+                    self._capacity_release_event.wait(self.interval)
         except KeyboardInterrupt:
             print("\nStopped by user.")
         finally:
@@ -822,9 +1126,10 @@ class CTraderDemoTrader:
             self.shutdown()
 
     def _tick(self):
-        summary = dict(scanned=0, trades=0, holds=0, rejects=0,
+        summary = dict(scanned=0, trades=0, signals=0, holds=0, rejects=0,
                    errors=0, timeouts=0, unmapped=0, managed=0,
-                   market_closed=0, shadowed=0, kill_switch=False)
+                   market_closed=0, shadowed=0, kill_switch=False,
+                   capacity_released=False)
         duplicate_mappings = _duplicate_broker_symbol_mappings(
             self.symbols, self._sym_mapper)
         if self._kill_switch_check():
@@ -849,6 +1154,12 @@ class CTraderDemoTrader:
                 log.warning("cTrader position reconciliation failed; skipping new-entry scan")
                 summary["errors"] += 1
                 return summary
+            self._observe_broker_positions(open_positions)
+            self._sync_risk_positions_from_broker(open_positions)
+            # This cycle starts at the beginning of a fresh full-symbol scan.
+            self._capacity_release_event.clear()
+            self._persist_dashboard_snapshot(positions=open_positions)
+            self._schedule_dashboard_history_refresh()
         try:
             pending_shadow = self.oracle.decision_ledger.unentered_trades_pending_replay(
                 max_items=5000, shadow_only=True)
@@ -859,6 +1170,7 @@ class CTraderDemoTrader:
         except Exception as exc:
             log.warning("Could not load active cTrader shadow observations: %s", type(exc).__name__)
 
+        candidate_queue = []
         for symbol in self.symbols:
             if self._kill_switch_check():
                 summary["kill_switch"] = True
@@ -867,6 +1179,31 @@ class CTraderDemoTrader:
                 summary["errors"] += 1
                 log.warning("Stopping scan because cTrader account equity is unavailable")
                 return summary
+            # A close can happen while a long symbol scan is in progress. Refresh
+            # at the next symbol boundary rather than reusing the count captured
+            # at cycle start for the rest of the scan.
+            if self._capacity_release_event.is_set() and self.broker.status.connected:
+                try:
+                    refreshed_positions = self.broker.positions()
+                except Exception as exc:
+                    log.warning("Could not refresh positions after a close: %s", exc)
+                    summary["errors"] += 1
+                    return summary
+                if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                    log.warning("Position refresh after close was not confirmed; stopping new-entry scan")
+                    summary["errors"] += 1
+                    return summary
+                previous_count = real_position_count
+                open_positions = refreshed_positions
+                real_position_count = len(open_positions)
+                self._observe_broker_positions(open_positions)
+                self._sync_risk_positions_from_broker(open_positions)
+                self._capacity_release_event.clear()
+                if real_position_count < previous_count:
+                    summary["capacity_released"] = True
+                    log.info("cTrader slot released during scan: %d/%d open positions",
+                             real_position_count, self.max_trades)
+                self._persist_dashboard_snapshot(positions=open_positions)
             broker_sym = self._sym_mapper.translate(symbol)
             if broker_sym is None:
                 print(f"[{symbol}] UNMAPPED — add BROKER_SYMBOL_MAP={symbol}:<name> to .env")
@@ -904,7 +1241,7 @@ class CTraderDemoTrader:
                 summary["market_closed"] += 1
                 continue
             capacity_full = real_position_count >= self.max_trades
-            if capacity_full and not self.shadow_mode:
+            if capacity_full and not self.shadow_mode and not self.signal_only:
                 log.info("[%s] new entry skipped; configured cTrader position limit reached", symbol)
                 summary["holds"] += 1
                 continue
@@ -912,7 +1249,11 @@ class CTraderDemoTrader:
                 log.info("[%s] duplicate shadow setup skipped; an unresolved shadow position already exists", symbol)
                 summary["holds"] += 1
                 continue
-            if self._pos_log.has_open_position(symbol, broker_sym):
+            # The broker snapshot above is the authoritative open-position
+            # state. Use Chronicle only as a short race-window guard; an old
+            # unmatched event must not permanently block a fresh setup after
+            # cTrader has confirmed that the position is gone.
+            if self._pos_log.has_open_position(symbol, broker_sym, max_age_sec=60):
                 print(f"[{symbol}->{broker_sym}] DEDUP: Chronicle shows open position")
                 summary["holds"] += 1
                 continue
@@ -947,6 +1288,7 @@ class CTraderDemoTrader:
                     summary["errors"] += 1
                 continue
             status = (sig or {}).get("status")
+            capacity_limited_signal = False
             if status != "complete":
                 message = (sig or {}).get("message", "unknown")
                 risk = (sig or {}).get("risk") or {}
@@ -955,12 +1297,15 @@ class CTraderDemoTrader:
                 capacity_only_rejection = bool(reasons) and all(
                     str(reason).startswith("max positions (") for reason in reasons
                 )
-                if (capacity_full and self.shadow_mode and capacity_only_rejection
+                if ((self.signal_only or (capacity_full and self.shadow_mode))
+                        and capacity_only_rejection
                         and isinstance(shadow_candidate, dict)):
                     # The risk decision remains rejected for real execution.
-                    # Reuse its non-executable candidate for the shadow path.
+                    # Reuse its non-executable candidate for shadow observation
+                    # or signal-only notification, never as an order approval.
                     sig = shadow_candidate
                     status = "complete"
+                    capacity_limited_signal = True
                 else:
                     if "hold" in message.lower():
                         print(f"[{symbol}] HOLD   ({message})")
@@ -979,19 +1324,26 @@ class CTraderDemoTrader:
                     continue
             plan = sig["plan"]
             s = sig["signal"]
-            self._open_context[symbol] = dict(sig.get("_streams", {}) or {})
-            self._open_context[symbol]["market_context"] = {
-                key: market_state.get(key) for key in
-                ("state", "sessions", "overlap", "schedule_timezone", "updated_at_utc")
-            }
-            conf_str = f"conf={s.get('confidence', 0):.3f}"
-            broker_plan = dict(plan)
-            broker_plan["broker_symbol"] = broker_sym
+            scout_enabled = bool(sig.get(
+                "scout_enabled", getattr(self.oracle, "scout_enabled", True)
+            ))
+            effective_confidence = float(
+                sig.get("effective_confidence", s.get("confidence", 0.0)) or 0.0
+            )
+            selection_score = float(
+                sig.get("scout_score", effective_confidence) or 0.0
+            )
+            score_label = "scout" if scout_enabled else "confidence"
+            conf_str = (
+                f"{score_label}={selection_score:.3f} "
+                f"effective_conf={effective_confidence:.3f} "
+                f"raw_conf={float(s.get('confidence', 0.0) or 0.0):.3f}"
+            )
             if capacity_full and self.shadow_mode:
                 summary["shadowed"] += 1
                 shadow_reason = f"cTrader position capacity full ({real_position_count}/{self.max_trades})"
                 print(f"[{symbol}->{broker_sym}] SHADOW ({shadow_reason}) direction={plan['direction']} "
-                      f"conf={s.get('confidence', 0):.3f} size={plan.get('size', 0)} "
+                      f"{conf_str} size={plan.get('size', 0)} "
                       f"stop={plan.get('stop')} target={plan.get('target')}; no cTrader order sent")
                 self._record_shadow_proposal(
                     symbol, broker_sym, sig, market_state,
@@ -1000,58 +1352,173 @@ class CTraderDemoTrader:
                 )
                 active_shadow_symbols.add(symbol)
                 continue
-            if self.broker.status.connected:
+            candidate_queue.append({
+                "symbol": symbol,
+                "broker_symbol": broker_sym,
+                "signal": sig,
+                "market_state": market_state,
+                "plan": plan,
+                "signal_data": s,
+                "scout_enabled": scout_enabled,
+                "selection_score": selection_score,
+                "effective_confidence": effective_confidence,
+                "conf_str": conf_str,
+                "capacity_limited_signal": capacity_limited_signal,
+            })
+
+        # Decide across the complete scan before consuming any broker slot.
+        # This prevents watchlist order from deciding which setup wins.
+        candidate_queue.sort(
+            key=lambda row: (
+                row["selection_score"] if row["scout_enabled"] else row["effective_confidence"],
+                row["effective_confidence"],
+            ),
+            reverse=True,
+        )
+        if self.signal_only:
+            for row in candidate_queue:
+                symbol, broker_sym = row["symbol"], row["broker_symbol"]
+                plan, sig = row["plan"], row["signal"]
+                alert = format_entry_alert(symbol, sig)
+                if row["capacity_limited_signal"]:
+                    alert = alert.replace(
+                        "ORACLE APPROVED SIGNAL",
+                        "ORACLE SIGNAL — BROKER CAPACITY BLOCKED",
+                        1,
+                    )
+                    alert += "\nRisk Manager blocked execution because the position limit is full."
+                delivered = self.telegram.send(alert, f"entry:{symbol}:{plan.get('direction', '')}")
+                summary["signals"] += 1
+                delivery = "sent" if delivered else (
+                    "not sent" if self.telegram.enabled else "not configured"
+                )
+                log.info("[%s->%s] SIGNAL ONLY direction=%s %s Telegram=%s",
+                         symbol, broker_sym, plan.get("direction"), row["conf_str"], delivery)
+                if not self.telegram.enabled:
+                    print(alert)
+        elif candidate_queue and self.broker.status.connected:
+            try:
+                # Refresh once after scoring, so externally opened/closed
+                # positions during the scan cannot make the slot count stale.
+                refreshed_positions = self.broker.positions()
+                if not getattr(self.broker, "_positions_last_refresh_ok", True):
+                    raise RuntimeError("broker position reconciliation was not confirmed")
+                open_positions = refreshed_positions
+                real_position_count = len(open_positions)
+                self._observe_broker_positions(open_positions)
+                self._sync_risk_positions_from_broker(open_positions)
+                self._persist_dashboard_snapshot(positions=open_positions)
+            except Exception as exc:
+                log.warning("Cannot rank-to-execution safely without a fresh position snapshot: %s", exc)
+                summary["errors"] += 1
+                candidate_queue = []
+
+            available_slots = max(0, self.max_trades - real_position_count)
+            execution_outcome_uncertain = False
+            for row in candidate_queue:
+                symbol, broker_sym = row["symbol"], row["broker_symbol"]
+                sig, plan = row["signal"], row["plan"]
+                if execution_outcome_uncertain:
+                    summary["holds"] += 1
+                    continue
+                if available_slots <= 0:
+                    if self.shadow_mode:
+                        summary["shadowed"] += 1
+                        reason = f"cTrader position capacity full ({real_position_count}/{self.max_trades}); out-ranked after full scan"
+                        self._record_shadow_proposal(
+                            symbol, broker_sym, sig, row["market_state"],
+                            reason_code="max_open_positions", reason=reason,
+                        )
+                        active_shadow_symbols.add(symbol)
+                    else:
+                        summary["holds"] += 1
+                    continue
+                if self._get_open_position(broker_sym, open_positions) is not None:
+                    summary["holds"] += 1
+                    continue
+                broker_plan = dict(plan)
+                broker_plan["broker_symbol"] = broker_sym
                 result = self.broker.place_order(broker_plan, human_confirm=self.confirm_live)
                 res_status = result.get("status", "unknown")
                 res_reason = result.get("reason", "")
-                print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
-                      f"  -> {res_status}  {res_reason}")
-                if res_status == "filled":
-                    self._trades_this_session += 1
-                    summary["trades"] += 1
-                    # Reserve the slot for the remainder of this scan. The
-                    # broker position snapshot is taken once per cycle, so
-                    # without this increment several simultaneous signals
-                    # could all pass the same final available slot.
-                    real_position_count += 1
-                    ticket = result.get("order") or result.get("ticket") or 0
-                    self._pos_log.log_opened(symbol, broker_sym, ticket,
-                        direction=plan["direction"],
-                        volume=result.get("volume", plan.get("size", 0)),
-                        price=result.get("price", 0.0),
-                        sl=plan.get("stop", 0.0), tp=plan.get("target", 0.0))
-                    open_positions.append({
-                        "symbol": broker_sym,
-                        "ticket": ticket,
-                        "type": "buy" if plan["direction"] in ("long", "buy") else "sell",
-                        "price_open": result.get("price") or plan.get("entry", 0.0),
-                        "volume": result.get("volume", plan.get("size", 0.0)),
-                        "sl": plan.get("stop", 0.0),
-                        "tp": plan.get("target", 0.0),
-                    })
-                    self._register_position(symbol, plan["direction"],
-                        entry_price=result.get("price") or plan.get("entry", 0.0),
-                        stop=plan.get("stop", 0.0), target=plan.get("target", 0.0),
-                        confidence=s.get("confidence", 0.0),
-                        size=result.get("volume", plan.get("size", 0.0)),
-                        news_level=sig.get("news_impact", "none"),
-                        news_reason=sig.get("news_reason", ""),
-                        social_level=sig.get("social_risk", "none"),
-                        social_reason=sig.get("social_reason", ""))
-                    self.oracle.risk.portfolio.record_trade_opened(symbol)
-                else:
-                    summary["rejects"] += 1
+                print(f"[{symbol}->{broker_sym}] TRADE direction={plan['direction']} {row['conf_str']}"
+                      f" -> {res_status} {res_reason}")
+                if res_status != "filled":
+                    if res_status == "unknown":
+                        execution_outcome_uncertain = True
+                        summary["errors"] += 1
+                        log.error("[%s] cTrader order outcome uncertain; stopping new order submissions for this scan",
+                                  symbol)
+                        try:
+                            refreshed = self.broker.positions()
+                            if getattr(self.broker, "_positions_last_refresh_ok", True):
+                                open_positions = refreshed
+                                real_position_count = len(refreshed)
+                                self._observe_broker_positions(refreshed)
+                                self._sync_risk_positions_from_broker(refreshed)
+                        except Exception as exc:
+                            log.error("Position reconciliation after uncertain cTrader order failed: %s",
+                                      type(exc).__name__)
+                    else:
+                        summary["rejects"] += 1
                     if _is_trading_disabled_rejection(result):
                         self._trading_disabled_symbols.add(broker_sym.upper())
-                        log.warning(
-                            "[%s->%s] cTrader disabled new trading; suppressing further "
-                            "entry attempts for this instrument until trader restart",
-                            symbol, broker_sym,
-                        )
-            else:
-                print(f"[{symbol}->{broker_sym}] TRADE  direction={plan['direction']}  {conf_str}"
-                      f"  (cTrader not connected)")
+                    continue
+                available_slots -= 1
+                real_position_count += 1
+                self._trades_this_session += 1
                 summary["trades"] += 1
+                execution_proposal = {**sig, "plan": {**plan, "broker_symbol": broker_sym}}
+                self.telegram.send(
+                    format_execution_alert(symbol, execution_proposal, result, "cTrader"),
+                    f"filled:ctrader:{result.get('order') or result.get('ticket') or symbol + ':' + str(plan.get('direction', ''))}",
+                )
+                self._open_context[symbol] = dict(sig.get("_streams", {}) or {})
+                self._open_context[symbol]["market_context"] = {
+                    key: row["market_state"].get(key) for key in
+                    ("state", "sessions", "overlap", "schedule_timezone", "updated_at_utc")
+                }
+                ticket = result.get("order") or result.get("ticket") or 0
+                fill_volume = result.get("volume_units", result.get("volume", plan.get("size", 0)))
+                self._pos_log.log_opened(
+                    symbol, broker_sym, ticket, direction=plan["direction"],
+                    volume=fill_volume, price=result.get("price", 0.0),
+                    sl=plan.get("stop", 0.0), tp=plan.get("target", 0.0),
+                    execution={
+                        "broker": "ctrader",
+                        "decision_entry_price": plan.get("entry"),
+                        "fill_price": result.get("price"),
+                        "adverse_slippage_price": adverse_slippage_price(
+                            plan["direction"], plan.get("entry"), result.get("price")),
+                        "requested_volume": result.get("requested_volume_units", plan.get("size")),
+                        "filled_volume": fill_volume,
+                        "volume_protocol_cents": result.get("volume_protocol_cents"),
+                        "risk_budget_account_currency": plan.get("risk_amount"),
+                    },
+                )
+                open_positions.append({
+                    "symbol": broker_sym, "ticket": ticket,
+                    "type": "buy" if plan["direction"] in ("long", "buy") else "sell",
+                    "price_open": result.get("price") or plan.get("entry", 0.0),
+                    "volume": fill_volume, "sl": plan.get("stop", 0.0),
+                    "tp": plan.get("target", 0.0),
+                })
+                self._register_position(
+                    symbol, plan["direction"],
+                    entry_price=result.get("price") or plan.get("entry", 0.0),
+                    stop=plan.get("stop", 0.0), target=plan.get("target", 0.0),
+                    confidence=row["signal_data"].get("confidence", 0.0),
+                    size=fill_volume, news_level=sig.get("news_impact", "none"),
+                    news_reason=sig.get("news_reason", ""),
+                    social_level=sig.get("social_risk", "none"),
+                    social_reason=sig.get("social_reason", ""),
+                )
+                self.oracle.risk.portfolio.record_trade_opened(symbol)
+        elif candidate_queue:
+            for row in candidate_queue:
+                print(f"[{row['symbol']}->{row['broker_symbol']}] SIGNAL READY; cTrader is disconnected, no order sent")
+                summary["errors"] += 1
+        summary["open_positions_after_scan"] = real_position_count
         # Replay only these broker-capacity shadow observations. Settled
         # outcomes update Scout's shadow evidence; they never alter live
         # conviction floors or open cTrader positions.
@@ -1081,6 +1548,7 @@ class CTraderDemoTrader:
             return True
         self._ks_check_unavailable = False
         if not self.broker.status.connected:
+            self._ks_check_unavailable = True
             return False
         _now = time.time()
         if (self._start_equity is None or self._ks_equity_cache is None
@@ -1101,12 +1569,41 @@ class CTraderDemoTrader:
                 log.info("Starting session equity baseline set to %.2f", self._start_equity)
             self._ks_equity_cache = float(equity)
             self._ks_equity_ts = _now
+            self._persist_dashboard_snapshot()
         equity = self._ks_equity_cache
         if self._start_equity is None:
             return False
+        today = time.strftime("%Y-%m-%d", time.gmtime(_now))
+        if today != self._risk_day_key or self._risk_day_start_equity is None:
+            try:
+                state = self._account_risk_state.load_or_initialize(float(equity), now=_now)
+                self._risk_day_key = state["utc_day"]
+                self._risk_day_start_equity = state["day_start_equity"]
+                self._start_equity = state["day_start_equity"]
+                self._ks_fired = state["kill_switch_latched"]
+            except Exception as exc:
+                self._ks_check_unavailable = True
+                log.error("Cannot roll cTrader account risk state to a new UTC day: %s",
+                          type(exc).__name__)
+                return False
+        self.oracle.risk.sync_broker_account(
+            equity=float(equity),
+            daily_pnl=float(equity) - float(self._risk_day_start_equity),
+        )
         loss = (self._start_equity - equity) / self._start_equity
         if loss >= self.session_max_loss_pct:
             self._ks_fired = True
+        try:
+            self._ks_fired = self._account_risk_state.save({
+                "utc_day": self._risk_day_key,
+                "day_start_equity": self._risk_day_start_equity,
+                "kill_switch_latched": self._ks_fired,
+            })
+        except Exception as exc:
+            self._ks_check_unavailable = True
+            log.error("Cannot persist cTrader account risk state; entries are blocked: %s",
+                      type(exc).__name__)
+            return False
         return self._ks_fired
 
     def _learn_from_closed(self):
@@ -1139,8 +1636,16 @@ class CTraderDemoTrader:
                 hypothetical_entry_price=entry,
                 hypothetical_stop=stop,
                 hypothetical_target=target,
-                scout_score=float(response.get("scout_score") or signal.get("confidence") or 0.0),
-                effective_confidence=float(response.get("effective_confidence") or signal.get("confidence") or 0.0),
+                scout_score=float(
+                    response.get("scout_score")
+                    if response.get("scout_score") is not None
+                    else response.get("effective_confidence", signal.get("confidence", 0.0)) or 0.0
+                ),
+                effective_confidence=float(
+                    response.get("effective_confidence")
+                    if response.get("effective_confidence") is not None
+                    else signal.get("confidence", 0.0) or 0.0
+                ),
                 entry_confidence=float(signal.get("confidence") or 0.0),
                 learned_conviction_floor=float(response.get("learned_conviction_floor") or 0.5),
                 regime=str(response.get("regime") or technical.get("regime") or "ranging"),
@@ -1169,6 +1674,10 @@ class CTraderDemoTrader:
             "regime": response.get("regime") or technical.get("regime"),
             "direction": plan.get("direction"),
             "confidence": signal.get("confidence"),
+            "effective_confidence": response.get("effective_confidence"),
+            "scout_score": response.get("scout_score"),
+            "scout_enabled": response.get("scout_enabled", getattr(self.oracle, "scout_enabled", True)),
+            "learned_conviction_floor": response.get("learned_conviction_floor"),
             "entry": plan.get("entry"),
             "size": plan.get("size"),
             "stop": plan.get("stop"),

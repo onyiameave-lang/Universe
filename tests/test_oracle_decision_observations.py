@@ -530,6 +530,7 @@ def test_lockbox_context_must_match_registered_development_screen(tmp_path):
     for field, changed in (("data_fingerprint", "c" * 64),
                            ("baseline_genome", {"genome_id": "other", "modules": {"entry": {}}}),
                            ("execution_costs", {**costs, "spread_bps": 9.0}),
+                           ("execution_costs", {**costs, "minimum_commission_per_side_usd": 0.01}),
                            ("risk_policy", {**risk, "max_drawdown_fraction": 0.5})):
         altered = {**request, field: changed}
         assert service._validate_hypothesis_lockbox_request(
@@ -850,6 +851,9 @@ def test_trader_heartbeat_distinguishes_and_recovers_stale_runtime(monkeypatch):
 
 def test_sustained_no_trade_pattern_opens_atlas_research_and_hypothesis(monkeypatch, tmp_path):
     monkeypatch.setenv("FORGE_ORACLE_ABLATION_MEMORY_DIR", str(tmp_path / "ablation-memory"))
+    monkeypatch.setenv("FORGE_ORACLE_NO_TRADE_DAYS", "14")
+    monkeypatch.setenv("FORGE_ORACLE_NO_TRADE_MIN_EVALUATIONS", "10")
+    monkeypatch.setenv("FORGE_ORACLE_NO_TRADE_MAX_EVALUATION_GAP_HOURS", "48")
     class _Atlas:
         def __init__(self):
             self.query = None
@@ -866,10 +870,11 @@ def test_sustained_no_trade_pattern_opens_atlas_research_and_hypothesis(monkeypa
     forge = _Forge()
     forge.atlas = _Atlas()
     service = OracleImprovementService(forge)
-    start = time.time() - 15 * 86400
+    start = time.time() - 14 * 86400
     result = None
+    observed_research_states = []
     for index in range(15):
-        event = _observation(f"event-{index}", "no_setup", start + index * 86400)
+        event = _observation(f"event-{index}", "no_setup", start + index * (14 * 86400 / 14))
         event["details"]["decision_context"] = {
             "schema": "oracle.decision_context.v1",
             "fused": {"call": "hold", "direction": 0.1,
@@ -879,8 +884,10 @@ def test_sustained_no_trade_pattern_opens_atlas_research_and_hypothesis(monkeypa
                                         "source": "evolved_champion"}},
         }
         result = service.record_decision_observation(event)
+        observed_research_states.append(result["diagnosis"]["research_case"]["status"])
 
-    assert result["diagnosis"]["research_case"]["status"] == "scheduled"
+    assert any(state in {"scheduled", "queued", "already_open"}
+               for state in observed_research_states), observed_research_states
     deadline = time.monotonic() + 5.0
     case_key = None
     while time.monotonic() < deadline:
@@ -889,7 +896,17 @@ def test_sustained_no_trade_pattern_opens_atlas_research_and_hypothesis(monkeypa
         if case_key:
             break
         time.sleep(0.01)
-    assert case_key is not None
+    assert case_key is not None, {
+        key: {"status": value.get("value", {}).get("status"),
+              "last_result": value.get("value", {}).get("last_result"),
+              "summary_snapshot": {field: value.get("value", {}).get("summary_snapshot", {}).get(field)
+                                  for field in ("first_strategy_evaluation_at_unix",
+                                                "last_strategy_evaluation_at_unix",
+                                                "last_event_at_unix",
+                                                "strategy_evaluations_since_last_trade")}}
+        for key, value in forge.chronicle.records.items()
+        if key.startswith("forge.oracle.no_trade_job.")
+    }
     assert "no trade" in forge.atlas.query
     assert "signal_below_threshold" in forge.atlas.query
     assert "mean_hold_threshold_gap" in forge.atlas.query

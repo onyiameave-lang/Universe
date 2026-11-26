@@ -10,6 +10,7 @@ from Oracle.execution.ctrader_demo_trader import (
     _is_trading_disabled_rejection,
     _call_with_timeout,
 )
+from Oracle.core.risk import Position as RiskPosition
 
 
 def test_live_preset_has_ten_symbols_without_disabled_oil_and_adds_top_champions():
@@ -67,6 +68,9 @@ def _kill_switch_trader(account_response, *, start_equity=10_000.0,
         status=SimpleNamespace(connected=True),
         account=lambda: account_response,
     )
+    # These tests exercise only kill-switch decisions; dashboard persistence
+    # requires a fully populated cTrader session and is covered separately.
+    trader._persist_dashboard_snapshot = lambda **_kwargs: None
     return trader
 
 
@@ -149,3 +153,50 @@ def test_timed_out_symbol_call_remains_single_flight_until_it_finishes(monkeypat
     assert capacity_timed_out is True
     release.set()
     assert future.result(timeout=1)["status"] == "complete"
+
+
+def test_broker_position_close_signals_scan_to_refresh_capacity():
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    trader._position_state_lock = threading.Lock()
+    trader._capacity_release_event = threading.Event()
+    trader._broker_position_signature = None
+
+    trader._observe_broker_positions([
+        {"ticket": 1, "symbol": "EURUSD"},
+        {"ticket": 2, "symbol": "GBPUSD"},
+        {"ticket": 3, "symbol": "XRPUSD"},
+    ])
+    assert not trader._capacity_release_event.is_set()
+
+    released = trader._observe_broker_positions([
+        {"ticket": 1, "symbol": "EURUSD"},
+        {"ticket": 3, "symbol": "XRPUSD"},
+    ])
+
+    assert released is True
+    assert trader._capacity_release_event.is_set()
+
+
+def test_broker_snapshot_replaces_only_live_risk_positions():
+    trader = CTraderDemoTrader.__new__(CTraderDemoTrader)
+    trader.symbols = ["EURUSD", "GBPUSD"]
+    trader._sym_mapper = SymbolMapper()
+    trader._sym_mapper.build(["EURUSD", "GBPUSD"], trader.symbols)
+    trader._manage_lock = threading.Lock()
+    portfolio = SimpleNamespace(
+        positions=[RiskPosition("USDJPY", "long", 1000, 150.0, 149.0, 152.0)],
+        trades_today={"EURUSD": 2},
+        last_loss_at={"GBPUSD": 123.0},
+    )
+    trader.oracle = SimpleNamespace(risk=SimpleNamespace(portfolio=portfolio))
+
+    trader._sync_risk_positions_from_broker([
+        {"ticket": 10, "symbol": "EURUSD", "type": "buy", "volume": 1000,
+         "price_open": 1.08, "sl": 1.07, "tp": 1.10},
+    ])
+
+    assert [(p.symbol, p.direction, p.size) for p in portfolio.positions] == [
+        ("EURUSD", "long", 1000.0),
+    ]
+    assert portfolio.trades_today == {"EURUSD": 2}
+    assert portfolio.last_loss_at == {"GBPUSD": 123.0}

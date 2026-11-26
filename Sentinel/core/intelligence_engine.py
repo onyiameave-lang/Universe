@@ -300,19 +300,21 @@ class IntelligenceEngine:
             return None  # Chronicle unavailable — fall through to live fetch
 
     def gather(self, topics=None, sources=None, limit=8, *,
-               consult_chronicle=True, include_deep_analysis=True) -> Dict[str, Any]:
+               consult_chronicle=True, include_deep_analysis=True,
+               force_refresh=False) -> Dict[str, Any]:
         cache_key = (
             tuple(sorted(set(topics or []))), tuple(sorted(set(sources or []))),
             int(limit), bool(consult_chronicle), bool(include_deep_analysis),
         )
         now = time.time()
-        with self._gather_cache_lock:
-            cached = self._gather_cache.get(cache_key)
-            if cached and cached[0] > now:
-                result = copy.deepcopy(cached[1])
-                result["cache_hit"] = True
-                return result
-            self._gather_cache.pop(cache_key, None)
+        if not force_refresh:
+            with self._gather_cache_lock:
+                cached = self._gather_cache.get(cache_key)
+                if cached and cached[0] > now:
+                    result = copy.deepcopy(cached[1])
+                    result["cache_hit"] = True
+                    return result
+                self._gather_cache.pop(cache_key, None)
 
         # ---- Principle 3: Memory First ----
         cached = self._consult_chronicle(topics) if consult_chronicle else None

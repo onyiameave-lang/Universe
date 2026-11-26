@@ -39,6 +39,7 @@ Responsibilities (from the roadmap)
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -201,8 +202,13 @@ class TradeManager:
     def __init__(self, config: Optional[TradeManagerConfig] = None):
         self.config = config or TradeManagerConfig()
 
-    def evaluate(self, pos: Position, snap: MarketSnapshot) -> ManagedDecision:
+    def evaluate(
+        self, pos: Position, snap: MarketSnapshot, *, at_time: Optional[float] = None
+    ) -> ManagedDecision:
         cfg = self.config
+        evaluated_at = time.time() if at_time is None else float(at_time)
+        if not math.isfinite(evaluated_at):
+            evaluated_at = time.time()
 
         # Remember the most recent snapshot, in case this position later
         # closes at the broker (native SL/TP hit) without us ever seeing the
@@ -350,7 +356,7 @@ class TradeManager:
         #         genuinely isn't working (unrealized_r below the minimum)
         #         -- a big winner that's just taking a while is left alone. ----
         if cfg.max_holding_sec is not None:
-            held_sec = time.time() - pos.entry_time
+            held_sec = evaluated_at - pos.entry_time
             if held_sec >= cfg.max_holding_sec and unrealized_r < cfg.time_exit_min_r:
                 return ManagedDecision(Action.CLOSE, reason=(
                     f"time exit: held {held_sec/3600:.1f}h (limit {cfg.max_holding_sec/3600:.0f}h) "

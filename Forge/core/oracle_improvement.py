@@ -1728,8 +1728,8 @@ class OracleImprovementService:
         # Keep the full telemetry in the durable case snapshot, but use a short
         # search query. Long prompts produced invalid HN/Scholar request URLs.
         query = (
-            "Oracle cTrader demo heartbeat gap: read-only checks for process, bridge/network, "
-            "and outbox; cause unknown."
+            "Oracle cTrader demo heartbeat gap: cannot distinguish process stop from bridge/network "
+            "or outbox delay; run read-only checks."
         )
         research: Dict[str, Any] = {"status": "unavailable", "reason": "Atlas is not connected"}
         atlas = getattr(self._forge, "atlas", None)
@@ -3068,17 +3068,28 @@ class OracleImprovementService:
                 "stress_slippage_bps": "stress_slippage_per_side",
                 "stress_spread_bps": "stress_spread_full",
             }
+            optional_zero_cost_fields = {
+                "minimum_commission_per_side_usd",
+                "minimum_commission_reference_notional_usd",
+            }
+
+            def same_cost_number(field: str, stored_field: str) -> bool:
+                default = 0.0 if field in optional_zero_cost_fields else None
+                left = profile.get(field, default) if isinstance(profile, dict) else None
+                right = stored_costs.get(stored_field, default) if isinstance(stored_costs, dict) else None
+                if (isinstance(left, bool) or isinstance(right, bool)
+                        or not isinstance(left, (int, float))
+                        or not isinstance(right, (int, float))
+                        or not math.isfinite(float(left))
+                        or not math.isfinite(float(right))):
+                    return False
+                return float(left) == float(right)
+
             same_costs = (isinstance(profile, dict) and isinstance(stored_profile, dict)
                           and isinstance(stored_costs, dict)
                           and all(profile.get(field) == stored_profile.get(field)
                                   for field in ("broker", "account_type", "profile_version", "price_basis"))
-                          and all(isinstance(profile.get(field), (int, float))
-                                  and not isinstance(profile.get(field), bool)
-                                  and float(profile[field]) == float(stored_costs.get(
-                                      stored_field, 0.0 if field in {
-                                          "minimum_commission_per_side_usd",
-                                          "minimum_commission_reference_notional_usd",
-                                      } else float("nan")))
+                          and all(same_cost_number(field, stored_field)
                                   for field, stored_field in cost_fields.items()))
             same_risk = (isinstance(risk_policy, dict) and isinstance(stored_risk, dict)
                          and risk_policy.get("source") == stored_risk.get("source")

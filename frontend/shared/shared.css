@@ -725,6 +725,13 @@ a:hover { color: var(--accent-light); }
 
 [data-theme="light"] .kpi-value { color: #0f172a; }
 
+/* Oracle's six account metrics contain longer unavailable and currency states;
+   keep them compact instead of letting display values dominate each card. */
+[data-agent="oracle"] .kpi-value {
+  font-size: clamp(15px, 1.1vw, 18px);
+  line-height: 1.2;
+}
+
 .kpi-delta {
   font-size: 11px;
   font-weight: 600;

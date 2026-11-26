@@ -44,6 +44,13 @@ from typing import Any, Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CTRADER_RESEARCH_ALIASES_FILE = _REPO_ROOT / "config" / "ctrader_research_symbol_aliases.json"
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.getenv(name)
+    return default if raw is None else raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 _RESEARCH_TIMEFRAMES = {
     "W1": 7 * 24 * 60 * 60 * 1000,
     "D1": 24 * 60 * 60 * 1000,
@@ -237,9 +244,20 @@ class OracleAgent(BaseAgent):
             strategy_promotion_verifier or _strategy_promotion_verifier()
         )
         self._initial_equity = equity
+        # Scout can be switched off for broker-bound decisions without
+        # disabling Oracle's configured confidence floor or other risk gates.
+        self.scout_enabled = _env_flag("ORACLE_SCOUT_ENABLED", True)
         super().__init__(chronicle_client=chronicle_client, atlas_client=atlas_client,
                          storage_dir=str(_REPO_ROOT / "memory"), **kw)
         self.data = MarketData()
+        # The broker runner injects its authenticated MT5 session here. Live
+        # execution signals must use that same terminal's candles and quote,
+        # rather than depending on unrelated public Yahoo/Stooq feeds.
+        self._mt5_execution_broker = None
+        self._mt5_signal_cache: Dict[str, Dict[str, Any]] = {}
+        self._mt5_quote_clock_offset_sec: Optional[int] = None
+        self._mt5_quote_clock_observations: Dict[str, int] = {}
+        self._mt5_quote_clock_lock = threading.Lock()
         self._forge_ctrader_broker = None
         self._forge_ctrader_history_lock = threading.Lock()
         self._ctrader_signal_cache: Dict[str, Dict[str, Any]] = {}
@@ -532,9 +550,168 @@ class OracleAgent(BaseAgent):
         self._ctrader_signal_cache[key] = {"fetched_at": now, "result": result}
         return result
 
-    def analyze_market(self, symbol, *, allow_cache_fallback=True, require_ctrader=False):
-        md = (self._get_ctrader_execution_series(symbol) if require_ctrader
-              else self.data.get(symbol, allow_cache_fallback=allow_cache_fallback))
+    def _get_mt5_execution_series(self, symbol: str) -> Dict[str, Any]:
+        """Read fresh M15 candles and a live quote from the trader's MT5 session."""
+        broker = getattr(self, "_mt5_execution_broker", None)
+        if not getattr(getattr(broker, "status", None), "connected", False):
+            return {"status": "error", "series": None,
+                    "message": "MT5 execution market data is unavailable: shared broker is disconnected"}
+
+        key = str(symbol).strip().upper()
+        cached = getattr(self, "_mt5_signal_cache", {}).get(key)
+        now = datetime.now(timezone.utc)
+        if isinstance(cached, dict) and (now - cached["fetched_at"]).total_seconds() < 10:
+            return cached["result"]
+
+        try:
+            fetch = getattr(broker, "fetch_execution_rates", None)
+            if not callable(fetch):
+                raise RuntimeError("MT5 broker does not expose execution-rate fetching")
+            payload = fetch(key)
+        except RuntimeError as exc:
+            return {"status": "error", "series": None,
+                    "message": f"MT5 historical bars unavailable for {key}: {exc}"}
+        except Exception as exc:
+            return {"status": "error", "series": None,
+                    "message": f"MT5 historical bars failed for {key}: {type(exc).__name__}"}
+        if not isinstance(payload, dict):
+            return {"status": "error", "series": None,
+                    "message": f"MT5 historical bars unavailable for {key}: terminal returned no rates"}
+
+        try:
+            raw_bars = (payload.get("raw_series") or {}).get("M15") or []
+            parsed = []
+            for item in raw_bars:
+                stamp = item.get("ts") or item.get("timestamp")
+                if not stamp and item.get("unix_sec"):
+                    stamp = datetime.fromtimestamp(float(item["unix_sec"]), timezone.utc).isoformat()
+                parsed_at = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                if parsed_at.tzinfo is None:
+                    parsed_at = parsed_at.replace(tzinfo=timezone.utc)
+                parsed.append((parsed_at.astimezone(timezone.utc), item))
+            parsed.sort(key=lambda pair: pair[0])
+
+            # MT5 position zero is the currently forming candle. Exclude it;
+            # trading price comes from the current terminal quote below.
+            completed = [
+                item for at, item in parsed
+                if (at + timedelta(minutes=15)).timestamp() <= now.timestamp() + 1.0
+            ]
+            bars = []
+            for item in completed:
+                stamp = item.get("ts") or item.get("timestamp")
+                if not stamp and item.get("unix_sec"):
+                    stamp = datetime.fromtimestamp(
+                        float(item["unix_sec"]), timezone.utc
+                    ).isoformat()
+                bars.append(Bar(
+                    ts=str(stamp), open=float(item["open"]),
+                    high=float(item["high"]), low=float(item["low"]),
+                    close=float(item["close"]), volume=float(item.get("volume", 0.0)),
+                ))
+            series = Series(key, bars, f"mt5_terminal_m15:{payload.get('broker_symbol', key)}")
+            invalid = self.data._series_validation_error(series)
+            if invalid:
+                raise ValueError(invalid)
+            if len(bars) < 75:
+                raise ValueError(f"only {len(bars)} completed M15 bars returned; 75 required")
+
+            latest = datetime.fromisoformat(bars[-1].ts.replace("Z", "+00:00"))
+            if latest.tzinfo is None:
+                latest = latest.replace(tzinfo=timezone.utc)
+            age_minutes = (now - latest.astimezone(timezone.utc)).total_seconds() / 60.0
+            if age_minutes < -5.0 or age_minutes > 60.0:
+                raise ValueError(f"latest MT5 M15 bar is stale or future-dated ({age_minutes:.1f}m old)")
+
+            bid, ask = float(payload.get("live_bid") or 0), float(payload.get("live_ask") or 0)
+            raw_quote_epoch = payload.get("quote_time_unix")
+            if raw_quote_epoch is None:
+                observed_at = datetime.fromisoformat(
+                    str(payload.get("quote_observed_at") or "").replace("Z", "+00:00")
+                )
+                if observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=timezone.utc)
+                raw_quote_epoch = observed_at.timestamp()
+            raw_quote_epoch = float(raw_quote_epoch)
+            if not math.isfinite(raw_quote_epoch):
+                raise ValueError("MT5 quote timestamp is not finite")
+
+            # MT5 documentation specifies UTC timestamps, but some broker
+            # terminals expose tick.time_msc in server-local time. Do not
+            # blindly subtract a guessed offset. Learn a stable whole/half-hour
+            # offset only after two different symbols independently report the
+            # same skew; until then this symbol stays blocked. Once calibrated,
+            # stale quotes still fail the normal freshness check.
+            offset = getattr(self, "_mt5_quote_clock_offset_sec", None)
+            if offset is None:
+                raw_skew = raw_quote_epoch - now.timestamp()
+                candidate_offset = 0
+                if abs(raw_skew) > 30.0:
+                    nearest = int(round(raw_skew / 1800.0) * 1800)
+                    if 1800 <= abs(nearest) <= 14 * 3600 and abs(raw_skew - nearest) <= 30.0:
+                        candidate_offset = nearest
+                    elif raw_skew > 0:
+                        raise ValueError(
+                            f"MT5 quote timestamp is {raw_skew:.1f}s ahead of UTC; "
+                            "clock offset is not a supported broker-time offset"
+                        )
+
+                lock = getattr(self, "_mt5_quote_clock_lock", None)
+                if lock is None:
+                    lock = threading.Lock()
+                    self._mt5_quote_clock_lock = lock
+                with lock:
+                    observations = getattr(self, "_mt5_quote_clock_observations", None)
+                    if observations is None:
+                        observations = {}
+                        self._mt5_quote_clock_observations = observations
+                    observations[key] = candidate_offset
+                    agreeing_symbols = [
+                        observed_symbol for observed_symbol, observed_offset in observations.items()
+                        if observed_offset == candidate_offset
+                    ]
+                    if len(agreeing_symbols) < 2:
+                        skew_label = f"{candidate_offset:+d}s" if candidate_offset else "UTC"
+                        raise ValueError(
+                            f"MT5 quote clock ({skew_label}) is not yet corroborated; "
+                            "a second symbol must report the same clock basis"
+                        )
+                    self._mt5_quote_clock_offset_sec = candidate_offset
+                    offset = candidate_offset
+
+            normalized_quote_epoch = raw_quote_epoch - int(offset)
+            quote_age = now.timestamp() - normalized_quote_epoch
+            if not math.isfinite(bid) or not math.isfinite(ask) or bid <= 0 or ask < bid:
+                raise ValueError("invalid MT5 bid/ask values")
+            if quote_age < -5.0 or quote_age > 30.0:
+                raise ValueError(
+                    f"MT5 quote is stale or future-dated after {int(offset)}s clock correction "
+                    f"({quote_age:.1f}s old)"
+                )
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            return {"status": "error", "series": None,
+                    "message": f"invalid MT5 execution data for {key}: {exc}"}
+
+        result = {"status": "complete", "series": series,
+                  "source": "mt5_terminal_m15+live_quote",
+                  "bars": len(series.bars), "price_basis": "bid_bars_live_mid_quote",
+                  "live_bid": bid, "live_ask": ask, "last": (bid + ask) / 2.0,
+                  "quote_observed_at": datetime.fromtimestamp(
+                      normalized_quote_epoch, timezone.utc
+                  ).isoformat(),
+                  "quote_time_offset_sec": int(offset),
+                  "broker_symbol": payload.get("broker_symbol", key)}
+        self._mt5_signal_cache[key] = {"fetched_at": now, "result": result}
+        return result
+
+    def analyze_market(self, symbol, *, allow_cache_fallback=True, require_ctrader=False,
+                       require_mt5=False):
+        if require_ctrader:
+            md = self._get_ctrader_execution_series(symbol)
+        elif require_mt5:
+            md = self._get_mt5_execution_series(symbol)
+        else:
+            md = self.data.get(symbol, allow_cache_fallback=allow_cache_fallback)
         if md["status"] != "complete":
             return {"status": "error", "message": md.get("message"), "symbol": symbol}
         return {"status": "complete", "symbol": symbol, "source": md["source"],
@@ -543,11 +720,12 @@ class OracleAgent(BaseAgent):
                 "live_bid": md.get("live_bid"), "live_ask": md.get("live_ask"),
                 "quote_observed_at": md.get("quote_observed_at")}
 
-    def signal(self, symbol, *, allow_cache_fallback=True, require_ctrader=False):
+    def signal(self, symbol, *, allow_cache_fallback=True, require_ctrader=False,
+               require_mt5=False):
         started = time.monotonic()
         market = self.analyze_market(
             symbol, allow_cache_fallback=allow_cache_fallback,
-            require_ctrader=require_ctrader,
+            require_ctrader=require_ctrader, require_mt5=require_mt5,
         )
         market_elapsed = time.monotonic() - started
         if market_elapsed >= 5.0:
@@ -1385,9 +1563,12 @@ class OracleAgent(BaseAgent):
 
         if not regime and forge_owns_data:
             champ_obj, _ = self._lightweight_champion_lookup(symbol, "ranging")
-            if champ_obj is None:
+            if champ_obj is not None:
+                regime = "ranging"
+            else:
                 champ_obj, _ = self._lightweight_champion_lookup(symbol, "trending_up")
-            regime = "ranging" if champ_obj is not None else ""
+                if champ_obj is not None:
+                    regime = "trending_up"
             if not regime and getattr(self, "_evolution", None) is not None:
                 incumbent_record = self._evolution.champion_info(symbol)
                 regime = str(incumbent_record.get("regime", "")).strip() if isinstance(incumbent_record, dict) else ""
@@ -1503,7 +1684,10 @@ class OracleAgent(BaseAgent):
             # Signals used for open-position management or execution must not
             # silently fall back to hours-old disk history.
             require_ctrader = str(ctx.get("_sender") or "").startswith("ctrader_demo")
-            out = self.signal(allow_cache_fallback=False, require_ctrader=require_ctrader, symbol=symbol)
+            sender = str(ctx.get("_sender") or "")
+            require_mt5 = sender in {"demo_trader", "live_trader", "mt5_demo"}
+            out = self.signal(allow_cache_fallback=False, require_ctrader=require_ctrader,
+                              require_mt5=require_mt5, symbol=symbol)
             if out.get("status") == "complete":
                 self._preserve(symbol, out)
                 streams = (out.get("signal") or {}).get("streams", {})
@@ -1648,7 +1832,10 @@ class OracleAgent(BaseAgent):
             propose_started = time.monotonic()
             # A proposal is an execution decision: require a valid live source.
             require_ctrader = str(ctx.get("_sender") or "").startswith("ctrader_demo")
-            sig = self.signal(symbol, allow_cache_fallback=False, require_ctrader=require_ctrader)
+            sender = str(ctx.get("_sender") or "")
+            require_mt5 = sender in {"demo_trader", "live_trader", "mt5_demo"}
+            sig = self.signal(symbol, allow_cache_fallback=False, require_ctrader=require_ctrader,
+                              require_mt5=require_mt5)
             signal_elapsed = time.monotonic() - propose_started
             if signal_elapsed >= 5.0:
                 log.warning("[%s] trade.propose signal phase took %.1fs", symbol, signal_elapsed)
@@ -1720,19 +1907,20 @@ class OracleAgent(BaseAgent):
             if hasattr(self, "cio") and self.cio is not None:
                 try:
                     self.cio.sync_learned_limits_to_risk_manager()
-                    scout_eval = self.cio.scout.evaluate_candidate(
-                        symbol=symbol,
-                        last_price=float(sig["last"]),
-                        atr=float(atr),
-                        technicals=sig.get("_technicals") or {},
-                        fused_signal=s,
-                        streams=streams,
-                        stop_price=hypothetical_stop,
-                        target_price=hypothetical_target,
-                        using_evolved_champion=bool(sig.get("using_evolved_champion")),
-                        learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
-                        learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
-                    )
+                    if self.scout_enabled:
+                        scout_eval = self.cio.scout.evaluate_candidate(
+                            symbol=symbol,
+                            last_price=float(sig["last"]),
+                            atr=float(atr),
+                            technicals=sig.get("_technicals") or {},
+                            fused_signal=s,
+                            streams=streams,
+                            stop_price=hypothetical_stop,
+                            target_price=hypothetical_target,
+                            using_evolved_champion=bool(sig.get("using_evolved_champion")),
+                            learned_news_multipliers=self.cio.risk.learned_news_multipliers(),
+                            learned_social_multipliers=self.cio.risk.learned_social_multipliers(),
+                        )
                 except Exception as exc:
                     log.warning("[%s] Scout evaluation error: %s", symbol, exc)
 
@@ -1824,12 +2012,14 @@ class OracleAgent(BaseAgent):
                         "news_impact": news.level, "news_reason": news.reason,
                         "social_risk": social.level, "social_reason": social.reason,
                         "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                        "scout_enabled": self.scout_enabled,
                         "market_data_source": sig.get("market_data_source"),
                         "shadow_candidate": shadow_candidate}
             return {"status": "complete", "plan": plan, "signal": s,
                     "market_data_source": sig.get("market_data_source"),
                     "effective_confidence": effective_confidence,
                     "scout_score": scout_eval.scout_score if scout_eval else effective_confidence,
+                    "scout_enabled": self.scout_enabled,
                     "learned_conviction_floor": (
                         scout_eval.learned_conviction_floor
                         if scout_eval else float(self.risk.confidence_floor)
